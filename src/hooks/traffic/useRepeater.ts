@@ -13,8 +13,8 @@ export function useRepeater(activeEnvId?: string) {
   const refreshRepeater = async () => {
     try {
       const data = await invoke<SyncData>('sync_data');
-      setRepeaterRequests(data.repeater_requests);
-      setRepeaterGroups(data.repeater_groups);
+      setRepeaterRequests(data.repeaterRequests);
+      setRepeaterGroups(data.repeaterGroups);
     } catch (error) { console.error('Failed to refresh repeater data:', error); }
   };
 
@@ -148,7 +148,7 @@ export function useRepeater(activeEnvId?: string) {
       if (!newGroupId) return null;
 
       const data = await invoke<SyncData>('sync_data');
-      const originalReqs = data.repeater_requests.filter(r => r.groupId === id);
+      const originalReqs = data.repeaterRequests.filter(r => r.groupId === id);
 
       for (const req of originalReqs) {
         await invoke('create_repeater_item', { 
@@ -192,7 +192,7 @@ export function useRepeater(activeEnvId?: string) {
 
   const getAllGroups = async () => {
     const data = await invoke<SyncData>('sync_data');
-    return data.repeater_groups;
+    return data.repeaterGroups;
   };
 
   const manageGroupAssignment = async (

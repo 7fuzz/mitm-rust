@@ -129,8 +129,9 @@ export function EnvironmentsSection({ openPrompt, openConfirm }: EnvironmentsSec
               values: [
                 { id: crypto.randomUUID(), name: 'Default', value: '' },
                 { id: crypto.randomUUID(), name: '(auto)', value: '' }
-              ], 
-              activeIndex: 0 
+              ],
+              activeIndex: 0,
+              orderIndex: envVariables.length
             })}
             className="px-3 py-1.5 bg-emerald-600/10 border border-emerald-600/30 text-emerald-text hover:bg-emerald-600/20 rounded text-[9px] font-black uppercase tracking-widest transition-all"
           >

@@ -125,7 +125,8 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
               { id: crypto.randomUUID(), name: 'Default', value: '' },
               { id: crypto.randomUUID(), name: '(auto)', value: '' }
             ],
-            activeIndex: 0
+            activeIndex: 0,
+            orderIndex: variables.filter(v => v.environmentId === activeEnvId).length
           });
         }
         setCommandMode(false);

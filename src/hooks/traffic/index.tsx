@@ -43,16 +43,16 @@ function useTrafficState() {
       const data = await invoke<SyncData>('sync_data');
       
       // Update each hook with fresh data
-      trafficData.setTraffic(data.history);
-      repeater._setRawGroups(data.repeater_groups);
-      repeater._setRawRepeater(data.repeater_requests);
-      variables.loadVariables(data.variables, data.environments, data.environments.find(e => e.is_active)?.id || data.environments[0]?.id || 'default-env-id');
+      trafficData.setTraffic(data.history || []);
+      repeater._setRawGroups(data.repeaterGroups || []);
+      repeater._setRawRepeater(data.repeaterRequests || []);
+      variables.loadVariables(data.variables || [], data.environments || [], data.environments?.find(e => e.is_active)?.id || data.environments?.[0]?.id || 'default-env-id');
       
       if (data.prefs) config.initConfig.setPrefs(data.prefs);
-      if (data.ui_layout) config.initConfig.setUiLayout(data.ui_layout as any);
-      if (data.toolkit_json) jsonToolkit._initToolkitJson(data.toolkit_json);
-      if (data.history_limits) {
-        const hl = data.history_limits as any;
+      if (data.uiLayout) config.initConfig.setUiLayout(data.uiLayout as any);
+      if (data.toolkitJson) jsonToolkit._initToolkitJson(data.toolkitJson);
+      if (data.historyLimits) {
+        const hl = data.historyLimits as any;
         if (typeof hl.enabled === 'boolean') config.initConfig.setIsLimitEnabled(hl.enabled);
         if (typeof hl.value === 'number') config.initConfig.setHistoryLimit(hl.value);
       }
@@ -65,12 +65,12 @@ function useTrafficState() {
         URL_PARAM_REPLACEMENTS: {} as Record<string, string>,
         TEXT_REPLACEMENTS: {} as Record<string, string>
       };
-      data.replacements.forEach(r => {
+      (data.replacements || []).forEach(r => {
         if (r.is_active && groupedReplacements[r.type as keyof typeof groupedReplacements]) {
           groupedReplacements[r.type as keyof typeof groupedReplacements][r.pattern] = r.replacement;
         }
       });
-      replacements._setRawReplacements(groupedReplacements, data.replacements);
+      replacements._setRawReplacements(groupedReplacements, data.replacements || []);
 
       setSyncStatus({ is_syncing: false, last_sync: Date.now(), error: null });
       if (!silent) notify.success('Data synchronized successfully');

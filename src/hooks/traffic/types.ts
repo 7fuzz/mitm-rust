@@ -6,52 +6,15 @@ export interface GlobalVariable {
   id: string;
   environmentId: string;
   name: string;
-  values: GlobalVariableValue[];
   activeIndex: number;
-  orderIndex?: number;
-}
-export type TabType = 'history' | 'intercept' | 'repeater' | 'options' | 'utilities' | 'workspace';
-
-export interface KeyboardShortcuts {
-  // Navigation
-  goto_history: string;
-  goto_intercept: string;
-  goto_repeater: string;
-  goto_workspace: string;
-  goto_utilities: string;
-  goto_options: string;
-  
-  // Quick Actions
-  open_variable_switcher: string;
-  open_environment_switcher: string;
-  
-  // Instant Actions (No Prefix)
-  instant_variable_switcher: string;
-  instant_environment_switcher: string;
-  
-  // Modifiers
-  prefix_key: string;
-  cycle_prev: string;
-  cycle_next: string;
-}
-
-export interface AppPreferences {
-  history: boolean;
-  repeater: boolean;
-  bindings: boolean;
-  limits: boolean;
-  intercept: boolean;
-  simpleMode: boolean;
-  autoSave: boolean;
-  replacementsAutoSave: boolean;
-  theme: 'dark' | 'light';
-  shortcuts?: KeyboardShortcuts;
+  orderIndex: number;
+  values: GlobalVariableValue[];
 }
 
 export interface RepeaterGroup {
   id: string;
   name: string;
-  orderIndex?: number;
+  orderIndex: number;
 }
 
 export interface RepeaterRequest {
@@ -87,15 +50,15 @@ export interface ReplacementEntry {
 
 export interface SyncData {
   history: import('@/types/traffic').Traffic[];
-  repeater_groups: RepeaterGroup[];
-  repeater_requests: RepeaterRequest[];
+  repeaterGroups: RepeaterGroup[];
+  repeaterRequests: RepeaterRequest[];
   environments: Environment[];
   variables: GlobalVariable[];
   replacements: ReplacementEntry[];
   prefs: any;
-  ui_layout: any;
-  toolkit_json: string;
-  history_limits: any;
+  uiLayout: any;
+  toolkitJson: string;
+  historyLimits: any;
 }
 
 export interface SyncStatus {
@@ -104,3 +67,20 @@ export interface SyncStatus {
   error: string | null;
 }
 
+export interface KeyboardShortcuts {
+  goto_history: string;
+  goto_intercept: string;
+  goto_repeater: string;
+  goto_workspace: string;
+  goto_utilities: string;
+  goto_options: string;
+  open_variable_switcher: string;
+  open_environment_switcher: string;
+  instant_variable_switcher: string;
+  instant_environment_switcher: string;
+  prefix_key: string;
+  cycle_prev: string;
+  cycle_next: string;
+}
+
+export type TabType = 'history' | 'intercept' | 'repeater' | 'options' | 'utilities' | 'workspace';

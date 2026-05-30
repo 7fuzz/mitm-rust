@@ -142,7 +142,7 @@ export function useVariables(prefs?: { autoSave: boolean }) {
       await invoke('set_active_environment', { id: envId });
       const data = await invoke<SyncData>('sync_data');
       setVariables(data.variables);
-      onSuccess({ variables: data.variables, groups: data.repeater_groups, requests: data.repeater_requests });
+      onSuccess({ variables: data.variables, groups: data.repeaterGroups, requests: data.repeaterRequests });
     } catch (error) {
       console.error("Failed to switch workspace context:", error);
     }
