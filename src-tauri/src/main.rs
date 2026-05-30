@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    mitm_rust_bootstrap_lib::run()
+    mitm_rust_lib::run()
 }
