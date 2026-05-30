@@ -8,6 +8,7 @@ import HttpResponseViewer from '../ui/HttpResponseViewer';
 import { useTraffic } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
 import { Button } from '../ui/Button';
+import { invoke } from '@tauri-apps/api/core';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { TrafficFilterModal } from '../Modals/TrafficFilterModal';
 
@@ -69,12 +70,10 @@ export function HistoryView() {
   const handleDeleteHistoryRequest = useCallback((id: string) => {
     setTraffic(traffic.filter(t => t.id !== id));
     if (selectedId === id) setSelectedId(null);
-    fetch(`/api/history/${id}`, { method: 'DELETE' }).catch(console.error);
   }, [traffic, selectedId, setTraffic, setSelectedId]);
 
   const handleClearHistory = () => {
     setTraffic([]); setSelectedId(null);
-    fetch('/api/history', { method: 'DELETE' }).catch(console.error);
     notify.success('History cleared');
   };
 
@@ -89,28 +88,24 @@ export function HistoryView() {
         ? { url: req.url, headers: req.request_headers || [], body: req.request_body || '' }
         : applyAllReplacements({ url: req.url, headers: req.request_headers || [], body: req.request_body || '' });
 
-      const response = await fetch(`/api/repeater-request${isRaw ? '?raw=true' : ''}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const itemId = await invoke<string>('create_repeater_item', { 
+        item: {
           name: `${req.method} ${path}`,
-          group: isRaw ? 'Raw Imports' : 'History Imports',
           method: req.method,
           url: transformedUrl,
           headers: transformedHeaders,
           body: transformedBody,
           response: req.status_code !== 0 ? {
-            status: req.status_code,
-            headers: req.response_headers || [],
-            body: req.response_body || '',
+            status_code: req.status_code,
+            response_headers: req.response_headers || [],
+            response_body: req.response_body || '',
           } : undefined
-        })
+        }
       });
 
-      const data = await response.json();
-      if (data.success || data.id) {
+      if (itemId) {
         if (refreshRepeater) await refreshRepeater();
-        if (setRepeaterSelectedId) setRepeaterSelectedId(data.id);
+        if (setRepeaterSelectedId) setRepeaterSelectedId(itemId);
         notify.success(isRaw ? `Staged Raw to Repeater!` : `Staged to Repeater!`);
       }
     } catch (error) {

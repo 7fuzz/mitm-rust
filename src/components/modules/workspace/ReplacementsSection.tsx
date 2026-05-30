@@ -171,7 +171,7 @@ export function ReplacementsSection() {
     debounceRef.current = setTimeout(async () => {
       setIsSaving(true);
       try {
-        const result = await saveRef.current(currentItems, true);
+        const result = await saveRef.current(currentItems);
         if (result.success) {
           lastSavedRef.current = currentPayloadString;
           setSaveMessage('Auto-saved ✓');
@@ -244,7 +244,7 @@ export function ReplacementsSection() {
         entries.filter(e => e.pattern).map((e, index) => ({ ...e, type, order_index: index }))
       );
 
-      const result = await saveReplacements(allItems, true);
+      const result = await saveReplacements(allItems);
       if (result.success) {
         setSaveMessage('Replacements updated successfully!');
         const sortedItems = [...allItems].sort((a, b) => {

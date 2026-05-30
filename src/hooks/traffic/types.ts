@@ -77,7 +77,7 @@ export type ReplacementCategory = 'URL_REPLACEMENTS' | 'HEADER_REPLACEMENTS' | '
 
 export interface ReplacementEntry {
   id: string;
-  type: string;
+  type: ReplacementCategory;
   pattern: string;
   replacement: string;
   description?: string;

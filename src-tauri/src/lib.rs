@@ -1,53 +1,33 @@
 mod ca;
 mod proxy;
 mod db;
+mod repeater;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
-use tokio_rustls::rustls;
 use tauri::{AppHandle, Manager, State};
+use serde::{Deserialize, Serialize};
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct ProxyConfig {
-    pub bindings: Vec<String>,
-    pub enabled: bool,
-}
+// Re-exports from other modules
+pub use repeater::{RepeaterGroup, RepeaterRequest, CreateRepeaterItem};
 
-pub struct ProxyManager {
-    pub active_listeners: HashMap<String, tokio::sync::oneshot::Sender<()>>,
-    pub config: ProxyConfig,
-}
-
-#[derive(serde::Serialize)]
-pub struct RepeaterGroup {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Environment {
     pub id: String,
     pub name: String,
-    pub order_index: i32,
+    pub is_active: bool,
 }
 
-#[derive(serde::Serialize)]
-pub struct RepeaterRequest {
-    pub id: String,
-    pub name: String,
-    pub group_id: Option<String>,
-    pub method: String,
-    pub url: String,
-    pub headers: Vec<(String, String)>,
-    pub body: String,
-    pub response: Option<proxy::Traffic>,
-    pub hit_count: i32,
-}
-
-#[derive(serde::Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VariableValue {
     pub id: String,
     pub name: String,
     pub value: String,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalVariable {
     pub id: String,
     pub environment_id: String,
@@ -57,17 +37,10 @@ pub struct GlobalVariable {
     pub values: Vec<VariableValue>,
 }
 
-#[derive(serde::Serialize)]
-pub struct Environment {
-    pub id: String,
-    pub name: String,
-    pub is_active: bool,
-}
-
-#[derive(serde::Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Replacement {
     pub id: String,
-    pub r_type: String, // Field name in DB is 'type', but we need to map it carefully
+    pub r_type: String, 
     pub pattern: String,
     pub replacement: String,
     pub description: Option<String>,
@@ -75,7 +48,7 @@ pub struct Replacement {
     pub order_index: i32,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SyncData {
     pub history: Vec<proxy::Traffic>,
     pub repeater_groups: Vec<RepeaterGroup>,
@@ -90,21 +63,15 @@ pub struct AppState {
     pub intercept_state: Arc<Mutex<proxy::InterceptState>>,
 }
 
-#[derive(serde::Deserialize)]
-pub struct RepeaterResponse {
-    pub status: u16,
-    pub headers: Vec<(String, String)>,
-    pub body: String,
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProxyConfig {
+    pub bindings: Vec<String>,
+    pub enabled: bool,
 }
 
-#[derive(serde::Deserialize)]
-pub struct CreateRepeaterItem {
-    pub name: String,
-    pub method: String,
-    pub url: String,
-    pub headers: Vec<(String, String)>,
-    pub body: String,
-    pub response: Option<RepeaterResponse>,
+pub struct ProxyManager {
+    pub active_listeners: HashMap<String, tokio::sync::oneshot::Sender<()>>,
+    pub config: ProxyConfig,
 }
 
 fn get_db_path(app_handle: &AppHandle) -> std::path::PathBuf {
@@ -216,37 +183,20 @@ async fn spawn_proxy_listener(
     ca: Arc<ca::CA>,
     intercept_state: Arc<Mutex<proxy::InterceptState>>,
 ) -> Result<tokio::sync::oneshot::Sender<()>, String> {
-    let addr: SocketAddr = if addr_str.contains(':') {
-        addr_str.parse().map_err(|e| format!("Invalid address {}: {}", addr_str, e))?
-    } else {
-        format!("0.0.0.0:{}", addr_str).parse().map_err(|e| format!("Invalid port {}: {}", addr_str, e))?
-    };
-
+    let addr: SocketAddr = addr_str.parse().map_err(|_| "Invalid address")?;
     let (tx, rx) = tokio::sync::oneshot::channel();
-    let app_handle_clone = app_handle.clone();
+    let ca_clone = (*ca).clone_shim();
     
     tauri::async_runtime::spawn(async move {
-        let proxy_task = proxy::start_proxy(app_handle_clone, (*ca).clone_shim(), intercept_state, addr);
-        
         tokio::select! {
-            res = proxy_task => {
-                if let Err(e) = res {
-                    eprintln!("Proxy on {} failed: {}", addr, e);
-                }
-            }
+            _ = proxy::start_proxy(app_handle, ca_clone, intercept_state, addr) => {},
             _ = rx => {
-                println!("Proxy on {} shutting down", addr);
+                println!("Stopping proxy listener on {}", addr);
             }
         }
     });
-
+    
     Ok(tx)
-}
-
-#[tauri::command]
-async fn get_proxy_status(state: State<'_, AppState>) -> Result<ProxyConfig, String> {
-    let manager = state.proxy_manager.lock().await;
-    Ok(manager.config.clone())
 }
 
 #[tauri::command]
@@ -254,13 +204,11 @@ async fn toggle_proxy(app_handle: AppHandle, state: State<'_, AppState>, enabled
     let mut manager = state.proxy_manager.lock().await;
     manager.config.enabled = enabled;
     
-    // Stop all if disabling
     if !enabled {
         for (_, tx) in manager.active_listeners.drain() {
             let _ = tx.send(());
         }
     } else {
-        // Start all configured bindings
         let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
         let ca = Arc::new(ca::get_ca(app_data_dir.join("ca")));
         let bindings = manager.config.bindings.clone();
@@ -278,7 +226,6 @@ async fn toggle_proxy(app_handle: AppHandle, state: State<'_, AppState>, enabled
         }
     }
     
-    // Save to DB
     let db_path = get_db_path(&app_handle);
     let config_json = serde_json::to_string(&manager.config).map_err(|e| e.to_string())?;
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
@@ -292,14 +239,11 @@ async fn update_network_settings(app_handle: AppHandle, state: State<'_, AppStat
     let mut manager = state.proxy_manager.lock().await;
     manager.config.bindings = bindings;
     
-    // If enabled, restart all listeners
     if manager.config.enabled {
-        // Stop current
         for (_, tx) in manager.active_listeners.drain() {
             let _ = tx.send(());
         }
         
-        // Start new
         let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
         let ca = Arc::new(ca::get_ca(app_data_dir.join("ca")));
         let bindings_to_start = manager.config.bindings.clone();
@@ -315,7 +259,6 @@ async fn update_network_settings(app_handle: AppHandle, state: State<'_, AppStat
         }
     }
     
-    // Save to DB
     let db_path = get_db_path(&app_handle);
     let config_json = serde_json::to_string(&manager.config).map_err(|e| e.to_string())?;
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
@@ -325,26 +268,109 @@ async fn update_network_settings(app_handle: AppHandle, state: State<'_, AppStat
 }
 
 #[tauri::command]
-async fn get_state(app_handle: AppHandle) -> Result<serde_json::Value, String> {
+async fn update_variable(app_handle: AppHandle, id: String, updates: GlobalVariable) -> Result<(), String> {
     let db_path = get_db_path(&app_handle);
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
-    let mut stmt = conn.prepare("SELECT key, value FROM app_state").map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    }).map_err(|e| e.to_string())?;
     
-    let mut map = serde_json::Map::new();
-    for row in rows {
-        if let Ok((key, value)) = row {
-            if let Ok(json_val) = serde_json::from_str(&value) {
-                map.insert(key, json_val);
-            } else {
-                map.insert(key, serde_json::Value::String(value));
-            }
-        }
+    conn.execute(
+        "UPDATE variables SET name = ?, active_index = ?, order_index = ? WHERE id = ?",
+        rusqlite::params![updates.name, updates.active_index, updates.order_index, id],
+    ).map_err(|e| e.to_string())?;
+
+    conn.execute("DELETE FROM variable_values WHERE variable_id = ?", [&id]).map_err(|e| e.to_string())?;
+    for val in updates.values {
+        conn.execute(
+            "INSERT INTO variable_values (id, variable_id, name, value) VALUES (?, ?, ?, ?)",
+            rusqlite::params![val.id, id, val.name, val.value],
+        ).map_err(|e| e.to_string())?;
     }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn create_variable(app_handle: AppHandle, variable: GlobalVariable) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
     
-    Ok(serde_json::Value::Object(map))
+    conn.execute(
+        "INSERT INTO variables (id, environment_id, name, active_index, order_index) VALUES (?, ?, ?, ?, ?)",
+        rusqlite::params![variable.id, variable.environment_id, variable.name, variable.active_index, variable.order_index],
+    ).map_err(|e| e.to_string())?;
+
+    for val in variable.values {
+        conn.execute(
+            "INSERT INTO variable_values (id, variable_id, name, value) VALUES (?, ?, ?, ?)",
+            rusqlite::params![val.id, variable.id, val.name, val.value],
+        ).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_variable(app_handle: AppHandle, id: String) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM variables WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn create_environment(app_handle: AppHandle, id: String, name: String) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("INSERT INTO environments (id, name, is_active) VALUES (?, ?, 0)", [id, name]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_environment(app_handle: AppHandle, id: String) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM environments WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_active_environment(app_handle: AppHandle, id: String) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("UPDATE environments SET is_active = 0", []).map_err(|e| e.to_string())?;
+    conn.execute("UPDATE environments SET is_active = 1 WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn save_replacements_bulk(app_handle: AppHandle, replacements: Vec<Replacement>) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    
+    for r in replacements {
+        conn.execute(
+            "INSERT OR REPLACE INTO replacements (id, type, pattern, replacement, description, is_active, order_index, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))",
+            rusqlite::params![r.id, r.r_type, r.pattern, r.replacement, r.description, r.is_active, r.order_index],
+        ).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_replacement(app_handle: AppHandle, id: String) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM replacements WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn update_replacement_order(app_handle: AppHandle, items: Vec<Replacement>) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    
+    for r in items {
+        conn.execute("UPDATE replacements SET order_index = ?, updated_at = strftime('%s', 'now') WHERE id = ?", rusqlite::params![r.order_index, r.id]).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -352,7 +378,6 @@ async fn update_filter_config(app_handle: AppHandle, state: State<'_, AppState>,
     let mut intercept = state.intercept_state.lock().await;
     intercept.filter_config = config.clone();
 
-    // Save to DB
     let db_path = get_db_path(&app_handle);
     let config_json = serde_json::to_string(&config).map_err(|e| e.to_string())?;
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
@@ -377,28 +402,6 @@ async fn resume_flow(id: String, action: proxy::ResumeAction, state: State<'_, A
     } else {
         Err("Flow not found".to_string())
     }
-}
-
-#[tauri::command]
-async fn create_repeater_item(app_handle: AppHandle, item: CreateRepeaterItem) -> Result<String, String> {
-    let db_path = get_db_path(&app_handle);
-    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
-    
-    let id = uuid::Uuid::new_v4().to_string();
-    let headers_json = serde_json::to_string(&item.headers).unwrap_or_default();
-    
-    let (res_status, res_headers, res_body) = if let Some(res) = &item.response {
-        (Some(res.status), Some(serde_json::to_string(&res.headers).unwrap_or_default()), Some(res.body.clone()))
-    } else {
-        (None, None, None)
-    };
-
-    conn.execute(
-        "INSERT INTO repeater_requests (id, name, method, url, headers, body, response_status, response_headers, response_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        rusqlite::params![id, item.name, item.method, item.url, headers_json, item.body, res_status, res_headers, res_body],
-    ).map_err(|e| e.to_string())?;
-
-    Ok(id)
 }
 
 #[tauri::command]
@@ -496,7 +499,7 @@ async fn get_root_ca_pem(app_handle: AppHandle) -> Result<String, String> {
 async fn regenerate_root_ca(app_handle: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
     let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
     let ca_dir = app_data_dir.join("ca");
-    
+
     // Stop all proxies
     let mut manager = state.proxy_manager.lock().await;
     for (_, tx) in manager.active_listeners.drain() {
@@ -512,17 +515,24 @@ async fn regenerate_root_ca(app_handle: AppHandle, state: State<'_, AppState>) -
     if manager.config.enabled {
         let bindings = manager.config.bindings.clone();
         for addr_str in bindings {
-            let tx = spawn_proxy_listener(
+            if let Ok(tx) = spawn_proxy_listener(
                 app_handle.clone(),
                 addr_str.clone(),
                 Arc::clone(&new_ca),
                 state.intercept_state.clone()
-            ).await.map_err(|e| e.to_string())?;
-            manager.active_listeners.insert(addr_str, tx);
+            ).await {
+                manager.active_listeners.insert(addr_str, tx);
+            }
         }
     }
 
     Ok(cert_pem)
+}
+
+#[tauri::command]
+async fn get_proxy_status(state: State<'_, AppState>) -> Result<ProxyConfig, String> {
+    let manager = state.proxy_manager.lock().await;
+    Ok(manager.config.clone())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -533,20 +543,20 @@ pub fn run() {
 
     let migrations = db::get_migrations();
 
-    let proxy_manager = Arc::new(Mutex::new(ProxyManager { 
+    let proxy_manager = Arc::new(Mutex::new(ProxyManager {
         active_listeners: HashMap::new(),
         config: ProxyConfig {
             bindings: vec!["8080".to_string()],
             enabled: true,
         }
     }));
-    
+
     let intercept_state = Arc::new(Mutex::new(proxy::InterceptState {
         config: proxy::InterceptConfig::default(),
         filter_config: proxy::FilterConfig::default(),
         pending: std::collections::HashMap::new(),
     }));
-    
+
     let state = AppState { 
         proxy_manager: Arc::clone(&proxy_manager),
         intercept_state: Arc::clone(&intercept_state),
@@ -568,11 +578,27 @@ pub fn run() {
             update_state,
             update_filter_config,
             resume_flow,
-            create_repeater_item,
+            repeater::create_repeater_item,
+            repeater::update_repeater_request,
+            repeater::delete_repeater_request,
+            repeater::reorder_repeater_requests,
+            repeater::create_repeater_group,
+            repeater::delete_repeater_group,
+            repeater::reorder_repeater_groups,
+            repeater::rename_repeater_group,
+            repeater::execute_repeater_request,
+            create_variable,
+            update_variable,
+            delete_variable,
+            create_environment,
+            delete_environment,
+            set_active_environment,
+            save_replacements_bulk,
+            delete_replacement,
+            update_replacement_order,
             get_proxy_status,
             toggle_proxy,
-            update_network_settings,
-            get_state
+            update_network_settings
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();

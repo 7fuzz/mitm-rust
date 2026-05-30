@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { SyncData, ReplacementEntry, ReplacementCategory } from './types';
+import { invoke } from '@tauri-apps/api/core';
 
 export interface ReplacementsData {
   URL_REPLACEMENTS: Record<string, string>;
@@ -6,15 +8,6 @@ export interface ReplacementsData {
   BODY_KEY_REPLACEMENTS: Record<string, string>;
   URL_PARAM_REPLACEMENTS: Record<string, string>;
   TEXT_REPLACEMENTS: Record<string, string>;
-}
-
-export interface OrderedReplacement {
-  id: string;
-  type: string;
-  pattern: string;
-  replacement: string;
-  is_active: boolean;
-  order_index: number;
 }
 
 const DEFAULT_REPLACEMENTS: ReplacementsData = {
@@ -26,11 +19,11 @@ const DEFAULT_REPLACEMENTS: ReplacementsData = {
 };
 
 // Helper function for nested JSON body transformation
-function transformObjectHelper(obj: unknown, bodyReplacements: Record<string, string>): unknown {
+function transformObjectHelper(obj: any, bodyReplacements: Record<string, string>): any {
   if (obj === null || typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) return obj.map(item => transformObjectHelper(item, bodyReplacements));
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
     const lowerKey = key.toLowerCase();
     if (bodyReplacements[lowerKey]) {
       result[key] = bodyReplacements[lowerKey];
@@ -45,11 +38,11 @@ function transformObjectHelper(obj: unknown, bodyReplacements: Record<string, st
 
 export function useReplacements() {
   const [replacements, setReplacements] = useState<ReplacementsData>(DEFAULT_REPLACEMENTS);
-  const [orderedReplacements, setOrderedReplacements] = useState<OrderedReplacement[]>([]);
+  const [orderedReplacements, setOrderedReplacements] = useState<ReplacementEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const _setRawReplacements = (grouped: ReplacementsData, ordered: OrderedReplacement[]) => {
+  const _setRawReplacements = (grouped: ReplacementsData, ordered: ReplacementEntry[]) => {
     setReplacements(grouped);
     setOrderedReplacements(ordered);
     setIsLoading(false);
@@ -57,60 +50,73 @@ export function useReplacements() {
 
   const fetchReplacements = useCallback(async () => {
     try {
-      const res = await fetch('/api/replacements');
+      const data = await invoke<SyncData>('sync_data');
+      
+      const grouped: ReplacementsData = {
+        URL_REPLACEMENTS: {},
+        HEADER_REPLACEMENTS: {},
+        BODY_KEY_REPLACEMENTS: {},
+        URL_PARAM_REPLACEMENTS: {},
+        TEXT_REPLACEMENTS: {}
+      };
+
+      data.replacements.forEach(r => {
+        const cat = r.type;
+        if (r.is_active && grouped[cat]) {
+          grouped[cat][r.pattern] = r.replacement;
+        }
+      });
+
+      setReplacements(grouped);
+      setOrderedReplacements(data.replacements);
       setError(null);
-      if (!res.ok) throw new Error('Failed to fetch');
-      const data = await res.json();
-      if (data.grouped) {
-        setReplacements(data.grouped);
-        setOrderedReplacements(data.ordered || []);
-      } else {
-        setReplacements(data);
-      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(String(err));
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const saveReplacements = useCallback(async (data: ReplacementsData | OrderedReplacement[], incremental = false) => {
+  const saveReplacements = useCallback(async (data: ReplacementsData | ReplacementEntry[]) => {
     setError(null);
     try {
-      const res = await fetch(`/api/replacements${incremental ? '?incremental=true' : ''}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error('Failed to save');
-      const result = await res.json();
-      if (result.success) {
-        await fetchReplacements();
+      let items: ReplacementEntry[] = [];
+      if (Array.isArray(data)) {
+        items = data;
+      } else {
+        (Object.keys(data) as ReplacementCategory[]).forEach((type) => {
+          const patterns = data[type];
+          Object.entries(patterns).forEach(([pattern, replacement]) => {
+            items.push({ 
+              id: crypto.randomUUID(), 
+              type, 
+              pattern, 
+              replacement, 
+              is_active: true, 
+              order_index: 0 
+            });
+          });
+        });
       }
-      return result;
+
+      await invoke('save_replacements_bulk', { replacements: items });
+      await fetchReplacements();
+      return { success: true };
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      const errMsg = String(err);
       setError(errMsg);
       return { success: false, error: errMsg };
     }
   }, [fetchReplacements]);
 
-  const updateOrder = useCallback(async (items: OrderedReplacement[]) => {
+  const updateOrder = useCallback(async (items: ReplacementEntry[]) => {
     setError(null);
     try {
-      const res = await fetch('/api/replacements', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
-      });
-      if (!res.ok) throw new Error('Failed to update order');
-      const result = await res.json();
-      if (result.success) {
-        setOrderedReplacements(items);
-      }
-      return result;
+      await invoke('update_replacement_order', { items });
+      setOrderedReplacements(items);
+      return { success: true };
     } catch (e) {
-      const errMsg = e instanceof Error ? e.message : 'Unknown error';
+      const errMsg = String(e);
       setError(errMsg);
       return { success: false, error: errMsg };
     }
@@ -119,16 +125,11 @@ export function useReplacements() {
   const deleteReplacement = useCallback(async (id: string) => {
     setError(null);
     try {
-      const res = await fetch('/api/replacements', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      });
-      if (!res.ok) throw new Error('Failed to delete');
+      await invoke('delete_replacement', { id });
       await fetchReplacements();
       return { success: true };
     } catch (e) {
-      const errMsg = e instanceof Error ? e.message : 'Unknown error';
+      const errMsg = String(e);
       setError(errMsg);
       return { success: false, error: errMsg };
     }
@@ -138,11 +139,10 @@ export function useReplacements() {
   const applyAllReplacements = useCallback((request: { url: string, headers: [string, string][], body: string }) => {
     let { url, headers, body } = request;
 
-    // 1. Global Text Replacements (applied to URL, Headers, and Body as strings)
+    // 1. Global Text Replacements
     for (const [pattern, replacement] of Object.entries(replacements.TEXT_REPLACEMENTS)) {
       url = url.replaceAll(pattern, replacement);
       
-      // Handle structured body separately to avoid breaking JSON
       if (body.startsWith('{') && body.includes('\"__form_data\"')) {
         try {
           const parsed = JSON.parse(body);
@@ -164,12 +164,12 @@ export function useReplacements() {
       headers = headers.map(([k, v]) => [k, v.replaceAll(pattern, replacement)]);
     }
 
-    // 2. URL Replacements (String replacement on URL)
+    // 2. URL Replacements
     for (const [pattern, replacement] of Object.entries(replacements.URL_REPLACEMENTS)) {
       url = url.replaceAll(pattern, replacement);
     }
 
-    // 3. URL Param Replacements (Key-based)
+    // 3. URL Param Replacements
     try {
       const parsedUrl = new URL(url);
       let searchParamsChanged = false;
@@ -182,7 +182,7 @@ export function useReplacements() {
       if (searchParamsChanged) url = parsedUrl.toString();
     } catch { /* skip if invalid URL */ }
 
-    // 4. Header Replacements (Key-based)
+    // 4. Header Replacements
     headers = headers.map(([k, v]) => {
       const lowerK = k.toLowerCase();
       for (const [pattern, replacement] of Object.entries(replacements.HEADER_REPLACEMENTS)) {
@@ -193,14 +193,12 @@ export function useReplacements() {
       return [k, v];
     });
 
-    // 5. Body Replacements (Key-based)
+    // 5. Body Replacements
     if (body) {
       try {
-        // Handle JSON (including our internal __form_data structure)
         const parsed = JSON.parse(body);
         
         if (parsed.__form_data && Array.isArray(parsed.__form_data)) {
-           // SPECIAL CASE: Structured form data
            parsed.__form_data = (parsed.__form_data as any[]).map((item) => {
              const lowerK = (item.k || "").toLowerCase();
              if (replacements.BODY_KEY_REPLACEMENTS[lowerK]) {
@@ -210,12 +208,10 @@ export function useReplacements() {
            });
            body = JSON.stringify(parsed, null, 2);
         } else {
-           // Normal JSON
            const transformed = transformObjectHelper(parsed, replacements.BODY_KEY_REPLACEMENTS);
            body = JSON.stringify(transformed, null, 2);
         }
       } catch {
-        // Handle Form Data
         if (body.includes('=') && (body.includes('&') || body.length > 0)) {
            const params = new URLSearchParams(body);
            let changed = false;
@@ -235,8 +231,7 @@ export function useReplacements() {
 
   useEffect(() => {
     fetchReplacements();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchReplacements]);
 
   return {
     replacements,

@@ -6,18 +6,14 @@ import { TrafficList } from '../Sidebar/TrafficList';
 import { Traffic } from '@/types/traffic';
 import HttpResponseViewer from '../ui/HttpResponseViewer';
 import { WorkspaceLayout } from '../Layout/WorkspaceLayout';
-import { useTraffic } from '@/hooks/traffic';
+import { useTraffic, RepeaterRequest } from '@/hooks/traffic';
+import { useNotification } from '../ui/NotificationProvider';
 import { PromptModal, ConfirmModal, ExtractionModal, RepeaterHistoryModal } from '../Modals';
 import { Button, Select } from '../ui';
-
-export interface RepeaterRequest {
-  id: string; name: string; groupId: string | null; method: string; url: string; headers: [string, string][]; body: string; timestamp: number;
-  extract?: Record<string, string>;
-  hitCount?: number;
-  response?: { status: number; headers: [string, string][]; body: string; time?: number; };
-}
+import { invoke } from '@tauri-apps/api/core';
 
 export function RepeaterView() {
+  const { notify } = useNotification();
   const {
     repeaterRequests, repeaterGroups, activeGroupId, switchGroup,
     addEmptyRequest, duplicateRequest, updateRequest, deleteRequest,
@@ -25,6 +21,7 @@ export function RepeaterView() {
     variables, activeEnvId, updateVariableAutoValue,
     uiLayout, updateUILayout,
     repeaterSelectedId: selectedId, setRepeaterSelectedId: setSelectedId,
+    _setRawRepeater,
     simpleMode
   } = useTraffic();
 
@@ -115,27 +112,38 @@ export function RepeaterView() {
     if (!currentReq) return;
     setIsLoading(true);
     try {
-      const varDict: Record<string, string> = {};
-      variables.filter(v => v.environmentId === activeEnvId).forEach(v => {
-        if (v.name.trim()) {
-          const activeVal = v.values[v.activeIndex] || v.values[0];
-          varDict[v.name.trim()] = activeVal ? activeVal.value : '';
-        }
-      });
+      // 1. Sync builder UI to backend before execution
+      const updatedReq: RepeaterRequest = {
+        ...currentReq,
+        method: editMethod,
+        url: editUrl,
+        headers: editHeaders,
+        body: editBody,
+      };
+      await updateRequest(currentReq.id, updatedReq);
 
-      const response = await fetch('/api/repeater', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: currentReq.id, method: editMethod, url: editUrl, headers: editHeaders, body: editBody, variables: varDict }),
-      });
-      const data = await response.json();
-      if (!data.success) return alert('Error: ' + (data.error || 'Unknown error'));
+      // 2. Execute
+      const response = await invoke<Traffic>('execute_repeater_request', { id: currentReq.id });
+      
+      // 3. Update local state with response
+      const updatedWithRes: RepeaterRequest = {
+        ...updatedReq,
+        hitCount: (updatedReq.hitCount || 0) + 1,
+        response: {
+           status: response.status_code,
+           headers: response.response_headers,
+           body: response.response_body
+        }
+      };
+      
+      _setRawRepeater((prev: RepeaterRequest[]) => prev.map((r: RepeaterRequest) => r.id === currentReq.id ? updatedWithRes : r));
 
       // --- EXTRACTION LOGIC ---
       if (editExtract && Object.keys(editExtract).length > 0) {
         try {
-          const respJson = JSON.parse(data.body);
+          const respJson = JSON.parse(response.response_body);
           Object.entries(editExtract).forEach(([varName, path]) => {
-            const value = path.split('.').reduce((obj, key) => obj?.[key], respJson);
+            const value = path.split('.').reduce((obj, key) => (obj as any)?.[key], respJson);
             if (value !== undefined) {
               updateVariableAutoValue(varName, String(value));
             }
@@ -145,12 +153,12 @@ export function RepeaterView() {
         }
       }
 
-      await updateRequest(currentReq.id, {
-        method: editMethod, url: editUrl, headers: editHeaders, body: editBody, extract: editExtract,
-        hitCount: (currentReq.hitCount || 0) + 1,
-        response: { status: data.status ?? 0, headers: data.headers || {}, body: data.body || '', time: Date.now() },
-      });
-    } catch (error) { alert('Error: ' + error); } finally { setIsLoading(false); }
+      notify.success('Execution complete');
+    } catch (error) {
+      notify.error(`Execution failed: ${error}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getPreviewRequestText = () => {
@@ -181,7 +189,7 @@ export function RepeaterView() {
     let headerStr = `${editMethod} ${path} HTTP/1.1\n`;
     let hasHost = false;
 
-    editHeaders.forEach(([k, v]) => {
+    editHeaders.forEach(([k, v]: [string, string]) => {
       if (k.toLowerCase() === 'host') hasHost = true;
       headerStr += `${interpolate(k)}: ${interpolate(v)}\n`;
     });

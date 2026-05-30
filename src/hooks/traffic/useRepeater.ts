@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { RepeaterRequest } from '@/components/View/RepeaterView';
-import { RepeaterGroup } from './types';
+import { RepeaterGroup, SyncData, RepeaterRequest } from './types';
+import { invoke } from '@tauri-apps/api/core';
 
 export function useRepeater(activeEnvId?: string) {
   const [repeaterRequests, setRepeaterRequests] = useState<RepeaterRequest[]>([]);
@@ -12,68 +12,59 @@ export function useRepeater(activeEnvId?: string) {
 
   const refreshRepeater = async () => {
     try {
-      const groupUrl = activeEnvId ? `/api/repeater-groups?envId=${activeEnvId}` : '/api/repeater-groups';
-      const [reqRes, groupRes] = await Promise.all([
-        fetch(`/api/repeater-db?groupId=${activeGroupId}`),
-        fetch(groupUrl)
-      ]);
-      setRepeaterRequests(await reqRes.json());
-      setRepeaterGroups(await groupRes.json());
+      const data = await invoke<SyncData>('sync_data');
+      setRepeaterRequests(data.repeater_requests);
+      setRepeaterGroups(data.repeater_groups);
     } catch (error) { console.error('Failed to refresh repeater data:', error); }
   };
 
-  // === UPGRADED: Lazy Loader now saves to database state ===
   const switchGroup = async (groupId: string) => {
     setActiveGroupId(groupId);
-
-    // Save to the Python app_state table in the background
-    fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active_repeater_group: groupId }) }).catch(console.error);
-
-    try {
-      const res = await fetch(`/api/repeater-db?groupId=${groupId}`);
-      setRepeaterRequests(await res.json());
-    } catch (error) { console.error("Failed to load group:", error); }
   };
 
   const addEmptyRequest = async (targetGroup: string | null = null) => {
     try {
-      const response = await fetch('/api/repeater-request', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'New Request', groupId: targetGroup, method: 'GET', url: '{{base_url}}/api/', headers: {}, body: '' }),
+      const id = await invoke<string>('create_repeater_item', { 
+        item: { name: 'New Request', method: 'GET', url: 'https://example.com/api/', headers: [], body: '', response: null, group_id: targetGroup } 
       });
-      const data = await response.json();
-      if (data.success || data.id) { await refreshRepeater(); return data.id; }
+      if (id) { await refreshRepeater(); return id; }
     } catch (error) { alert('Error creating request: ' + error); }
     return null;
   };
 
   const duplicateRequest = async (currentReq: RepeaterRequest) => {
     try {
-      const response = await fetch('/api/repeater-request', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const id = await invoke<string>('create_repeater_item', { 
+        item: {
           name: `${currentReq.name} (Copy)`,
-          groupId: currentReq.groupId,
           method: currentReq.method,
           url: currentReq.url,
-          headers: currentReq.headers || {},
+          headers: currentReq.headers || [],
           body: currentReq.body || '',
-        }),
+          response: currentReq.response,
+          group_id: currentReq.groupId
+        } 
       });
-      const data = await response.json();
-      if (data.success || data.id) { await refreshRepeater(); return data.id; }
+      if (id) { await refreshRepeater(); return id; }
     } catch (error) { alert('Error duplicating request: ' + error); }
     return null;
   };
 
   const deleteRequest = async (id: string) => {
     setRepeaterRequests(prev => prev.filter(r => r.id !== id));
-    fetch(`/api/repeater-db/${id}`, { method: 'DELETE' }).catch(console.error);
+    try {
+      await invoke('delete_repeater_request', { id });
+    } catch (e) { console.error(e); }
   };
 
   const updateRequest = async (id: string, updates: Partial<RepeaterRequest>) => {
-    setRepeaterRequests(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
-    fetch(`/api/repeater-db/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) }).catch(console.error);
+    const current = repeaterRequests.find(r => r.id === id);
+    if (!current) return;
+    const full = { ...current, ...updates };
+    setRepeaterRequests(prev => prev.map(r => r.id === id ? full : r));
+    try {
+      await invoke('update_repeater_request', { id, updates: full });
+    } catch (e) { console.error(e); }
   };
 
   const importPostman = async () => {
@@ -157,31 +148,28 @@ export function useRepeater(activeEnvId?: string) {
 
   const createGroup = async (name: string) => {
     if (!name.trim()) return null;
-    const res = await fetch('/api/repeater-groups', { 
-      method: 'POST', 
-      headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify({ name, envId: activeEnvId }) 
-    });
-    const data = await res.json();
-    if (data.success) { await refreshRepeater(); return data.id; }
-    return null;
+    try {
+      const id = await invoke<string>('create_repeater_group', { name });
+      await refreshRepeater();
+      return id;
+    } catch (e) { console.error(e); return null; }
   };
 
   const renameGroup = async (id: string, name: string) => {
     if (!name.trim()) return;
     setRepeaterGroups(prev => prev.map(g => g.id === id ? { ...g, name } : g));
-    await fetch(`/api/repeater-groups/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    try {
+      await invoke('rename_repeater_group', { id, name });
+    } catch (e) { console.error(e); }
   };
 
   const deleteGroup = async (id: string) => {
     setRepeaterGroups(prev => prev.filter(g => g.id !== id));
     setRepeaterRequests(prev => prev.filter(r => r.groupId !== id));
-
-    await fetch(`/api/repeater-groups/${id}`, { method: 'DELETE' });
-
-    if (activeGroupId === id) {
-      await switchGroup('All');
-    }
+    try {
+      await invoke('delete_repeater_group', { id });
+      if (activeGroupId === id) setActiveGroupId('All');
+    } catch (e) { console.error(e); }
   };
 
   const cloneGroup = async (id: string, newName: string) => {
@@ -225,48 +213,17 @@ export function useRepeater(activeEnvId?: string) {
     }
   };
   const reorderRequests = async (reorderedIds: string[]) => {
-    // Optimistically update UI
-    setRepeaterRequests(prev => {
-      const sorted = [...prev].sort((a, b) => {
-        const idxA = reorderedIds.indexOf(a.id);
-        const idxB = reorderedIds.indexOf(b.id);
-        return idxA - idxB;
-      });
-      return sorted;
-    });
-
+    setRepeaterRequests(prev => [...prev].sort((a, b) => reorderedIds.indexOf(a.id) - reorderedIds.indexOf(b.id)));
     try {
-      await fetch('/api/repeater-db', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reorderedIds)
-      });
-    } catch (error) {
-      console.error("Failed to save reorder:", error);
-    }
+      await invoke('reorder_repeater_requests', { ids: reorderedIds });
+    } catch (e) { console.error(e); }
   };
 
   const reorderGroups = async (reorderedIds: string[]) => {
-    // Optimistically update UI
-    setRepeaterGroups(prev => {
-      const sorted = [...prev].sort((a, b) => {
-        const idxA = reorderedIds.indexOf(a.id);
-        const idxB = reorderedIds.indexOf(b.id);
-        return idxA - idxB;
-      });
-      return sorted;
-    });
-
+    setRepeaterGroups(prev => [...prev].sort((a, b) => reorderedIds.indexOf(a.id) - reorderedIds.indexOf(b.id)));
     try {
-      const url = activeEnvId ? `/api/repeater-groups-reorder?envId=${activeEnvId}` : '/api/repeater-groups-reorder';
-      await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reorderedIds)
-      });
-    } catch (error) {
-      console.error("Failed to save group reorder:", error);
-    }
+      await invoke('reorder_repeater_groups', { ids: reorderedIds });
+    } catch (e) { console.error(e); }
   };
 
   const bulkSync = (groups: RepeaterGroup[], requests: RepeaterRequest[]) => {
@@ -275,8 +232,8 @@ export function useRepeater(activeEnvId?: string) {
   };
 
   const getAllGroups = async () => {
-    const res = await fetch('/api/repeater-groups');
-    return await res.json() as RepeaterGroup[];
+    const data = await invoke<SyncData>('sync_data');
+    return data.repeater_groups;
   };
 
   const manageGroupAssignment = async (

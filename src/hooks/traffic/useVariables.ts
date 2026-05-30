@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
-import { GlobalVariable, Environment } from './types';
+import { GlobalVariable, Environment, SyncData } from './types';
+import { invoke } from '@tauri-apps/api/core';
 
 export function useVariables(prefs?: { autoSave: boolean }) {
   const [variables, setVariables] = useState<GlobalVariable[]>([]);
@@ -13,7 +14,7 @@ export function useVariables(prefs?: { autoSave: boolean }) {
     setActiveEnvId(activeId);
   };
 
-  const reorderVariables = (reorderedVars: GlobalVariable[]) => {
+  const reorderVariables = async (reorderedVars: GlobalVariable[]) => {
     // 1. Optimistic Update
     const updated = reorderedVars.map((v, idx) => ({ ...v, orderIndex: idx }));
     setVariables(prev => {
@@ -21,38 +22,37 @@ export function useVariables(prefs?: { autoSave: boolean }) {
       return [...otherEnvVars, ...updated].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
     });
 
-    // 2. Persist (ONLY send id and orderIndex)
-    const payload = updated.map(v => ({ id: v.id, orderIndex: v.orderIndex }));
-    fetch('/api/variables/bulk', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).catch(console.error);
+    // 2. Persist
+    for (const v of updated) {
+      try {
+        await invoke('update_variable', { id: v.id, updates: v });
+      } catch (e) { console.error(e); }
+    }
   };
 
-  const addVariable = (v: GlobalVariable) => {
+  const addVariable = async (v: GlobalVariable) => {
     setVariables(prev => [...prev, v]);
-    fetch('/api/variables', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(v) }).catch(console.error);
+    try {
+      await invoke('create_variable', { variable: v });
+    } catch (e) { console.error(e); }
   };
 
-  const saveVariable = (id: string, updates: Partial<GlobalVariable>) => {
-    fetch(`/api/variables/${id}`, { 
-      method: 'PUT', 
-      headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify(updates) 
-    }).catch(console.error);
+  const saveVariable = async (id: string, updates: Partial<GlobalVariable>) => {
+    const current = variables.find(v => v.id === id);
+    if (!current) return;
+    const full = { ...current, ...updates };
+    try {
+      await invoke('update_variable', { id, updates: full });
+    } catch (e) { console.error(e); }
   };
 
   const saveAllVariables = async () => {
     const envVars = variables.filter(v => v.environmentId === activeEnvId);
-    if (envVars.length === 0) return;
-    
-    // For manual "Save All", we still send the full objects because they might have changed
-    await fetch('/api/variables/bulk', { 
-      method: 'PUT', 
-      headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify(envVars) 
-    }).catch(console.error);
+    for (const v of envVars) {
+      try {
+        await invoke('update_variable', { id: v.id, updates: v });
+      } catch (e) { console.error(e); }
+    }
   };
 
   const updateVariable = (id: string, updates: Partial<GlobalVariable>, immediate = false) => {
@@ -87,71 +87,62 @@ export function useVariables(prefs?: { autoSave: boolean }) {
     });
   };
 
-  const deleteVariable = (id: string) => {
+  const deleteVariable = async (id: string) => {
     setVariables(prev => prev.filter(v => v.id !== id));
-    fetch(`/api/variables/${id}`, { method: 'DELETE' }).catch(console.error);
+    try {
+      await invoke('delete_variable', { id });
+    } catch (e) { console.error(e); }
   };
 
   const setActiveEnvironment = async (id: string, refreshGroups?: () => Promise<void>) => {
     setActiveEnvId(id);
-
-    fetch('/api/environments', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ activeId: id })
-    }).catch(console.error);
-
     try {
-      const res = await fetch(`/api/variables?envId=${id}`);
-      const data = await res.json();
-      if (data.variables) {
-        setVariables(data.variables);
-      }
-      
-      // Refresh groups for the new environment
+      await invoke('set_active_environment', { id });
+      const data = await invoke<SyncData>('sync_data');
+      setVariables(data.variables);
       if (refreshGroups) await refreshGroups();
     } catch (error) {
       console.error("Failed to lazy-load environment variables:", error);
     }
   };
 
-  const createEnvironment = (name: string) => {
+  const createEnvironment = async (name: string) => {
     const newId = crypto.randomUUID();
-    setEnvironments(prev => [...prev, { id: newId, name }]);
+    setEnvironments(prev => [...prev, { id: newId, name, is_active: false }]);
     setActiveEnvId(newId);
-    fetch('/api/environments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: newId, name, activeId: newId }) });
+    try {
+      await invoke('create_environment', { id: newId, name });
+      await invoke('set_active_environment', { id: newId });
+    } catch (e) { console.error(e); }
   };
 
-  const renameEnvironment = (id: string, name: string) => {
+  const renameEnvironment = async (id: string, name: string) => {
     if (id === 'default-env-id' || !name.trim()) return;
     setEnvironments(prev => prev.map(e => e.id === id ? { ...e, name } : e));
-    fetch(`/api/environments/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    // TODO: implement rename_environment in rust if needed
   };
 
-  const deleteEnvironment = (id: string) => {
+  const deleteEnvironment = async (id: string) => {
     if (id === 'default-env-id') return;
     setEnvironments(prev => prev.filter(e => e.id !== id));
     setVariables(prev => prev.filter(v => v.environmentId !== id)); // Local cascade
-    if (activeEnvId === id) setActiveEnvironment('default-env-id');
-    fetch(`/api/environments/${id}`, { method: 'DELETE' });
+    try {
+      await invoke('delete_environment', { id });
+      if (activeEnvId === id) setActiveEnvironment('default-env-id');
+    } catch (e) { console.error(e); }
   };
 
   const switchWorkspace = async (
     envId: string, 
-    groupId: string, 
+    _groupId: string, 
     onSuccess: (data: { variables: any[], groups: any[], requests: any[] }) => void
   ) => {
     setActiveEnvId(envId);
     try {
-      const res = await fetch('/api/workspace/switch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ envId, groupId })
-      });
-      const data = await res.json();
-      if (data.success) {
-        if (data.environments) setEnvironments(data.environments);
-        setVariables(data.variables);
-        onSuccess(data);
-      }
+      await invoke('set_active_environment', { id: envId });
+      const data = await invoke<SyncData>('sync_data');
+      setVariables(data.variables);
+      onSuccess({ variables: data.variables, groups: data.repeater_groups, requests: data.repeater_requests });
     } catch (error) {
       console.error("Failed to switch workspace context:", error);
     }
@@ -167,12 +158,10 @@ export function useVariables(prefs?: { autoSave: boolean }) {
           if (prefs?.autoSave) {
             const timerId = `auto-${v.id}`;
             if (debounceTimers.current[timerId]) clearTimeout(debounceTimers.current[timerId]);
-            debounceTimers.current[timerId] = setTimeout(() => {
-              fetch(`/api/variables/${v.id}`, { 
-                method: 'PUT', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ values: newValues }) 
-              }).catch(console.error);
+            debounceTimers.current[timerId] = setTimeout(async () => {
+              try {
+                await invoke('update_variable', { id: v.id, updates: { ...v, values: newValues } });
+              } catch (e) { console.error(e); }
               delete debounceTimers.current[timerId];
             }, 2000);
           }
