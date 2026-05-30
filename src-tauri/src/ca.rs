@@ -3,6 +3,7 @@ use rcgen::{
 };
 use std::fs;
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 pub struct CA {
     pub cert: Certificate,
@@ -39,6 +40,11 @@ pub fn get_ca(ca_dir: PathBuf) -> CA {
         params.distinguished_name.push(DnType::OrganizationName, "MITM Rust");
         params.key_usages.push(rcgen::KeyUsagePurpose::KeyCertSign);
         params.key_usages.push(rcgen::KeyUsagePurpose::CrlSign);
+
+        // Adjust dates for clock skew
+        let now = SystemTime::now();
+        params.not_before = time::OffsetDateTime::from(now - std::time::Duration::from_secs(86400 * 365));
+        params.not_after = time::OffsetDateTime::from(now + std::time::Duration::from_secs(86400 * 365 * 10));
 
         let key_pair = KeyPair::generate().expect("Failed to generate CA key");
         let cert = params.self_signed(&key_pair).expect("Failed to sign CA cert");

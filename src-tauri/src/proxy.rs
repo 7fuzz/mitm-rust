@@ -161,6 +161,11 @@ async fn handle_connect(
     params.key_usages.push(rcgen::KeyUsagePurpose::KeyEncipherment);
     params.extended_key_usages.push(rcgen::ExtendedKeyUsagePurpose::ServerAuth);
     
+    // Adjust dates for clock skew
+    let now = SystemTime::now();
+    params.not_before = time::OffsetDateTime::from(now - std::time::Duration::from_secs(86400));
+    params.not_after = time::OffsetDateTime::from(now + std::time::Duration::from_secs(86400 * 365));
+
     let cert_key_pair = KeyPair::generate().unwrap();
     let cert = params.signed_by(&cert_key_pair, &state.ca.cert, &state.ca.key_pair).unwrap();
     
@@ -221,7 +226,7 @@ async fn handle_http(
 
     let (_parts, body) = req.into_parts();
     let collected_req_body = body.collect().await?.to_bytes();
-    let mut request_body = String::from_utf8_lossy(&collected_req_body).to_string();
+    let mut request_body_bytes = collected_req_body;
 
     // 1. Check Request Interception
     let intercept_config = {
@@ -245,7 +250,7 @@ async fn handle_http(
             status_code: 0,
             request_headers: request_headers.clone(),
             response_headers: HashMap::new(),
-            request_body: request_body.clone(),
+            request_body: String::from_utf8_lossy(&request_body_bytes).to_string(),
             response_body: String::new(),
             phase: "request".to_string(),
             is_intercepted: true,
@@ -272,7 +277,7 @@ async fn handle_http(
             if let Some(m) = action.method { method = m.parse().unwrap_or(method); }
             if let Some(u) = action.url { url = u; }
             if let Some(h) = action.headers { request_headers = h; }
-            if let Some(b) = action.body { request_body = b; }
+            if let Some(b) = action.body { request_body_bytes = Bytes::from(b); }
         }
     }
 
@@ -280,11 +285,15 @@ async fn handle_http(
         .method(method.clone())
         .uri(url.clone());
     
+    // Remove content-length/transfer-encoding to let hyper recalculate
+    request_headers.remove("content-length");
+    request_headers.remove("transfer-encoding");
+
     for (k, v) in request_headers.iter() {
         new_req = new_req.header(k, v);
     }
     
-    let new_req = new_req.body(Full::new(Bytes::from(request_body.clone()))).unwrap();
+    let new_req = new_req.body(Full::new(request_body_bytes.clone())).unwrap();
     
     match client.request(new_req).await {
         Ok(res) => {
@@ -292,7 +301,7 @@ async fn handle_http(
             let mut response_headers = headers_to_map(res.headers());
             let (_parts, body) = res.into_parts();
             let collected_res_body = body.collect().await?.to_bytes();
-            let mut response_body = String::from_utf8_lossy(&collected_res_body).to_string();
+            let mut response_body_bytes = collected_res_body;
 
             // 2. Check Response Interception
             if intercept_config.enabled && 
@@ -309,8 +318,8 @@ async fn handle_http(
                     status_code: status,
                     request_headers: request_headers.clone(),
                     response_headers: response_headers.clone(),
-                    request_body: request_body.clone(),
-                    response_body: response_body.clone(),
+                    request_body: String::from_utf8_lossy(&request_body_bytes).to_string(),
+                    response_body: String::from_utf8_lossy(&response_body_bytes).to_string(),
                     phase: "response".to_string(),
                     is_intercepted: true,
                     intercepted_at: Some(now),
@@ -334,7 +343,7 @@ async fn handle_http(
 
                     if let Some(s) = action.status_code { status = s; }
                     if let Some(h) = action.headers { response_headers = h; }
-                    if let Some(b) = action.body { response_body = b; }
+                    if let Some(b) = action.body { response_body_bytes = Bytes::from(b); }
                 }
             }
             
@@ -346,8 +355,8 @@ async fn handle_http(
                 status_code: status,
                 request_headers,
                 response_headers: response_headers.clone(),
-                request_body,
-                response_body: response_body.clone(),
+                request_body: String::from_utf8_lossy(&request_body_bytes).to_string(),
+                response_body: String::from_utf8_lossy(&response_body_bytes).to_string(),
                 phase: "response".to_string(),
                 is_intercepted: false,
                 intercepted_at: None,
@@ -355,11 +364,15 @@ async fn handle_http(
             
             let _ = state.app_handle.emit("traffic_captured", &traffic);
 
+            // Remove content-length/transfer-encoding to let hyper recalculate
+            response_headers.remove("content-length");
+            response_headers.remove("transfer-encoding");
+
             let mut builder = Response::builder().status(status);
             for (k, v) in response_headers.iter() {
                 builder = builder.header(k, v);
             }
-            Ok(builder.body(Full::new(Bytes::from(response_body))).unwrap())
+            Ok(builder.body(Full::new(response_body_bytes)).unwrap())
         }
         Err(e) => {
             eprintln!("Outbound request error: {}", e);
