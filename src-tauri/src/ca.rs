@@ -3,15 +3,11 @@ use rcgen::{
 };
 use std::fs;
 use std::path::PathBuf;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
 pub struct CA {
     pub cert: Certificate,
     pub key_pair: KeyPair,
-    pub cert_der: CertificateDer<'static>,
-    pub key_der: PrivateKeyDer<'static>,
     pub cert_pem: String,
-    pub key_pem: String,
 }
 
 pub fn get_ca(ca_dir: PathBuf) -> CA {
@@ -27,12 +23,9 @@ pub fn get_ca(ca_dir: PathBuf) -> CA {
         let cert = params.self_signed(&key_pair).expect("Failed to reconstruct CA cert");
 
         CA {
-            cert_der: cert.der().clone(),
-            key_der: PrivateKeyDer::from(PrivatePkcs8KeyDer::from(key_pair.serialize_der())),
             cert,
             key_pair,
             cert_pem,
-            key_pem,
         }
     } else {
         if !ca_dir.exists() {
@@ -57,12 +50,9 @@ pub fn get_ca(ca_dir: PathBuf) -> CA {
         fs::write(&key_path, &key_pem).expect("Failed to write CA key");
 
         CA {
-            cert_der: cert.der().clone(),
-            key_der: PrivateKeyDer::from(PrivatePkcs8KeyDer::from(key_pair.serialize_der())),
             cert,
             key_pair,
             cert_pem,
-            key_pem,
         }
     }
 }

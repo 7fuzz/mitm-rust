@@ -15,7 +15,7 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
-use rcgen::{CertificateParams, KeyPair, DnType, IsCa, BasicConstraints};
+use rcgen::{CertificateParams, KeyPair, DnType};
 
 use crate::ca::CA;
 
