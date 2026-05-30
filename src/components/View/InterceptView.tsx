@@ -7,7 +7,7 @@ import { InterceptTimer } from '../ui/InterceptTimer';
 import { WorkspaceLayout } from '../Layout/WorkspaceLayout';
 import { useTraffic } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
-import { Button } from '../ui/Button';
+import { Button, Select } from '../ui';
 
 export function InterceptView() {
   const {
@@ -170,9 +170,16 @@ export function InterceptView() {
             {isIntercepting ? 'Intercept_On' : 'Intercept_Off'}
           </Button>
 
-          <select value={interceptMode} onChange={(e) => updateConfig(isIntercepting, e.target.value as "both" | "request" | "response", ignoredMethods, urlFilter)} className="bg-zinc-950 border border-zinc-700 text-zinc-300 text-[10px] uppercase font-bold tracking-widest p-1.5 rounded outline-none focus:border-emerald-500 ml-2">
-            <option value="both">Req & Res</option><option value="request">Request Only</option><option value="response">Response Only</option>
-          </select>
+          <Select 
+            value={interceptMode} 
+            onChange={(val) => updateConfig(isIntercepting, val as "both" | "request" | "response", ignoredMethods, urlFilter)} 
+            options={[
+              { value: "both", label: "Req & Res" },
+              { value: "request", label: "Request Only" },
+              { value: "response", label: "Response Only" }
+            ]}
+            className="w-40 ml-2"
+          />
           <div className="w-px h-4 bg-zinc-800 mx-2"></div>
           
           <Button

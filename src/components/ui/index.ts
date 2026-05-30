@@ -6,3 +6,4 @@ export * from './StatusBadge';
 export * from './VariableSwitcher';
 export * from './Modal';
 export * from './DebouncedInput';
+export * from './Select';

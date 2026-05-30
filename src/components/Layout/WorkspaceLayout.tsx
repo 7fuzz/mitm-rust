@@ -1,6 +1,7 @@
 import { ReactNode, useState, useCallback, useEffect, useRef } from 'react';
 import { UILayout, useTraffic } from '@/hooks/traffic';
 import { VariableSwitcher } from '../ui/VariableSwitcher';
+import { Select } from '../ui';
 
 // === Main Layout ===
 interface Props {
@@ -89,13 +90,12 @@ export function WorkspaceLayout({ children, listComponent, mainContent, toolbarL
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 bg-zinc-950 p-1 rounded-full border border-zinc-800 px-3 shadow-inner shadow-app-shadow/50">
                 <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest hidden sm:inline-block">Env:</span>
-                <select
+                <Select
                   value={activeEnvId}
-                  onChange={(e) => setActiveEnvironment(e.target.value)}
-                  className="bg-transparent text-amber-400 text-[10px] uppercase font-bold outline-none cursor-pointer max-w-40 truncate"
-                >
-                  {environments.map(e => <option key={e.id} value={e.id} className="bg-zinc-900 text-zinc-300">{e.name}</option>)}
-                </select>
+                  onChange={(val) => setActiveEnvironment(val)}
+                  options={environments.map(e => ({ value: e.id, label: e.name }))}
+                  className="bg-transparent text-amber-400 text-[10px] uppercase font-bold outline-none cursor-pointer w-40 truncate"
+                />
               </div>
 
               <VariableSwitcher />

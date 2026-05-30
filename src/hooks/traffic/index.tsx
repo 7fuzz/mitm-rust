@@ -1,4 +1,6 @@
 import { useState, useEffect, createContext, useContext, ReactNode, useRef } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { Traffic } from '@/types/traffic';
 
 // Import our segmented hooks
@@ -56,78 +58,24 @@ function useTrafficState() {
   }, [config.isLimitEnabled, config.historyLimit, isStateLoaded, config.prefs.limits]);
 
   useEffect(() => {
-    // === 1. CORE STATE LOAD ===
-    fetch('/api/state').then(r => r.json()).then(state => {
-      if (state.preferences) config.initConfig.setPrefs(state.preferences);
-      if (state.limits && state.preferences?.limits !== false) {
-        config.initConfig.setIsLimitEnabled(state.limits.enabled);
-        config.initConfig.setHistoryLimit(state.limits.value);
-      }
-      if (state.intercept && state.preferences?.intercept !== false) {
-        config.initConfig.setIsIntercepting(state.intercept.enabled);
-        config.initConfig.setInterceptMode(state.intercept.mode);
-        config.initConfig.setIgnoredMethods(state.intercept.ignored);
-        config.initConfig.setUrlFilter(state.intercept.url_filter || '');
-      }
-      if (state.ui_layout) config.initConfig.setUiLayout(state.ui_layout);
-      if (state.toolkit_json) jsonToolkit._initToolkitJson(state.toolkit_json);
-      if (state.queue && state.queue.length > 0) trafficData.setTraffic(prev => [...state.queue, ...prev]);
-
-      // === FIXED: Consolidated Initial Load based on Saved State! ===
-      const savedGroupId = state.active_repeater_group || 'All';
-      repeater.initActiveGroup(savedGroupId);
-
-      // We need a fallback envId if one isn't active, but switchWorkspace handles activation
-      // If we don't have an active env yet, we'll fetch from /api/variables first to get the activeId
-      fetch('/api/variables').then(r => r.json()).then(data => {
-        if (data.variables) {
-          variables.switchWorkspace(data.activeEnvironmentId, savedGroupId, (wsData) => {
-            repeater.bulkSync(wsData.groups, wsData.requests);
-          });
-        }
+    // === 1. TAURI EVENT LISTENER ===
+    const unlisten = listen<Traffic>('traffic_captured', (event) => {
+      const data = event.payload;
+      trafficData.setTraffic((prev) => {
+        const filtered = prev.filter(t => t.id !== data.id);
+        const next = [data, ...filtered];
+        if (config.limitRef.current.enabled) return next.slice(0, config.limitRef.current.value);
+        return next;
       });
-
-      // === 2. PARALLEL BACKGROUND LOADS ===
-      fetch('/api/history').then(r => r.json()).then(hist => {
-        if (hist && hist.length > 0) {
-          trafficData.setTraffic(prev => {
-            const next = [...prev, ...hist.reverse()];
-            if (config.limitRef.current.enabled) return next.slice(0, config.limitRef.current.value);
-            return next;
-          });
-        }
-      });
-
-      setIsStateLoaded(true);
     });
 
-    // === 3. SSE CONNECTION ===
-    const connectSSE = () => {
-      const eventSource = new EventSource('/api/traffic');
-      
-      eventSource.onmessage = (e) => {
-        const data: Traffic = JSON.parse(e.data);
-        trafficData.setTraffic((prev) => {
-          const filtered = prev.filter(t => t.id !== data.id);
-          const next = [data, ...filtered];
-          if (config.limitRef.current.enabled) return next.slice(0, config.limitRef.current.value);
-          return next;
-        });
-      };
+    // TODO: Implement get_initial_state and get_history tauri commands
+    // For now, we set loaded to true so the UI doesn't hang
+    setIsStateLoaded(true);
 
-      eventSource.onerror = () => {
-        console.error("SSE Connection interrupted. Browser will attempt to reconnect automatically.");
-        eventSource.close();
-        // Manually trigger a reconnect after a short delay if the browser's native retry isn't enough
-        setTimeout(connectSSE, 3000);
-      };
-
-      return eventSource;
+    return () => {
+      unlisten.then(f => f());
     };
-
-    const es = connectSSE();
-
-    return () => es.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

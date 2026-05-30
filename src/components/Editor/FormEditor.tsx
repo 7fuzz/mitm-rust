@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Input, Textarea } from '../ui';
+import { Input, Textarea, Select } from '../ui';
 
 interface FormEntry {
   id: string;
@@ -128,15 +128,15 @@ export function FormEditor({ initialBody, contentType, onChange }: { initialBody
                placeholder="Key" 
                variant="sky"
              />
-             <select 
+             <Select 
                value={e.type} 
-               onChange={(ev) => updateEntry(e.id, { type: ev.target.value as 'text' | 'file', v: '' })}
+               onChange={(val) => updateEntry(e.id, { type: val as 'text' | 'file', v: '' })}
                disabled={isUrlEncoded}
-               className="bg-zinc-900 border border-zinc-800 text-[9px] text-zinc-500 uppercase font-bold p-1 rounded outline-none disabled:opacity-50"
-             >
-               <option value="text">Text</option>
-               {!isUrlEncoded && <option value="file">File</option>}
-             </select>
+               options={[
+                 { value: 'text', label: 'Text' },
+                 ...(!isUrlEncoded ? [{ value: 'file', label: 'File' }] : [])
+               ]}
+             />
           </div>
           
           <div className="flex-1 flex flex-col gap-1">

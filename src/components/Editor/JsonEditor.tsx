@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { Select } from '../ui';
 
 // --- Sub-component: Handles typing without losing focus ---
 const EditableKey = ({ initialKey, onCommit }: { initialKey: string, onCommit: (oldK: string, newK: string) => void }) => {
@@ -141,26 +142,28 @@ const JsonNode = ({ label, value, onChange, onDelete, onKeyChange }: JsonNodePro
         <div className="w-4 shrink-0 text-zinc-600 text-[10px] flex justify-end pr-2">-</div>
       )}
 
-      <select
+      <Select
         value={valueType}
-        onChange={(e) => handleTypeSwitch(e.target.value)}
-        className="bg-zinc-900 border border-zinc-700 text-zinc-400 text-[9px] uppercase font-bold px-1 py-1.5 rounded outline-none cursor-pointer hover:border-zinc-500 hover:text-zinc-300 transition-colors"
-      >
-        <option value="string">STR</option>
-        <option value="number">NUM</option>
-        <option value="boolean">BOOL</option>
-        <option value="null">NULL</option>
-      </select>
+        onChange={(val) => handleTypeSwitch(val)}
+        options={[
+          { value: "string", label: "STR" },
+          { value: "number", label: "NUM" },
+          { value: "boolean", label: "BOOL" },
+          { value: "null", label: "NULL" }
+        ]}
+        className="w-20"
+      />
 
       {valueType === 'boolean' ? (
-        <select
+        <Select
           value={String(value)}
-          onChange={(e) => onChange(e.target.value === 'true')}
-          className="flex-1 bg-zinc-950/50 border border-zinc-800/50 hover:border-zinc-700 p-1.5 rounded text-fuchsia-400 outline-none focus:border-fuchsia-500 text-[11px] font-mono transition-colors"
-        >
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
+          onChange={(val) => onChange(val === 'true')}
+          options={[
+            { value: "true", label: "true" },
+            { value: "false", label: "false" }
+          ]}
+          className="flex-1"
+        />
       ) : valueType === 'null' ? (
         <div className="flex-1 bg-zinc-950/30 border border-transparent p-1.5 rounded text-zinc-600 text-[11px] font-mono italic">
           null

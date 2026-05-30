@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { Input, Textarea } from '../ui';
+import { Input, Textarea, Select } from '../ui';
 
 interface Props {
   method?: string;
@@ -83,18 +83,21 @@ export function UrlEditor({ method = 'GET', onMethodChange, url, onChange, readO
       <div className="bg-zinc-800/50 px-3 py-2 flex justify-between items-center border-b border-zinc-800 shrink-0">
 
         <div className="flex items-center gap-3">
-          <select
+          <Select
             value={method}
             disabled={readOnly}
-            onChange={(e) => onMethodChange && onMethodChange(e.target.value)}
-            className={`bg-zinc-950 border border-zinc-700 px-2 py-1 rounded font-black outline-none transition-colors text-[10px] text-center uppercase tracking-widest
-              ${readOnly ? 'text-zinc-500 appearance-none' : 'text-amber-500 focus:border-amber-500 cursor-pointer'}
-            `}
-          >
-            <option value="GET">GET</option><option value="POST">POST</option><option value="PUT">PUT</option>
-            <option value="DELETE">DELETE</option><option value="PATCH">PATCH</option><option value="HEAD">HEAD</option>
-            <option value="OPTIONS">OPTIONS</option>
-          </select>
+            onChange={(val) => onMethodChange && onMethodChange(val)}
+            options={[
+              { value: "GET", label: "GET" },
+              { value: "POST", label: "POST" },
+              { value: "PUT", label: "PUT" },
+              { value: "DELETE", label: "DELETE" },
+              { value: "PATCH", label: "PATCH" },
+              { value: "HEAD", label: "HEAD" },
+              { value: "OPTIONS", label: "OPTIONS" }
+            ]}
+            className="w-32"
+          />
           <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest hidden sm:block">Target_URL</span>
         </div>
 

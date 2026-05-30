@@ -8,7 +8,7 @@ import HttpResponseViewer from '../ui/HttpResponseViewer';
 import { WorkspaceLayout } from '../Layout/WorkspaceLayout';
 import { useTraffic } from '@/hooks/traffic';
 import { PromptModal, ConfirmModal, ExtractionModal, RepeaterHistoryModal } from '../Modals';
-import { Button } from '../ui/Button';
+import { Button, Select } from '../ui';
 
 export interface RepeaterRequest {
   id: string; name: string; groupId: string | null; method: string; url: string; headers: Record<string, string>; body: string; timestamp: number;
@@ -240,16 +240,16 @@ export function RepeaterView() {
         toolbarLeft={!simpleMode ? (
           <div className="flex items-center gap-2 bg-zinc-950 p-1 rounded-full border border-zinc-800 px-3 shadow-inner shadow-app-shadow/50">
             <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest hidden sm:inline-block">Collection:</span>
-            <select
+            <Select
               value={activeGroupId}
-              onChange={(e) => switchGroup(e.target.value)}
-              className="bg-transparent text-purple-400 text-[10px] uppercase font-bold outline-none cursor-pointer min-w-30 max-w-50 truncate"
-            >
-              <option value="All" className="bg-zinc-900 text-zinc-300">All Groups</option>
-              <option value="null" className="bg-zinc-900 text-zinc-300">Default (Uncategorized)</option>
-              <option disabled className="bg-zinc-900 text-zinc-600">──────────</option>
-              {repeaterGroups.map(g => <option key={g.id} value={g.id} className="bg-zinc-900 text-zinc-300">{g.name}</option>)}
-            </select>
+              onChange={switchGroup}
+              options={[
+                { value: "All", label: "All Groups" },
+                { value: "null", label: "Default (Uncategorized)" },
+                ...repeaterGroups.map(g => ({ value: g.id, label: g.name }))
+              ]}
+              className="w-44"
+            />
 
             <div className="flex items-center gap-1 border-l border-zinc-800 pl-2 ml-1">
               <button
@@ -324,18 +324,19 @@ export function RepeaterView() {
                       <div>
                         <label className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest block mb-1.5">Collection Assignment</label>
                         <div className="flex gap-2">
-                          <select
+                          <Select
                             value={editGroupId || 'null'}
-                            onChange={(e) => {
-                              const newGroupId = e.target.value === 'null' ? null : e.target.value;
+                            onChange={(val) => {
+                              const newGroupId = val === 'null' ? null : val;
                               setEditGroupId(newGroupId);
                               updateRequest(currentReq.id, { groupId: newGroupId });
                             }}
-                            className="flex-1 bg-zinc-950 border border-zinc-700 px-3 py-2 rounded text-zinc-300 text-[11px] font-mono focus:border-purple-500 outline-none transition-colors cursor-pointer"
-                          >
-                            <option value="null">Default (Uncategorized)</option>
-                            {repeaterGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                          </select>
+                            options={[
+                              { value: 'null', label: 'Default (Uncategorized)' },
+                              ...repeaterGroups.map(g => ({ value: g.id, label: g.name }))
+                            ]}
+                            className="flex-1"
+                          />
                           <Button
                             variant="secondary"
                             size="sm"

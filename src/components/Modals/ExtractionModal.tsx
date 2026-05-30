@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { GlobalVariable } from '@/hooks/traffic';
-import { Button, Input, Modal } from '../ui';
+import { Button, Input, Modal, Select } from '../ui';
 
 interface ExtractionModalProps {
   isOpen: boolean;
@@ -92,16 +92,14 @@ export function ExtractionModal({ isOpen, onClose, onSave, initialRules, availab
             rules.map((rule) => (
               <div key={rule.id} className="flex items-center gap-2 group">
                 <div className="flex-1">
-                  <select
+                  <Select
                     value={rule.varName}
-                    onChange={(e) => updateRule(rule.id, 'varName', e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 p-2 rounded text-emerald-text text-xs font-mono outline-none focus:border-amber-500/50 transition-colors"
-                  >
-                    <option value="">Select Variable...</option>
-                    {availableVariables.map(v => (
-                      <option key={v.id} value={v.name}>{v.name}</option>
-                    ))}
-                  </select>
+                    onChange={(val) => updateRule(rule.id, 'varName', val)}
+                    options={[
+                      { value: '', label: 'Select Variable...' },
+                      ...availableVariables.map(v => ({ value: v.name, label: v.name }))
+                    ]}
+                  />
                 </div>
                 <span className="text-zinc-700 text-xs">←</span>
                 <div className="flex-[1.5]">
