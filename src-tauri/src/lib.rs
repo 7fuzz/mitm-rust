@@ -1,15 +1,82 @@
 mod ca;
 mod proxy;
 
-use hudsucker::Proxy;
 use std::net::SocketAddr;
-use tauri::Manager;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_sql::{Migration, MigrationKind};
+
+pub struct ProxyManager {
+    shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
+}
+
+pub struct AppState {
+    pub proxy_manager: Arc<Mutex<ProxyManager>>,
+}
+
+#[tauri::command]
+fn greet(name: &str) -> String {
+    format!("Hello, {}! You've been greeted from Rust!", name)
+}
 
 #[tauri::command]
 async fn get_history() -> Vec<proxy::Traffic> {
-    // Placeholder - will return from DB later
     Vec::new()
+}
+
+#[tauri::command]
+async fn get_root_ca_pem(app_handle: AppHandle) -> Result<String, String> {
+    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let ca_dir = app_data_dir.join("ca");
+    let ca = ca::get_ca(ca_dir);
+    Ok(ca.cert_pem)
+}
+
+#[tauri::command]
+async fn regenerate_root_ca(app_handle: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let ca_dir = app_data_dir.join("ca");
+    
+    // Stop proxy
+    {
+        let mut manager = state.proxy_manager.lock().await;
+        if let Some(tx) = manager.shutdown_tx.take() {
+            let _ = tx.send(());
+        }
+    }
+
+    // Delete and regenerate
+    ca::delete_ca(ca_dir.clone());
+    let ca = ca::get_ca(ca_dir.clone());
+    let cert_pem = ca.cert_pem.clone();
+
+    // Restart proxy
+    let app_handle_clone = app_handle.clone();
+    let proxy_manager = Arc::clone(&state.proxy_manager);
+    
+    tauri::async_runtime::spawn(async move {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        {
+            let mut manager = proxy_manager.lock().await;
+            manager.shutdown_tx = Some(tx);
+        }
+
+        let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+        
+        let proxy_task = proxy::start_proxy(app_handle_clone, ca, addr);
+        
+        tokio::select! {
+            _ = proxy_task => {
+                eprintln!("Proxy task finished unexpectedly");
+            }
+            _ = rx => {
+                println!("Proxy shutting down for CA regeneration");
+            }
+        }
+    });
+
+    Ok(cert_pem)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -35,14 +102,22 @@ pub fn run() {
         }
     ];
 
+    let proxy_manager = Arc::new(Mutex::new(ProxyManager { shutdown_tx: None }));
+    let state = AppState { proxy_manager: Arc::clone(&proxy_manager) };
+
     tauri::Builder::default()
+        .manage(state)
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::default()
             .add_migrations("sqlite:mitm.db", migrations)
             .build())
-        .invoke_handler(tauri::generate_handler![greet, get_history])
+        .invoke_handler(tauri::generate_handler![greet, get_history, get_root_ca_pem, regenerate_root_ca])
         .setup(|app| {
             let app_handle = app.handle().clone();
+            let state = app.state::<AppState>();
+            let proxy_manager = Arc::clone(&state.proxy_manager);
             
             // Get app data directory for CA storage
             let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
@@ -53,18 +128,23 @@ pub fn run() {
             
             // Spawn proxy server in a background tokio task
             tauri::async_runtime::spawn(async move {
-                let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-                let proxy = Proxy::builder()
-                    .with_addr(addr)
-                    .with_rustls_client()
-                    .with_ca(ca)
-                    .with_http_handler(proxy::MitmHandler { app_handle })
-                    .build();
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                {
+                    let mut manager = proxy_manager.lock().await;
+                    manager.shutdown_tx = Some(tx);
+                }
 
-                println!("Proxy server listening on {}", addr);
+                let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
                 
-                if let Err(e) = proxy.start(tauri::async_runtime::handle().clone()).await {
-                    eprintln!("Proxy server error: {}", e);
+                let proxy_task = proxy::start_proxy(app_handle, ca, addr);
+                
+                tokio::select! {
+                    _ = proxy_task => {
+                        eprintln!("Proxy task finished unexpectedly");
+                    }
+                    _ = rx => {
+                        println!("Proxy shutting down");
+                    }
                 }
             });
 

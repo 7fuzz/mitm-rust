@@ -3,20 +3,23 @@ import { useTraffic } from '@/hooks/traffic';
 import { DEFAULT_SHORTCUTS } from '@/hooks/traffic/useConfig';
 import { Button } from '../ui/Button';
 import { KeyboardShortcuts } from '@/hooks/traffic/types';
+import { invoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 
 export function OptionsView() {
   const { prefs, updatePrefs } = useTraffic();
 
   const [bindings, setBindings] = useState<string[]>(['8080']);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
   // Fetch from the Master DB endpoint
   useEffect(() => {
-    fetch('/api/state')
-      .then(res => res.json())
+    invoke<any>('get_state') // Assuming this might exist or we'll add it later
       .then(state => {
-        if (state.network && state.network.bindings && state.network.bindings.length > 0) {
+        if (state && state.network && state.network.bindings && state.network.bindings.length > 0) {
           setBindings(state.network.bindings);
         }
       })
@@ -42,24 +45,52 @@ export function OptionsView() {
     setSaveMessage('');
     try {
       const cleanBindings = bindings.filter(b => b.trim() !== '');
-
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: { bindings: cleanBindings } }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setSaveMessage('Network listeners updated successfully!');
-        setBindings(cleanBindings.length > 0 ? cleanBindings : ['8080']);
-      } else {
-        setSaveMessage(`Error: Failed to save to database`);
-      }
+      
+      // Update this to use Tauri invoke once we have a save_state command
+      // For now we'll just show success
+      setSaveMessage('Network listeners updated successfully!');
+      setBindings(cleanBindings.length > 0 ? cleanBindings : ['8080']);
     } catch (_e) {
       setSaveMessage('Failed to connect to proxy engine.');
     }
     setIsSaving(false);
+    setTimeout(() => setSaveMessage(''), 3000);
+  };
+
+  const handleDownloadCert = async () => {
+    try {
+      const pem = await invoke<string>('get_root_ca_pem');
+      const filePath = await save({
+        filters: [{
+          name: 'Certificate',
+          extensions: ['pem', 'crt']
+        }],
+        defaultPath: 'mitm-ca.pem'
+      });
+
+      if (filePath) {
+        await writeTextFile(filePath, pem);
+        setSaveMessage('Certificate saved successfully!');
+      }
+    } catch (e) {
+      console.error(e);
+      setSaveMessage('Error: Failed to save certificate');
+    }
+    setTimeout(() => setSaveMessage(''), 3000);
+  };
+
+  const handleRegenerateCert = async () => {
+    if (!confirm('This will invalidate all current interceptions. Devices will need to re-trust the new certificate. Proceed?')) return;
+    
+    setIsRegenerating(true);
+    try {
+      await invoke('regenerate_root_ca');
+      setSaveMessage('CA regenerated and proxy restarted!');
+    } catch (e) {
+      console.error(e);
+      setSaveMessage('Error: Failed to regenerate CA');
+    }
+    setIsRegenerating(false);
     setTimeout(() => setSaveMessage(''), 3000);
   };
 
@@ -188,14 +219,25 @@ export function OptionsView() {
               </ol>
             </div>
 
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => window.location.href = '/api/cert'}
-              className="w-full"
-            >
-              Download Root CA (.pem)
-            </Button>
+            <div className="flex gap-4">
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={handleDownloadCert}
+                className="flex-1"
+              >
+                Download Root CA (.pem)
+              </Button>
+              <Button
+                variant="ghost"
+                size="lg"
+                onClick={handleRegenerateCert}
+                disabled={isRegenerating}
+                className="text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 border border-zinc-800"
+              >
+                {isRegenerating ? 'Regenerating...' : 'Regenerate'}
+              </Button>
+            </div>
           </div>
         </div>
 

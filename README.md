@@ -29,8 +29,8 @@ npm run tauri build
 ## 🏃 Features & Migration Status
 
 ### 1. HTTP History (Porting)
-- [ ] Traffic capture in Rust.
-- [ ] Real-time update via Tauri Events.
+- [x] Traffic capture in Rust (Custom Hyper/Rustls engine).
+- [x] Real-time update via Tauri Events.
 - [ ] Search and filter UI.
 
 ### 2. Intercept & Modify (Porting)
