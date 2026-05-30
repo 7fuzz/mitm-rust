@@ -4,6 +4,7 @@ mod proxy;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio_rustls::rustls;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
@@ -81,6 +82,10 @@ async fn regenerate_root_ca(app_handle: AppHandle, state: State<'_, AppState>) -
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     let migrations = vec![
         Migration {
             version: 1,

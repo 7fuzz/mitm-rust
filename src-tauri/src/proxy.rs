@@ -9,7 +9,7 @@ use hyper::body::Incoming;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use hyper_util::client::legacy::Client;
-use hyper_util::client::legacy::connect::HttpConnector;
+use hyper_rustls;
 use http_body_util::{BodyExt, Full};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
@@ -112,6 +112,9 @@ async fn handle_connect(
     // Generate cert for this host
     let mut params = CertificateParams::new(vec![host.clone()]).unwrap();
     params.distinguished_name.push(DnType::CommonName, host.clone());
+    params.key_usages.push(rcgen::KeyUsagePurpose::DigitalSignature);
+    params.key_usages.push(rcgen::KeyUsagePurpose::KeyEncipherment);
+    params.extended_key_usages.push(rcgen::ExtendedKeyUsagePurpose::ServerAuth);
     
     let cert_key_pair = KeyPair::generate().unwrap();
     let cert = params.signed_by(&cert_key_pair, &state.ca.cert, &state.ca.key_pair).unwrap();
@@ -124,13 +127,20 @@ async fn handle_connect(
         .with_single_cert(vec![cert_der], key_der)?;
     
     let acceptor = TlsAcceptor::from(Arc::new(server_config));
-    let tls_stream = acceptor.accept(upgraded_io).await?;
+    let tls_stream = match acceptor.accept(upgraded_io).await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("TLS accept error for {}: {}", host, e);
+            return Err(e.into());
+        }
+    };
     
     let io = TokioIo::new(tls_stream);
     
+    let host_for_service = host.clone();
     let service = service_fn(move |mut req| {
         let state = Arc::clone(&state);
-        let host = host.clone();
+        let host = host_for_service.clone();
         async move {
             let uri = format!("https://{}{}", host, req.uri());
             *req.uri_mut() = uri.parse().unwrap();
@@ -138,10 +148,11 @@ async fn handle_connect(
         }
     });
 
-    if let Err(_err) = hyper::server::conn::http1::Builder::new()
+    if let Err(err) = hyper::server::conn::http1::Builder::new()
         .serve_connection(io, service)
         .await 
     {
+        eprintln!("Error serving TLS connection for {}: {}", host, err);
     }
 
     Ok(())
@@ -151,7 +162,12 @@ async fn handle_http(
     req: Request<Incoming>,
     state: Arc<ProxyState>,
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
-    let client = Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
+    let https = hyper_rustls::HttpsConnectorBuilder::new()
+        .with_webpki_roots()
+        .https_or_http()
+        .enable_http1()
+        .build();
+    let client = Client::builder(hyper_util::rt::TokioExecutor::new()).build(https);
     
     let method = req.method().clone();
     let url = req.uri().to_string();
