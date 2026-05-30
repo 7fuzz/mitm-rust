@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { UILayout } from './types';
+import { invoke } from '@tauri-apps/api/core';
 
 export const DEFAULT_SHORTCUTS = {
   goto_history: 'h',
@@ -43,18 +44,28 @@ export function useConfig() {
 
   const updateConfig = async (enabled: boolean, mode: 'both' | 'request' | 'response', ignored: string[], filter: string) => {
     setIsIntercepting(enabled); setInterceptMode(mode); setIgnoredMethods(ignored); setUrlFilter(filter);
-    if (prefsRef.current.intercept) fetch('/api/state', { method: 'POST', body: JSON.stringify({ intercept: { enabled, mode, ignored, url_filter: filter } }) });
+    
+    try {
+      await invoke('update_state', { config: {
+        enabled,
+        mode,
+        ignored_methods: ignored,
+        url_filter: filter
+      }});
+    } catch (e) {
+      console.error('Failed to update intercept config:', e);
+    }
   };
 
   const updatePrefs = async (newPrefs: typeof prefs) => {
     setPrefs(newPrefs);
-    await fetch('/api/state', { method: 'POST', body: JSON.stringify({ preferences: newPrefs }) });
+    // TODO: implement update_prefs in rust if needed
   };
 
   const updateUILayout = (updates: Partial<UILayout>) => {
     const next = { ...uiLayout, ...updates };
     setUiLayout(next);
-    fetch('/api/state', { method: 'POST', body: JSON.stringify({ ui_layout: next }) });
+    // TODO: implement update_ui_layout in rust if needed
   };
 
   useEffect(() => {

@@ -33,10 +33,10 @@ npm run tauri build
 - [x] Real-time update via Tauri Events.
 - [ ] Search and filter UI.
 
-### 2. Intercept & Modify (Porting)
-- [ ] Request/Response pausing logic in Rust.
-- [ ] UI for editing URL, headers, and body.
-- [ ] Stage to Repeater logic.
+### 2. Intercept & Modify (Ported)
+- [x] Request/Response pausing logic in Rust.
+- [x] UI for editing URL, headers, and body.
+- [x] Stage to Repeater logic.
 
 ### 3. Repeater (Porting)
 - [ ] Request execution engine in Rust.

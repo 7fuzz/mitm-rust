@@ -14,6 +14,49 @@ pub struct ProxyManager {
 
 pub struct AppState {
     pub proxy_manager: Arc<Mutex<ProxyManager>>,
+    pub intercept_state: Arc<Mutex<proxy::InterceptState>>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct RepeaterResponse {
+    pub status: u16,
+    pub headers: std::collections::HashMap<String, String>,
+    pub body: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct CreateRepeaterItem {
+    pub name: String,
+    pub method: String,
+    pub url: String,
+    pub headers: std::collections::HashMap<String, String>,
+    pub body: String,
+    pub response: Option<RepeaterResponse>,
+}
+
+#[tauri::command]
+async fn update_state(config: proxy::InterceptConfig, state: State<'_, AppState>) -> Result<(), String> {
+    let mut intercept = state.intercept_state.lock().await;
+    intercept.config = config;
+    Ok(())
+}
+
+#[tauri::command]
+async fn resume_flow(id: String, action: proxy::ResumeAction, state: State<'_, AppState>) -> Result<(), String> {
+    let mut intercept = state.intercept_state.lock().await;
+    if let Some(tx) = intercept.pending.remove(&id) {
+        let _ = tx.send(action);
+        Ok(())
+    } else {
+        Err("Flow not found".to_string())
+    }
+}
+
+#[tauri::command]
+async fn create_repeater_item(item: CreateRepeaterItem) -> Result<String, String> {
+    println!("Staging to Repeater: {} {}", item.method, item.url);
+    // TODO: Actually insert into DB. For now, just return a fake ID.
+    Ok(uuid::Uuid::new_v4().to_string())
 }
 
 #[tauri::command]
@@ -55,6 +98,7 @@ async fn regenerate_root_ca(app_handle: AppHandle, state: State<'_, AppState>) -
     // Restart proxy
     let app_handle_clone = app_handle.clone();
     let proxy_manager = Arc::clone(&state.proxy_manager);
+    let intercept_state = Arc::clone(&state.intercept_state);
     
     tauri::async_runtime::spawn(async move {
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -64,8 +108,7 @@ async fn regenerate_root_ca(app_handle: AppHandle, state: State<'_, AppState>) -
         }
 
         let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-        
-        let proxy_task = proxy::start_proxy(app_handle_clone, ca, addr);
+        let proxy_task = proxy::start_proxy(app_handle_clone, ca, intercept_state, addr);
         
         tokio::select! {
             _ = proxy_task => {
@@ -104,11 +147,37 @@ pub fn run() {
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );",
             kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "create repeater table",
+            sql: "CREATE TABLE IF NOT EXISTS repeater_requests (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                group_id TEXT,
+                method TEXT,
+                url TEXT,
+                headers TEXT,
+                body TEXT,
+                response_status INTEGER,
+                response_headers TEXT,
+                response_body TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );",
+            kind: MigrationKind::Up,
         }
     ];
 
     let proxy_manager = Arc::new(Mutex::new(ProxyManager { shutdown_tx: None }));
-    let state = AppState { proxy_manager: Arc::clone(&proxy_manager) };
+    let intercept_state = Arc::new(Mutex::new(proxy::InterceptState {
+        config: proxy::InterceptConfig::default(),
+        pending: std::collections::HashMap::new(),
+    }));
+    
+    let state = AppState { 
+        proxy_manager: Arc::clone(&proxy_manager),
+        intercept_state: Arc::clone(&intercept_state),
+    };
 
     tauri::Builder::default()
         .manage(state)
@@ -118,11 +187,20 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::default()
             .add_migrations("sqlite:mitm.db", migrations)
             .build())
-        .invoke_handler(tauri::generate_handler![greet, get_history, get_root_ca_pem, regenerate_root_ca])
+        .invoke_handler(tauri::generate_handler![
+            greet, 
+            get_history, 
+            get_root_ca_pem, 
+            regenerate_root_ca,
+            update_state,
+            resume_flow,
+            create_repeater_item
+        ])
         .setup(|app| {
             let app_handle = app.handle().clone();
             let state = app.state::<AppState>();
             let proxy_manager = Arc::clone(&state.proxy_manager);
+            let intercept_state = Arc::clone(&state.intercept_state);
             
             // Get app data directory for CA storage
             let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
@@ -141,7 +219,7 @@ pub fn run() {
 
                 let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
                 
-                let proxy_task = proxy::start_proxy(app_handle, ca, addr);
+                let proxy_task = proxy::start_proxy(app_handle, ca, intercept_state, addr);
                 
                 tokio::select! {
                     _ = proxy_task => {

@@ -8,6 +8,7 @@ import { WorkspaceLayout } from '../Layout/WorkspaceLayout';
 import { useTraffic } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
 import { Button, Select } from '../ui';
+import { invoke } from '@tauri-apps/api/core';
 
 export function InterceptView() {
   const {
@@ -76,28 +77,24 @@ export function InterceptView() {
         ? { url: editUrl || currentReq.url, headers: editHeaders, body: editBody }
         : applyAllReplacements({ url: editUrl || currentReq.url, headers: editHeaders, body: editBody });
 
-      const response = await fetch(`/api/repeater-request${isRaw ? '?raw=true' : ''}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: `${currentReq.method} ${path} (Intercept)`,
-          groupId: null,
-          method: editMethod || currentReq.method,
-          url: finalUrl,
+      const payload = {
+        name: `${currentReq.method} ${path} (Intercept)`,
+        method: editMethod || currentReq.method,
+        url: finalUrl,
+        headers: finalHeaders,
+        body: finalBody,
+        response: isRes ? {
+          status: editStatusCode,
           headers: finalHeaders,
-          body: finalBody,
-          response: isRes ? {
-            status: editStatusCode,
-            headers: finalHeaders,
-            body: finalBody
-          } : undefined
-        })
-      });
+          body: finalBody
+        } : undefined
+      };
 
-      const data = await response.json();
-      if (data.success || data.id) {
+      const itemId = await invoke<string>('create_repeater_item', { item: payload });
+      
+      if (itemId) {
         if (refreshRepeater) await refreshRepeater();
-        if (setRepeaterSelectedId) setRepeaterSelectedId(data.id);
+        if (setRepeaterSelectedId) setRepeaterSelectedId(itemId);
         notify.success(isRaw ? 'Staged Raw to Repeater' : 'Staged in Repeater');
       }
     } catch (error) {
