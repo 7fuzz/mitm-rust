@@ -8,10 +8,6 @@
     "opener:default",
     "dialog:allow-save",
     "fs:allow-write-text-file",
-    "sql:default",
-    "mitm-rust:allow-get-history",
-    "mitm-rust:allow-get-root-ca-pem",
-    "mitm-rust:allow-regenerate-root-ca",
-    "mitm-rust:allow-greet"
+    "sql:default"
   ]
 }
