@@ -49,6 +49,12 @@ export function useReplacements() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const _setRawReplacements = (grouped: ReplacementsData, ordered: OrderedReplacement[]) => {
+    setReplacements(grouped);
+    setOrderedReplacements(ordered);
+    setIsLoading(false);
+  };
+
   const fetchReplacements = useCallback(async () => {
     try {
       const res = await fetch('/api/replacements');
@@ -237,6 +243,7 @@ export function useReplacements() {
     orderedReplacements,
     isLoading,
     error,
+    _setRawReplacements,
     fetchReplacements,
     saveReplacements,
     updateOrder,

@@ -1,6 +1,6 @@
 export interface EnvVariant { name: string; value: string; }
 export interface UILayout { isListOpen: boolean; splitMode: 'vertical' | 'horizontal'; sidebarWidth: number; }
-export interface Environment { id: string; name: string; }
+export interface Environment { id: string; name: string; is_active?: boolean; }
 export interface GlobalVariableValue { id: string; name: string; value: string; }
 export interface GlobalVariable {
   id: string;
@@ -60,13 +60,14 @@ export interface RepeaterRequest {
   groupId: string | null;
   method: string;
   url: string;
-  headers: Record<string, string>;
+  headers: [string, string][];
   body: string;
   timestamp: number;
   extract?: Record<string, string>;
+  hitCount?: number;
   response?: {
     status: number;
-    headers: Record<string, string>;
+    headers: [string, string][];
     body: string;
     time?: number;
   };
@@ -76,8 +77,26 @@ export type ReplacementCategory = 'URL_REPLACEMENTS' | 'HEADER_REPLACEMENTS' | '
 
 export interface ReplacementEntry {
   id: string;
+  type: string;
   pattern: string;
   replacement: string;
+  description?: string;
   is_active: boolean;
+  order_index: number;
+}
+
+export interface SyncData {
+  history: import('@/types/traffic').Traffic[];
+  repeater_groups: RepeaterGroup[];
+  repeater_requests: RepeaterRequest[];
+  environments: Environment[];
+  variables: GlobalVariable[];
+  replacements: ReplacementEntry[];
+}
+
+export interface SyncStatus {
+  is_syncing: boolean;
+  last_sync: number | null;
+  error: string | null;
 }
 

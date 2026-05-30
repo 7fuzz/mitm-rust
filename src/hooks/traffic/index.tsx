@@ -1,6 +1,9 @@
 import { useState, useEffect, createContext, useContext, ReactNode, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { Traffic } from '@/types/traffic';
+import { SyncData, SyncStatus } from './types';
+import { useNotification } from '@/components/ui/NotificationProvider';
 
 // Import our segmented hooks
 import { useSelection } from './useSelection';
@@ -23,10 +26,58 @@ function useTrafficState() {
   const variables = useVariables(config.prefs);
   const repeater = useRepeater(variables.activeEnvId);
   const trafficData = useTrafficLog();
+  const replacements = useReplacements();
+  const { notify } = useNotification();
+  
   const isFirstSync = useRef(true);
   const jsonToolkit = useJsonToolkit();
 
   const [isStateLoaded, setIsStateLoaded] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ is_syncing: false, last_sync: null, error: null });
+
+  const syncAll = async (silent = false) => {
+    setSyncStatus(prev => ({ ...prev, is_syncing: true, error: null }));
+    if (!silent) notify.info('Synchronizing data with backend...');
+    
+    try {
+      const data = await invoke<SyncData>('sync_data');
+      
+      // Update each hook with fresh data
+      trafficData.setTraffic(data.history);
+      repeater._setRawGroups(data.repeater_groups);
+      repeater._setRawRepeater(data.repeater_requests);
+      variables.loadVariables(data.variables, data.environments, data.environments.find(e => e.is_active)?.id || data.environments[0]?.id || 'default-env-id');
+      
+      // Group replacements for the segmented hook
+      const groupedReplacements = {
+        URL_REPLACEMENTS: {} as Record<string, string>,
+        HEADER_REPLACEMENTS: {} as Record<string, string>,
+        BODY_KEY_REPLACEMENTS: {} as Record<string, string>,
+        URL_PARAM_REPLACEMENTS: {} as Record<string, string>,
+        TEXT_REPLACEMENTS: {} as Record<string, string>
+      };
+      data.replacements.forEach(r => {
+        if (r.is_active && groupedReplacements[r.type as keyof typeof groupedReplacements]) {
+          groupedReplacements[r.type as keyof typeof groupedReplacements][r.pattern] = r.replacement;
+        }
+      });
+      replacements._setRawReplacements(groupedReplacements, data.replacements);
+
+      setSyncStatus({ is_syncing: false, last_sync: Date.now(), error: null });
+      if (!silent) notify.success('Data synchronized successfully');
+      setIsStateLoaded(true);
+    } catch (e) {
+      const errorMsg = String(e);
+      setSyncStatus({ is_syncing: false, last_sync: null, error: errorMsg });
+      notify.error(`Sync failed: ${errorMsg}`);
+    }
+  };
+
+  useEffect(() => {
+    // Initial sync
+    syncAll(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!isStateLoaded) return;
@@ -68,17 +119,12 @@ function useTrafficState() {
       });
     });
 
-    // TODO: Implement get_initial_state and get_history tauri commands
-    // For now, we set loaded to true so the UI doesn't hang
-    setIsStateLoaded(true);
-
     return () => {
       unlisten.then(f => f());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const replacements = useReplacements();
   const { initConfig: _initConfig, prefsRef: _prefsRef, limitRef: _limitRef, ...configRest } = config; // eslint-disable-line @typescript-eslint/no-unused-vars
   const { _initToolkitJson: _itj, ...jsonToolkitRest } = jsonToolkit; // eslint-disable-line @typescript-eslint/no-unused-vars
 
@@ -95,6 +141,8 @@ function useTrafficState() {
     ...jsonToolkitRest,
     ...trafficData,
     ...replacements,
+    syncAll,
+    syncStatus,
     selectedReq: trafficData.traffic.find((r) => r.id === selections.selectedId) || null,
   };
 }

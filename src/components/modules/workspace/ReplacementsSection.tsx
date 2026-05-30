@@ -107,11 +107,11 @@ export function ReplacementsSection() {
   if (orderedReplacements !== prevOrdered) {
     setPrevOrdered(orderedReplacements);
     const converted: Record<ReplacementCategory, ReplacementEntry[]> = {
-      URL_REPLACEMENTS: orderedReplacements.filter(r => r.type === 'URL_REPLACEMENTS').map(r => ({ id: r.id, pattern: r.pattern, replacement: r.replacement, is_active: r.is_active })),
-      HEADER_REPLACEMENTS: orderedReplacements.filter(r => r.type === 'HEADER_REPLACEMENTS').map(r => ({ id: r.id, pattern: r.pattern, replacement: r.replacement, is_active: r.is_active })),
-      BODY_KEY_REPLACEMENTS: orderedReplacements.filter(r => r.type === 'BODY_KEY_REPLACEMENTS').map(r => ({ id: r.id, pattern: r.pattern, replacement: r.replacement, is_active: r.is_active })),
-      URL_PARAM_REPLACEMENTS: orderedReplacements.filter(r => r.type === 'URL_PARAM_REPLACEMENTS').map(r => ({ id: r.id, pattern: r.pattern, replacement: r.replacement, is_active: r.is_active })),
-      TEXT_REPLACEMENTS: orderedReplacements.filter(r => r.type === 'TEXT_REPLACEMENTS').map(r => ({ id: r.id, pattern: r.pattern, replacement: r.replacement, is_active: r.is_active })),
+      URL_REPLACEMENTS: orderedReplacements.filter(r => r.type === 'URL_REPLACEMENTS').map(r => ({ id: r.id, type: r.type, pattern: r.pattern, replacement: r.replacement, is_active: r.is_active, order_index: r.order_index })),
+      HEADER_REPLACEMENTS: orderedReplacements.filter(r => r.type === 'HEADER_REPLACEMENTS').map(r => ({ id: r.id, type: r.type, pattern: r.pattern, replacement: r.replacement, is_active: r.is_active, order_index: r.order_index })),
+      BODY_KEY_REPLACEMENTS: orderedReplacements.filter(r => r.type === 'BODY_KEY_REPLACEMENTS').map(r => ({ id: r.id, type: r.type, pattern: r.pattern, replacement: r.replacement, is_active: r.is_active, order_index: r.order_index })),
+      URL_PARAM_REPLACEMENTS: orderedReplacements.filter(r => r.type === 'URL_PARAM_REPLACEMENTS').map(r => ({ id: r.id, type: r.type, pattern: r.pattern, replacement: r.replacement, is_active: r.is_active, order_index: r.order_index })),
+      TEXT_REPLACEMENTS: orderedReplacements.filter(r => r.type === 'TEXT_REPLACEMENTS').map(r => ({ id: r.id, type: r.type, pattern: r.pattern, replacement: r.replacement, is_active: r.is_active, order_index: r.order_index })),
     };
     
     isSyncingRef.current = true;
@@ -121,7 +121,7 @@ export function ReplacementsSection() {
       if (a.type !== b.type) return a.type.localeCompare(b.type);
       return (a.order_index || 0) - (b.order_index || 0);
     });
-    const payloadString = JSON.stringify(sortedItems.map(r => ({ id: r.id, type: r.type, pattern: r.pattern, replacement: r.replacement, is_active: r.is_active })));
+    const payloadString = JSON.stringify(sortedItems.map(r => ({ id: r.id, type: r.type, pattern: r.pattern, replacement: r.replacement, is_active: r.is_active, order_index: r.order_index })));
     lastSavedRef.current = payloadString;
   }
 
@@ -204,7 +204,7 @@ export function ReplacementsSection() {
     isSyncingRef.current = false;
     setLocalReplacements(prev => ({
       ...prev,
-      [category]: [...prev[category], { id: crypto.randomUUID(), pattern: '', replacement: '', is_active: true }]
+      [category]: [...prev[category], { id: crypto.randomUUID(), type: category, pattern: '', replacement: '', is_active: true, order_index: prev[category].length }]
     }));
   };
 
@@ -354,7 +354,7 @@ export function ReplacementsSection() {
             size="md"
             onClick={handleManualSave}
             disabled={isSaving}
-            className="bg-rose-600 hover:bg-rose-500 text-zinc-950 px-8"
+            className="bg-btn-destructive text-btn-destructive-text px-8"
           >
             {isSaving ? 'Saving...' : 'Save Configuration'}
           </Button>

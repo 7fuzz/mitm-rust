@@ -20,6 +20,71 @@ pub struct ProxyManager {
     pub config: ProxyConfig,
 }
 
+#[derive(serde::Serialize)]
+pub struct RepeaterGroup {
+    pub id: String,
+    pub name: String,
+    pub order_index: i32,
+}
+
+#[derive(serde::Serialize)]
+pub struct RepeaterRequest {
+    pub id: String,
+    pub name: String,
+    pub group_id: Option<String>,
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: String,
+    pub response: Option<proxy::Traffic>,
+    pub hit_count: i32,
+}
+
+#[derive(serde::Serialize)]
+pub struct VariableValue {
+    pub id: String,
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct GlobalVariable {
+    pub id: String,
+    pub environment_id: String,
+    pub name: String,
+    pub active_index: i32,
+    pub order_index: i32,
+    pub values: Vec<VariableValue>,
+}
+
+#[derive(serde::Serialize)]
+pub struct Environment {
+    pub id: String,
+    pub name: String,
+    pub is_active: bool,
+}
+
+#[derive(serde::Serialize)]
+pub struct Replacement {
+    pub id: String,
+    pub r_type: String, // Field name in DB is 'type', but we need to map it carefully
+    pub pattern: String,
+    pub replacement: String,
+    pub description: Option<String>,
+    pub is_active: bool,
+    pub order_index: i32,
+}
+
+#[derive(serde::Serialize)]
+pub struct SyncData {
+    pub history: Vec<proxy::Traffic>,
+    pub repeater_groups: Vec<RepeaterGroup>,
+    pub repeater_requests: Vec<RepeaterRequest>,
+    pub environments: Vec<Environment>,
+    pub variables: Vec<GlobalVariable>,
+    pub replacements: Vec<Replacement>,
+}
+
 pub struct AppState {
     pub proxy_manager: Arc<Mutex<ProxyManager>>,
     pub intercept_state: Arc<Mutex<proxy::InterceptState>>,
@@ -28,7 +93,7 @@ pub struct AppState {
 #[derive(serde::Deserialize)]
 pub struct RepeaterResponse {
     pub status: u16,
-    pub headers: std::collections::HashMap<String, String>,
+    pub headers: Vec<(String, String)>,
     pub body: String,
 }
 
@@ -37,7 +102,7 @@ pub struct CreateRepeaterItem {
     pub name: String,
     pub method: String,
     pub url: String,
-    pub headers: std::collections::HashMap<String, String>,
+    pub headers: Vec<(String, String)>,
     pub body: String,
     pub response: Option<RepeaterResponse>,
 }
@@ -216,10 +281,25 @@ async fn resume_flow(id: String, action: proxy::ResumeAction, state: State<'_, A
 }
 
 #[tauri::command]
-async fn create_repeater_item(item: CreateRepeaterItem) -> Result<String, String> {
-    println!("Staging to Repeater: {} {}", item.method, item.url);
-    // TODO: Actually insert into DB. For now, just return a fake ID.
-    Ok(uuid::Uuid::new_v4().to_string())
+async fn create_repeater_item(app_handle: AppHandle, item: CreateRepeaterItem) -> Result<String, String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    
+    let id = uuid::Uuid::new_v4().to_string();
+    let headers_json = serde_json::to_string(&item.headers).unwrap_or_default();
+    
+    let (res_status, res_headers, res_body) = if let Some(res) = &item.response {
+        (Some(res.status), Some(serde_json::to_string(&res.headers).unwrap_or_default()), Some(res.body.clone()))
+    } else {
+        (None, None, None)
+    };
+
+    conn.execute(
+        "INSERT INTO repeater_requests (id, name, method, url, headers, body, response_status, response_headers, response_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        rusqlite::params![id, item.name, item.method, item.url, headers_json, item.body, res_status, res_headers, res_body],
+    ).map_err(|e| e.to_string())?;
+
+    Ok(id)
 }
 
 #[tauri::command]
@@ -228,8 +308,81 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-async fn get_history() -> Vec<proxy::Traffic> {
-    Vec::new()
+async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+
+    // 1. History
+    let mut stmt = conn.prepare("SELECT id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase FROM history ORDER BY created_at DESC LIMIT 500").map_err(|e| e.to_string())?;
+    let history = stmt.query_map([], |row| {
+        let req_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or_default();
+        let res_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(6)?).unwrap_or_default();
+        Ok(proxy::Traffic {
+            id: row.get(0)?, method: row.get(1)?, url: row.get(2)?, host: row.get(3)?, status_code: row.get(4)?,
+            request_headers: req_headers, response_headers: res_headers,
+            request_body: row.get(7)?, response_body: row.get(8)?, phase: row.get(9)?,
+            is_intercepted: false, intercepted_at: None,
+        })
+    }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+
+    // 2. Repeater Groups
+    let mut stmt = conn.prepare("SELECT id, name, order_index FROM repeater_groups ORDER BY order_index").map_err(|e| e.to_string())?;
+    let repeater_groups = stmt.query_map([], |row| {
+        Ok(RepeaterGroup { id: row.get(0)?, name: row.get(1)?, order_index: row.get(2)? })
+    }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+
+    // 3. Repeater Requests
+    let mut stmt = conn.prepare("SELECT id, name, group_id, method, url, headers, body, response_status, response_headers, response_body, hit_count FROM repeater_requests ORDER BY order_index").map_err(|e| e.to_string())?;
+    let repeater_requests = stmt.query_map([], |row| {
+        let headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or_default();
+        let res_status: Option<u16> = row.get(7).ok();
+        let response = if let Some(status) = res_status {
+             let res_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(8)?).unwrap_or_default();
+             Some(proxy::Traffic {
+                 id: row.get::<_, String>(0)? + "_res", method: row.get(3)?, url: row.get(4)?, host: String::new(), status_code: status,
+                 request_headers: headers.clone(), response_headers: res_headers,
+                 request_body: row.get(6)?, response_body: row.get(9)?, phase: "response".to_string(),
+                 is_intercepted: false, intercepted_at: None,
+             })
+        } else { None };
+
+        Ok(RepeaterRequest {
+            id: row.get(0)?, name: row.get(1)?, group_id: row.get(2)?, method: row.get(3)?, url: row.get(4)?,
+            headers, body: row.get(6)?, response, hit_count: row.get(10)?,
+        })
+    }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+
+    // 4. Environments
+    let mut stmt = conn.prepare("SELECT id, name, is_active FROM environments").map_err(|e| e.to_string())?;
+    let environments = stmt.query_map([], |row| {
+        Ok(Environment { id: row.get(0)?, name: row.get(1)?, is_active: row.get::<_, i32>(2)? != 0 })
+    }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+
+    // 5. Variables
+    let mut stmt = conn.prepare("SELECT id, environment_id, name, active_index, order_index FROM variables ORDER BY order_index").map_err(|e| e.to_string())?;
+    let variables = stmt.query_map([], |row| {
+        let var_id: String = row.get(0)?;
+        let mut val_stmt = conn.prepare("SELECT id, name, value FROM variable_values WHERE variable_id = ?").unwrap();
+        let values = val_stmt.query_map([&var_id], |vrow| {
+            Ok(VariableValue { id: vrow.get(0)?, name: vrow.get(1)?, value: vrow.get(2)? })
+        }).unwrap().filter_map(|r| r.ok()).collect();
+
+        Ok(GlobalVariable {
+            id: var_id, environment_id: row.get(1)?, name: row.get(2)?, active_index: row.get(3)?, order_index: row.get(4)?,
+            values,
+        })
+    }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+
+    // 6. Replacements
+    let mut stmt = conn.prepare("SELECT id, type, pattern, replacement, description, is_active, order_index FROM replacements ORDER BY order_index").map_err(|e| e.to_string())?;
+    let replacements = stmt.query_map([], |row| {
+        Ok(Replacement {
+            id: row.get(0)?, r_type: row.get(1)?, pattern: row.get(2)?, replacement: row.get(3)?,
+            description: row.get(4)?, is_active: row.get::<_, i32>(5)? != 0, order_index: row.get(6)?,
+        })
+    }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+
+    Ok(SyncData { history, repeater_groups, repeater_requests, environments, variables, replacements })
 }
 
 #[tauri::command]
@@ -310,7 +463,7 @@ pub fn run() {
             .build())
         .invoke_handler(tauri::generate_handler![
             greet, 
-            get_history, 
+            sync_data,
             get_root_ca_pem, 
             regenerate_root_ca,
             update_state,
