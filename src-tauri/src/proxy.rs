@@ -413,7 +413,7 @@ async fn handle_http(
         .unwrap_or_default();
     
     let decompressed_req_body = decompress_body(&request_body_bytes, &req_encoding);
-    let req_body_for_ui = match &decompressed_req_body {
+    let mut req_body_for_ui = match &decompressed_req_body {
         Some(b) => String::from_utf8_lossy(b).to_string(),
         None => String::from_utf8_lossy(&request_body_bytes).to_string(),
     };
@@ -439,6 +439,7 @@ async fn handle_http(
             intercepted_at: Some(now),
         };
 
+
         let (tx, rx) = tokio::sync::oneshot::channel();
         {
             let mut intercept = state.intercept.lock().await;
@@ -460,7 +461,9 @@ async fn handle_http(
             if let Some(u) = action.url { url = u; }
             if let Some(h) = action.headers { request_headers = h; }
             if let Some(b) = action.body { 
-                request_body_bytes = Bytes::from(b);
+                request_body_bytes = Bytes::from(b.clone());
+                // Update UI representation of request body for the next phase
+                req_body_for_ui = b;
                 // If body was modified or even just resumed from UI, it's now decompressed
                 request_headers.retain(|(k, _)| k != "content-encoding");
             }
@@ -520,6 +523,7 @@ async fn handle_http(
                     is_intercepted: true,
                     intercepted_at: Some(now),
                 };
+
 
                 let (tx, rx) = tokio::sync::oneshot::channel();
                 {

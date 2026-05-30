@@ -41,9 +41,12 @@ export function InterceptView() {
   const isRes = currentReq?.phase === 'response';
 
   const [prevReqId, setPrevReqId] = useState<string | null>(null);
+  const [prevPhase, setPrevPhase] = useState<string | null>(null);
 
-  if (currentReq && currentReq.id !== prevReqId) {
+  if (currentReq && (currentReq.id !== prevReqId || currentReq.phase !== prevPhase)) {
     setPrevReqId(currentReq.id);
+    setPrevPhase(currentReq.phase);
+    
     if (currentReq.phase === 'response') {
       setEditStatusCode(currentReq.status_code || 200);
       setEditHeaders(currentReq.response_headers || []);
