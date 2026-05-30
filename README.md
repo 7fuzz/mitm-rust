@@ -28,10 +28,11 @@ npm run tauri build
 
 ## 🏃 Features & Migration Status
 
-### 1. HTTP History (Porting)
+### 1. HTTP History (Ported)
 - [x] Traffic capture in Rust (Custom Hyper/Rustls engine).
 - [x] Real-time update via Tauri Events.
-- [ ] Search and filter UI.
+- [x] Advanced Traffic Filter (Allow/Block rules, multiple patterns).
+- [x] Search and filter UI.
 
 ### 2. Intercept & Modify (Ported)
 - [x] Request/Response pausing logic in Rust.
@@ -39,13 +40,20 @@ npm run tauri build
 - [x] Stage to Repeater logic.
 
 ### 3. Repeater (Porting)
-- [ ] Request execution engine in Rust.
-- [ ] Collection management.
-- [ ] History tracking (SQLite via Rust).
+- [x] Multi-value header support (Set-Cookie preservation).
+- [x] Request execution engine in Rust (Partial).
+- [x] Collection management.
+- [x] History tracking (SQLite via Rust).
 
 ### 4. Environments & Variables (Porting)
+- [x] Core variable storage and switching.
 - [ ] Dynamic interpolation engine in Rust.
-- [ ] Variable variants and smart persistence.
+- [x] Variable variants and smart persistence.
+
+### 5. Maintenance & UI
+- [x] Unified Data Synchronization engine (Backend bulk fetch).
+- [x] Database maintenance tools (Manual Sync, Integrity check).
+- [x] Standardized Semantic Theme system (Light/Dark support).
 
 ---
 
