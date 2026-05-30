@@ -39,19 +39,19 @@ npm run tauri build
 - [x] UI for editing URL, headers, and body.
 - [x] Stage to Repeater logic.
 
-### 3. Repeater (Porting)
+### 3. Repeater (Ported)
+- [x] Backend Execution Engine (Rust/Hyper).
 - [x] Multi-value header support (Set-Cookie preservation).
-- [x] Request execution engine in Rust (Partial).
-- [x] Collection management.
-- [x] History tracking (SQLite via Rust).
+- [x] Collection management (Groups).
+- [x] Persistent workspace (SQLite via Rust).
 
-### 4. Environments & Variables (Porting)
-- [x] Core variable storage and switching.
+### 4. Environments & Variables (Ported)
+- [x] Variable storage and variants.
+- [x] Workspace context switching.
 - [ ] Dynamic interpolation engine in Rust.
-- [x] Variable variants and smart persistence.
 
 ### 5. Maintenance & UI
-- [x] Unified Data Synchronization engine (Backend bulk fetch).
+- [x] Unified Data Synchronization engine (Atomic bulk fetch).
 - [x] Database maintenance tools (Manual Sync, Integrity check).
 - [x] Standardized Semantic Theme system (Light/Dark support).
 

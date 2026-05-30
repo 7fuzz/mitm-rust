@@ -1,93 +1,81 @@
 # MITM Real - API Documentation (Rust Migration)
 
-MITM Real is migrating to a Tauri-based architecture. In this version, the frontend (React + Vite) communicates directly with the Rust backend via Tauri commands and potentially a local HTTP/SSE interface for the proxy engine.
+MITM Real uses a Tauri-based architecture. The frontend (React + Vite) communicates directly with the Rust backend via Tauri commands.
 
 - **Frontend**: React 19 + Vite
 - **Backend**: Rust (Tauri)
-- **Proxy Engine**: Rust (Integrated or via specialized crates)
+- **Proxy Engine**: Rust (Custom Hyper/Tokio engine)
+- **Database**: SQLite (via `rusqlite` and `tauri-plugin-sql`)
 
 ---
 
 ## 🏛️ Core & State
 
-Global application state and intercept control.
+Global application state and synchronization.
 
-| Command / Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `get_state` | Tauri | Retrieve global application state (preferences, queue). |
-| `update_state` | Tauri | Update global preferences and application state. |
-| `get_cert` | Tauri | Download the Root CA certificate (`.pem`). |
-| `resume_flow` | Tauri | Resume or drop an intercepted request. |
+| Command | Description |
+| :--- | :--- |
+| `sync_data` | **Bulk Fetch**: Retrieve History, Repeater, Environments, Variables, and Replacements in one atomic transaction. |
+| `get_proxy_status` | Get current proxy bindings and enabled status. |
+| `toggle_proxy` | Enable or disable the proxy engine globally. |
+| `update_network_settings` | Update listening ports/bindings. |
+| `get_root_ca_pem` | Get the Root CA certificate for browser trust. |
+| `regenerate_root_ca` | Wipe and recreate the CA certificate. |
 
 ---
 
-## 🚦 Traffic & History
+## 🚦 Traffic & Intercept
 
-Management of the HTTP history log.
+Management of traffic flow and filtering.
 
-| Command / Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `get_history` | Tauri | Fetch all historical traffic flows. |
-| `clear_history` | Tauri | Clear the entire history log. |
-| `delete_history_item`| Tauri | Delete a single history item by ID. |
-| `traffic_events` | SSE/Event| Listen for real-time traffic updates via Tauri Events or SSE. |
+| Command | Description |
+| :--- | :--- |
+| `update_state` | Update interception preferences (mode, ignored methods). |
+| `update_filter_config` | Update global traffic filter rules (Allow/Block). |
+| `resume_flow` | Resume or drop an intercepted request/response. |
+| `traffic_captured` | **Event**: Emitted by backend when new traffic is logged. |
 
 ---
 
 ## 🔁 Repeater (Requests)
 
-Manual request execution and persistent workspace items.
+Manual request execution and workspace management.
 
-| Command / Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `execute_repeat` | Tauri | Execute a manual request (interpolates variables). |
-| `create_repeater_item`| Tauri | Create a new request in the Repeater workspace. |
-| `get_repeater_items` | Tauri | Fetch saved Repeater items. |
-| `update_repeater_items`| Tauri | Bulk update or reorder Repeater items. |
-| `update_repeater_item` | Tauri | Update a specific Repeater item. |
-| `delete_repeater_item` | Tauri | Remove a request from the Repeater workspace. |
-| `import_requests` | Tauri | Import requests from Postman or MITM Real JSON exports. |
-
-### Repeater History
-
-Individual execution history for specific Repeater items.
-
-| Command / Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `get_repeater_history`| Tauri | Get execution history for a specific request. |
-| `clear_repeater_history`| Tauri | Clear history for a specific request. |
+| Command | Description |
+| :--- | :--- |
+| `execute_repeater_request` | Execute a request from the backend using the proxy's client. Updates DB with response. |
+| `create_repeater_item` | Create a new request (often staged from History or Intercept). |
+| `update_repeater_request` | Update request details (URL, Method, Headers, Body). |
+| `delete_repeater_request` | Remove a request from the database. |
+| `reorder_repeater_requests` | Update the display order of requests. |
 
 ---
 
 ## 📁 Repeater Groups (Collections)
 
-Organization of Repeater items into collections.
+Organization of Repeater items.
 
-| Command / Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `get_groups` | Tauri | Fetch all Repeater groups. |
-| `create_group` | Tauri | Create a new collection group. |
-| `rename_group` | Tauri | Rename a collection group. |
-| `delete_group` | Tauri | Delete a group and all its contained requests. |
-| `assign_groups` | Tauri | Link, unlink or move groups between environments. |
-| `reorder_groups` | Tauri | Update the display order of groups. |
+| Command | Description |
+| :--- | :--- |
+| `create_repeater_group` | Create a new collection. |
+| `rename_repeater_group` | Rename an existing collection. |
+| `delete_repeater_group` | Delete a group (cascade delete not yet implementation in Rust layer). |
+| `reorder_repeater_groups` | Update the display order of collections. |
 
 ---
 
 ## 🌍 Environments & Variables
 
-Dynamic variable system and server environments.
+Dynamic variable system.
 
-| Command / Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `get_variables` | Tauri | Fetch variables for an environment. |
-| `create_variable` | Tauri | Create a new variable. |
-| `update_variable` | Tauri | Update variable name, variants, or active index. |
-| `delete_variable` | Tauri | Delete a variable. |
-| `bulk_update_variables`| Tauri | Bulk update multiple variables. |
-| `set_environment` | Tauri | Create or set the active environment. |
-| `rename_environment` | Tauri | Rename an environment. |
-| `delete_environment` | Tauri | Delete an environment. |
+| Command | Description |
+| :--- | :--- |
+| `create_variable` | Create a new global variable. |
+| `update_variable` | Update variable name or variants. |
+| `delete_variable` | Delete a variable. |
+| `create_environment` | Create a new server environment. |
+| `delete_environment` | Delete an environment. |
+| `set_active_environment` | Switch the active context. |
 
 ---
 
@@ -95,54 +83,26 @@ Dynamic variable system and server environments.
 
 Rules for automatic traffic modification.
 
-| Command / Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `get_replacements` | Tauri | Fetch all replacement rules. |
-| `upsert_replacement` | Tauri | Create or update replacement rules. |
-| `reorder_replacements`| Tauri | Update the execution order of rules. |
-| `delete_replacement` | Tauri | Delete a replacement rule. |
+| Command | Description |
+| :--- | :--- |
+| `save_replacements_bulk` | Bulk upsert replacement rules. |
+| `update_replacement_order` | Update the execution sequence. |
+| `delete_replacement` | Remove a rule. |
 
 ---
 
-## 📤 File Uploads
+## 📝 Data Structures
 
-Persistence for files used in `multipart/form-data` requests.
-
-| Command / Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `upload_file` | Tauri | Upload a file to the application storage. |
-
----
-
-## 📝 Request/Response Structures
+### multi-value headers
+Headers are stored as `Vec<(String, String)>` to preserve duplicates like `Set-Cookie`.
 
 ### __form_data Abstraction
-
-Used in the Repeater and Intercept views to manage complex forms.
+Used to manage complex forms in the UI before serialization.
 
 ```json
 {
   "__form_data": [
-    {
-      "k": "username",
-      "v": "admin",
-      "type": "text",
-      "contentType": ""
-    },
-    {
-      "k": "profile_pic",
-      "v": "uuid-of-stored-file.png",
-      "type": "file",
-      "fileName": "avatar.png",
-      "contentType": "image/png"
-    }
+    { "k": "user", "v": "admin", "type": "text" }
   ]
 }
 ```
-
-### Interpolation Engine
-
-Variables in the backend are interpolated using two syntaxes:
-
-- `{{variable_name}}`: Standard workspace variables.
-- `[[today+1]]`: Dynamic time-based variables (today, yesterday, tomorrow with +/- offsets).
