@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTraffic, GlobalVariable } from '@/hooks/traffic';
 import { VariableEditorModal } from '../Modals/VariableEditorModal';
 

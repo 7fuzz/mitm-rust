@@ -1,6 +1,5 @@
-import React from 'react';
+import { useState, useMemo } from 'react';
 import { useTraffic } from '@/hooks/traffic';
-import { DebouncedInput } from '../../ui/DebouncedInput';
 import { 
   DndContext, 
   closestCenter, 
@@ -27,18 +26,18 @@ interface EnvironmentsSectionProps {
 
 export function EnvironmentsSection({ openPrompt, openConfirm }: EnvironmentsSectionProps) {
   const {
-    environments, activeEnvId, setActiveEnvironment, createEnvironment, renameEnvironment, deleteEnvironment,
+    environments, activeEnvId, setActiveEnvironment, createEnvironment, deleteEnvironment,
     variables, addVariable, updateVariable, deleteVariable, saveVariable, saveAllVariables, reorderVariables,
     prefs, updatePrefs
   } = useTraffic();
 
-  const [isSavingAll, setIsSavingAll] = React.useState(false);
-  const [saveMessage, setSaveMessage] = React.useState('');
-  const [editModal, setEditModal] = React.useState<{ isOpen: boolean, envId: string | null, envName: string }>({ 
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  const [editModal, setEditModal] = useState<{ isOpen: boolean, envId: string | null, envName: string }>({ 
     isOpen: false, envId: null, envName: '' 
   });
 
-  const envVariables = React.useMemo(() => 
+  const envVariables = useMemo(() => 
     variables.filter(v => v.environmentId === activeEnvId),
     [variables, activeEnvId]
   );
@@ -157,7 +156,6 @@ export function EnvironmentsSection({ openPrompt, openConfirm }: EnvironmentsSec
                   <VariableItem 
                     key={v.id} 
                     v={v} 
-                    activeEnvId={activeEnvId} 
                     autoSave={prefs.autoSave}
                     updateVariable={updateVariable}
                     saveVariable={saveVariable}

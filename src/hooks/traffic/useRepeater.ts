@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { RepeaterRequest } from '@/components/View/RepeaterView';
 import { RepeaterGroup } from './types';
 

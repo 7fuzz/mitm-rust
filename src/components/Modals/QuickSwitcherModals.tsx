@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { GlobalVariable, Environment } from '@/hooks/traffic/types';
 import { Modal } from '../ui/Modal';
 import { useHotkeys } from '@/hooks/ui/useHotkeys';

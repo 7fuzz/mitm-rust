@@ -1,4 +1,3 @@
-import React from 'react';
 import { GlobalVariable } from '@/hooks/traffic/types';
 import { Button, Modal, DebouncedInput } from '../ui';
 

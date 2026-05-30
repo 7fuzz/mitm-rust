@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useRef, useMemo, useCallback } from 'react';
 import { useHotkeys } from '@/hooks/ui/useHotkeys';
 import { Traffic } from '@/types/traffic';
 import { TrafficList } from '../Sidebar/TrafficList';

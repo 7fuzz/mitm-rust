@@ -1,4 +1,3 @@
-import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GlobalVariable } from '@/hooks/traffic/types';
@@ -6,14 +5,13 @@ import { DebouncedInput } from '../../ui/DebouncedInput';
 
 interface VariableItemProps {
   v: GlobalVariable;
-  activeEnvId: string;
   autoSave: boolean;
   updateVariable: (id: string, updates: Partial<GlobalVariable>, immediate?: boolean) => void;
   saveVariable: (id: string, updates: Partial<GlobalVariable>) => void;
   deleteVariable: (id: string) => void;
 }
 
-export function VariableItem({ v, activeEnvId, autoSave, updateVariable, saveVariable, deleteVariable }: VariableItemProps) {
+export function VariableItem({ v, autoSave, updateVariable, saveVariable, deleteVariable }: VariableItemProps) {
   const {
     attributes,
     listeners,

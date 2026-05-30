@@ -50,7 +50,7 @@ function SortableGroupItem({ group, isActive, onSelect, onRename, onDelete, onAs
 }
 
 export function CollectionsSection({ selectedGroupId, setSelectedGroupId, openPrompt, openConfirm }: CollectionsSectionProps) {
-  const { repeaterGroups, createGroup, renameGroup, deleteGroup, cloneGroup, reorderGroups, simpleMode } = useTraffic();
+  const { repeaterGroups, createGroup, renameGroup, deleteGroup, cloneGroup, reorderGroups } = useTraffic();
   const [assignModal, setAssignModal] = useState<{ isOpen: boolean, groupId: string | null, groupName: string }>({ isOpen: false, groupId: null, groupName: '' });
 
   const sensors = useSensors(

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Button, Modal } from '../ui';
 import { useTraffic } from '@/hooks/traffic';
 
