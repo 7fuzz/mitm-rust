@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react';
+import { NotificationProvider } from '@/components/ui/NotificationProvider';
 import { TrafficProvider, useTraffic } from '@/hooks/traffic';
+import { ThemeProvider, useTheme } from '@/hooks/ui/useTheme';
 import { InterceptView } from '@/components/View/InterceptView';
 import { RepeaterView } from '@/components/View/RepeaterView';
 import { HistoryView } from '@/components/View/HistoryView';
@@ -9,7 +11,6 @@ import { WorkspaceView, WorkspaceViewHandle } from '@/components/View/WorkspaceV
 import { useKeyboardShortcuts } from '@/hooks/ui/useKeyboardShortcuts';
 import { ShortcutHint } from '@/components/ui/ShortcutHint';
 import { VariableQuickSwitcherModal, EnvironmentQuickSwitcherModal } from '@/components/Modals/QuickSwitcherModals';
-import { useTheme } from '@/hooks/ui/useTheme';
 
 function TrafficApp() {
   const { 
@@ -177,8 +178,12 @@ function TrafficApp() {
 
 export default function App() {
   return (
-    <TrafficProvider>
-      <TrafficApp />
-    </TrafficProvider>
+    <NotificationProvider>
+      <TrafficProvider>
+        <ThemeProvider>
+          <TrafficApp />
+        </ThemeProvider>
+      </TrafficProvider>
+    </NotificationProvider>
   );
 }
