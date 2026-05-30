@@ -4,12 +4,20 @@ mod db;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::collections::HashMap;
 use tokio::sync::Mutex;
 use tokio_rustls::rustls;
 use tauri::{AppHandle, Manager, State};
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct ProxyConfig {
+    pub bindings: Vec<String>,
+    pub enabled: bool,
+}
+
 pub struct ProxyManager {
-    shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    pub active_listeners: HashMap<String, tokio::sync::oneshot::Sender<()>>,
+    pub config: ProxyConfig,
 }
 
 pub struct AppState {
@@ -32,6 +40,147 @@ pub struct CreateRepeaterItem {
     pub headers: std::collections::HashMap<String, String>,
     pub body: String,
     pub response: Option<RepeaterResponse>,
+}
+
+fn get_db_path(app_handle: &AppHandle) -> std::path::PathBuf {
+    app_handle.path().app_data_dir().expect("Failed to get app data dir").join("mitm.db")
+}
+
+async fn spawn_proxy_listener(
+    app_handle: AppHandle,
+    addr_str: String,
+    ca: Arc<ca::CA>,
+    intercept_state: Arc<Mutex<proxy::InterceptState>>,
+) -> Result<tokio::sync::oneshot::Sender<()>, String> {
+    let addr: SocketAddr = if addr_str.contains(':') {
+        addr_str.parse().map_err(|e| format!("Invalid address {}: {}", addr_str, e))?
+    } else {
+        format!("0.0.0.0:{}", addr_str).parse().map_err(|e| format!("Invalid port {}: {}", addr_str, e))?
+    };
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let app_handle_clone = app_handle.clone();
+    
+    tauri::async_runtime::spawn(async move {
+        let proxy_task = proxy::start_proxy(app_handle_clone, (*ca).clone_shim(), intercept_state, addr);
+        
+        tokio::select! {
+            res = proxy_task => {
+                if let Err(e) = res {
+                    eprintln!("Proxy on {} failed: {}", addr, e);
+                }
+            }
+            _ = rx => {
+                println!("Proxy on {} shutting down", addr);
+            }
+        }
+    });
+
+    Ok(tx)
+}
+
+#[tauri::command]
+async fn get_proxy_status(state: State<'_, AppState>) -> Result<ProxyConfig, String> {
+    let manager = state.proxy_manager.lock().await;
+    Ok(manager.config.clone())
+}
+
+#[tauri::command]
+async fn toggle_proxy(app_handle: AppHandle, state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
+    let mut manager = state.proxy_manager.lock().await;
+    manager.config.enabled = enabled;
+    
+    // Stop all if disabling
+    if !enabled {
+        for (_, tx) in manager.active_listeners.drain() {
+            let _ = tx.send(());
+        }
+    } else {
+        // Start all configured bindings
+        let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+        let ca = Arc::new(ca::get_ca(app_data_dir.join("ca")));
+        let bindings = manager.config.bindings.clone();
+        
+        for addr_str in bindings {
+            if !manager.active_listeners.contains_key(&addr_str) {
+                let tx = spawn_proxy_listener(
+                    app_handle.clone(),
+                    addr_str.clone(),
+                    Arc::clone(&ca),
+                    state.intercept_state.clone()
+                ).await?;
+                manager.active_listeners.insert(addr_str, tx);
+            }
+        }
+    }
+    
+    // Save to DB
+    let db_path = get_db_path(&app_handle);
+    let config_json = serde_json::to_string(&manager.config).map_err(|e| e.to_string())?;
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("INSERT OR REPLACE INTO app_state (key, value) VALUES ('proxy_config', ?)", [config_json]).map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn update_network_settings(app_handle: AppHandle, state: State<'_, AppState>, bindings: Vec<String>) -> Result<(), String> {
+    let mut manager = state.proxy_manager.lock().await;
+    manager.config.bindings = bindings;
+    
+    // If enabled, restart all listeners
+    if manager.config.enabled {
+        // Stop current
+        for (_, tx) in manager.active_listeners.drain() {
+            let _ = tx.send(());
+        }
+        
+        // Start new
+        let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+        let ca = Arc::new(ca::get_ca(app_data_dir.join("ca")));
+        let bindings_to_start = manager.config.bindings.clone();
+        
+        for addr_str in bindings_to_start {
+            let tx = spawn_proxy_listener(
+                app_handle.clone(),
+                addr_str.clone(),
+                Arc::clone(&ca),
+                state.intercept_state.clone()
+            ).await?;
+            manager.active_listeners.insert(addr_str, tx);
+        }
+    }
+    
+    // Save to DB
+    let db_path = get_db_path(&app_handle);
+    let config_json = serde_json::to_string(&manager.config).map_err(|e| e.to_string())?;
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("INSERT OR REPLACE INTO app_state (key, value) VALUES ('proxy_config', ?)", [config_json]).map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_state(app_handle: AppHandle) -> Result<serde_json::Value, String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT key, value FROM app_state").map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    }).map_err(|e| e.to_string())?;
+    
+    let mut map = serde_json::Map::new();
+    for row in rows {
+        if let Ok((key, value)) = row {
+            if let Ok(json_val) = serde_json::from_str(&value) {
+                map.insert(key, json_val);
+            } else {
+                map.insert(key, serde_json::Value::String(value));
+            }
+        }
+    }
+    
+    Ok(serde_json::Value::Object(map))
 }
 
 #[tauri::command]
@@ -82,43 +231,30 @@ async fn regenerate_root_ca(app_handle: AppHandle, state: State<'_, AppState>) -
     let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
     let ca_dir = app_data_dir.join("ca");
     
-    // Stop proxy
-    {
-        let mut manager = state.proxy_manager.lock().await;
-        if let Some(tx) = manager.shutdown_tx.take() {
-            let _ = tx.send(());
-        }
+    // Stop all proxies
+    let mut manager = state.proxy_manager.lock().await;
+    for (_, tx) in manager.active_listeners.drain() {
+        let _ = tx.send(());
     }
 
     // Delete and regenerate
     ca::delete_ca(ca_dir.clone());
-    let ca = ca::get_ca(ca_dir.clone());
-    let cert_pem = ca.cert_pem.clone();
+    let new_ca = Arc::new(ca::get_ca(ca_dir.clone()));
+    let cert_pem = new_ca.cert_pem.clone();
 
-    // Restart proxy
-    let app_handle_clone = app_handle.clone();
-    let proxy_manager = Arc::clone(&state.proxy_manager);
-    let intercept_state = Arc::clone(&state.intercept_state);
-    
-    tauri::async_runtime::spawn(async move {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        {
-            let mut manager = proxy_manager.lock().await;
-            manager.shutdown_tx = Some(tx);
+    // Restart if enabled
+    if manager.config.enabled {
+        let bindings = manager.config.bindings.clone();
+        for addr_str in bindings {
+            let tx = spawn_proxy_listener(
+                app_handle.clone(),
+                addr_str.clone(),
+                Arc::clone(&new_ca),
+                state.intercept_state.clone()
+            ).await.map_err(|e| e.to_string())?;
+            manager.active_listeners.insert(addr_str, tx);
         }
-
-        let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-        let proxy_task = proxy::start_proxy(app_handle_clone, ca, intercept_state, addr);
-        
-        tokio::select! {
-            _ = proxy_task => {
-                eprintln!("Proxy task finished unexpectedly");
-            }
-            _ = rx => {
-                println!("Proxy shutting down for CA regeneration");
-            }
-        }
-    });
+    }
 
     Ok(cert_pem)
 }
@@ -131,7 +267,14 @@ pub fn run() {
 
     let migrations = db::get_migrations();
 
-    let proxy_manager = Arc::new(Mutex::new(ProxyManager { shutdown_tx: None }));
+    let proxy_manager = Arc::new(Mutex::new(ProxyManager { 
+        active_listeners: HashMap::new(),
+        config: ProxyConfig {
+            bindings: vec!["8080".to_string()],
+            enabled: true,
+        }
+    }));
+    
     let intercept_state = Arc::new(Mutex::new(proxy::InterceptState {
         config: proxy::InterceptConfig::default(),
         pending: std::collections::HashMap::new(),
@@ -157,7 +300,11 @@ pub fn run() {
             regenerate_root_ca,
             update_state,
             resume_flow,
-            create_repeater_item
+            create_repeater_item,
+            get_proxy_status,
+            toggle_proxy,
+            update_network_settings,
+            get_state
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -168,28 +315,35 @@ pub fn run() {
             // Get app data directory for CA storage
             let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
             let ca_dir = app_data_dir.join("ca");
+            let db_path = app_data_dir.join("mitm.db");
             
-            // Initialize CA
-            let ca = ca::get_ca(ca_dir);
-            
-            // Spawn proxy server in a background tokio task
-            tauri::async_runtime::spawn(async move {
-                let (tx, rx) = tokio::sync::oneshot::channel();
-                {
-                    let mut manager = proxy_manager.lock().await;
-                    manager.shutdown_tx = Some(tx);
+            // Try to load config from DB
+            tauri::async_runtime::block_on(async move {
+                let mut manager = proxy_manager.lock().await;
+                if let Ok(conn) = rusqlite::Connection::open(db_path) {
+                    if let Ok(config_str) = conn.query_row::<String, _, _>(
+                        "SELECT value FROM app_state WHERE key = 'proxy_config'",
+                        [],
+                        |row| row.get(0)
+                    ) {
+                        if let Ok(config) = serde_json::from_str::<ProxyConfig>(&config_str) {
+                            manager.config = config;
+                        }
+                    }
                 }
 
-                let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-                
-                let proxy_task = proxy::start_proxy(app_handle, ca, intercept_state, addr);
-                
-                tokio::select! {
-                    _ = proxy_task => {
-                        eprintln!("Proxy task finished unexpectedly");
-                    }
-                    _ = rx => {
-                        println!("Proxy shutting down");
+                if manager.config.enabled {
+                    let ca = Arc::new(ca::get_ca(ca_dir));
+                    let bindings = manager.config.bindings.clone();
+                    for addr_str in bindings {
+                        if let Ok(tx) = spawn_proxy_listener(
+                            app_handle.clone(),
+                            addr_str.clone(),
+                            Arc::clone(&ca),
+                            intercept_state.clone()
+                        ).await {
+                            manager.active_listeners.insert(addr_str, tx);
+                        }
                     }
                 }
             });

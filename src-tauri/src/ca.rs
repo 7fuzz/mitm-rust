@@ -11,6 +11,23 @@ pub struct CA {
     pub cert_pem: String,
 }
 
+impl CA {
+    /// Since Certificate and KeyPair don't implement Clone, 
+    /// we use this shim to reconstruct a clone when needed.
+    pub fn clone_shim(&self) -> CA {
+        let key_pem = self.key_pair.serialize_pem();
+        let key_pair = KeyPair::from_pem(&key_pem).unwrap();
+        let params = CertificateParams::from_ca_cert_pem(&self.cert_pem).unwrap();
+        let cert = params.self_signed(&key_pair).unwrap();
+
+        CA {
+            cert,
+            key_pair,
+            cert_pem: self.cert_pem.clone(),
+        }
+    }
+}
+
 pub fn get_ca(ca_dir: PathBuf) -> CA {
     let cert_path = ca_dir.join("ca.crt");
     let key_path = ca_dir.join("ca.key");

@@ -11,19 +11,21 @@ export function OptionsView() {
   const { prefs, updatePrefs } = useTraffic();
 
   const [bindings, setBindings] = useState<string[]>(['8080']);
+  const [isProxyEnabled, setIsProxyEnabled] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
   // Fetch from the Master DB endpoint
   useEffect(() => {
-    invoke<any>('get_state') // Assuming this might exist or we'll add it later
-      .then(state => {
-        if (state && state.network && state.network.bindings && state.network.bindings.length > 0) {
-          setBindings(state.network.bindings);
+    invoke<any>('get_proxy_status')
+      .then(status => {
+        if (status) {
+          setBindings(status.bindings || ['8080']);
+          setIsProxyEnabled(status.enabled);
         }
       })
-      .catch(e => console.error("Failed to load settings", e));
+      .catch(e => console.error("Failed to load proxy status", e));
   }, []);
 
   const handleBindingChange = (index: number, value: string) => {
@@ -40,18 +42,28 @@ export function OptionsView() {
     }
   };
 
+  const handleToggleProxy = async () => {
+    const nextValue = !isProxyEnabled;
+    try {
+      await invoke('toggle_proxy', { enabled: nextValue });
+      setIsProxyEnabled(nextValue);
+      setSaveMessage(nextValue ? 'Proxy engine started' : 'Proxy engine stopped');
+    } catch (e) {
+      setSaveMessage(`Error: ${e}`);
+    }
+    setTimeout(() => setSaveMessage(''), 3000);
+  };
+
   const handleSaveSettings = async () => {
     setIsSaving(true);
     setSaveMessage('');
     try {
       const cleanBindings = bindings.filter(b => b.trim() !== '');
-      
-      // Update this to use Tauri invoke once we have a save_state command
-      // For now we'll just show success
+      await invoke('update_network_settings', { bindings: cleanBindings });
       setSaveMessage('Network listeners updated successfully!');
       setBindings(cleanBindings.length > 0 ? cleanBindings : ['8080']);
-    } catch (_e) {
-      setSaveMessage('Failed to connect to proxy engine.');
+    } catch (e) {
+      setSaveMessage(`Error: ${e}`);
     }
     setIsSaving(false);
     setTimeout(() => setSaveMessage(''), 3000);
@@ -123,6 +135,22 @@ export function OptionsView() {
           </div>
 
           <div className="flex flex-col items-end gap-2">
+            <label className="flex items-center gap-3 p-3 bg-zinc-900 border border-zinc-700 rounded-lg cursor-pointer hover:border-emerald-500/50 transition-all shadow-lg shadow-app-shadow/20 mb-2">
+              <div className="flex flex-col items-end mr-2">
+                <span className="text-[10px] text-zinc-300 font-black uppercase tracking-widest">Proxy_Engine</span>
+                <span className="text-[8px] text-zinc-500 font-mono">{isProxyEnabled ? 'Active' : 'Disabled'}</span>
+              </div>
+              <div className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={isProxyEnabled}
+                  onChange={handleToggleProxy}
+                  className="sr-only peer"
+                />
+                <div className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-zinc-950 shadow-sm ring-0 transition duration-200 ease-in-out ${isProxyEnabled ? 'translate-x-5 bg-sky-500 shadow-[0_0_10px_rgba(14,165,233,0.5)]' : 'translate-x-0 bg-zinc-400'}`}></div>
+              </div>
+            </label>
+
             <label className="flex items-center gap-3 p-3 bg-zinc-900 border border-zinc-700 rounded-lg cursor-pointer hover:border-emerald-500/50 transition-all shadow-lg shadow-app-shadow/20">
               <div className="flex flex-col items-end mr-2">
                 <span className="text-[10px] text-zinc-300 font-black uppercase tracking-widest">Simple_Mode</span>
