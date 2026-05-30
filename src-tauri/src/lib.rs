@@ -20,7 +20,14 @@ async fn spawn_proxy_listener(
     ca: Arc<ca::CA>,
     intercept_state: Arc<Mutex<proxy::InterceptState>>,
 ) -> Result<tokio::sync::oneshot::Sender<()>, String> {
-    let addr: SocketAddr = addr_str.parse().map_err(|_| "Invalid address")?;
+    // Support "8080" as "0.0.0.0:8080"
+    let full_addr = if !addr_str.contains(':') {
+        format!("0.0.0.0:{}", addr_str)
+    } else {
+        addr_str.clone()
+    };
+
+    let addr: SocketAddr = full_addr.parse().map_err(|_| format!("Invalid address: {}", addr_str))?;
     let (tx, rx) = tokio::sync::oneshot::channel();
     let ca_clone = (*ca).clone_shim();
     
