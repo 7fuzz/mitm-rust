@@ -65,16 +65,16 @@ const getSafeHostname = (url: string, host: string) => {
 const getMethodColor = (m: string) => {
   if (m === 'GET') return 'text-sky-text';
   if (m === 'POST') return 'text-emerald-text';
-  if (m === 'DELETE') return 'text-rose-400';
-  if (m === 'PUT' || m === 'PATCH') return 'text-amber-400';
-  return 'text-purple-400';
+  if (m === 'DELETE') return 'text-rose-text';
+  if (m === 'PUT' || m === 'PATCH') return 'text-amber-text';
+  return 'text-purple-text';
 };
 
 const getStatusColor = (s: number) => {
   if (s === 0) return 'text-zinc-600';
   if (s < 300) return 'text-emerald-text';
-  if (s < 400) return 'text-amber-500';
-  return 'text-rose-500';
+  if (s < 400) return 'text-amber-text';
+  return 'text-rose-text';
 };
 
 export function TrafficList({ items, activeId, onSelect, onDelete, onReorder, activeColor = 'emerald', layout = 'sidebar', isFocused = true }: TrafficListProps) {

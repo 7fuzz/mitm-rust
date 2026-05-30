@@ -6,14 +6,14 @@ import { Textarea } from '../ui';
 
 interface Props {
   body: string;
-  headers: Record<string, string>;
+  headers: [string, string][];
   onChange: (newBody: string) => void;
-  onHeadersChange?: (newHeaders: Record<string, string>) => void;
+  onHeadersChange?: (newHeaders: [string, string][]) => void;
 }
 
 export function BodyEditor({ body, headers, onChange, onHeadersChange }: Props) {
-  const contentTypeKey = Object.keys(headers).find(k => k.toLowerCase() === 'content-type');
-  const contentType = contentTypeKey ? headers[contentTypeKey].toLowerCase() : '';
+  const contentTypeEntry = headers.find(([k]) => k.toLowerCase() === 'content-type');
+  const contentType = contentTypeEntry ? contentTypeEntry[1].toLowerCase() : '';
 
   const [mode, setMode] = useState<'raw' | 'json' | 'form'>(() => {
     if (contentType.includes('application/json')) return 'json';
@@ -31,9 +31,18 @@ export function BodyEditor({ body, headers, onChange, onHeadersChange }: Props) 
 
   const updateContentType = (newType: string) => {
     if (!onHeadersChange) return;
-    const newHeaders = { ...headers };
-    const key = Object.keys(newHeaders).find(k => k.toLowerCase() === 'content-type') || 'Content-Type';
-    newHeaders[key] = newType;
+    let found = false;
+    const newHeaders = headers.map(([k, v]) => {
+      if (k.toLowerCase() === 'content-type') {
+        found = true;
+        return [k, newType] as [string, string];
+      }
+      return [k, v] as [string, string];
+    });
+
+    if (!found) {
+      newHeaders.push(['Content-Type', newType]);
+    }
     onHeadersChange(newHeaders);
   };
 

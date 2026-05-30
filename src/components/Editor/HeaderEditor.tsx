@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Input, Textarea } from '../ui';
 
 interface Props {
-  initialHeaders: Record<string, string>;
-  onChange: (headers: Record<string, string>) => void;
+  initialHeaders: [string, string][];
+  onChange: (headers: [string, string][]) => void;
 }
 
 export function HeaderEditor({ initialHeaders, onChange }: Props) {
@@ -18,16 +18,17 @@ export function HeaderEditor({ initialHeaders, onChange }: Props) {
       isInternalUpdate.current = false;
       return;
     }
-    const arr = Object.entries(initialHeaders || {}).map(([k, v]) => ({ id: crypto.randomUUID(), k, v }));
+    const arr = (initialHeaders || []).map(([k, v]) => ({ id: crypto.randomUUID(), k, v }));
     setEntries(arr);
     setRawText(arr.map((e) => `${e.k}: ${e.v}`).join('\n'));
   }, [initialHeaders]);
 
   const notifyParent = (newEntries: typeof entries) => {
-    const obj: Record<string, string> = {};
-    newEntries.forEach((e) => { if (e.k.trim() !== '') obj[e.k] = e.v; });
+    const arr: [string, string][] = newEntries
+      .filter((e) => e.k.trim() !== '')
+      .map((e) => [e.k, e.v]);
     isInternalUpdate.current = true;
-    onChange(obj);
+    onChange(arr);
   };
 
   const parseRawToEntries = (text: string) => {

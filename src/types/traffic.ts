@@ -5,8 +5,8 @@ export interface Traffic {
   url: string;
   host: string;
   status_code: number;
-  request_headers: Record<string, string>;
-  response_headers: Record<string, string>;
+  request_headers: [string, string][];
+  response_headers: [string, string][];
   request_body: string;
   response_body: string;
 

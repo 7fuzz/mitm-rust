@@ -3,6 +3,7 @@ export { ConfirmModal } from './ConfirmModal';
 export { MultiGroupExportModal } from './MultiGroupExportModal';
 export { ExtractionModal } from './ExtractionModal';
 export { RepeaterHistoryModal } from './RepeaterHistoryModal';
+export { TrafficFilterModal } from './TrafficFilterModal';
 export { VariableEditorModal } from './VariableEditorModal';
 export { EnvironmentEditorModal } from './EnvironmentEditorModal';
 export { ImportModal } from './ImportModal';

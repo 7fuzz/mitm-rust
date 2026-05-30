@@ -5,7 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 export interface ResumeData {
   method?: string;
   url?: string;
-  headers?: Record<string, string>;
+  headers?: [string, string][];
   body?: string;
   status_code?: number;
   variables?: Record<string, string>;

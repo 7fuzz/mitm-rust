@@ -129,7 +129,7 @@ export function useReplacements() {
   }, [fetchReplacements]);
 
   // Apply functions
-  const applyAllReplacements = useCallback((request: { url: string, headers: Record<string, string>, body: string }) => {
+  const applyAllReplacements = useCallback((request: { url: string, headers: [string, string][], body: string }) => {
     let { url, headers, body } = request;
 
     // 1. Global Text Replacements (applied to URL, Headers, and Body as strings)
@@ -155,11 +155,7 @@ export function useReplacements() {
         body = body.replaceAll(pattern, replacement);
       }
 
-      const newHeaders: Record<string, string> = {};
-      for (const [k, v] of Object.entries(headers)) {
-        newHeaders[k] = v.replaceAll(pattern, replacement);
-      }
-      headers = newHeaders;
+      headers = headers.map(([k, v]) => [k, v.replaceAll(pattern, replacement)]);
     }
 
     // 2. URL Replacements (String replacement on URL)
@@ -181,15 +177,15 @@ export function useReplacements() {
     } catch { /* skip if invalid URL */ }
 
     // 4. Header Replacements (Key-based)
-    const updatedHeaders = { ...headers };
-    for (const [k, v] of Object.entries(replacements.HEADER_REPLACEMENTS)) {
-      // Find matching key case-insensitively
-      const actualKey = Object.keys(updatedHeaders).find(key => key.toLowerCase() === k.toLowerCase());
-      if (actualKey) {
-        updatedHeaders[actualKey] = v;
+    headers = headers.map(([k, v]) => {
+      const lowerK = k.toLowerCase();
+      for (const [pattern, replacement] of Object.entries(replacements.HEADER_REPLACEMENTS)) {
+        if (lowerK === pattern.toLowerCase()) {
+          return [k, replacement];
+        }
       }
-    }
-    headers = updatedHeaders;
+      return [k, v];
+    });
 
     // 5. Body Replacements (Key-based)
     if (body) {

@@ -18,8 +18,62 @@ use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 use rcgen::{CertificateParams, KeyPair, DnType};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::io::Read;
+use flate2::read::{GzDecoder, ZlibDecoder};
 
 use crate::ca::CA;
+
+fn decompress_body(body: &[u8], encoding: &str) -> Option<Vec<u8>> {
+    let encodings: Vec<&str> = encoding.split(',').map(|s| s.trim()).collect();
+    let mut current_body = body.to_vec();
+    let mut decompressed = false;
+
+    for enc in encodings.iter().rev() {
+        let enc = enc.to_lowercase();
+        match enc.as_str() {
+            "gzip" | "x-gzip" => {
+                let mut decoder = GzDecoder::new(&current_body[..]);
+                let mut decoded = Vec::new();
+                if decoder.read_to_end(&mut decoded).is_ok() {
+                    current_body = decoded;
+                    decompressed = true;
+                } else {
+                    return None;
+                }
+            }
+            "deflate" => {
+                let mut decoder = ZlibDecoder::new(&current_body[..]);
+                let mut decoded = Vec::new();
+                if decoder.read_to_end(&mut decoded).is_ok() {
+                    current_body = decoded;
+                    decompressed = true;
+                } else {
+                    return None;
+                }
+            }
+            "br" => {
+                let mut decoded = Vec::new();
+                if brotli::Decompressor::new(&current_body[..], 4096).read_to_end(&mut decoded).is_ok() {
+                    current_body = decoded;
+                    decompressed = true;
+                } else {
+                    return None;
+                }
+            }
+            "identity" | "" => {}
+            _ => {
+                // Unknown encoding, stop decompressing
+                return if decompressed { Some(current_body) } else { None };
+            }
+        }
+    }
+
+    if decompressed {
+        Some(current_body)
+    } else {
+        None
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Traffic {
@@ -28,8 +82,8 @@ pub struct Traffic {
     pub url: String,
     pub host: String,
     pub status_code: u16,
-    pub request_headers: HashMap<String, String>,
-    pub response_headers: HashMap<String, String>,
+    pub request_headers: Vec<(String, String)>,
+    pub response_headers: Vec<(String, String)>,
     pub request_body: String,
     pub response_body: String,
     pub phase: String,
@@ -43,6 +97,64 @@ pub struct InterceptConfig {
     pub mode: String, // "both", "request", "response"
     pub ignored_methods: Vec<String>,
     pub url_filter: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilterRule {
+    pub id: String,
+    pub is_active: bool,
+    pub rule_type: String, // "contains", "starts_with", "ends_with", "exact"
+    pub mode: String,      // "whitelist", "blacklist"
+    pub pattern: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilterConfig {
+    pub rules: Vec<FilterRule>,
+}
+
+impl Default for FilterConfig {
+    fn default() -> Self {
+        Self {
+            rules: Vec::new(),
+        }
+    }
+}
+
+impl FilterConfig {
+    pub fn should_process(&self, url: &str) -> bool {
+        let active_rules: Vec<&FilterRule> = self.rules.iter().filter(|r| r.is_active).collect();
+        
+        if active_rules.is_empty() {
+            return true;
+        }
+
+        let whitelists: Vec<&FilterRule> = active_rules.iter().filter(|r| r.mode == "whitelist").cloned().collect();
+        let blacklists: Vec<&FilterRule> = active_rules.iter().filter(|r| r.mode == "blacklist").cloned().collect();
+
+        let matches = |rules: &[&FilterRule]| -> bool {
+            rules.iter().any(|rule| {
+                match rule.rule_type.as_str() {
+                    "contains" => url.contains(&rule.pattern),
+                    "starts_with" => url.starts_with(&rule.pattern),
+                    "ends_with" => url.ends_with(&rule.pattern),
+                    "exact" => url == rule.pattern,
+                    _ => false,
+                }
+            })
+        };
+
+        if whitelists.is_empty() {
+            // Only blacklists: Allow everything EXCEPT matches
+            !matches(&blacklists)
+        } else if blacklists.is_empty() {
+            // Only whitelists: Allow ONLY matches
+            matches(&whitelists)
+        } else {
+            // Both: Allow if matches any whitelist AND matches no blacklist
+            matches(&whitelists) && !matches(&blacklists)
+        }
+    }
 }
 
 impl Default for InterceptConfig {
@@ -61,7 +173,7 @@ pub struct ResumeAction {
     pub drop: Option<bool>,
     pub method: Option<String>,
     pub url: Option<String>,
-    pub headers: Option<HashMap<String, String>>,
+    pub headers: Option<Vec<(String, String)>>,
     pub body: Option<String>,
     pub status_code: Option<u16>,
     pub variables: Option<HashMap<String, String>>,
@@ -69,6 +181,7 @@ pub struct ResumeAction {
 
 pub struct InterceptState {
     pub config: InterceptConfig,
+    pub filter_config: FilterConfig,
     pub pending: HashMap<String, tokio::sync::oneshot::Sender<ResumeAction>>,
 }
 
@@ -208,6 +321,17 @@ async fn handle_connect(
     Ok(())
 }
 
+fn headers_to_vec(headers: &hyper::HeaderMap) -> Vec<(String, String)> {
+    let mut vec = Vec::new();
+    for (name, value) in headers.iter() {
+        vec.push((
+            name.to_string().to_lowercase(),
+            value.to_str().unwrap_or("").to_string(),
+        ));
+    }
+    vec
+}
+
 async fn handle_http(
     req: Request<Incoming>,
     state: Arc<ProxyState>,
@@ -222,11 +346,58 @@ async fn handle_http(
     let mut method = req.method().clone();
     let mut url = req.uri().to_string();
     let host = req.uri().host().unwrap_or_default().to_string();
-    let mut request_headers = headers_to_map(req.headers());
+    let mut request_headers = headers_to_vec(req.headers());
 
     let (_parts, body) = req.into_parts();
     let collected_req_body = body.collect().await?.to_bytes();
     let mut request_body_bytes = collected_req_body;
+
+    // 0. Check Traffic Filter
+    let filter_config = {
+        let intercept = state.intercept.lock().await;
+        intercept.filter_config.clone()
+    };
+
+    if !filter_config.should_process(&url) {
+        let mut new_req = Request::builder()
+            .method(method.clone())
+            .uri(url.clone());
+        
+        // Remove content-length/transfer-encoding to let hyper recalculate
+        let mut headers_cleaned = request_headers.clone();
+        headers_cleaned.retain(|(k, _)| k != "content-length" && k != "transfer-encoding");
+
+        for (k, v) in headers_cleaned.iter() {
+            new_req = new_req.header(k, v);
+        }
+        
+        let new_req = new_req.body(Full::new(request_body_bytes.clone())).unwrap();
+        
+        match client.request(new_req).await {
+            Ok(res) => {
+                let status = res.status().as_u16();
+                let mut response_headers = headers_to_vec(res.headers());
+                let (_parts, body) = res.into_parts();
+                let collected_res_body = body.collect().await?.to_bytes();
+                let response_body_bytes = collected_res_body;
+
+                response_headers.retain(|(k, _)| k != "content-length" && k != "transfer-encoding");
+
+                let mut builder = Response::builder().status(status);
+                for (k, v) in response_headers.iter() {
+                    builder = builder.header(k, v);
+                }
+                return Ok(builder.body(Full::new(response_body_bytes)).unwrap());
+            }
+            Err(e) => {
+                eprintln!("Outbound filtered request error: {}", e);
+                return Ok(Response::builder()
+                    .status(StatusCode::BAD_GATEWAY)
+                    .body(Full::new(Bytes::from(format!("Proxy error: {}", e))))
+                    .unwrap());
+            }
+        }
+    }
 
     // 1. Check Request Interception
     let intercept_config = {
@@ -235,6 +406,17 @@ async fn handle_http(
     };
 
     let traffic_id = Uuid::new_v4().to_string();
+
+    let req_encoding = request_headers.iter()
+        .find(|(k, _)| k == "content-encoding")
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default();
+    
+    let decompressed_req_body = decompress_body(&request_body_bytes, &req_encoding);
+    let req_body_for_ui = match &decompressed_req_body {
+        Some(b) => String::from_utf8_lossy(b).to_string(),
+        None => String::from_utf8_lossy(&request_body_bytes).to_string(),
+    };
 
     if intercept_config.enabled && 
        (intercept_config.mode == "both" || intercept_config.mode == "request") &&
@@ -249,8 +431,8 @@ async fn handle_http(
             host: host.clone(),
             status_code: 0,
             request_headers: request_headers.clone(),
-            response_headers: HashMap::new(),
-            request_body: String::from_utf8_lossy(&request_body_bytes).to_string(),
+            response_headers: Vec::new(),
+            request_body: req_body_for_ui.clone(),
             response_body: String::new(),
             phase: "request".to_string(),
             is_intercepted: true,
@@ -277,7 +459,11 @@ async fn handle_http(
             if let Some(m) = action.method { method = m.parse().unwrap_or(method); }
             if let Some(u) = action.url { url = u; }
             if let Some(h) = action.headers { request_headers = h; }
-            if let Some(b) = action.body { request_body_bytes = Bytes::from(b); }
+            if let Some(b) = action.body { 
+                request_body_bytes = Bytes::from(b);
+                // If body was modified or even just resumed from UI, it's now decompressed
+                request_headers.retain(|(k, _)| k != "content-encoding");
+            }
         }
     }
 
@@ -286,8 +472,7 @@ async fn handle_http(
         .uri(url.clone());
     
     // Remove content-length/transfer-encoding to let hyper recalculate
-    request_headers.remove("content-length");
-    request_headers.remove("transfer-encoding");
+    request_headers.retain(|(k, _)| k != "content-length" && k != "transfer-encoding");
 
     for (k, v) in request_headers.iter() {
         new_req = new_req.header(k, v);
@@ -298,10 +483,21 @@ async fn handle_http(
     match client.request(new_req).await {
         Ok(res) => {
             let mut status = res.status().as_u16();
-            let mut response_headers = headers_to_map(res.headers());
+            let mut response_headers = headers_to_vec(res.headers());
             let (_parts, body) = res.into_parts();
             let collected_res_body = body.collect().await?.to_bytes();
             let mut response_body_bytes = collected_res_body;
+
+            let res_encoding = response_headers.iter()
+                .find(|(k, _)| k == "content-encoding")
+                .map(|(_, v)| v.clone())
+                .unwrap_or_default();
+                
+            let decompressed_res_body = decompress_body(&response_body_bytes, &res_encoding);
+            let res_body_for_ui = match &decompressed_res_body {
+                Some(b) => String::from_utf8_lossy(b).to_string(),
+                None => String::from_utf8_lossy(&response_body_bytes).to_string(),
+            };
 
             // 2. Check Response Interception
             if intercept_config.enabled && 
@@ -318,8 +514,8 @@ async fn handle_http(
                     status_code: status,
                     request_headers: request_headers.clone(),
                     response_headers: response_headers.clone(),
-                    request_body: String::from_utf8_lossy(&request_body_bytes).to_string(),
-                    response_body: String::from_utf8_lossy(&response_body_bytes).to_string(),
+                    request_body: req_body_for_ui.clone(),
+                    response_body: res_body_for_ui.clone(),
                     phase: "response".to_string(),
                     is_intercepted: true,
                     intercepted_at: Some(now),
@@ -343,7 +539,10 @@ async fn handle_http(
 
                     if let Some(s) = action.status_code { status = s; }
                     if let Some(h) = action.headers { response_headers = h; }
-                    if let Some(b) = action.body { response_body_bytes = Bytes::from(b); }
+                    if let Some(b) = action.body { 
+                        response_body_bytes = Bytes::from(b);
+                        response_headers.retain(|(k, _)| k != "content-encoding");
+                    }
                 }
             }
             
@@ -355,8 +554,8 @@ async fn handle_http(
                 status_code: status,
                 request_headers,
                 response_headers: response_headers.clone(),
-                request_body: String::from_utf8_lossy(&request_body_bytes).to_string(),
-                response_body: String::from_utf8_lossy(&response_body_bytes).to_string(),
+                request_body: req_body_for_ui,
+                response_body: res_body_for_ui,
                 phase: "response".to_string(),
                 is_intercepted: false,
                 intercepted_at: None,
@@ -365,8 +564,7 @@ async fn handle_http(
             let _ = state.app_handle.emit("traffic_captured", &traffic);
 
             // Remove content-length/transfer-encoding to let hyper recalculate
-            response_headers.remove("content-length");
-            response_headers.remove("transfer-encoding");
+            response_headers.retain(|(k, _)| k != "content-length" && k != "transfer-encoding");
 
             let mut builder = Response::builder().status(status);
             for (k, v) in response_headers.iter() {
@@ -382,15 +580,4 @@ async fn handle_http(
                 .unwrap())
         }
     }
-}
-
-fn headers_to_map(headers: &hyper::HeaderMap) -> HashMap<String, String> {
-    let mut map = HashMap::new();
-    for (name, value) in headers.iter() {
-        map.insert(
-            name.to_string(),
-            value.to_str().unwrap_or("").to_string(),
-        );
-    }
-    map
 }

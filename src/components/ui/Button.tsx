@@ -28,12 +28,12 @@ const ButtonComponent = forwardRef<HTMLButtonElement, ButtonProps>(({
   };
   
   const variantStyles = {
-    primary: 'bg-emerald-600 hover:bg-emerald-500 text-zinc-950 shadow-lg shadow-emerald-500/20',
+    primary: 'bg-btn-primary hover:opacity-90 text-btn-primary-text shadow-lg shadow-emerald-500/20',
     secondary: 'bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-zinc-100',
-    destructive: 'bg-rose-600 hover:bg-rose-500 text-zinc-950 shadow-lg shadow-rose-500/20',
-    purple: 'bg-purple-600 hover:bg-purple-500 text-zinc-950 shadow-lg shadow-purple-500/20',
-    sky: 'bg-sky-600 hover:bg-sky-500 text-zinc-950 shadow-lg shadow-sky-500/20',
-    amber: 'bg-amber-600 hover:bg-amber-500 text-zinc-950 shadow-lg shadow-amber-500/20',
+    destructive: 'bg-btn-destructive hover:opacity-90 text-btn-destructive-text shadow-lg shadow-rose-500/20',
+    purple: 'bg-btn-purple hover:opacity-90 text-btn-purple-text shadow-lg shadow-purple-500/20',
+    sky: 'bg-btn-sky hover:opacity-90 text-btn-sky-text shadow-lg shadow-sky-500/20',
+    amber: 'bg-btn-amber hover:opacity-90 text-btn-amber-text shadow-lg shadow-amber-500/20',
     ghost: 'bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-300',
     outline: 'bg-transparent border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200',
   };

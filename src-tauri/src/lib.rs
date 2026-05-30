@@ -184,6 +184,20 @@ async fn get_state(app_handle: AppHandle) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
+async fn update_filter_config(app_handle: AppHandle, state: State<'_, AppState>, config: proxy::FilterConfig) -> Result<(), String> {
+    let mut intercept = state.intercept_state.lock().await;
+    intercept.filter_config = config.clone();
+
+    // Save to DB
+    let db_path = get_db_path(&app_handle);
+    let config_json = serde_json::to_string(&config).map_err(|e| e.to_string())?;
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("INSERT OR REPLACE INTO app_state (key, value) VALUES ('filter_config', ?)", [config_json]).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn update_state(config: proxy::InterceptConfig, state: State<'_, AppState>) -> Result<(), String> {
     let mut intercept = state.intercept_state.lock().await;
     intercept.config = config;
@@ -277,6 +291,7 @@ pub fn run() {
     
     let intercept_state = Arc::new(Mutex::new(proxy::InterceptState {
         config: proxy::InterceptConfig::default(),
+        filter_config: proxy::FilterConfig::default(),
         pending: std::collections::HashMap::new(),
     }));
     
@@ -299,6 +314,7 @@ pub fn run() {
             get_root_ca_pem, 
             regenerate_root_ca,
             update_state,
+            update_filter_config,
             resume_flow,
             create_repeater_item,
             get_proxy_status,
@@ -320,7 +336,7 @@ pub fn run() {
             // Try to load config from DB
             tauri::async_runtime::block_on(async move {
                 let mut manager = proxy_manager.lock().await;
-                if let Ok(conn) = rusqlite::Connection::open(db_path) {
+                if let Ok(conn) = rusqlite::Connection::open(db_path.clone()) {
                     if let Ok(config_str) = conn.query_row::<String, _, _>(
                         "SELECT value FROM app_state WHERE key = 'proxy_config'",
                         [],
@@ -328,6 +344,17 @@ pub fn run() {
                     ) {
                         if let Ok(config) = serde_json::from_str::<ProxyConfig>(&config_str) {
                             manager.config = config;
+                        }
+                    }
+
+                    let mut intercept = intercept_state.lock().await;
+                    if let Ok(config_str) = conn.query_row::<String, _, _>(
+                        "SELECT value FROM app_state WHERE key = 'filter_config'",
+                        [],
+                        |row| row.get(0)
+                    ) {
+                        if let Ok(config) = serde_json::from_str::<proxy::FilterConfig>(&config_str) {
+                            intercept.filter_config = config;
                         }
                     }
                 }

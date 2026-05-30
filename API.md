@@ -9,6 +9,7 @@ MITM Real is migrating to a Tauri-based architecture. In this version, the front
 ---
 
 ## 🏛️ Core & State
+
 Global application state and intercept control.
 
 | Command / Endpoint | Method | Description |
@@ -21,6 +22,7 @@ Global application state and intercept control.
 ---
 
 ## 🚦 Traffic & History
+
 Management of the HTTP history log.
 
 | Command / Endpoint | Method | Description |
@@ -33,6 +35,7 @@ Management of the HTTP history log.
 ---
 
 ## 🔁 Repeater (Requests)
+
 Manual request execution and persistent workspace items.
 
 | Command / Endpoint | Method | Description |
@@ -46,6 +49,7 @@ Manual request execution and persistent workspace items.
 | `import_requests` | Tauri | Import requests from Postman or MITM Real JSON exports. |
 
 ### Repeater History
+
 Individual execution history for specific Repeater items.
 
 | Command / Endpoint | Method | Description |
@@ -56,6 +60,7 @@ Individual execution history for specific Repeater items.
 ---
 
 ## 📁 Repeater Groups (Collections)
+
 Organization of Repeater items into collections.
 
 | Command / Endpoint | Method | Description |
@@ -70,6 +75,7 @@ Organization of Repeater items into collections.
 ---
 
 ## 🌍 Environments & Variables
+
 Dynamic variable system and server environments.
 
 | Command / Endpoint | Method | Description |
@@ -86,6 +92,7 @@ Dynamic variable system and server environments.
 ---
 
 ## 🔄 Automated Replacements
+
 Rules for automatic traffic modification.
 
 | Command / Endpoint | Method | Description |
@@ -98,6 +105,7 @@ Rules for automatic traffic modification.
 ---
 
 ## 📤 File Uploads
+
 Persistence for files used in `multipart/form-data` requests.
 
 | Command / Endpoint | Method | Description |
@@ -109,7 +117,9 @@ Persistence for files used in `multipart/form-data` requests.
 ## 📝 Request/Response Structures
 
 ### __form_data Abstraction
+
 Used in the Repeater and Intercept views to manage complex forms.
+
 ```json
 {
   "__form_data": [
@@ -131,6 +141,8 @@ Used in the Repeater and Intercept views to manage complex forms.
 ```
 
 ### Interpolation Engine
+
 Variables in the backend are interpolated using two syntaxes:
+
 - `{{variable_name}}`: Standard workspace variables.
 - `[[today+1]]`: Dynamic time-based variables (today, yesterday, tomorrow with +/- offsets).

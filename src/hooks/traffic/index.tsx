@@ -1,6 +1,5 @@
 import { useState, useEffect, createContext, useContext, ReactNode, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
 import { Traffic } from '@/types/traffic';
 
 // Import our segmented hooks

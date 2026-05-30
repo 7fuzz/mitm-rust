@@ -9,6 +9,7 @@ import { useTraffic } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
 import { Button } from '../ui/Button';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
+import { TrafficFilterModal } from '../Modals/TrafficFilterModal';
 
 // === NEW: HTTP Formatters for the Viewer ===
 const buildRawRequestMessage = (req: Traffic) => {
@@ -18,13 +19,13 @@ const buildRawRequestMessage = (req: Traffic) => {
     path = parsed.pathname + parsed.search + parsed.hash;
   } catch { }
   const firstLine = `${req.method} ${path} HTTP/1.1`;
-  const headerText = Object.entries(req.request_headers || {}).map(([k, v]) => `${k}: ${v}`).join('\n');
+  const headerText = (req.request_headers || []).map(([k, v]) => `${k}: ${v}`).join('\n');
   return `${firstLine}\n${headerText}\n\n${req.request_body || ''}`;
 };
 
 const buildRawResponseMessage = (req: Traffic) => {
   const firstLine = `HTTP/1.1 ${req.status_code}`;
-  const headerText = Object.entries(req.response_headers || {}).map(([k, v]) => `${k}: ${v}`).join('\n');
+  const headerText = (req.response_headers || []).map(([k, v]) => `${k}: ${v}`).join('\n');
   return `${firstLine}\n${headerText}\n\n${req.response_body || ''}`;
 };
 
@@ -34,6 +35,7 @@ export function HistoryView() {
   const {
     traffic, setTraffic, selectedReq, selectedId, setSelectedId,
     historyLimit, setHistoryLimit, isLimitEnabled, setIsLimitEnabled,
+    filterConfig, updateFilterConfig,
     uiLayout, updateUILayout,
     refreshRepeater, setRepeaterSelectedId,
     applyAllReplacements,
@@ -46,6 +48,7 @@ export function HistoryView() {
   const [prevHistoryLimit, setPrevHistoryLimit] = useState(historyLimit);
   const [activeSection, setActiveSection] = useState<HistorySection>('sidebar');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
 
   // Refs for navigation
   const headerRef = useRef<HTMLElement>(null);
@@ -83,8 +86,8 @@ export function HistoryView() {
       const isRaw = simpleMode || raw;
 
       const { url: transformedUrl, headers: transformedHeaders, body: transformedBody } = isRaw
-        ? { url: req.url, headers: req.request_headers || {}, body: req.request_body || '' }
-        : applyAllReplacements({ url: req.url, headers: req.request_headers || {}, body: req.request_body || '' });
+        ? { url: req.url, headers: req.request_headers || [], body: req.request_body || '' }
+        : applyAllReplacements({ url: req.url, headers: req.request_headers || [], body: req.request_body || '' });
 
       const response = await fetch(`/api/repeater-request${isRaw ? '?raw=true' : ''}`, {
         method: 'POST',
@@ -98,7 +101,7 @@ export function HistoryView() {
           body: transformedBody,
           response: req.status_code !== 0 ? {
             status: req.status_code,
-            headers: req.response_headers || {},
+            headers: req.response_headers || [],
             body: req.response_body || '',
           } : undefined
         })
@@ -117,7 +120,7 @@ export function HistoryView() {
 
   const copyAsCurl = () => {
     if (!selectedReq) return;
-    const curl = `curl -X ${selectedReq.method} '${selectedReq.url}' ${Object.entries(selectedReq.request_headers).map(([k, v]) => `-H '${k}: ${v}'`).join(' ')}`;
+    const curl = `curl -X ${selectedReq.method} '${selectedReq.url}' ${(selectedReq.request_headers || []).map(([k, v]) => `-H '${k}: ${v}'`).join(' ')}`;
     navigator.clipboard.writeText(curl);
   };
 
@@ -217,6 +220,20 @@ export function HistoryView() {
         onUpdateLayout={updateUILayout}
         listComponent={() => listElement}
 
+        toolbarLeft={
+          <div className="flex items-center gap-2">
+            <Button
+              variant={filterConfig.rules.some(r => r.is_active) ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setIsFilterModalOpen(true)}
+              className={filterConfig.rules.some(r => r.is_active) ? 'bg-sky-highlight-bg border-sky-highlight-border text-sky-text' : ''}
+            >
+              Traffic_Filter
+            </Button>
+            <div className="w-px h-4 bg-zinc-800 mx-1"></div>
+          </div>
+        }
+
         toolbarRight={
           <>
             <Button
@@ -259,7 +276,7 @@ export function HistoryView() {
         mainContent={(splitMode) => (
           selectedReq ? (
             <div className={`w-full mx-auto pb-24 space-y-10 ${splitMode === 'horizontal' ? 'max-w-360' : 'max-w-5xl'}`}>
-              <header ref={headerRef} className={`flex flex-col items-start border-b pb-6 transition-all duration-200 scroll-mt-24 ${activeSection === 'header' ? 'border-amber-500/50 bg-amber-500/5 -mx-4 px-4 py-2 rounded-lg' : 'border-zinc-800'}`}>
+              <header ref={headerRef} className={`flex flex-col items-start border-b pb-6 transition-all duration-200 scroll-mt-24 ${activeSection === 'header' ? 'border-amber-highlight-border bg-amber-highlight-bg -mx-4 px-4 py-2 rounded-lg' : 'border-zinc-800'}`}>
                 <div className="ml-auto flex gap-3 mb-4">
                   <Button
                     variant="purple"
@@ -285,31 +302,31 @@ export function HistoryView() {
                     variant="secondary"
                     size="sm"
                     onClick={copyAsCurl}
-                    className={`hover:bg-emerald-600 hover:border-emerald-500 ${activeSection === 'header' && (headerButtonIndex === 2 || (headerButtonIndex === 1 && simpleMode)) ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-zinc-950 scale-105 bg-emerald-600 border-emerald-500' : ''}`}
+                    className={`hover:bg-emerald-600 hover:border-emerald-500 ${activeSection === 'header' && (headerButtonIndex === 2 || (headerButtonIndex === 1 && simpleMode)) ? 'ring-2 ring-emerald-highlight-border ring-offset-2 ring-offset-zinc-950 scale-105 bg-btn-primary text-btn-primary-text' : ''}`}
                   >
                     Copy_as_cURL
                   </Button>
                 </div>
-                <div className={`w-full transition-all ${activeSection === 'url' ? 'ring-2 ring-sky-500 ring-offset-4 ring-offset-zinc-950 rounded' : ''}`}>
+                <div className={`w-full transition-all ${activeSection === 'url' ? 'ring-2 ring-sky-highlight-border ring-offset-4 ring-offset-zinc-950 rounded' : ''}`}>
                   <UrlEditor method={selectedReq.method} onMethodChange={() => { }} url={selectedReq.url} onChange={() => { }} readOnly={true} />
                 </div>
               </header>
 
               <div className={`grid ${splitMode === 'horizontal' ? 'grid-cols-2 gap-8' : 'grid-cols-1 gap-10'}`}>
-                <div ref={requestRef} className={`flex flex-col space-y-3 transition-all p-2 rounded ${activeSection === 'request' ? 'bg-sky-500/5 ring-1 ring-sky-500/30' : ''}`}>
-                  <h3 className={`text-sky-text text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${activeSection === 'request' ? 'text-sky-400' : ''}`}>
+                <div ref={requestRef} className={`flex flex-col space-y-3 transition-all p-2 rounded ${activeSection === 'request' ? 'bg-sky-highlight-bg ring-1 ring-sky-highlight-border' : ''}`}>
+                  <h3 className={`text-sky-text text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${activeSection === 'request' ? 'text-sky-text' : ''}`}>
                     <span className="opacity-50">#</span> Request_Payload
-                    {activeSection === 'request' && <span className="ml-auto text-[8px] bg-sky-500 text-zinc-950 px-1 rounded">ACTIVE</span>}
+                    {activeSection === 'request' && <span className="ml-auto text-[8px] bg-btn-sky text-btn-sky-text px-1 rounded">ACTIVE</span>}
                   </h3>
                   <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-100">
                     <HttpResponseViewer text={buildRawRequestMessage(selectedReq)} />
                   </div>
                 </div>
 
-                <div ref={responseRef} className={`flex flex-col space-y-3 transition-all p-2 rounded ${activeSection === 'response' ? 'bg-amber-500/5 ring-1 ring-amber-500/30' : ''}`}>
-                  <h3 className={`text-amber-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${activeSection === 'response' ? 'text-amber-400' : ''}`}>
+                <div ref={responseRef} className={`flex flex-col space-y-3 transition-all p-2 rounded ${activeSection === 'response' ? 'bg-amber-highlight-bg ring-1 ring-amber-highlight-border' : ''}`}>
+                  <h3 className={`text-amber-text text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${activeSection === 'response' ? 'text-amber-text' : ''}`}>
                     <span className="opacity-50">#</span> Response_Payload
-                    {activeSection === 'response' && <span className="ml-auto text-[8px] bg-amber-500 text-zinc-900 px-1 rounded font-black">ACTIVE</span>}
+                    {activeSection === 'response' && <span className="ml-auto text-[8px] bg-btn-amber text-btn-amber-text px-1 rounded font-black">ACTIVE</span>}
                   </h3>
                   <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-100">
                     {selectedReq.status_code === 0 ? (
@@ -337,6 +354,13 @@ export function HistoryView() {
         message="Are you sure you want to permanently delete all intercepted traffic? This action cannot be undone."
         confirmText="Clear All"
         variant="destructive"
+      />
+
+      <TrafficFilterModal
+        isOpen={isFilterModalOpen}
+        onClose={() => setIsFilterModalOpen(false)}
+        config={filterConfig}
+        onSave={updateFilterConfig}
       />
     </>
   );

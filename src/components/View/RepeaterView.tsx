@@ -11,10 +11,10 @@ import { PromptModal, ConfirmModal, ExtractionModal, RepeaterHistoryModal } from
 import { Button, Select } from '../ui';
 
 export interface RepeaterRequest {
-  id: string; name: string; groupId: string | null; method: string; url: string; headers: Record<string, string>; body: string; timestamp: number;
+  id: string; name: string; groupId: string | null; method: string; url: string; headers: [string, string][]; body: string; timestamp: number;
   extract?: Record<string, string>;
   hitCount?: number;
-  response?: { status: number; headers: Record<string, string>; body: string; time?: number; };
+  response?: { status: number; headers: [string, string][]; body: string; time?: number; };
 }
 
 export function RepeaterView() {
@@ -34,7 +34,7 @@ export function RepeaterView() {
   const [editGroupId, setEditGroupId] = useState<string | null>(null);
   const [editMethod, setEditMethod] = useState('GET');
   const [editUrl, setEditUrl] = useState('');
-  const [editHeaders, setEditHeaders] = useState<Record<string, string>>({});
+  const [editHeaders, setEditHeaders] = useState<[string, string][]>([]);
   const [editBody, setEditBody] = useState('');
   const [editExtract, setEditExtract] = useState<Record<string, string>>({});
 
@@ -75,14 +75,28 @@ export function RepeaterView() {
     setEditGroupId(currentReq.groupId || null);
     setEditMethod(currentReq.method);
     setEditUrl(currentReq.url);
-    setEditHeaders(currentReq.headers || {});
+    setEditHeaders(currentReq.headers || []);
     setEditBody(currentReq.body || '');
     setEditExtract(currentReq.extract || {});
   }
 
   const trafficMapped: Traffic[] = repeaterRequests.map(req => {
     const groupName = req.groupId ? repeaterGroups.find(g => g.id === req.groupId)?.name : 'Default';
-    return { id: req.id, method: req.method, url: req.name, status_code: req.response?.status ?? 0, host: '', phase: 'history', request_headers: {}, response_headers: {}, request_body: '', response_body: '', is_intercepted: false, group: groupName || 'Default', hit_count: req.hitCount };
+    return { 
+      id: req.id, 
+      method: req.method, 
+      url: req.name, 
+      status_code: req.response?.status ?? 0, 
+      host: '', 
+      phase: 'history', 
+      request_headers: [], 
+      response_headers: [], 
+      request_body: '', 
+      response_body: '', 
+      is_intercepted: false, 
+      group: groupName || 'Default', 
+      hit_count: req.hitCount 
+    };
   });
 
   const handleAdd = async () => {
@@ -167,7 +181,7 @@ export function RepeaterView() {
     let headerStr = `${editMethod} ${path} HTTP/1.1\n`;
     let hasHost = false;
 
-    Object.entries(editHeaders).forEach(([k, v]) => {
+    editHeaders.forEach(([k, v]) => {
       if (k.toLowerCase() === 'host') hasHost = true;
       headerStr += `${interpolate(k)}: ${interpolate(v)}\n`;
     });
@@ -192,7 +206,7 @@ export function RepeaterView() {
   const getRawResponseText = () => {
     if (!currentReq?.response) return '';
     const firstLine = `HTTP/1.1 ${currentReq.response.status}`;
-    const headerText = Object.entries(currentReq.response.headers).map(([k, v]) => `${k}: ${v}`).join('\n');
+    const headerText = (currentReq.response.headers || []).map(([k, v]) => `${k}: ${v}`).join('\n');
     return `${firstLine}\n${headerText}\n\n${currentReq.response.body}`;
   };
 
@@ -301,7 +315,7 @@ export function RepeaterView() {
             <div className={`w-full mx-auto pb-24 space-y-10 ${splitMode === 'horizontal' ? 'max-w-360' : 'max-w-5xl'}`}>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-purple-500 font-bold uppercase text-[10px] tracking-widest flex items-center gap-2">
+                  <h3 className="text-purple-text font-bold uppercase text-[10px] tracking-widest flex items-center gap-2">
                     <span className="opacity-50">#</span> Request_Metadata
                   </h3>
                   {currentReq.hitCount !== undefined && currentReq.hitCount > 0 && (
@@ -367,28 +381,28 @@ export function RepeaterView() {
               </div>
 
               <div className="space-y-3">
-                <h3 className="text-purple-500 font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Request_Line</h3>
+                <h3 className="text-purple-text font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Request_Line</h3>
                 <UrlEditor method={editMethod} onMethodChange={setEditMethod} url={editUrl} onChange={setEditUrl} />
               </div>
 
               <div className={`grid ${splitMode === 'horizontal' ? 'grid-cols-2 gap-8' : 'grid-cols-1 gap-10'}`}>
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-purple-500 font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Outbound_Payload</h3>
+                    <h3 className="text-purple-text font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Outbound_Payload</h3>
                     <div className="flex bg-zinc-950 p-0.5 rounded border border-zinc-800">
-                      <button onClick={() => setShowPreview(false)} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded transition-all ${!showPreview ? 'bg-purple-600/20 text-purple-400' : 'text-zinc-500 hover:text-zinc-300'}`}>Builder</button>
-                      <button onClick={() => setShowPreview(true)} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded transition-all ${showPreview ? 'bg-purple-600/20 text-purple-400' : 'text-zinc-500 hover:text-zinc-300'}`}>Interpolated</button>
+                      <button onClick={() => setShowPreview(false)} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded transition-all ${!showPreview ? 'bg-purple-highlight-bg text-purple-text' : 'text-zinc-500 hover:text-zinc-300'}`}>Builder</button>
+                      <button onClick={() => setShowPreview(true)} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded transition-all ${showPreview ? 'bg-purple-highlight-bg text-purple-text' : 'text-zinc-500 hover:text-zinc-300'}`}>Interpolated</button>
                     </div>
                   </div>
 
                   {!showPreview ? (
                     <div className="flex flex-col gap-8 flex-1">
                       <div className="flex flex-col space-y-3">
-                        <h3 className="text-purple-500 font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Request_Headers</h3>
+                        <h3 className="text-purple-text font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Request_Headers</h3>
                         <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-75"><HeaderEditor initialHeaders={editHeaders} onChange={setEditHeaders} /></div>
                       </div>
                       <div className="flex flex-col space-y-3">
-                        <h3 className="text-purple-500 font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Request_Body</h3>
+                        <h3 className="text-purple-text font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Request_Body</h3>
                         <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-87.5">
                           <BodyEditor 
                             body={editBody} 
@@ -409,9 +423,9 @@ export function RepeaterView() {
 
                 <div className="flex flex-col space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-amber-500 font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Response_Received</h3>
+                    <h3 className="text-amber-text font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Response_Received</h3>
                     {currentReq.response && (
-                      <div className={`px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-widest ${currentReq.response.status >= 400 ? 'bg-rose-500/10 border border-rose-500/30 text-rose-500' : currentReq.response.status >= 300 ? 'bg-amber-500/10 border border-amber-500/30 text-amber-500' : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-text'}`}>Status: {currentReq.response.status}</div>
+                      <div className={`px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-widest ${currentReq.response.status >= 400 ? 'bg-rose-highlight-bg border border-rose-highlight-border text-rose-text' : currentReq.response.status >= 300 ? 'bg-amber-highlight-bg border border-amber-highlight-border text-amber-text' : 'bg-emerald-highlight-bg border border-emerald-highlight-border text-emerald-text'}`}>Status: {currentReq.response.status}</div>
                     )}
                   </div>
                   <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-100">

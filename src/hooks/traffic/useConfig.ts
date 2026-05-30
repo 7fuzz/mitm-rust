@@ -38,6 +38,9 @@ export function useConfig() {
   const [isLimitEnabled, setIsLimitEnabled] = useState(true);
   const [historyLimit, setHistoryLimit] = useState(100);
   const [uiLayout, setUiLayout] = useState<UILayout>({ isListOpen: true, sidebarWidth: 350, splitMode: 'vertical' });
+  const [filterConfig, setFilterConfig] = useState<{ rules: Array<{ id: string, is_active: boolean, rule_type: string, mode: 'whitelist' | 'blacklist', pattern: string }> }>({ 
+    rules: [] 
+  });
 
   const limitRef = useRef({ enabled: isLimitEnabled, value: historyLimit });
   const prefsRef = useRef(prefs);
@@ -68,6 +71,15 @@ export function useConfig() {
     // TODO: implement update_ui_layout in rust if needed
   };
 
+  const updateFilterConfig = async (config: typeof filterConfig) => {
+    setFilterConfig(config);
+    try {
+      await invoke('update_filter_config', { config });
+    } catch (e) {
+      console.error('Failed to update filter config:', e);
+    }
+  };
+
   useEffect(() => {
     limitRef.current = { enabled: isLimitEnabled, value: historyLimit };
   }, [isLimitEnabled, historyLimit]);
@@ -93,7 +105,8 @@ export function useConfig() {
     setInterceptMode, 
     setIgnoredMethods, 
     setUrlFilter, 
-    setUiLayout 
+    setUiLayout,
+    setFilterConfig
   };
 
   return {
@@ -101,6 +114,8 @@ export function useConfig() {
     simpleMode: prefs.simpleMode,
     isIntercepting, interceptMode, ignoredMethods, urlFilter, updateConfig,
     isLimitEnabled, setIsLimitEnabled, historyLimit, setHistoryLimit, limitRef,
-    uiLayout, updateUILayout, initConfig
+    uiLayout, updateUILayout, 
+    filterConfig, updateFilterConfig,
+    initConfig
   };
 }
