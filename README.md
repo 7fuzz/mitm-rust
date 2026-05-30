@@ -59,23 +59,36 @@ npm run tauri build
 
 ## 🏗️ Technical Architecture (New)
 
-> [!IMPORTANT]
-> **Legacy Project**: The original implementation (Next.js + Python) has been moved to the `mitm-next-python/` directory. It is kept here solely for reference during the migration process and is ignored by git.
+The application follows a modular, backend-heavy architecture designed for high performance and reliable persistence.
 
 1.  **Backend (Rust/Tauri)**:
-    -   Handles the proxy engine using crates like `hickory-resolver` or custom `tokio` based listeners.
-    -   Manages the SQLite database for persistence.
-    -   Exposes functionalities to the frontend via Tauri Commands.
+    *   **Modular Design**: Logic is separated into specialized modules (`repeater`, `workspace`, `proxy`, etc.) for maintainability.
+    *   **Proxy Engine**: Custom `Hyper` and `Tokio` based listener handling TLS termination and traffic modification.
+    *   **State Management**: Unified synchronization engine that bulk-fetches all application data in a single transaction.
+    *   **Persistence**: SQLite database with a robust migration system and an `init_database` safety layer.
 2.  **Frontend (React/Vite)**:
-    -   Modern React 19 UI.
-    -   Uses `@tauri-apps/api` for backend communication.
-    -   Maintains parity with the original Next.js UI components.
+    *   **Modern React 19**: Utilizing the latest React features and a centralized theme system.
+    *   **Unified IPC**: All communication is handled via Tauri `invoke` commands, completely removing dependency on traditional REST APIs.
+    *   **Semantic UI**: Standardized styling using theme-aware CSS variables for consistent light/dark mode support.
 
 ## 📁 File Structure
-- **`src/`**: React frontend source code.
-- **`src-tauri/`**: Rust backend source code.
-  - `src-tauri/src/main.rs`: Entry point and command registrations.
-- **`API.md`**: Mapping of original REST API to new Tauri commands.
+
+### 🦀 Rust Backend (`src-tauri/src/`)
+- **`lib.rs`**: The heart of the app. Handles command registration and lifecycle management.
+- **`db.rs`**: Database engine. Handles SQLite initialization, migrations, and path resolving.
+- **`models.rs`**: Centralized data models. Shared structs and state definitions.
+- **`proxy.rs`**: The intercepting proxy core. Manages traffic flow and TLS.
+- **`repeater.rs`**: Manual request engine. Handles collection CRUD and HTTP execution.
+- **`workspace.rs`**: Management logic for Environments, Variables, and Replacements.
+- **`state.rs`**: Global application state, preferences, and the bulk sync engine.
+- **`history.rs`**: Management of the main traffic history log.
+- **`ca.rs`**: Certificate Authority logic for generating and managing the Root CA.
+
+### ⚛️ React Frontend (`src/`)
+- **`hooks/traffic/`**: Encapsulated state logic for each major feature.
+- **`components/View/`**: Main application views (History, Intercept, Repeater, etc.).
+- **`components/ui/`**: Reusable, theme-aware component library.
+- **`index.css`**: Centralized semantic theme definition using CSS variables.
 
 ---
 
