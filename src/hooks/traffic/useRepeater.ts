@@ -111,39 +111,9 @@ export function useRepeater(activeEnvId?: string) {
   };
 
   const finalizeImport = async (data: Record<string, any>, options: Record<string, any>, notify: any) => {
-    try {
-      const importEnv = options.importAllEnv || (options.selectedEnvIds && options.selectedEnvIds.length > 0);
-      
-      const response = await fetch('/api/repeater-import', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          ...data, 
-          importEnv,
-          importOptions: options
-        }),
-      });
-      const result = await response.json();
-
-      if (result.success) {
-        const envCount = options.importAllEnv ? (data.all_environments?.length || 0) : (options.selectedEnvIds?.length || 0);
-        const groupCount = options.importAllGroups ? (data.test_cases?.length || 0) : (options.selectedGroupNames?.length || 0);
-        
-        const skippedEnvs = (data.all_environments?.length || 0) - envCount;
-        const skippedGroups = (data.test_cases?.length || 0) - groupCount;
-
-        let msg = `Imported ${result.imported} request(s) into ${groupCount} collection(s).`;
-        if (envCount > 0) msg += ` Imported ${envCount} environment(s).`;
-        if (skippedEnvs > 0 || skippedGroups > 0) msg += ` Skipped ${skippedEnvs} envs and ${skippedGroups} collections.`;
-
-        notify.success(msg);
-        await refreshRepeater();
-        if (envCount > 0) setTimeout(() => window.location.reload(), 1500);
-      } else {
-        notify.error(`Import Error: ${result.error}`);
-      }
-    } catch (error) {
-      notify.error(`Failed to import: ${error}`);
-    }
+    console.log("Import would use data:", data, options);
+    // TODO: implement import_repeater_data in rust
+    notify.error('Import not yet implemented in Rust backend');
   };
 
   const createGroup = async (name: string) => {
@@ -174,34 +144,23 @@ export function useRepeater(activeEnvId?: string) {
 
   const cloneGroup = async (id: string, newName: string) => {
     try {
-      // 1. Create the new group
-      const res = await fetch('/api/repeater-groups', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, envId: activeEnvId })
-      });
-      const groupData = await res.json();
-      if (!groupData.success) return null;
-      const newGroupId = groupData.id;
+      const newGroupId = await createGroup(newName);
+      if (!newGroupId) return null;
 
-      // 2. Fetch requests from original group
-      const reqRes = await fetch(`/api/repeater-db?groupId=${id}`);
-      const originalReqs: RepeaterRequest[] = await reqRes.json();
+      const data = await invoke<SyncData>('sync_data');
+      const originalReqs = data.repeater_requests.filter(r => r.groupId === id);
 
-      // 3. Batch create clones of these requests
       for (const req of originalReqs) {
-        await fetch('/api/repeater-request', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        await invoke('create_repeater_item', { 
+          item: {
             name: req.name,
-            groupId: newGroupId,
             method: req.method,
             url: req.url,
             headers: req.headers,
             body: req.body,
-            extract: req.extract
-          })
+            groupId: newGroupId,
+            response: null
+          } 
         });
       }
 
@@ -243,21 +202,23 @@ export function useRepeater(activeEnvId?: string) {
     targetEnvId?: string,
     bulkPayload?: { links: { groupId: string, envId: string }[], unlinks: { groupId: string, envId: string }[] }
   ) => {
-    const res = await fetch('/api/repeater-groups/assignment', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+    try {
+      const res = await invoke<any>('manage_group_assignment', { 
         action, 
         groupId, 
         envId: envId || activeEnvId, 
         targetEnvId,
-        ...bulkPayload
-      })
-    });
-    const data = await res.json();
-    if (action === 'get_assignments' || action === 'get_groups_for_env') return data as string[];
-    if (data.success) await refreshRepeater();
-    return data.success;
+        bulkLinks: bulkPayload?.links.map(l => [l.groupId, l.envId]),
+        bulkUnlinks: bulkPayload?.unlinks.map(l => [l.groupId, l.envId])
+      });
+      
+      if (action === 'get_assignments' || action === 'get_groups_for_env') return res as string[];
+      if (res.success) await refreshRepeater();
+      return res.success;
+    } catch (e) {
+      console.error('Group assignment failed:', e);
+      return false;
+    }
   };
 
   return {

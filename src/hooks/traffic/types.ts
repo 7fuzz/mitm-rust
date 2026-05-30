@@ -92,6 +92,10 @@ export interface SyncData {
   environments: Environment[];
   variables: GlobalVariable[];
   replacements: ReplacementEntry[];
+  prefs: any;
+  ui_layout: any;
+  toolkit_json: string;
+  history_limits: any;
 }
 
 export interface SyncStatus {

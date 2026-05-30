@@ -2,18 +2,23 @@ import { useState, useEffect, useCallback } from 'react';
 import { Modal, Button } from '../ui';
 import HttpResponseViewer from '../ui/HttpResponseViewer';
 import { TrafficItem } from '../Sidebar/TrafficItem';
+import { invoke } from '@tauri-apps/api/core';
 
 interface HistoryItem {
   id: string;
   method: string;
   url: string;
-  headers: Record<string, string>;
-  body: string;
-  response: {
-    status: number;
-    headers: Record<string, string>;
-    body: string;
-  };
+  request: string; // JSON string from Rust
+  response: string; // JSON string from Rust
+  timestamp: number;
+}
+
+interface ParsedHistoryItem {
+  id: string;
+  method: string;
+  url: string;
+  request: { headers: string; body: string };
+  response: { status: number; headers: string; body: string };
   timestamp: number;
 }
 
@@ -25,17 +30,23 @@ interface RepeaterHistoryModalProps {
 }
 
 export function RepeaterHistoryModal({ isOpen, onClose, repeaterId, repeaterName }: RepeaterHistoryModalProps) {
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [selectedItem, setSelectedItem] = useState<HistoryItem | null>(null);
+  const [history, setHistory] = useState<ParsedHistoryItem[]>([]);
+  const [selectedItem, setSelectedItem] = useState<ParsedHistoryItem | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchHistory = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/repeater/${repeaterId}/history`);
-      const data = await res.json();
-      setHistory(data);
-      if (data.length > 0) setSelectedItem(data[0]);
+      const data = await invoke<HistoryItem[]>('get_repeater_history', { repeaterId });
+      const parsed = data.map(h => {
+        let req = { headers: '[]', body: '' };
+        let res = { status: 0, headers: '[]', body: '' };
+        try { req = JSON.parse(h.request); } catch { /* ignore */ }
+        try { res = JSON.parse(h.response); } catch { /* ignore */ }
+        return { ...h, request: req, response: res };
+      });
+      setHistory(parsed);
+      if (parsed.length > 0) setSelectedItem(parsed[0]);
     } catch (error) {
       console.error('Failed to fetch history:', error);
     } finally {
@@ -52,7 +63,7 @@ export function RepeaterHistoryModal({ isOpen, onClose, repeaterId, repeaterName
   const clearHistory = async () => {
     if (!confirm('Are you sure you want to clear the history for this request?')) return;
     try {
-      await fetch(`/api/repeater/${repeaterId}/history`, { method: 'DELETE' });
+      await invoke('clear_repeater_history', { repeaterId });
       setHistory([]);
       setSelectedItem(null);
     } catch (error) {
@@ -63,7 +74,7 @@ export function RepeaterHistoryModal({ isOpen, onClose, repeaterId, repeaterName
   const deleteHistoryItem = async (itemId: string) => {
     if (!confirm('Delete this history item?')) return;
     try {
-      await fetch(`/api/repeater-history/${itemId}`, { method: 'DELETE' });
+      await invoke('delete_repeater_history_item', { id: itemId });
       setHistory(prev => prev.filter(item => item.id !== itemId));
       if (selectedItem?.id === itemId) {
         setSelectedItem(history.find(item => item.id !== itemId) || null);
@@ -73,21 +84,29 @@ export function RepeaterHistoryModal({ isOpen, onClose, repeaterId, repeaterName
     }
   };
 
-  const buildRawRequest = (item: HistoryItem) => {
+  const buildRawRequest = (item: ParsedHistoryItem) => {
     let path = item.url;
     try {
       const parsed = new URL(item.url);
       path = parsed.pathname + parsed.search + parsed.hash;
     } catch { }
     const firstLine = `${item.method} ${path} HTTP/1.1`;
-    const headers = Object.entries(item.headers).map(([k, v]) => `${k}: ${v}`).join('\n');
-    return `${firstLine}\n${headers}\n\n${item.body}`;
+    let headerText = '';
+    try {
+      const headers = JSON.parse(item.request.headers) as [string, string][];
+      headerText = headers.map(([k, v]) => `${k}: ${v}`).join('\n');
+    } catch { /* ignore */ }
+    return `${firstLine}\n${headerText}\n\n${item.request.body}`;
   };
 
-  const buildRawResponse = (item: HistoryItem) => {
+  const buildRawResponse = (item: ParsedHistoryItem) => {
     const firstLine = `HTTP/1.1 ${item.response.status}`;
-    const headers = Object.entries(item.response.headers).map(([k, v]) => `${k}: ${v}`).join('\n');
-    return `${firstLine}\n${headers}\n\n${item.response.body}`;
+    let headerText = '';
+    try {
+      const headers = JSON.parse(item.response.headers) as [string, string][];
+      headerText = headers.map(([k, v]) => `${k}: ${v}`).join('\n');
+    } catch { /* ignore */ }
+    return `${firstLine}\n${headerText}\n\n${item.response.body}`;
   };
 
   return (
@@ -128,7 +147,7 @@ export function RepeaterHistoryModal({ isOpen, onClose, repeaterId, repeaterName
                 method={item.method}
                 status={item.response.status}
                 title={item.url}
-                timestamp={item.timestamp}
+                timestamp={item.timestamp * 1000}
                 isActive={selectedItem?.id === item.id}
                 activeColor="purple"
                 onClick={() => setSelectedItem(item)}
@@ -143,13 +162,13 @@ export function RepeaterHistoryModal({ isOpen, onClose, repeaterId, repeaterName
           {selectedItem ? (
             <div className="flex-1 flex flex-col p-6 space-y-6 overflow-y-auto">
               <div className="space-y-3">
-                <h3 className="text-purple-500 font-bold uppercase text-[9px] tracking-widest"># Captured_Request</h3>
+                <h3 className="text-purple-text font-bold uppercase text-[9px] tracking-widest"># Captured_Request</h3>
                 <div className="border border-zinc-800 rounded bg-zinc-950 min-h-[200px] shadow-inner shadow-app-shadow/50">
                   <HttpResponseViewer text={buildRawRequest(selectedItem)} />
                 </div>
               </div>
               <div className="space-y-3">
-                <h3 className="text-amber-500 font-bold uppercase text-[9px] tracking-widest"># Captured_Response</h3>
+                <h3 className="text-amber-text font-bold uppercase text-[9px] tracking-widest"># Captured_Response</h3>
                 <div className="border border-zinc-800 rounded bg-zinc-950 min-h-[200px] shadow-inner shadow-app-shadow/50">
                   <HttpResponseViewer text={buildRawResponse(selectedItem)} />
                 </div>

@@ -9,6 +9,7 @@ use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct RepeaterGroup {
     pub id: String,
     pub name: String,
@@ -16,6 +17,7 @@ pub struct RepeaterGroup {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct RepeaterRequest {
     pub id: String,
     pub name: String,
@@ -28,7 +30,8 @@ pub struct RepeaterRequest {
     pub hit_count: i32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateRepeaterItem {
     pub name: String,
     pub method: String,
@@ -134,6 +137,69 @@ pub async fn rename_repeater_group(app_handle: AppHandle, id: String, name: Stri
 }
 
 #[tauri::command]
+pub async fn manage_group_assignment(
+    app_handle: AppHandle,
+    action: String,
+    group_id: Option<String>,
+    env_id: Option<String>,
+    target_env_id: Option<String>,
+    bulk_links: Option<Vec<(String, String)>>,
+    bulk_unlinks: Option<Vec<(String, String)>>
+) -> Result<serde_json::Value, String> {
+    let db_path = get_db_path(&app_handle);
+    let mut conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+
+    match action.as_str() {
+        "link" => {
+            if let (Some(gid), Some(eid)) = (group_id, env_id) {
+                conn.execute("INSERT OR IGNORE INTO environment_groups (group_id, environment_id) VALUES (?, ?)", [gid, eid]).map_err(|e| e.to_string())?;
+            }
+        },
+        "unlink" => {
+            if let (Some(gid), Some(eid)) = (group_id, env_id) {
+                conn.execute("DELETE FROM environment_groups WHERE group_id = ? AND environment_id = ?", [gid, eid]).map_err(|e| e.to_string())?;
+            }
+        },
+        "move" => {
+            if let (Some(gid), Some(eid), Some(teid)) = (group_id, env_id, target_env_id) {
+                conn.execute("UPDATE environment_groups SET environment_id = ? WHERE group_id = ? AND environment_id = ?", [teid, gid, eid]).map_err(|e| e.to_string())?;
+            }
+        },
+        "get_assignments" => {
+            if let Some(gid) = group_id {
+                let mut stmt = conn.prepare("SELECT environment_id FROM environment_groups WHERE group_id = ?").map_err(|e| e.to_string())?;
+                let env_ids: Vec<String> = stmt.query_map([gid], |row| row.get(0)).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+                return Ok(serde_json::to_value(env_ids).unwrap());
+            }
+        },
+        "get_groups_for_env" => {
+            if let Some(eid) = env_id {
+                let mut stmt = conn.prepare("SELECT group_id FROM environment_groups WHERE environment_id = ?").map_err(|e| e.to_string())?;
+                let group_ids: Vec<String> = stmt.query_map([eid], |row| row.get(0)).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+                return Ok(serde_json::to_value(group_ids).unwrap());
+            }
+        },
+        "bulk" => {
+            let tx = conn.transaction().map_err(|e| e.to_string())?;
+            if let Some(links) = bulk_links {
+                for (gid, eid) in links {
+                    tx.execute("INSERT OR IGNORE INTO environment_groups (group_id, environment_id) VALUES (?, ?)", [gid, eid]).map_err(|e| e.to_string())?;
+                }
+            }
+            if let Some(unlinks) = bulk_unlinks {
+                for (gid, eid) in unlinks {
+                    tx.execute("DELETE FROM environment_groups WHERE group_id = ? AND environment_id = ?", [gid, eid]).map_err(|e| e.to_string())?;
+                }
+            }
+            tx.commit().map_err(|e| e.to_string())?;
+        },
+        _ => return Err("Invalid action".to_string()),
+    }
+
+    Ok(serde_json::json!({ "success": true }))
+}
+
+#[tauri::command]
 pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Result<proxy::Traffic, String> {
     let db_path = get_db_path(&app_handle);
     
@@ -176,20 +242,80 @@ pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Resu
 
     let traffic = proxy::Traffic {
         id: format!("{}_res", id),
-        method, url, host: String::new(), status_code: status,
-        request_headers: headers, response_headers: res_headers.clone(),
-        request_body: body, response_body: res_body_str.clone(),
-        phase: "response".to_string(), is_intercepted: false, intercepted_at: None,
+        method: method.clone(),
+        url: url.clone(),
+        host: String::new(),
+        status_code: status,
+        request_headers: headers.clone(),
+        response_headers: res_headers.clone(),
+        request_body: body.clone(),
+        response_body: res_body_str.clone(),
+        phase: "response".to_string(),
+        is_intercepted: false,
+        intercepted_at: None,
     };
 
     let res_headers_json = serde_json::to_string(&res_headers).unwrap_or_default();
+    let req_headers_json = serde_json::to_string(&headers).unwrap_or_default();
     {
         let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
         conn.execute(
             "UPDATE repeater_requests SET response_status = ?, response_headers = ?, response_body = ?, hit_count = hit_count + 1 WHERE id = ?",
             rusqlite::params![status, res_headers_json, res_body_str, id],
         ).map_err(|e| e.to_string())?;
+
+        // Add to history
+        let history_id = Uuid::new_v4().to_string();
+        let _ = conn.execute(
+            "INSERT INTO repeater_history (id, repeater_id, method, url, request, response, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            rusqlite::params![
+                history_id, id, method, url, 
+                serde_json::json!({ "headers": req_headers_json, "body": body }).to_string(),
+                serde_json::json!({ "status": status, "headers": res_headers_json, "body": res_body_str }).to_string(),
+                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
+            ],
+        );
     }
 
     Ok(traffic)
+}
+
+#[tauri::command]
+pub async fn get_repeater_history(app_handle: AppHandle, repeater_id: String) -> Result<serde_json::Value, String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, method, url, request, response, timestamp FROM repeater_history WHERE repeater_id = ? ORDER BY timestamp DESC").map_err(|e| e.to_string())?;
+    
+    let rows = stmt.query_map([repeater_id], |row| {
+        Ok(serde_json::json!({
+            "id": row.get::<_, String>(0)?,
+            "method": row.get::<_, String>(1)?,
+            "url": row.get::<_, String>(2)?,
+            "request": row.get::<_, String>(3)?,
+            "response": row.get::<_, String>(4)?,
+            "timestamp": row.get::<_, i64>(5)?
+        }))
+    }).map_err(|e| e.to_string())?;
+
+    let mut history = Vec::new();
+    for row in rows {
+        if let Ok(h) = row { history.push(h); }
+    }
+    Ok(serde_json::to_value(history).unwrap())
+}
+
+#[tauri::command]
+pub async fn clear_repeater_history(app_handle: AppHandle, repeater_id: String) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM repeater_history WHERE repeater_id = ?", [repeater_id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_repeater_history_item(app_handle: AppHandle, id: String) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM repeater_history WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    Ok(())
 }

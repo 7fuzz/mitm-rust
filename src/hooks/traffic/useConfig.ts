@@ -62,13 +62,21 @@ export function useConfig() {
 
   const updatePrefs = async (newPrefs: typeof prefs) => {
     setPrefs(newPrefs);
-    // TODO: implement update_prefs in rust if needed
+    try {
+      await invoke('update_prefs', { prefs: newPrefs });
+    } catch (e) {
+      console.error('Failed to update prefs:', e);
+    }
   };
 
-  const updateUILayout = (updates: Partial<UILayout>) => {
+  const updateUILayout = async (updates: Partial<UILayout>) => {
     const next = { ...uiLayout, ...updates };
     setUiLayout(next);
-    // TODO: implement update_ui_layout in rust if needed
+    try {
+      await invoke('update_ui_layout', { layout: next });
+    } catch (e) {
+      console.error('Failed to update UI layout:', e);
+    }
   };
 
   const updateFilterConfig = async (config: typeof filterConfig) => {

@@ -15,7 +15,11 @@ Global application state and synchronization.
 
 | Command | Description |
 | :--- | :--- |
-| `sync_data` | **Bulk Fetch**: Retrieve History, Repeater, Environments, Variables, and Replacements in one atomic transaction. |
+| `sync_data` | **Bulk Fetch**: Retrieve History, Repeater, Environments, Variables, Replacements, Prefs, and Layout in one atomic transaction. |
+| `update_prefs` | Save global preferences object (JSON). |
+| `update_ui_layout` | Save UI layout state (sidebar width, split mode, etc). |
+| `save_state` | Generic key-value store for arbitrary workspace state. |
+| `upload_file` | Save binary data to local uploads folder and return path. |
 | `get_proxy_status` | Get current proxy bindings and enabled status. |
 | `toggle_proxy` | Enable or disable the proxy engine globally. |
 | `update_network_settings` | Update listening ports/bindings. |
@@ -43,7 +47,10 @@ Manual request execution and workspace management.
 
 | Command | Description |
 | :--- | :--- |
-| `execute_repeater_request` | Execute a request from the backend using the proxy's client. Updates DB with response. |
+| `execute_repeater_request` | Execute a request from the backend. Updates DB with response and saves to history. |
+| `get_repeater_history` | Retrieve execution history for a specific request. |
+| `clear_repeater_history` | Wipe history for a specific request. |
+| `delete_repeater_history_item` | Delete a single history record. |
 | `create_repeater_item` | Create a new request (often staged from History or Intercept). |
 | `update_repeater_request` | Update request details (URL, Method, Headers, Body). |
 | `delete_repeater_request` | Remove a request from the database. |
@@ -59,8 +66,9 @@ Organization of Repeater items.
 | :--- | :--- |
 | `create_repeater_group` | Create a new collection. |
 | `rename_repeater_group` | Rename an existing collection. |
-| `delete_repeater_group` | Delete a group (cascade delete not yet implementation in Rust layer). |
+| `delete_repeater_group` | Delete a group. |
 | `reorder_repeater_groups` | Update the display order of collections. |
+| `manage_group_assignment` | Link, unlink or move groups between environments. |
 
 ---
 

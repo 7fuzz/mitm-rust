@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 
 export function useJsonToolkit() {
   const [toolkitJson, setToolkitJson] = useState('{\n  "status": "waiting",\n  "message": "Send a JSON payload here to begin"\n}');
@@ -10,12 +11,12 @@ export function useJsonToolkit() {
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
-    debounceRef.current = setTimeout(() => {
-      fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toolkit_json: newVal })
-      }).catch(() => { }); // Fail silently if network drops
+    debounceRef.current = setTimeout(async () => {
+      try {
+        await invoke('save_state', { key: 'toolkit_json', value: newVal });
+      } catch (e) {
+        console.error('Failed to save toolkit JSON:', e);
+      }
     }, 500);
   };
 

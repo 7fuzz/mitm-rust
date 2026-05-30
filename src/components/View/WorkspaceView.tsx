@@ -1,5 +1,5 @@
 import { useState, useImperativeHandle, forwardRef } from 'react';
-import { useTraffic, RepeaterRequest } from '@/hooks/traffic';
+import { useTraffic } from '@/hooks/traffic';
 import { WorkspaceLayout } from '../Layout/WorkspaceLayout';
 import { ConfirmModal, PromptModal, MultiGroupExportModal, ImportModal } from '../Modals';
 import { EnvironmentsSection } from '../modules/workspace/EnvironmentsSection';
@@ -20,7 +20,7 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
     uiLayout, updateUILayout,
     variables, activeEnvId,
     environments,
-    repeaterGroups,
+    repeaterGroups, repeaterRequests,
     importPostman, importProject, finalizeImport,
     syncAll, syncStatus
   } = useTraffic();
@@ -68,9 +68,7 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
 
   const handleExport = async (selectedGroupIds: string[], projectName: string) => {
     try {
-      const fetchPromises = selectedGroupIds.map(gid => fetch(`/api/repeater-db?groupId=${gid}`).then(r => r.json()));
-      const results = await Promise.all(fetchPromises);
-      const flattenedRequests: RepeaterRequest[] = results.flat();
+      const flattenedRequests = repeaterRequests.filter(r => selectedGroupIds.includes(r.groupId || 'null'));
 
       if (flattenedRequests.length === 0) return alert('No requests found in selected groups.');
 

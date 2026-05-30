@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 pub use repeater::{RepeaterGroup, RepeaterRequest, CreateRepeaterItem};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Environment {
     pub id: String,
     pub name: String,
@@ -21,6 +22,7 @@ pub struct Environment {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VariableValue {
     pub id: String,
     pub name: String,
@@ -28,6 +30,7 @@ pub struct VariableValue {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GlobalVariable {
     pub id: String,
     pub environment_id: String,
@@ -38,6 +41,7 @@ pub struct GlobalVariable {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Replacement {
     pub id: String,
     pub r_type: String, 
@@ -56,6 +60,18 @@ pub struct SyncData {
     pub environments: Vec<Environment>,
     pub variables: Vec<GlobalVariable>,
     pub replacements: Vec<Replacement>,
+    pub prefs: serde_json::Value,
+    pub ui_layout: serde_json::Value,
+    pub toolkit_json: String,
+    pub history_limits: serde_json::Value,
+}
+
+#[tauri::command]
+async fn save_state(app_handle: AppHandle, key: String, value: String) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)", [key, value]).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 pub struct AppState {
@@ -405,6 +421,42 @@ async fn resume_flow(id: String, action: proxy::ResumeAction, state: State<'_, A
 }
 
 #[tauri::command]
+async fn update_prefs(app_handle: AppHandle, prefs: serde_json::Value) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let prefs_json = serde_json::to_string(&prefs).map_err(|e| e.to_string())?;
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("INSERT OR REPLACE INTO app_state (key, value) VALUES ('prefs', ?)", [prefs_json]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn update_ui_layout(app_handle: AppHandle, layout: serde_json::Value) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let layout_json = serde_json::to_string(&layout).map_err(|e| e.to_string())?;
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("INSERT OR REPLACE INTO app_state (key, value) VALUES ('ui_layout', ?)", [layout_json]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn upload_file(app_handle: AppHandle, name: String, content: Vec<u8>) -> Result<String, String> {
+    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let uploads_dir = app_data_dir.join("uploads");
+    if !uploads_dir.exists() {
+        std::fs::create_dir_all(&uploads_dir).map_err(|e| e.to_string())?;
+    }
+    
+    let file_id = uuid::Uuid::new_v4().to_string();
+    let extension = std::path::Path::new(&name).extension().and_then(|s| s.to_str()).unwrap_or("bin");
+    let file_name = format!("{}.{}", file_id, extension);
+    let dest_path = uploads_dir.join(&file_name);
+    
+    std::fs::write(&dest_path, content).map_err(|e| e.to_string())?;
+    
+    Ok(dest_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
@@ -484,7 +536,28 @@ async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
         })
     }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
 
-    Ok(SyncData { history, repeater_groups, repeater_requests, environments, variables, replacements })
+    // 7. Prefs and UI Layout
+    let mut prefs = serde_json::Value::Null;
+    if let Ok(config_str) = conn.query_row::<String, _, _>("SELECT value FROM app_state WHERE key = 'prefs'", [], |row| row.get(0)) {
+        if let Ok(v) = serde_json::from_str(&config_str) { prefs = v; }
+    }
+
+    let mut ui_layout = serde_json::Value::Null;
+    if let Ok(config_str) = conn.query_row::<String, _, _>("SELECT value FROM app_state WHERE key = 'ui_layout'", [], |row| row.get(0)) {
+        if let Ok(v) = serde_json::from_str(&config_str) { ui_layout = v; }
+    }
+
+    let mut toolkit_json = String::new();
+    if let Ok(v) = conn.query_row::<String, _, _>("SELECT value FROM app_state WHERE key = 'toolkit_json'", [], |row| row.get(0)) {
+        toolkit_json = v;
+    }
+
+    let mut history_limits = serde_json::Value::Null;
+    if let Ok(config_str) = conn.query_row::<String, _, _>("SELECT value FROM app_state WHERE key = 'history_limits'", [], |row| row.get(0)) {
+        if let Ok(v) = serde_json::from_str(&config_str) { history_limits = v; }
+    }
+
+    Ok(SyncData { history, repeater_groups, repeater_requests, environments, variables, replacements, prefs, ui_layout, toolkit_json, history_limits })
 }
 
 #[tauri::command]
@@ -586,7 +659,11 @@ pub fn run() {
             repeater::delete_repeater_group,
             repeater::reorder_repeater_groups,
             repeater::rename_repeater_group,
+            repeater::manage_group_assignment,
             repeater::execute_repeater_request,
+            repeater::get_repeater_history,
+            repeater::clear_repeater_history,
+            repeater::delete_repeater_history_item,
             create_variable,
             update_variable,
             delete_variable,
@@ -596,6 +673,10 @@ pub fn run() {
             save_replacements_bulk,
             delete_replacement,
             update_replacement_order,
+            update_prefs,
+            update_ui_layout,
+            save_state,
+            upload_file,
             get_proxy_status,
             toggle_proxy,
             update_network_settings

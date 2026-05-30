@@ -36,4 +36,18 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    // 4. Increase chunk size limit since tauri is local (no network latency)
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        // 5. Separate vendor libraries from app logic
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+        }
+      }
+    }
+  }
 }));

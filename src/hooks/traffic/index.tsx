@@ -48,6 +48,15 @@ function useTrafficState() {
       repeater._setRawRepeater(data.repeater_requests);
       variables.loadVariables(data.variables, data.environments, data.environments.find(e => e.is_active)?.id || data.environments[0]?.id || 'default-env-id');
       
+      if (data.prefs) config.initConfig.setPrefs(data.prefs);
+      if (data.ui_layout) config.initConfig.setUiLayout(data.ui_layout as any);
+      if (data.toolkit_json) jsonToolkit._initToolkitJson(data.toolkit_json);
+      if (data.history_limits) {
+        const hl = data.history_limits as any;
+        if (typeof hl.enabled === 'boolean') config.initConfig.setIsLimitEnabled(hl.enabled);
+        if (typeof hl.value === 'number') config.initConfig.setHistoryLimit(hl.value);
+      }
+
       // Group replacements for the segmented hook
       const groupedReplacements = {
         URL_REPLACEMENTS: {} as Record<string, string>,
@@ -89,11 +98,10 @@ function useTrafficState() {
     }
 
     if (config.prefs.limits) {
-      fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limits: { enabled: config.isLimitEnabled, value: config.historyLimit } })
-      }).catch(() => { }); // Fail silently if network drops
+      invoke('save_state', { 
+        key: 'history_limits', 
+        value: JSON.stringify({ enabled: config.isLimitEnabled, value: config.historyLimit }) 
+      }).catch(() => { });
     }
 
     if (config.isLimitEnabled) {

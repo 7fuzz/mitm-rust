@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Input, Textarea, Select } from '../ui';
+import { invoke } from '@tauri-apps/api/core';
 
 interface FormEntry {
   id: string;
@@ -97,21 +98,18 @@ export function FormEditor({ initialBody, contentType, onChange }: { initialBody
   };
 
   const handleFileUpload = async (id: string, file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
       updateEntry(id, { fileName: file.name, contentType: file.type, v: 'Uploading...' });
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
+      
+      const buffer = await file.arrayBuffer();
+      const content = Array.from(new Uint8Array(buffer));
+      
+      const path = await invoke<string>('upload_file', { 
+        name: file.name, 
+        content 
       });
-      const data = await res.json();
-      if (data.success) {
-        updateEntry(id, { v: data.path, fileName: file.name, contentType: file.type });
-      } else {
-        updateEntry(id, { v: 'Upload Failed', fileName: '', contentType: '' });
-      }
+      
+      updateEntry(id, { v: path, fileName: file.name, contentType: file.type });
     } catch (_error) {
       updateEntry(id, { v: 'Upload Error', fileName: '', contentType: '' });
     }
