@@ -1,12 +1,12 @@
 mod ca;
 mod proxy;
+mod db;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_rustls::rustls;
 use tauri::{AppHandle, Manager, State};
-use tauri_plugin_sql::{Migration, MigrationKind};
 
 pub struct ProxyManager {
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
@@ -129,44 +129,7 @@ pub fn run() {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    let migrations = vec![
-        Migration {
-            version: 1,
-            description: "create history table",
-            sql: "CREATE TABLE IF NOT EXISTS history (
-                id TEXT PRIMARY KEY,
-                method TEXT,
-                url TEXT,
-                host TEXT,
-                status_code INTEGER,
-                request_headers TEXT,
-                response_headers TEXT,
-                request_body TEXT,
-                response_body TEXT,
-                phase TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );",
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 2,
-            description: "create repeater table",
-            sql: "CREATE TABLE IF NOT EXISTS repeater_requests (
-                id TEXT PRIMARY KEY,
-                name TEXT,
-                group_id TEXT,
-                method TEXT,
-                url TEXT,
-                headers TEXT,
-                body TEXT,
-                response_status INTEGER,
-                response_headers TEXT,
-                response_body TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );",
-            kind: MigrationKind::Up,
-        }
-    ];
+    let migrations = db::get_migrations();
 
     let proxy_manager = Arc::new(Mutex::new(ProxyManager { shutdown_tx: None }));
     let intercept_state = Arc::new(Mutex::new(proxy::InterceptState {
