@@ -35,6 +35,7 @@ export function useConfig() {
   const [interceptMode, setInterceptMode] = useState<'both' | 'request' | 'response'>('both');
   const [ignoredMethods, setIgnoredMethods] = useState<string[]>(['OPTIONS']);
   const [urlFilter, setUrlFilter] = useState('');
+  const [autoFocus, setAutoFocus] = useState(true);
   const [isLimitEnabled, setIsLimitEnabled] = useState(true);
   const [historyLimit, setHistoryLimit] = useState(100);
   const [uiLayout, setUiLayout] = useState<UILayout>({ isListOpen: true, sidebarWidth: 350, splitMode: 'vertical' });
@@ -45,15 +46,16 @@ export function useConfig() {
   const limitRef = useRef({ enabled: isLimitEnabled, value: historyLimit });
   const prefsRef = useRef(prefs);
 
-  const updateConfig = async (enabled: boolean, mode: 'both' | 'request' | 'response', ignored: string[], filter: string) => {
-    setIsIntercepting(enabled); setInterceptMode(mode); setIgnoredMethods(ignored); setUrlFilter(filter);
+  const updateConfig = async (enabled: boolean, mode: 'both' | 'request' | 'response', ignored: string[], filter: string, autoFocusVal: boolean) => {
+    setIsIntercepting(enabled); setInterceptMode(mode); setIgnoredMethods(ignored); setUrlFilter(filter); setAutoFocus(autoFocusVal);
     
     try {
       await invoke('update_state', { config: {
         enabled,
         mode,
         ignored_methods: ignored,
-        url_filter: filter
+        url_filter: filter,
+        auto_focus: autoFocusVal
       }});
     } catch (e) {
       console.error('Failed to update intercept config:', e);
@@ -113,6 +115,7 @@ export function useConfig() {
     setInterceptMode, 
     setIgnoredMethods, 
     setUrlFilter, 
+    setAutoFocus,
     setUiLayout,
     setFilterConfig
   };
@@ -120,7 +123,7 @@ export function useConfig() {
   return {
     prefs, updatePrefs, prefsRef,
     simpleMode: prefs.simpleMode,
-    isIntercepting, interceptMode, ignoredMethods, urlFilter, updateConfig,
+    isIntercepting, interceptMode, ignoredMethods, urlFilter, autoFocus, updateConfig,
     isLimitEnabled, setIsLimitEnabled, historyLimit, setHistoryLimit, limitRef,
     uiLayout, updateUILayout, 
     filterConfig, updateFilterConfig,

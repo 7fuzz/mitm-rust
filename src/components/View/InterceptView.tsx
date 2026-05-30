@@ -12,7 +12,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 export function InterceptView() {
   const {
-    traffic, isIntercepting, interceptMode, ignoredMethods, urlFilter,
+    traffic, isIntercepting, interceptMode, ignoredMethods, urlFilter, autoFocus,
     updateConfig, resumeRequest, uiLayout, updateUILayout,
     refreshRepeater, setRepeaterSelectedId, variables, activeEnvId,
     applyAllReplacements,
@@ -135,18 +135,18 @@ export function InterceptView() {
     }
   };
 
-  const toggleIntercept = () => updateConfig(!isIntercepting, interceptMode, ignoredMethods, urlFilter);
+  const toggleIntercept = () => updateConfig(!isIntercepting, interceptMode, ignoredMethods, urlFilter, autoFocus);
 
   const toggleMethodIgnore = (method: string) => {
     const newMethods = ignoredMethods.includes(method)
       ? ignoredMethods.filter(m => m !== method)
       : [...ignoredMethods, method];
-    updateConfig(isIntercepting, interceptMode, newMethods, urlFilter);
+    updateConfig(isIntercepting, interceptMode, newMethods, urlFilter, autoFocus);
   };
 
   const handleUrlFilterBlur = () => {
     if (localUrlFilter !== urlFilter) {
-      updateConfig(isIntercepting, interceptMode, ignoredMethods, localUrlFilter);
+      updateConfig(isIntercepting, interceptMode, ignoredMethods, localUrlFilter, autoFocus);
     }
   };
 
@@ -172,7 +172,7 @@ export function InterceptView() {
 
           <Select 
             value={interceptMode} 
-            onChange={(val) => updateConfig(isIntercepting, val as "both" | "request" | "response", ignoredMethods, urlFilter)} 
+            onChange={(val) => updateConfig(isIntercepting, val as "both" | "request" | "response", ignoredMethods, urlFilter, autoFocus)} 
             options={[
               { value: "both", label: "Req & Res" },
               { value: "request", label: "Request Only" },
@@ -231,6 +231,17 @@ export function InterceptView() {
                 onKeyDown={(e) => e.key === 'Enter' && handleUrlFilterBlur()}
                 className="bg-transparent border-none text-[10px] text-zinc-300 w-full outline-none px-2 font-mono"
               />
+            </div>
+
+            <div className="flex items-center gap-2 px-3 py-1 bg-zinc-950 rounded border border-zinc-800 shrink-0">
+              <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest whitespace-nowrap">Auto Focus:</span>
+              <button 
+                onClick={() => updateConfig(isIntercepting, interceptMode, ignoredMethods, urlFilter, !autoFocus)}
+                className={`w-8 h-4 rounded-full relative transition-colors ${autoFocus ? 'bg-sky-500/50' : 'bg-zinc-800'}`}
+                title="Automatically focus app when traffic is intercepted"
+              >
+                <div className={`absolute top-1 w-2 h-2 rounded-full transition-all ${autoFocus ? 'right-1 bg-sky-400' : 'left-1 bg-zinc-600'}`} />
+              </button>
             </div>
           </div>
           {currentReq && (

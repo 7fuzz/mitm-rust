@@ -14,7 +14,7 @@ use hyper_rustls;
 use http_body_util::{BodyExt, Full};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 use rcgen::{CertificateParams, KeyPair, DnType};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -97,6 +97,7 @@ pub struct InterceptConfig {
     pub mode: String, // "both", "request", "response"
     pub ignored_methods: Vec<String>,
     pub url_filter: String,
+    pub auto_focus: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -163,10 +164,12 @@ impl Default for InterceptConfig {
             enabled: false,
             mode: "both".to_string(),
             ignored_methods: vec!["OPTIONS".to_string()],
-            url_filter: "".to_string(),
+            url_filter: String::new(),
+            auto_focus: true,
         }
     }
 }
+
 
 #[derive(Debug, Deserialize)]
 pub struct ResumeAction {
@@ -448,6 +451,13 @@ async fn handle_http(
 
         let _ = state.app_handle.emit("traffic_captured", &traffic);
 
+        if intercept_config.auto_focus {
+            if let Some(window) = state.app_handle.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }
+
         // Wait for resume
         if let Ok(action) = rx.await {
             if action.drop.unwrap_or(false) {
@@ -533,6 +543,13 @@ async fn handle_http(
 
                 let _ = state.app_handle.emit("traffic_captured", &traffic);
 
+        if intercept_config.auto_focus {
+            if let Some(window) = state.app_handle.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }
+
                 if let Ok(action) = rx.await {
                     if action.drop.unwrap_or(false) {
                         return Ok(Response::builder()
@@ -566,6 +583,13 @@ async fn handle_http(
             };
             
             let _ = state.app_handle.emit("traffic_captured", &traffic);
+
+        if intercept_config.auto_focus {
+            if let Some(window) = state.app_handle.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }
 
             // Remove content-length/transfer-encoding to let hyper recalculate
             response_headers.retain(|(k, _)| k != "content-length" && k != "transfer-encoding");
