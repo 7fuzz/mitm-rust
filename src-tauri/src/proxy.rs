@@ -584,13 +584,6 @@ async fn handle_http(
             
             let _ = state.app_handle.emit("traffic_captured", &traffic);
 
-        if intercept_config.auto_focus {
-            if let Some(window) = state.app_handle.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }
-
             // Remove content-length/transfer-encoding to let hyper recalculate
             response_headers.retain(|(k, _)| k != "content-length" && k != "transfer-encoding");
 
