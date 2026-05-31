@@ -92,6 +92,22 @@ function useTrafficState() {
     }
   };
 
+  const purgeAllData = async () => {
+    setSyncStatus(prev => ({ ...prev, is_syncing: true, error: null }));
+    notify.info('Purging workspace data...');
+
+    try {
+      await invoke('purge_all_data');
+      await syncAll(true);
+      notify.success('Workspace data purged successfully');
+    } catch (e) {
+      const errorMsg = String(e);
+      setSyncStatus({ is_syncing: false, last_sync: null, error: errorMsg });
+      notify.error(`Failed to purge data: ${errorMsg}`);
+      throw e;
+    }
+  };
+
   useEffect(() => {
     // Initial sync
     syncAll(true);
@@ -167,6 +183,7 @@ function useTrafficState() {
     ...debugLog,
     syncAll,
     syncStatus,
+    purgeAllData,
     selectedReq: trafficData.traffic.find((r) => r.id === selections.selectedId) || null,
   };
 }

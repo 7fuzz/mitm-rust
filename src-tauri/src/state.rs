@@ -32,6 +32,34 @@ pub async fn save_state(app_handle: AppHandle, key: String, value: String) -> Re
 }
 
 #[tauri::command]
+pub async fn purge_all_data(app_handle: AppHandle) -> Result<(), String> {
+    let db_path = db::get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute_batch(
+        "PRAGMA foreign_keys = ON;
+         DELETE FROM history;
+         DELETE FROM repeater_history;
+         DELETE FROM repeater_requests;
+         DELETE FROM repeater_groups;
+         DELETE FROM environments;
+         DELETE FROM variables;
+         DELETE FROM variable_values;
+         DELETE FROM environment_groups;
+         DELETE FROM replacements;
+         DELETE FROM app_state WHERE key NOT IN ('proxy_config','filter_config');"
+    ).map_err(|e| e.to_string())?;
+
+    if let Ok(app_data_dir) = app_handle.path().app_data_dir() {
+        let uploads_dir = app_data_dir.join("uploads");
+        if uploads_dir.exists() {
+            let _ = std::fs::remove_dir_all(uploads_dir);
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn upload_file(app_handle: AppHandle, name: String, content: Vec<u8>) -> Result<String, String> {
     let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
     let uploads_dir = app_data_dir.join("uploads");

@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "mitm-rust-bootstrap",
+        "title": "mitm-rust",
         "width": 800,
         "height": 600
       }
