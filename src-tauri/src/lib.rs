@@ -232,6 +232,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet, 
             state::sync_data,
+            state::get_repeater_requests,
             get_root_ca_pem, 
             regenerate_root_ca,
             update_state,

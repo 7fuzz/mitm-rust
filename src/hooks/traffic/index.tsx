@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode, useRef } from 'react';
+import { useState, useEffect, createContext, useContext, ReactNode, useRef, useMemo, useCallback } from 'react';
 import { listen, invoke } from '@/lib/utils/tauri';
 import { Traffic } from '@/types/traffic';
 import { SyncData, SyncStatus } from './types';
@@ -43,7 +43,7 @@ function useTrafficState() {
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ is_syncing: false, last_sync: null, error: null });
 
-  const syncAll = async (silent = false) => {
+  const syncAll = useCallback(async (silent = false) => {
     setSyncStatus(prev => ({ ...prev, is_syncing: true, error: null }));
     if (!silent) notify.info('Synchronizing data with backend...');
     
@@ -90,9 +90,9 @@ function useTrafficState() {
       setSyncStatus({ is_syncing: false, last_sync: null, error: errorMsg });
       notify.error(`Sync failed: ${errorMsg}`);
     }
-  };
+  }, [trafficData, repeater, variables, config.initConfig, jsonToolkit, replacements, notify]);
 
-  const purgeAllData = async () => {
+  const purgeAllData = useCallback(async () => {
     setSyncStatus(prev => ({ ...prev, is_syncing: true, error: null }));
     notify.info('Purging workspace data...');
 
@@ -106,7 +106,7 @@ function useTrafficState() {
       notify.error(`Failed to purge data: ${errorMsg}`);
       throw e;
     }
-  };
+  }, [notify, syncAll]);
 
   useEffect(() => {
     // Initial sync
@@ -167,12 +167,14 @@ function useTrafficState() {
   const { initConfig: _initConfig, prefsRef: _prefsRef, limitRef: _limitRef, ...configRest } = config; // eslint-disable-line @typescript-eslint/no-unused-vars
   const { _initToolkitJson: _itj, ...jsonToolkitRest } = jsonToolkit; // eslint-disable-line @typescript-eslint/no-unused-vars
 
-  return {
+  const setActiveEnvironment = useCallback((id: string) => variables.switchWorkspace(id, repeater.activeGroupId, (data) => {
+    repeater.bulkSync(data.groups, data.requests);
+  }), [variables, repeater]);
+
+  const value = useMemo(() => ({
     ...selections,
     ...variables,
-    setActiveEnvironment: (id: string) => variables.switchWorkspace(id, repeater.activeGroupId, (data) => {
-      repeater.bulkSync(data.groups, data.requests);
-    }),
+    setActiveEnvironment,
     // Strip out internal config tools
     ...configRest,
     // Export internal repeater boot tools for optimistic updates
@@ -185,7 +187,12 @@ function useTrafficState() {
     syncStatus,
     purgeAllData,
     selectedReq: trafficData.traffic.find((r) => r.id === selections.selectedId) || null,
-  };
+  }), [
+    selections, variables, setActiveEnvironment, configRest, repeater, jsonToolkitRest,
+    trafficData, replacements, debugLog, syncAll, syncStatus, purgeAllData
+  ]);
+
+  return value;
 }
 
 // ============================================================================

@@ -59,6 +59,7 @@ export interface SyncData {
   uiLayout: any;
   toolkitJson: string;
   historyLimits: any;
+  activeGroupId?: string | null;
 }
 
 export interface SyncStatus {

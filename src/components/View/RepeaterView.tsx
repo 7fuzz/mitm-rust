@@ -55,26 +55,22 @@ export function RepeaterView() {
     }, 300);
   }, [updateRequest]);
 
-  const filteredRequests = activeGroupId === 'All'
-    ? repeaterRequests
-    : repeaterRequests.filter((req) => activeGroupId === 'null' ? req.groupId === null : req.groupId === activeGroupId);
-
-  const currentReq = filteredRequests.find(r => r.id === selectedId) || filteredRequests[0] || null;
+  const currentReq = repeaterRequests.find(r => r.id === selectedId) || repeaterRequests[0] || null;
 
   const [prevReqId, setPrevReqId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!filteredRequests.length) {
+    if (!repeaterRequests.length) {
       if (selectedId && setSelectedId) setSelectedId(null);
       return;
     }
 
-    if (!selectedId || !filteredRequests.some(r => r.id === selectedId)) {
-      setSelectedId(filteredRequests[0].id);
+    if (!selectedId || !repeaterRequests.some(r => r.id === selectedId)) {
+      setSelectedId(repeaterRequests[0].id);
     }
-  }, [filteredRequests, selectedId, setSelectedId]);
+  }, [repeaterRequests, selectedId, setSelectedId]);
 
-  // Auto-update selectedId if we defaulted to filteredRequests[0]
+  // Auto-update selectedId if we defaulted to repeaterRequests[0]
   useEffect(() => {
     if (currentReq && currentReq.id !== selectedId && setSelectedId) {
       setSelectedId(currentReq.id);
@@ -92,7 +88,7 @@ export function RepeaterView() {
     setEditExtract(currentReq.extract || {});
   }
 
-  const trafficMapped: Traffic[] = filteredRequests.map(req => {
+  const trafficMapped: Traffic[] = repeaterRequests.map(req => {
     const groupName = req.groupId ? repeaterGroups.find(g => g.id === req.groupId)?.name : 'Default';
     return { 
       id: req.id, 
@@ -281,8 +277,11 @@ export function RepeaterView() {
               value={activeGroupId}
               onChange={switchGroup}
               options={[
-                { value: "All", label: "All Groups" },
-                { value: "null", label: "Default (Uncategorized)" },
+                { value: "All", label: "All Groups", color: 'text-sky-400' },
+                { isDivider: true },
+                { value: "null", label: "Default (Uncategorized)", color: 'text-zinc-500' },
+                { isDivider: true },
+                { isHeader: true, label: "My Collections" },
                 ...repeaterGroups.map(g => ({ value: g.id, label: g.name }))
               ]}
               className="w-44"

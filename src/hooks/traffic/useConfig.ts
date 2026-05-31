@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { UILayout } from './types';
 import { invoke } from '@/lib/utils/tauri';
 
@@ -48,7 +48,7 @@ export function useConfig() {
   const limitRef = useRef({ enabled: isLimitEnabled, value: historyLimit });
   const prefsRef = useRef(prefs);
 
-  const updateConfig = async (enabled: boolean, mode: 'both' | 'request' | 'response', ignored: string[], filter: string, autoFocusVal: boolean) => {
+  const updateConfig = useCallback(async (enabled: boolean, mode: 'both' | 'request' | 'response', ignored: string[], filter: string, autoFocusVal: boolean) => {
     setIsIntercepting(enabled); setInterceptMode(mode); setIgnoredMethods(ignored); setUrlFilter(filter); setAutoFocus(autoFocusVal);
     
     try {
@@ -62,35 +62,33 @@ export function useConfig() {
     } catch (e) {
       console.error('Failed to update intercept config:', e);
     }
-  };
+  }, []);
 
-  const updatePrefs = async (newPrefs: typeof prefs) => {
+  const updatePrefs = useCallback(async (newPrefs: typeof prefs) => {
     setPrefs(newPrefs);
     try {
       await invoke('update_prefs', { prefs: newPrefs });
     } catch (e) {
       console.error('Failed to update prefs:', e);
     }
-  };
+  }, [prefs]);
 
-  const updateUILayout = async (updates: Partial<UILayout>) => {
-    const next = { ...uiLayout, ...updates };
-    setUiLayout(next);
-    try {
-      await invoke('update_ui_layout', { layout: next });
-    } catch (e) {
-      console.error('Failed to update UI layout:', e);
-    }
-  };
+  const updateUILayout = useCallback(async (updates: Partial<UILayout>) => {
+    setUiLayout(prev => {
+      const next = { ...prev, ...updates };
+      invoke('update_ui_layout', { layout: next }).catch(e => console.error(e));
+      return next;
+    });
+  }, []);
 
-  const updateFilterConfig = async (config: typeof filterConfig) => {
+  const updateFilterConfig = useCallback(async (config: typeof filterConfig) => {
     setFilterConfig(config);
     try {
       await invoke('update_filter_config', { config });
     } catch (e) {
       console.error('Failed to update filter config:', e);
     }
-  };
+  }, []);
 
   useEffect(() => {
     limitRef.current = { enabled: isLimitEnabled, value: historyLimit };
@@ -100,7 +98,7 @@ export function useConfig() {
     prefsRef.current = prefs;
   }, [prefs]);
 
-  const initConfig = { 
+  const initConfig = useMemo(() => ({ 
     setPrefs: (loadedPrefs: any) => {
       setPrefs(prev => ({
         ...prev,
@@ -121,9 +119,9 @@ export function useConfig() {
     setAutoFocus,
     setUiLayout,
     setFilterConfig
-  };
+  }), []);
 
-  return {
+  return useMemo(() => ({
     prefs, updatePrefs, prefsRef,
     simpleMode: prefs.simpleMode,
     isProxyActive, setIsProxyActive,
@@ -132,5 +130,9 @@ export function useConfig() {
     uiLayout, updateUILayout, 
     filterConfig, updateFilterConfig,
     initConfig
-  };
+  }), [
+    prefs, updatePrefs, isProxyActive, isIntercepting, interceptMode, ignoredMethods,
+    urlFilter, autoFocus, updateConfig, isLimitEnabled, historyLimit, uiLayout,
+    updateUILayout, filterConfig, updateFilterConfig, initConfig
+  ]);
 }

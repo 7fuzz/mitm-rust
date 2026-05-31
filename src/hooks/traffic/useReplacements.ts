@@ -42,11 +42,11 @@ export function useReplacements() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const _setRawReplacements = (grouped: ReplacementsData, ordered: ReplacementEntry[]) => {
+  const _setRawReplacements = useCallback((grouped: ReplacementsData, ordered: ReplacementEntry[]) => {
     setReplacements(grouped);
     setOrderedReplacements(ordered);
     setIsLoading(false);
-  };
+  }, []);
 
   const fetchReplacements = useCallback(async () => {
     try {

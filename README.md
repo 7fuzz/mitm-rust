@@ -49,7 +49,7 @@ npm run tauri build
 
 - [x] Backend Execution Engine (Rust/Hyper).
 - [x] Multi-value header support (Set-Cookie preservation).
-- [ ] Collection management (Groups).
+- [x] Collection management (Groups).
 - [x] Persistent workspace (SQLite via Rust).
 - [x] **Import/Export**: Selectively import projects with environments, variables, and collections (see [IMPORT.md](IMPORT.md)).
 

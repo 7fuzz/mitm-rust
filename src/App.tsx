@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { NotificationProvider } from '@/components/ui/NotificationProvider';
 import { TrafficProvider, useTraffic } from '@/hooks/traffic';
 import { ThemeProvider, useTheme } from '@/hooks/ui/useTheme';
@@ -14,7 +14,7 @@ import { ShortcutHint } from '@/components/ui/ShortcutHint';
 import { VariableQuickSwitcherModal, EnvironmentQuickSwitcherModal } from '@/components/Modals/QuickSwitcherModals';
 
 function TrafficApp() {
-  const { 
+  const {
     traffic, repeaterRequests, simpleMode, prefs, isProxyActive,
     variables, activeEnvId, updateVariable, reorderVariables,
     addVariable, deleteVariable,
@@ -47,6 +47,21 @@ function TrafficApp() {
   });
 
   const pendingCount = traffic.filter(t => t.is_intercepted).length;
+
+  useEffect(() => {
+    const handleTab = (e: any) => setActiveTab(e.detail);
+    const handleWorkspaceTab = (e: any) => {
+      setActiveTab('workspace');
+      setTimeout(() => workspaceRef.current?.switchTab(e.detail), 0);
+    };
+
+    window.addEventListener('switch-tab', handleTab as any);
+    window.addEventListener('switch-workspace-tab', handleWorkspaceTab as any);
+    return () => {
+      window.removeEventListener('switch-tab', handleTab as any);
+      window.removeEventListener('switch-workspace-tab', handleWorkspaceTab as any);
+    };
+  }, []);
 
   const handleQuickEdit = () => {
     setIsVarModalOpen(false);
@@ -134,7 +149,7 @@ function TrafficApp() {
             title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
           >
             {theme === 'dark' ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="18.36" x2="5.64" y2="16.92"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="18.36" x2="5.64" y2="16.92" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>
             ) : (
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
             )}
@@ -165,9 +180,9 @@ function TrafficApp() {
 
       <ShortcutHint isOpen={isWaiting} simpleMode={simpleMode} />
 
-      <VariableQuickSwitcherModal 
-        isOpen={isVarModalOpen} 
-        onClose={() => setIsVarModalOpen(false)} 
+      <VariableQuickSwitcherModal
+        isOpen={isVarModalOpen}
+        onClose={() => setIsVarModalOpen(false)}
         variables={variables}
         activeEnvId={activeEnvId}
         onUpdateVariable={updateVariable}
@@ -176,7 +191,7 @@ function TrafficApp() {
         onDeleteVariable={deleteVariable}
         onEdit={handleQuickEdit}
       />
-      
+
       <EnvironmentQuickSwitcherModal
         isOpen={isEnvModalOpen}
         onClose={() => setIsEnvModalOpen(false)}

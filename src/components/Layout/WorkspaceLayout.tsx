@@ -1,7 +1,7 @@
 import { ReactNode, useState, useCallback, useEffect, useRef } from 'react';
 import { UILayout, useTraffic } from '@/hooks/traffic';
 import { VariableSwitcher } from '../ui/VariableSwitcher';
-import { Select } from '../ui';
+import { EnvironmentQuickSwitcherModal } from '../Modals';
 
 // === Main Layout ===
 interface Props {
@@ -23,6 +23,9 @@ export function WorkspaceLayout({ children, listComponent, mainContent, toolbarL
   const {
     environments, activeEnvId, setActiveEnvironment, simpleMode
   } = useTraffic();
+
+  const [isEnvModalOpen, setIsEnvModalOpen] = useState(false);
+  const activeEnvName = environments.find(e => e.id === activeEnvId)?.name || 'Default';
 
   const startResizing = useCallback(() => {
     setIsResizing(true);
@@ -90,12 +93,12 @@ export function WorkspaceLayout({ children, listComponent, mainContent, toolbarL
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 bg-zinc-950 p-1 rounded-full border border-zinc-800 px-3 shadow-inner shadow-app-shadow/50">
                 <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest hidden sm:inline-block">Env:</span>
-                <Select
-                  value={activeEnvId}
-                  onChange={(val) => setActiveEnvironment(val)}
-                  options={environments.map(e => ({ value: e.id, label: e.name }))}
-                  className="bg-transparent text-amber-400 text-[10px] uppercase font-bold outline-none cursor-pointer w-40 truncate"
-                />
+                <button 
+                  onClick={() => setIsEnvModalOpen(true)}
+                  className="bg-transparent text-amber-400 text-[10px] uppercase font-bold outline-none cursor-pointer max-w-40 truncate hover:text-amber-300 transition-colors"
+                >
+                  {activeEnvName}
+                </button>
               </div>
 
               <VariableSwitcher />
@@ -141,6 +144,18 @@ export function WorkspaceLayout({ children, listComponent, mainContent, toolbarL
           {mainContent(splitMode)}
         </div>
       </div>
+
+      <EnvironmentQuickSwitcherModal
+        isOpen={isEnvModalOpen}
+        onClose={() => setIsEnvModalOpen(false)}
+        environments={environments}
+        activeEnvId={activeEnvId}
+        onSetActive={setActiveEnvironment}
+        onEdit={() => {
+          setIsEnvModalOpen(false);
+          window.dispatchEvent(new CustomEvent('switch-workspace-tab', { detail: 'env' }));
+        }}
+      />
     </div>
   );
 }

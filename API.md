@@ -48,6 +48,7 @@ Manual request execution and workspace management.
 | Command | Description |
 | :--- | :--- |
 | `execute_repeater_request` | Execute a request from the backend. Updates DB with response and saves to history. |
+| `get_repeater_requests` | Fetch requests filtered by collection ID (or "All" / "null"). |
 | `get_repeater_history` | Retrieve execution history for a specific request. |
 | `clear_repeater_history` | Wipe history for a specific request. |
 | `delete_repeater_history_item` | Delete a single history record. |

@@ -79,6 +79,59 @@ pub async fn upload_file(app_handle: AppHandle, name: String, content: Vec<u8>) 
 }
 
 #[tauri::command]
+pub async fn get_repeater_requests(app_handle: AppHandle, group_id: String) -> Result<Vec<RepeaterRequest>, String> {
+    let db_path = db::get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+
+    let (query, params): (&str, Vec<rusqlite::types::Value>) = if group_id == "All" {
+        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests ORDER BY order_index", vec![])
+    } else if group_id == "null" {
+        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id IS NULL ORDER BY order_index", vec![])
+    } else {
+        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id = ? ORDER BY order_index", vec![rusqlite::types::Value::Text(group_id)])
+    };
+
+    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+    let repeater_requests = stmt.query_map(rusqlite::params_from_iter(params), |row| {
+        let headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or_default();
+        let extract: Option<serde_json::Value> = row.get::<_, Option<String>>(7)?.and_then(|s| serde_json::from_str(&s).ok());
+        let res_status: Option<u16> = row.get(8).ok();
+        let response = if let Some(status) = res_status {
+             let res_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default();
+             Some(proxy::Traffic {
+                 id: row.get::<_, String>(0)? + "_res",
+                 method: row.get(3)?,
+                 url: row.get(4)?,
+                 host: String::new(),
+                 status_code: status,
+                 request_headers: headers.clone(),
+                 response_headers: res_headers,
+                 request_body: row.get(6)?,
+                 response_body: row.get(10)?,
+                 phase: "response".to_string(),
+                 is_intercepted: false,
+                 intercepted_at: None,
+             })
+        } else { None };
+
+        Ok(RepeaterRequest {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            group_id: row.get(2)?,
+            method: row.get(3)?,
+            url: row.get(4)?,
+            headers,
+            body: row.get(6)?,
+            extract,
+            response,
+            hit_count: row.get(11)?,
+        })
+    }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+
+    Ok(repeater_requests)
+}
+
+#[tauri::command]
 pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
     let db_path = db::get_db_path(&app_handle);
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
@@ -120,87 +173,58 @@ pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
         }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect()
     };
 
-    // 3. Repeater Requests
-    let request_query = if active_env_id.is_some() {
-        "SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id IS NULL OR group_id IN (SELECT group_id FROM environment_groups WHERE environment_id = ?) ORDER BY order_index"
+    // 2.5. Determine active group
+    let active_group_id: Option<String> = conn.query_row("SELECT value FROM app_state WHERE key = 'active_group_id'", [], |row| row.get(0))
+        .optional()
+        .unwrap_or(None);
+
+    let effective_group_id = active_group_id.clone().unwrap_or_else(|| "null".to_string());
+
+    // 3. Repeater Requests (filtered by effective_group_id)
+    let (request_query, request_params): (&str, Vec<rusqlite::types::Value>) = if effective_group_id == "All" {
+        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests ORDER BY order_index", vec![])
+    } else if effective_group_id == "null" {
+        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id IS NULL ORDER BY order_index", vec![])
     } else {
-        "SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests ORDER BY order_index"
+        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id = ? ORDER BY order_index", vec![rusqlite::types::Value::Text(effective_group_id)])
     };
 
     let mut stmt = conn.prepare(request_query).map_err(|e| e.to_string())?;
-    let repeater_requests = if let Some(ref env_id) = active_env_id {
-        stmt.query_map([env_id], |row| {
-            let headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or_default();
-            let extract: Option<serde_json::Value> = row.get::<_, Option<String>>(7)?.and_then(|s| serde_json::from_str(&s).ok());
-            let res_status: Option<u16> = row.get(8).ok();
-            let response = if let Some(status) = res_status {
-                 let res_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default();
-                 Some(proxy::Traffic {
-                     id: row.get::<_, String>(0)? + "_res",
-                     method: row.get(3)?,
-                     url: row.get(4)?,
-                     host: String::new(),
-                     status_code: status,
-                     request_headers: headers.clone(),
-                     response_headers: res_headers,
-                     request_body: row.get(6)?,
-                     response_body: row.get(10)?,
-                     phase: "response".to_string(),
-                     is_intercepted: false,
-                     intercepted_at: None,
-                 })
-            } else { None };
+    let repeater_requests = stmt.query_map(rusqlite::params_from_iter(request_params), |row| {
+        let headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or_default();
+        let extract: Option<serde_json::Value> = row.get::<_, Option<String>>(7)?.and_then(|s| serde_json::from_str(&s).ok());
+        let res_status: Option<u16> = row.get(8).ok();
+        let response = if let Some(status) = res_status {
+             let res_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default();
+             Some(proxy::Traffic {
+                 id: row.get::<_, String>(0)? + "_res",
+                 method: row.get(3)?,
+                 url: row.get(4)?,
+                 host: String::new(),
+                 status_code: status,
+                 request_headers: headers.clone(),
+                 response_headers: res_headers,
+                 request_body: row.get(6)?,
+                 response_body: row.get(10)?,
+                 phase: "response".to_string(),
+                 is_intercepted: false,
+                 intercepted_at: None,
+             })
+        } else { None };
 
-            Ok(RepeaterRequest {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                group_id: row.get(2)?,
-                method: row.get(3)?,
-                url: row.get(4)?,
-                headers,
-                body: row.get(6)?,
-                extract,
-                response,
-                hit_count: row.get(11)?,
-            })
-        }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect()
-    } else {
-        stmt.query_map([], |row| {
-            let headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or_default();
-            let extract: Option<serde_json::Value> = row.get::<_, Option<String>>(7)?.and_then(|s| serde_json::from_str(&s).ok());
-            let res_status: Option<u16> = row.get(8).ok();
-            let response = if let Some(status) = res_status {
-                 let res_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default();
-                 Some(proxy::Traffic {
-                     id: row.get::<_, String>(0)? + "_res",
-                     method: row.get(3)?,
-                     url: row.get(4)?,
-                     host: String::new(),
-                     status_code: status,
-                     request_headers: headers.clone(),
-                     response_headers: res_headers,
-                     request_body: row.get(6)?,
-                     response_body: row.get(10)?,
-                     phase: "response".to_string(),
-                     is_intercepted: false,
-                     intercepted_at: None,
-                 })
-            } else { None };
-
-            Ok(RepeaterRequest {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                group_id: row.get(2)?,
-                method: row.get(3)?,
-                url: row.get(4)?,
-                headers,
-                body: row.get(6)?,
-                extract,
-                response,
-                hit_count: row.get(11)?,
-            })
-        }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect()
-    };
+        Ok(RepeaterRequest {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            group_id: row.get(2)?,
+            method: row.get(3)?,
+            url: row.get(4)?,
+            headers,
+            body: row.get(6)?,
+            extract,
+            response,
+            hit_count: row.get(11)?,
+        })
+    }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
 
     // 4. Environments
     let mut stmt = conn.prepare("SELECT id, name, is_active FROM environments").map_err(|e| e.to_string())?;
@@ -253,5 +277,5 @@ pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
         if let Ok(v) = serde_json::from_str(&config_str) { history_limits = v; }
     }
 
-    Ok(SyncData { history, repeater_groups, repeater_requests, environments, variables, replacements, prefs, ui_layout, toolkit_json, history_limits })
+    Ok(SyncData { history, repeater_groups, repeater_requests, environments, variables, replacements, prefs, ui_layout, toolkit_json, history_limits, active_group_id })
 }

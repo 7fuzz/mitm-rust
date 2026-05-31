@@ -57,6 +57,7 @@ pub struct SyncData {
     pub ui_layout: serde_json::Value,
     pub toolkit_json: String,
     pub history_limits: serde_json::Value,
+    pub active_group_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
