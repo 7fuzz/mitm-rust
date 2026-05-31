@@ -15,7 +15,7 @@ import { VariableQuickSwitcherModal, EnvironmentQuickSwitcherModal } from '@/com
 
 function TrafficApp() {
   const { 
-    traffic, repeaterRequests, simpleMode, prefs,
+    traffic, repeaterRequests, simpleMode, prefs, isProxyActive,
     variables, activeEnvId, updateVariable, reorderVariables,
     addVariable, deleteVariable,
     environments, setActiveEnvironment
@@ -140,12 +140,14 @@ function TrafficApp() {
             )}
           </button>
 
-          <div className="flex items-center gap-3 px-3 py-1.5 bg-emerald-500/5 border border-emerald-500/20 rounded-full group hover:border-emerald-500/40 transition-all cursor-default">
+          <div className={`flex items-center gap-3 px-3 py-1.5 border rounded-full group transition-all cursor-default ${isProxyActive ? 'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40' : 'bg-rose-500/5 border-rose-500/20 hover:border-rose-500/40'}`}>
             <div className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              {isProxyActive && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${isProxyActive ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
             </div>
-            <span className="text-[10px] text-emerald-500/80 font-black uppercase tracking-[0.15em]">Proxy_Live</span>
+            <span className={`text-[10px] font-black uppercase tracking-[0.15em] ${isProxyActive ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>
+              {isProxyActive ? 'Proxy_Live' : 'Proxy_Offline'}
+            </span>
           </div>
         </div>
       </header>

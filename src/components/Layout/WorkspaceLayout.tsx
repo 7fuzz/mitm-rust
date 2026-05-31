@@ -21,7 +21,7 @@ export function WorkspaceLayout({ children, listComponent, mainContent, toolbarL
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   const {
-    environments, activeEnvId, setActiveEnvironment, simpleMode
+    environments, activeEnvId, setActiveEnvironment, simpleMode, isProxyActive
   } = useTraffic();
 
   const startResizing = useCallback(() => {
@@ -108,8 +108,20 @@ export function WorkspaceLayout({ children, listComponent, mainContent, toolbarL
           </div>
 
           {/* ZONE D: ACTIONS (The toolbarRight slot) */}
-          <div className="flex items-center gap-2">
-            {toolbarRight}
+          <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-2 px-2.5 py-1 border rounded-full transition-all cursor-default ${isProxyActive ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-rose-500/5 border-rose-500/20'}`}>
+              <div className="relative flex h-1.5 w-1.5">
+                {isProxyActive && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${isProxyActive ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+              </div>
+              <span className={`text-[9px] font-black uppercase tracking-widest ${isProxyActive ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>
+                {isProxyActive ? 'Live' : 'Off'}
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {toolbarRight}
+            </div>
           </div>
         </div>
 

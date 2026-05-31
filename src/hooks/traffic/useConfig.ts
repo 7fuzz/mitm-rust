@@ -32,6 +32,7 @@ export function useConfig() {
     theme: 'dark' as 'dark' | 'light',
     shortcuts: DEFAULT_SHORTCUTS
   });
+  const [isProxyActive, setIsProxyActive] = useState(true);
   const [isIntercepting, setIsIntercepting] = useState(false);
   const [interceptMode, setInterceptMode] = useState<'both' | 'request' | 'response'>('both');
   const [ignoredMethods, setIgnoredMethods] = useState<string[]>(['OPTIONS']);
@@ -112,6 +113,7 @@ export function useConfig() {
     },
     setIsLimitEnabled, 
     setHistoryLimit, 
+    setIsProxyActive,
     setIsIntercepting, 
     setInterceptMode, 
     setIgnoredMethods, 
@@ -124,6 +126,7 @@ export function useConfig() {
   return {
     prefs, updatePrefs, prefsRef,
     simpleMode: prefs.simpleMode,
+    isProxyActive, setIsProxyActive,
     isIntercepting, interceptMode, ignoredMethods, urlFilter, autoFocus, updateConfig,
     isLimitEnabled, setIsLimitEnabled, historyLimit, setHistoryLimit, limitRef,
     uiLayout, updateUILayout, 

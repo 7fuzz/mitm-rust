@@ -8,10 +8,9 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
 
 export function OptionsView() {
-  const { prefs, updatePrefs } = useTraffic();
+  const { prefs, updatePrefs, isProxyActive, setIsProxyActive } = useTraffic();
 
   const [bindings, setBindings] = useState<string[]>(['8080']);
-  const [isProxyEnabled, setIsProxyEnabled] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
@@ -22,11 +21,11 @@ export function OptionsView() {
       .then(status => {
         if (status) {
           setBindings(status.bindings || ['8080']);
-          setIsProxyEnabled(status.enabled);
+          setIsProxyActive(status.enabled);
         }
       })
       .catch(e => console.error("Failed to load proxy status", e));
-  }, []);
+  }, [setIsProxyActive]);
 
   const handleBindingChange = (index: number, value: string) => {
     const newBindings = [...bindings];
@@ -43,10 +42,10 @@ export function OptionsView() {
   };
 
   const handleToggleProxy = async () => {
-    const nextValue = !isProxyEnabled;
+    const nextValue = !isProxyActive;
     try {
       await invoke('toggle_proxy', { enabled: nextValue });
-      setIsProxyEnabled(nextValue);
+      setIsProxyActive(nextValue);
       setSaveMessage(nextValue ? 'Proxy engine started' : 'Proxy engine stopped');
     } catch (e) {
       setSaveMessage(`Error: ${e}`);
@@ -140,16 +139,16 @@ export function OptionsView() {
           <label className="flex items-center justify-between p-4 bg-zinc-900 border border-zinc-800 rounded-lg cursor-pointer hover:border-sky-500/50 transition-all shadow-sm">
             <div className="flex flex-col">
               <span className="text-[10px] text-zinc-300 font-black uppercase tracking-widest">Proxy_Engine</span>
-              <span className={`text-[8px] font-mono ${isProxyEnabled ? 'text-sky-400' : 'text-zinc-500'}`}>{isProxyEnabled ? 'ACTIVE_LISTENING' : 'OFFLINE'}</span>
+              <span className={`text-[8px] font-mono ${isProxyActive ? 'text-sky-400' : 'text-zinc-500'}`}>{isProxyActive ? 'ACTIVE_LISTENING' : 'OFFLINE'}</span>
             </div>
             <div className="relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-zinc-700">
               <input
                 type="checkbox"
-                checked={isProxyEnabled}
+                checked={isProxyActive}
                 onChange={handleToggleProxy}
                 className="sr-only peer"
               />
-              <div className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-zinc-950 shadow-sm ring-0 transition duration-200 ease-in-out ${isProxyEnabled ? 'translate-x-5 bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]' : 'translate-x-0 bg-zinc-400'}`}></div>
+              <div className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-zinc-950 shadow-sm ring-0 transition duration-200 ease-in-out ${isProxyActive ? 'translate-x-5 bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]' : 'translate-x-0 bg-zinc-400'}`}></div>
             </div>
           </label>
 
