@@ -135,6 +135,11 @@ function useTrafficState() {
         if (config.limitRef.current.enabled) return next.slice(0, config.limitRef.current.value);
         return next;
       });
+      
+      // Save captured traffic to database
+      invoke('save_traffic_history', { traffic: data }).catch(err => {
+        console.warn('Failed to save traffic history:', err);
+      });
     });
 
     return () => {
