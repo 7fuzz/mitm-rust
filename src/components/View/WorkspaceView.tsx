@@ -5,11 +5,10 @@ import { ConfirmModal, PromptModal, MultiGroupExportModal, ImportModal } from '.
 import { EnvironmentsSection } from '../modules/workspace/EnvironmentsSection';
 import { CollectionsSection } from '../modules/workspace/CollectionsSection';
 import { ReplacementsSection } from '../modules/workspace/ReplacementsSection';
-import { SyncSection } from '../modules/workspace/SyncSection';
 import { Button } from '../ui/Button';
 import { useNotification } from '../ui/NotificationProvider';
 
-export type WorkspaceTab = 'env' | 'collections' | 'replacements' | 'sync';
+export type WorkspaceTab = 'env' | 'collections' | 'replacements';
 
 export interface WorkspaceViewHandle {
   switchTab: (tab: WorkspaceTab) => void;
@@ -246,18 +245,12 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
           >
             Repeater Replacements
           </button>
-          <button
-            onClick={() => setActiveTab('sync')}
-            className={`flex items-center text-left px-3 py-2.5 rounded text-[11px] font-bold tracking-wider transition-all border ${activeTab === 'sync' ? 'bg-sky-highlight-bg border-sky-highlight-border text-sky-text' : 'bg-transparent border-transparent text-zinc-400 hover:bg-zinc-900'}`}
-          >
-            Database & Sync
-          </button>
         </div>
       )}
       toolbarLeft={
         <div className="flex items-center px-4">
           <span className="text-[12px] font-black uppercase tracking-[0.2em] text-zinc-300">
-            Workspace_Management / {activeTab === 'env' ? 'Environments' : activeTab === 'collections' ? 'Collections' : activeTab === 'replacements' ? 'Replacements' : 'Database & Sync'}
+            Workspace_Management / {activeTab === 'env' ? 'Environments' : activeTab === 'collections' ? 'Collections' : 'Replacements'}
           </span>
         </div>
       }
@@ -274,9 +267,6 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
           {activeTab === 'env' && <EnvironmentsSection openPrompt={openPrompt} openConfirm={openConfirm} />}
           {activeTab === 'collections' && <CollectionsSection selectedGroupId={selectedGroupId} setSelectedGroupId={setSelectedGroupId} openPrompt={openPrompt} openConfirm={openConfirm} />}
           {activeTab === 'replacements' && <ReplacementsSection />}
-          {activeTab === 'sync' && (
-            <SyncSection onOpenConfirm={() => openConfirm('Purge Database', 'This will IRREVERSIBLY destroy all history, collections, and variables. The app will restart after purge.', handlePurge)} />
-          )}
         </div>
       )}
     >
