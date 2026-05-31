@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { GlobalVariable, Environment } from '@/hooks/traffic/types';
-import { Modal, useDialog } from '../ui';
+import { Modal } from '../ui';
 import { useHotkeys } from '@/hooks/ui/useHotkeys';
 
 interface VariableQuickSwitcherProps {
@@ -15,177 +15,236 @@ interface VariableQuickSwitcherProps {
   onEdit: () => void;
 }
 
+type InlineEditType = 'value' | 'rename-var' | 'rename-variant' | 'new-var' | 'new-variant';
+
 export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeEnvId, onUpdateVariable, onReorder, onAddVariable, onDeleteVariable, onEdit }: VariableQuickSwitcherProps) {
   const envVars = variables.filter(v => v.environmentId === activeEnvId);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [filter, setFilter] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
-  const { prompt, confirm, alert } = useDialog();
+  const filterInputRef = useRef<HTMLInputElement>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
   
+  const [inlineEdit, setInlineEdit] = useState<{
+    type: InlineEditType;
+    id?: string;
+    value: string;
+    extraValue?: string; // used for new-variant value
+  } | null>(null);
+
   const filtered = envVars.filter(v => v.name.toLowerCase().includes(filter.toLowerCase()));
 
   useEffect(() => {
     if (isOpen) {
       setSelectedIndex(0);
       setFilter('');
+      setInlineEdit(null);
     }
   }, [isOpen]);
 
   useEffect(() => {
-    if (listRef.current && filtered.length > 0) {
+    if (listRef.current && filtered.length > 0 && !inlineEdit) {
       const selectedEl = listRef.current.children[selectedIndex] as HTMLElement;
       if (selectedEl) {
         selectedEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
     }
-  }, [selectedIndex, filtered.length]);
+  }, [selectedIndex, filtered.length, inlineEdit]);
+
+  useEffect(() => {
+    if (inlineEdit) {
+      setTimeout(() => editInputRef.current?.focus(), 10);
+    }
+  }, [inlineEdit]);
 
   const v = filtered[selectedIndex];
 
+  const handleSaveInline = () => {
+    if (!inlineEdit) return;
+
+    if (inlineEdit.type === 'value' && v) {
+      const newValues = v.values.map((val, idx) => 
+        idx === v.activeIndex ? { ...val, value: inlineEdit.value } : val
+      );
+      onUpdateVariable(v.id, { values: newValues }, true);
+    } 
+    else if (inlineEdit.type === 'rename-var' && v) {
+      if (inlineEdit.value.trim()) {
+        onUpdateVariable(v.id, { name: inlineEdit.value.trim() }, true);
+      }
+    }
+    else if (inlineEdit.type === 'rename-variant' && v) {
+      if (inlineEdit.value.trim()) {
+        const newValues = v.values.map((val, idx) => 
+          idx === v.activeIndex ? { ...val, name: inlineEdit.value.trim() } : val
+        );
+        onUpdateVariable(v.id, { values: newValues }, true);
+      }
+    }
+    else if (inlineEdit.type === 'new-variant' && v) {
+      if (inlineEdit.value.trim()) {
+        const newValues = [...v.values, { 
+          id: crypto.randomUUID(), 
+          name: inlineEdit.value.trim(), 
+          value: inlineEdit.extraValue || '' 
+        }];
+        onUpdateVariable(v.id, { values: newValues, activeIndex: newValues.length - 1 }, true);
+      }
+    }
+    else if (inlineEdit.type === 'new-var') {
+      if (inlineEdit.value.trim()) {
+        onAddVariable({
+          id: crypto.randomUUID(),
+          environmentId: activeEnvId,
+          name: inlineEdit.value.trim(),
+          values: [
+            { id: crypto.randomUUID(), name: 'Default', value: '' },
+            { id: crypto.randomUUID(), name: '(auto)', value: '' }
+          ],
+          activeIndex: 0,
+          orderIndex: envVars.length
+        });
+        setFilter('');
+      }
+    }
+
+    setInlineEdit(null);
+  };
+
   useHotkeys([
-    // 1. Edit Value (Enter)
+    // 1. Inline Edit Controls
     {
       key: 'Enter',
-      enabled: isOpen && !!v,
+      enabled: isOpen && !!inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
-      handler: async (e) => {
+      handler: (e) => {
         e.preventDefault();
-        const currentVariant = v.values[v.activeIndex];
-        const newValue = await prompt(`Update Variable`, `Value for "${v.name}" [${currentVariant.name}]:`, currentVariant.value);
-        if (newValue !== null) {
-          const newValues = v.values.map((val, idx) => 
-            idx === v.activeIndex ? { ...val, value: newValue } : val
-          );
-          onUpdateVariable(v.id, { values: newValues }, true);
+        handleSaveInline();
+      }
+    },
+    {
+      key: 'Escape',
+      enabled: isOpen && !!inlineEdit,
+      ignoreInputs: false,
+      stopPropagation: true,
+      handler: (e) => {
+        e.preventDefault();
+        setInlineEdit(null);
+      }
+    },
+    // 2. Direct Shortcuts (Only when not inline editing)
+    {
+      key: 'Enter',
+      enabled: isOpen && !!v && !inlineEdit,
+      ignoreInputs: false,
+      stopPropagation: true,
+      handler: (e) => {
+        e.preventDefault();
+        setInlineEdit({ type: 'value', id: v.id, value: v.values[v.activeIndex]?.value || '' });
+      }
+    },
+    {
+      key: 'f',
+      ctrl: true,
+      enabled: isOpen && !inlineEdit,
+      ignoreInputs: false,
+      stopPropagation: true,
+      handler: (e) => {
+        e.preventDefault();
+        if (document.activeElement === filterInputRef.current) {
+          filterInputRef.current?.blur();
+        } else {
+          filterInputRef.current?.focus();
         }
       }
     },
-    // 2. New Variant (Ctrl + N)
     {
       key: 'n',
       ctrl: true,
       shift: false,
-      enabled: isOpen && !!v,
+      enabled: isOpen && !!v && !inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
-      handler: async (e) => {
+      handler: (e) => {
         e.preventDefault();
-        const varName = await prompt(`New Variant`, `Add new variant name for "${v.name}":`, 'New Variant');
-        if (varName) {
-          const varValue = await prompt(`Variant Value`, `Value for "${varName}":`, '');
-          const newValues = [...v.values, { id: crypto.randomUUID(), name: varName, value: varValue || '' }];
-          onUpdateVariable(v.id, { values: newValues, activeIndex: newValues.length - 1 }, true);
-        }
+        setInlineEdit({ type: 'new-variant', id: v.id, value: 'New Variant', extraValue: '' });
       }
     },
-    // 3. New Variable (Ctrl + Shift + N)
     {
       key: 'n',
       ctrl: true,
       shift: true,
-      enabled: isOpen,
+      enabled: isOpen && !inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
-      handler: async (e) => {
+      handler: (e) => {
         e.preventDefault();
-        const newName = await prompt(`New Variable`, 'Enter variable name:', '');
-        if (newName) {
-          onAddVariable({
-            id: crypto.randomUUID(),
-            environmentId: activeEnvId,
-            name: newName,
-            values: [
-              { id: crypto.randomUUID(), name: 'Default', value: '' },
-              { id: crypto.randomUUID(), name: '(auto)', value: '' }
-            ],
-            activeIndex: 0,
-            orderIndex: envVars.length
-          });
-          setFilter(''); // Clear filter to see the new variable
-        }
+        setInlineEdit({ type: 'new-var', value: '' });
       }
     },
-    // 4. Delete Variant (Ctrl + D)
     {
       key: 'd',
       ctrl: true,
       shift: false,
-      enabled: isOpen && !!v,
+      enabled: isOpen && !!v && !inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
-      handler: async (e) => {
+      handler: (e) => {
         e.preventDefault();
         const currentVariant = v.values[v.activeIndex];
         if (v.values.length > 1) {
-          if (await confirm(`Delete Variant`, `Are you sure you want to delete variant "${currentVariant.name}"?`, true)) {
+          if (window.confirm(`Delete variant "${currentVariant.name}"?`)) {
             const newValues = v.values.filter((_, idx) => idx !== v.activeIndex);
             onUpdateVariable(v.id, { values: newValues, activeIndex: 0 }, true);
           }
-        } else {
-          await alert("Cannot Delete", "Cannot delete the last variant. Delete the variable instead.");
         }
       }
     },
-    // 5. Delete Variable (Ctrl + Shift + D)
     {
       key: 'd',
       ctrl: true,
       shift: true,
-      enabled: isOpen && !!v,
+      enabled: isOpen && !!v && !inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
-      handler: async (e) => {
+      handler: (e) => {
         e.preventDefault();
-        if (await confirm(`Delete Variable`, `Permanently delete variable "${v.name}"?`, true)) {
+        if (window.confirm(`Permanently delete variable "${v.name}"?`)) {
           onDeleteVariable(v.id);
         }
       }
     },
-    // 6. Rename Variant (Ctrl + R)
     {
       key: 'r',
       ctrl: true,
       shift: false,
-      enabled: isOpen && !!v,
+      enabled: isOpen && !!v && !inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
-      handler: async (e) => {
+      handler: (e) => {
         e.preventDefault();
         const currentVariant = v.values[v.activeIndex];
-        if (currentVariant.name === '(auto)') {
-          await alert("Protected Variant", "Cannot rename the (auto) variant.");
-          return;
-        }
-        const newName = await prompt(`Rename Variant`, `Rename variant "${currentVariant.name}" to:`, currentVariant.name);
-        if (newName && newName !== currentVariant.name) {
-          const newValues = v.values.map((val, idx) => 
-            idx === v.activeIndex ? { ...val, name: newName } : val
-          );
-          onUpdateVariable(v.id, { values: newValues }, true);
-        }
+        if (currentVariant.name === '(auto)') return;
+        setInlineEdit({ type: 'rename-variant', id: v.id, value: currentVariant.name });
       }
     },
-    // 7. Rename Variable (Ctrl + Shift + R)
     {
       key: 'r',
       ctrl: true,
       shift: true,
-      enabled: isOpen && !!v,
+      enabled: isOpen && !!v && !inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
-      handler: async (e) => {
+      handler: (e) => {
         e.preventDefault();
-        const newName = await prompt(`Rename Variable`, `Rename variable "${v.name}" to:`, v.name);
-        if (newName && newName !== v.name) {
-          onUpdateVariable(v.id, { name: newName }, true);
-        }
+        setInlineEdit({ type: 'rename-var', id: v.id, value: v.name });
       }
     },
     // Navigation
     {
       key: 'ArrowDown',
-      enabled: isOpen,
+      enabled: isOpen && !inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
       handler: (e) => {
@@ -209,7 +268,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
     },
     {
       key: 'ArrowUp',
-      enabled: isOpen,
+      enabled: isOpen && !inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
       handler: (e) => {
@@ -233,7 +292,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
     },
     {
       key: 'ArrowLeft',
-      enabled: isOpen && !!v,
+      enabled: isOpen && !!v && !inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
       handler: () => {
@@ -245,7 +304,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
     },
     {
       key: 'ArrowRight',
-      enabled: isOpen && !!v,
+      enabled: isOpen && !!v && !inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
       handler: () => {
@@ -257,7 +316,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
     },
     {
       key: 'Escape',
-      enabled: isOpen,
+      enabled: isOpen && !inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
       handler: () => onClose(),
@@ -265,7 +324,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
     {
       key: 'm',
       ctrl: true,
-      enabled: isOpen,
+      enabled: isOpen && !inlineEdit,
       ignoreInputs: false,
       stopPropagation: true,
       handler: (e) => {
@@ -274,40 +333,119 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
         onClose();
       }
     }
-  ], [isOpen, selectedIndex, filtered, filter, envVars, v]);
+  ], [isOpen, selectedIndex, filtered, filter, envVars, v, inlineEdit]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Quick Variable Switcher" maxWidth="lg">
       <div className="p-4 space-y-4">
         <input 
-          autoFocus
-          className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded text-amber-400 font-bold outline-none focus:border-amber-500 transition-colors text-sm font-mono shadow-inner"
-          placeholder="Type to filter variables..."
+          ref={filterInputRef}
+          disabled={!!inlineEdit && inlineEdit.type !== 'new-var'}
+          className={`w-full bg-zinc-950 border border-zinc-800 p-3 rounded text-amber-400 font-bold outline-none focus:border-amber-500 transition-colors text-sm font-mono shadow-inner ${!!inlineEdit && inlineEdit.type !== 'new-var' ? 'opacity-30' : ''}`}
+          placeholder="Type to filter variables... (^F to focus)"
           value={filter}
           onChange={e => setFilter(e.target.value)}
         />
         
         <div ref={listRef} className="space-y-1 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
-          {filtered.map((v, idx) => (
-            <div 
-              key={v.id} 
-              className={`p-3 rounded flex items-center justify-between cursor-pointer border transition-all ${selectedIndex === idx ? 'bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/5' : 'bg-transparent border-transparent hover:bg-zinc-900/50'}`}
-              onClick={() => setSelectedIndex(idx)}
-            >
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                   <span className={`text-xs font-bold ${selectedIndex === idx ? 'text-amber-400' : 'text-zinc-200'}`}>{v.name}</span>
-                </div>
-                <span className="text-[10px] text-zinc-500 font-mono">
-                  Variant: <span className="text-purple-400 font-bold">{v.values[v.activeIndex]?.name}</span>
-                </span>
-              </div>
-              <div className="text-[10px] font-mono text-emerald-text truncate max-w-40 bg-zinc-950/50 px-2 py-1 rounded border border-zinc-800/50">
-                {v.values[v.activeIndex]?.value || <span className="opacity-30 italic">empty</span>}
+          {/* New Variable Inline Entry */}
+          {inlineEdit?.type === 'new-var' && (
+            <div className="p-3 rounded flex items-center justify-between border bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/5">
+              <div className="flex flex-col flex-1">
+                <span className="text-[9px] font-black uppercase text-amber-500 mb-1">New Variable Name:</span>
+                <input
+                  ref={editInputRef}
+                  className="bg-zinc-950 border border-zinc-800 p-1.5 rounded text-amber-400 font-bold text-xs outline-none focus:border-amber-500 w-full"
+                  value={inlineEdit.value}
+                  onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                  placeholder="variable_name..."
+                />
               </div>
             </div>
-          ))}
-          {filtered.length === 0 && (
+          )}
+
+          {filtered.map((v, idx) => {
+            const isSelected = selectedIndex === idx;
+            const isEditingThis = isSelected && inlineEdit;
+            
+            return (
+              <div 
+                key={v.id} 
+                className={`p-3 rounded flex flex-col gap-2 border transition-all ${isSelected ? 'bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/5' : 'bg-transparent border-transparent hover:bg-zinc-900/50'}`}
+                onClick={() => !inlineEdit && setSelectedIndex(idx)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    {isEditingThis && (inlineEdit.type === 'rename-var' || inlineEdit.type === 'new-variant') ? (
+                       <div className="flex flex-col gap-1">
+                          <span className="text-[8px] font-black uppercase text-amber-500">
+                            {inlineEdit.type === 'rename-var' ? 'Rename Variable' : 'New Variant Name'}
+                          </span>
+                          <input
+                            ref={editInputRef}
+                            className="bg-zinc-950 border border-zinc-800 p-1 rounded text-amber-400 font-bold text-[11px] outline-none focus:border-amber-500"
+                            value={inlineEdit.value}
+                            onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                          />
+                       </div>
+                    ) : (
+                      <span className={`text-xs font-bold ${isSelected ? 'text-amber-400' : 'text-zinc-200'}`}>{v.name}</span>
+                    )}
+                    
+                    <div className="flex items-center gap-2 mt-1">
+                      {isEditingThis && inlineEdit.type === 'rename-variant' ? (
+                        <div className="flex items-center gap-1">
+                           <span className="text-[8px] font-black uppercase text-purple-500">Rename Variant:</span>
+                           <input
+                              ref={editInputRef}
+                              className="bg-zinc-950 border border-zinc-800 p-0.5 px-1 rounded text-purple-400 font-bold text-[10px] outline-none focus:border-purple-500"
+                              value={inlineEdit.value}
+                              onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                           />
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-zinc-500 font-mono">
+                          Variant: <span className="text-purple-400 font-bold">{v.values[v.activeIndex]?.name}</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-end gap-1 flex-1 max-w-[60%]">
+                    {isEditingThis && (inlineEdit.type === 'value' || inlineEdit.type === 'new-variant') ? (
+                      <div className="w-full flex flex-col items-end">
+                        <span className="text-[8px] font-black uppercase text-emerald-500 mb-1">
+                          {inlineEdit.type === 'value' ? 'Edit Value' : 'Initial Value'}
+                        </span>
+                        <input
+                          ref={inlineEdit.type === 'value' ? editInputRef : undefined}
+                          className="w-full bg-zinc-950 border border-zinc-800 p-1.5 rounded text-emerald-text font-mono text-[10px] outline-none focus:border-emerald-500 text-right"
+                          value={inlineEdit.type === 'value' ? inlineEdit.value : (inlineEdit.extraValue || '')}
+                          onChange={e => {
+                            if (inlineEdit.type === 'value') setInlineEdit({ ...inlineEdit, value: e.target.value });
+                            else setInlineEdit({ ...inlineEdit, extraValue: e.target.value });
+                          }}
+                          placeholder="value..."
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && inlineEdit.type === 'new-variant') {
+                              // special case to allow enter from extraValue field
+                              handleSaveInline();
+                            }
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="text-[10px] font-mono text-emerald-text truncate w-full text-right bg-zinc-950/50 px-2 py-1 rounded border border-zinc-800/50">
+                        {v.values[v.activeIndex]?.value || <span className="opacity-30 italic">empty</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          
+          {filtered.length === 0 && inlineEdit?.type !== 'new-var' && (
             <div className="py-12 text-center border border-dashed border-zinc-800 rounded bg-zinc-900/20">
                <p className="text-[10px] text-zinc-600 uppercase font-black tracking-widest text-balance px-4">
                  No variables matching &quot;{filter}&quot;
@@ -321,11 +459,11 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
           <div className="space-y-2">
             <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">↑↓</kbd> Navigate</div>
             <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">←→</kbd> Cycle Variant</div>
-            <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">ENTER</kbd> Edit Value</div>
+            <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">^F</kbd> Focus Filter</div>
           </div>
           <div className="space-y-2">
+            <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">ENTER</kbd> {inlineEdit ? 'Save' : 'Edit Value'}</div>
             <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">^N</kbd> New Variant <span className="text-[7px] opacity-40 ml-auto">^⇧N for New Var</span></div>
-            <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">^D</kbd> Del Variant <span className="text-[7px] opacity-40 ml-auto">^⇧D for Del Var</span></div>
             <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">^R</kbd> Rename Variant <span className="text-[7px] opacity-40 ml-auto">^⇧R for Ren Var</span></div>
           </div>
         </div>
