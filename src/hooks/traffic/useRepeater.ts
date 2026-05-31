@@ -111,9 +111,44 @@ export function useRepeater(activeEnvId?: string) {
   };
 
   const finalizeImport = async (data: Record<string, any>, options: Record<string, any>, notify: any) => {
-    console.log("Import would use data:", data, options);
-    // TODO: implement import_repeater_data in rust
-    notify.error('Import not yet implemented in Rust backend');
+    try {
+      // Transform the data for the import command
+      const importPayload = {
+        name: data.name,
+        url: data.url,
+        header: data.header,
+        placeholders: data.placeholders,
+        all_environments: data.all_environments,
+        all_variables: data.all_variables,
+        test_cases: data.test_cases,
+        import_environments: options.selectedEnvIds || [],
+        import_groups: options.selectedGroupNames || [],
+        link_to_environment: options.smartSync && options.targetEnvIds?.length > 0 ? options.targetEnvIds[0] : null,
+      };
+
+      const result = await invoke<any>('import_repeater_data', { data: importPayload });
+
+      if (result.success) {
+        const imported = result.imported || {};
+        const summary = [];
+        if (imported.environments) summary.push(`${imported.environments} environment(s)`);
+        if (imported.variables) summary.push(`${imported.variables} variable(s)`);
+        if (imported.groups) summary.push(`${imported.groups} collection(s)`);
+        if (imported.requests) summary.push(`${imported.requests} request(s)`);
+        
+        const message = summary.length > 0 
+          ? `✓ Imported ${summary.join(', ')}`
+          : '✓ Import completed';
+        
+        notify?.success?.(message);
+        await refreshRepeater();
+      } else {
+        notify?.error?.(`Import failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      notify?.error?.(`Import failed: ${error}`);
+    }
   };
 
   const createGroup = async (name: string) => {

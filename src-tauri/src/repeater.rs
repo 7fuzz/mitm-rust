@@ -333,3 +333,198 @@ pub async fn delete_repeater_history_item(app_handle: AppHandle, id: String) -> 
     conn.execute("DELETE FROM repeater_history WHERE id = ?", [id]).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[derive(Debug, Deserialize)]
+pub struct ImportRepeaterData {
+    pub name: Option<String>,
+    pub url: Option<String>,
+    pub header: Option<serde_json::Value>,
+    pub placeholders: Option<std::collections::HashMap<String, String>>,
+    pub all_environments: Option<Vec<serde_json::Value>>,
+    pub all_variables: Option<Vec<serde_json::Value>>,
+    pub test_cases: Option<Vec<serde_json::Value>>,
+    pub import_environments: Option<Vec<String>>,
+    pub import_groups: Option<Vec<String>>,
+    pub link_to_environment: Option<String>,
+}
+
+#[tauri::command]
+pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterData) -> Result<serde_json::Value, String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    
+    let mut imported_envs = 0;
+    let mut imported_vars = 0;
+    let mut imported_groups = 0;
+    let mut imported_requests = 0;
+
+    // 1. Import environments and variables if requested
+    if let (Some(envs), Some(import_env_ids)) = (&data.all_environments, &data.import_environments) {
+        for env in envs {
+            let env_obj = env.as_object().ok_or("Invalid environment object")?;
+            let env_id = env_obj.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| Uuid::new_v4().to_string());
+            let env_name = env_obj.get("name").and_then(|v| v.as_str()).unwrap_or("Imported Environment").to_string();
+
+            // Check if this environment should be imported
+            if !import_env_ids.contains(&env_id) && !import_env_ids.contains(&env_name) {
+                continue;
+            }
+
+            let new_env_id = Uuid::new_v4().to_string();
+            conn.execute(
+                "INSERT INTO environments (id, name, is_active) VALUES (?, ?, 0)",
+                rusqlite::params![new_env_id, env_name],
+            ).map_err(|e| e.to_string())?;
+            
+            imported_envs += 1;
+
+            // Import variables for this environment
+            if let Some(vars) = &data.all_variables {
+                for var in vars {
+                    let var_obj = var.as_object().ok_or("Invalid variable object")?;
+                    let var_env_id = var_obj.get("environmentId").and_then(|v| v.as_str()).unwrap_or("");
+                    
+                    if var_env_id == env_id.as_str() {
+                        let var_name = var_obj.get("name").and_then(|v| v.as_str()).unwrap_or("unnamed").to_string();
+                        let active_index = var_obj.get("activeIndex").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                        let values = var_obj.get("values").and_then(|v| v.as_array()).ok_or("Invalid values array")?;
+
+                        let new_var_id = Uuid::new_v4().to_string();
+                        conn.execute(
+                            "INSERT INTO variables (id, environment_id, name, active_index) VALUES (?, ?, ?, ?)",
+                            rusqlite::params![new_var_id, new_env_id, var_name, active_index],
+                        ).map_err(|e| e.to_string())?;
+
+                        for (val_idx, value_obj) in values.iter().enumerate() {
+                            if let Some(v_obj) = value_obj.as_object() {
+                                let value_name = v_obj.get("name").and_then(|v| v.as_str()).unwrap_or(&format!("Value {}", val_idx)).to_string();
+                                let value_str = v_obj.get("value").and_then(|v| v.as_str()).unwrap_or("");
+                                
+                                let val_id = Uuid::new_v4().to_string();
+                                conn.execute(
+                                    "INSERT INTO variable_values (id, variable_id, name, value) VALUES (?, ?, ?, ?)",
+                                    rusqlite::params![val_id, new_var_id, value_name, value_str],
+                                ).map_err(|e| e.to_string())?;
+                                
+                                imported_vars += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Import repeater groups and requests
+    if let Some(test_cases) = &data.test_cases {
+        let import_group_names = data.import_groups.clone().unwrap_or_default();
+        let link_env_id = data.link_to_environment.clone();
+
+        for (group_idx, tc) in test_cases.iter().enumerate() {
+            let tc_obj = tc.as_object().ok_or("Invalid test case object")?;
+            let group_name = tc_obj.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| format!("Imported Group {}", group_idx));
+            
+            // Check if this group should be imported
+            if !import_group_names.is_empty() && !import_group_names.contains(&group_name) {
+                continue;
+            }
+
+            let new_group_id = Uuid::new_v4().to_string();
+            let global_url = data.url.as_deref().unwrap_or("");
+            let group_url = tc_obj.get("url").and_then(|v| v.as_str()).unwrap_or(global_url);
+
+            conn.execute(
+                "INSERT INTO repeater_groups (id, name, order_index) VALUES (?, ?, ?)",
+                rusqlite::params![new_group_id, group_name, group_idx],
+            ).map_err(|e| e.to_string())?;
+
+            imported_groups += 1;
+
+            // Link group to environment if specified
+            if let Some(ref env_id) = link_env_id {
+                conn.execute(
+                    "INSERT OR IGNORE INTO environment_groups (group_id, environment_id) VALUES (?, ?)",
+                    rusqlite::params![new_group_id, env_id],
+                ).map_err(|e| e.to_string())?;
+            }
+
+            // Import requests in this group
+            if let Some(targets) = tc_obj.get("target").and_then(|v| v.as_array()) {
+                for (req_idx, target) in targets.iter().enumerate() {
+                    let target_obj = target.as_object().ok_or("Invalid target object")?;
+                    let req_name = target_obj.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| format!("Request {}", req_idx));
+                    let method = target_obj.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
+                    let endpoint = target_obj.get("endpoint").and_then(|v| v.as_str()).unwrap_or("");
+                    let params = target_obj.get("params").and_then(|v| v.as_object());
+                    
+                    // Build full URL
+                    let mut full_url = group_url.to_string() + endpoint;
+                    if let Some(p) = params {
+                        let query_parts: Vec<String> = p.iter()
+                            .map(|(k, v)| {
+                                let val = v.as_str().unwrap_or("");
+                                format!("{}={}", k, val)
+                            })
+                            .collect();
+                        if !query_parts.is_empty() {
+                            full_url.push('?');
+                            full_url.push_str(&query_parts.join("&"));
+                        }
+                    }
+
+                    // Merge headers
+                    let mut headers: Vec<(String, String)> = Vec::new();
+                    if let Some(global_header) = &data.header {
+                        if let Some(header_obj) = global_header.as_object() {
+                            for (k, v) in header_obj {
+                                if let Some(val) = v.as_str() {
+                                    headers.push((k.clone(), val.to_string()));
+                                }
+                            }
+                        }
+                    }
+                    if let Some(target_headers) = target_obj.get("header").and_then(|v| v.as_object()) {
+                        for (k, v) in target_headers {
+                            if let Some(val) = v.as_str() {
+                                // Replace or add header
+                                if let Some(existing) = headers.iter_mut().find(|(hk, _)| hk == k) {
+                                    existing.1 = val.to_string();
+                                } else {
+                                    headers.push((k.clone(), val.to_string()));
+                                }
+                            } else if v.is_null() {
+                                // Remove header
+                                headers.retain(|(hk, _)| hk != k);
+                            }
+                        }
+                    }
+
+                    let body = target_obj.get("body").and_then(|v| v.as_str()).unwrap_or("");
+                    let extract = target_obj.get("extract").and_then(|v| serde_json::to_string(v).ok()).unwrap_or_else(|| "{}".to_string());
+
+                    let headers_json = serde_json::to_string(&headers).unwrap_or_default();
+                    let req_id = Uuid::new_v4().to_string();
+
+                    conn.execute(
+                        "INSERT INTO repeater_requests (id, name, group_id, method, url, headers, body, extract, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        rusqlite::params![req_id, req_name, new_group_id, method, full_url, headers_json, body, extract, req_idx],
+                    ).map_err(|e| e.to_string())?;
+
+                    imported_requests += 1;
+                }
+            }
+        }
+    }
+
+    conn.execute("PRAGMA optimize", []).ok();
+
+    Ok(serde_json::json!({
+        "success": true,
+        "imported": {
+            "environments": imported_envs,
+            "variables": imported_vars,
+            "groups": imported_groups,
+            "requests": imported_requests
+        }
+    }))
+}
