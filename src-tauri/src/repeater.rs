@@ -439,7 +439,11 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
                         }
                     }
 
-                    let body = target_obj.get("body").and_then(|v| v.as_str()).unwrap_or("");
+                    let body = match target_obj.get("body") {
+                        Some(v) if v.is_string() => v.as_str().unwrap_or("").to_string(),
+                        Some(v) if !v.is_null() => serde_json::to_string(v).unwrap_or_default(),
+                        _ => String::new(),
+                    };
                     let extract = target_obj.get("extract").and_then(|v| serde_json::to_string(v).ok()).unwrap_or_else(|| "{}".to_string());
 
                     let headers_json = serde_json::to_string(&headers).unwrap_or_default();

@@ -21,7 +21,7 @@ export function WorkspaceLayout({ children, listComponent, mainContent, toolbarL
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   const {
-    environments, activeEnvId, setActiveEnvironment, simpleMode, isProxyActive
+    environments, activeEnvId, setActiveEnvironment, simpleMode
   } = useTraffic();
 
   const startResizing = useCallback(() => {
