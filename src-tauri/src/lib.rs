@@ -2,6 +2,7 @@ pub mod ca;
 pub mod proxy;
 pub mod db;
 pub mod repeater;
+pub mod repeater_execute;
 pub mod models;
 pub mod workspace;
 pub mod state;
@@ -248,7 +249,7 @@ pub fn run() {
             repeater::reorder_repeater_groups,
             repeater::rename_repeater_group,
             repeater::manage_group_assignment,
-            repeater::execute_repeater_request,
+            repeater_execute::execute_repeater_request,
             repeater::get_repeater_history,
             repeater::clear_repeater_history,
             repeater::delete_repeater_history_item,
