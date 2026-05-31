@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { GlobalVariable, Environment } from '@/hooks/traffic/types';
-import { Modal } from '../ui/Modal';
+import { Modal, useDialog } from '../ui';
 import { useHotkeys } from '@/hooks/ui/useHotkeys';
 
 interface VariableQuickSwitcherProps {
@@ -19,8 +19,8 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
   const envVars = variables.filter(v => v.environmentId === activeEnvId);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [filter, setFilter] = useState('');
-  const [commandMode, setCommandMode] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const { prompt, confirm, alert } = useDialog();
   
   const filtered = envVars.filter(v => v.name.toLowerCase().includes(filter.toLowerCase()));
 
@@ -43,84 +43,53 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
   const v = filtered[selectedIndex];
 
   useHotkeys([
-    // Command Mode Actions
+    // 1. Edit Value (Enter)
     {
-      key: 'Escape',
-      enabled: isOpen && commandMode,
+      key: 'Enter',
+      enabled: isOpen && !!v,
+      ignoreInputs: false,
       stopPropagation: true,
-      handler: () => setCommandMode(false),
-    },
-    {
-      key: ['e', 'Enter'],
-      enabled: isOpen && commandMode && !!v,
-      stopPropagation: true,
-      handler: () => {
+      handler: async (e) => {
+        e.preventDefault();
         const currentVariant = v.values[v.activeIndex];
-        const newValue = window.prompt(`Update value for "${v.name}" [${currentVariant.name}]:`, currentVariant.value);
+        const newValue = await prompt(`Update Variable`, `Value for "${v.name}" [${currentVariant.name}]:`, currentVariant.value);
         if (newValue !== null) {
           const newValues = v.values.map((val, idx) => 
             idx === v.activeIndex ? { ...val, value: newValue } : val
           );
           onUpdateVariable(v.id, { values: newValues }, true);
         }
-        setCommandMode(false);
       }
     },
-    {
-      key: 'v',
-      enabled: isOpen && commandMode && !!v,
-      stopPropagation: true,
-      handler: () => {
-        const varName = window.prompt(`Add new variant name for "${v.name}":`, 'New Variant');
-        if (varName) {
-          const varValue = window.prompt(`Value for "${varName}":`, '');
-          const newValues = [...v.values, { id: crypto.randomUUID(), name: varName, value: varValue || '' }];
-          onUpdateVariable(v.id, { values: newValues }, true);
-        }
-        setCommandMode(false);
-      }
-    },
-    {
-      key: 'd',
-      enabled: isOpen && commandMode && !!v,
-      stopPropagation: true,
-      handler: (e) => {
-        if (e.shiftKey) {
-          if (window.confirm(`Permanently delete variable "${v.name}"?`)) {
-            onDeleteVariable(v.id);
-          }
-        } else {
-          const currentVariant = v.values[v.activeIndex];
-          if (v.values.length > 1) {
-            if (window.confirm(`Delete variant "${currentVariant.name}"?`)) {
-              const newValues = v.values.filter((_, idx) => idx !== v.activeIndex);
-              onUpdateVariable(v.id, { values: newValues, activeIndex: 0 }, true);
-            }
-          } else {
-            alert("Cannot delete the last variant. Delete the variable instead.");
-          }
-        }
-        setCommandMode(false);
-      }
-    },
-    {
-      key: 'r',
-      enabled: isOpen && commandMode && !!v,
-      stopPropagation: true,
-      handler: () => {
-        const newName = window.prompt(`Rename variable "${v.name}" to:`, v.name);
-        if (newName && newName !== v.name) {
-          onUpdateVariable(v.id, { name: newName }, true);
-        }
-        setCommandMode(false);
-      }
-    },
+    // 2. New Variant (Ctrl + N)
     {
       key: 'n',
-      enabled: isOpen && commandMode,
+      ctrl: true,
+      shift: false,
+      enabled: isOpen && !!v,
+      ignoreInputs: false,
       stopPropagation: true,
-      handler: () => {
-        const newName = window.prompt('New variable name:', '');
+      handler: async (e) => {
+        e.preventDefault();
+        const varName = await prompt(`New Variant`, `Add new variant name for "${v.name}":`, 'New Variant');
+        if (varName) {
+          const varValue = await prompt(`Variant Value`, `Value for "${varName}":`, '');
+          const newValues = [...v.values, { id: crypto.randomUUID(), name: varName, value: varValue || '' }];
+          onUpdateVariable(v.id, { values: newValues, activeIndex: newValues.length - 1 }, true);
+        }
+      }
+    },
+    // 3. New Variable (Ctrl + Shift + N)
+    {
+      key: 'n',
+      ctrl: true,
+      shift: true,
+      enabled: isOpen,
+      ignoreInputs: false,
+      stopPropagation: true,
+      handler: async (e) => {
+        e.preventDefault();
+        const newName = await prompt(`New Variable`, 'Enter variable name:', '');
         if (newName) {
           onAddVariable({
             id: crypto.randomUUID(),
@@ -131,16 +100,92 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
               { id: crypto.randomUUID(), name: '(auto)', value: '' }
             ],
             activeIndex: 0,
-            orderIndex: variables.filter(v => v.environmentId === activeEnvId).length
+            orderIndex: envVars.length
           });
+          setFilter(''); // Clear filter to see the new variable
         }
-        setCommandMode(false);
       }
     },
-    // Navigation (Available even when typing in filter)
+    // 4. Delete Variant (Ctrl + D)
+    {
+      key: 'd',
+      ctrl: true,
+      shift: false,
+      enabled: isOpen && !!v,
+      ignoreInputs: false,
+      stopPropagation: true,
+      handler: async (e) => {
+        e.preventDefault();
+        const currentVariant = v.values[v.activeIndex];
+        if (v.values.length > 1) {
+          if (await confirm(`Delete Variant`, `Are you sure you want to delete variant "${currentVariant.name}"?`, true)) {
+            const newValues = v.values.filter((_, idx) => idx !== v.activeIndex);
+            onUpdateVariable(v.id, { values: newValues, activeIndex: 0 }, true);
+          }
+        } else {
+          await alert("Cannot Delete", "Cannot delete the last variant. Delete the variable instead.");
+        }
+      }
+    },
+    // 5. Delete Variable (Ctrl + Shift + D)
+    {
+      key: 'd',
+      ctrl: true,
+      shift: true,
+      enabled: isOpen && !!v,
+      ignoreInputs: false,
+      stopPropagation: true,
+      handler: async (e) => {
+        e.preventDefault();
+        if (await confirm(`Delete Variable`, `Permanently delete variable "${v.name}"?`, true)) {
+          onDeleteVariable(v.id);
+        }
+      }
+    },
+    // 6. Rename Variant (Ctrl + R)
+    {
+      key: 'r',
+      ctrl: true,
+      shift: false,
+      enabled: isOpen && !!v,
+      ignoreInputs: false,
+      stopPropagation: true,
+      handler: async (e) => {
+        e.preventDefault();
+        const currentVariant = v.values[v.activeIndex];
+        if (currentVariant.name === '(auto)') {
+          await alert("Protected Variant", "Cannot rename the (auto) variant.");
+          return;
+        }
+        const newName = await prompt(`Rename Variant`, `Rename variant "${currentVariant.name}" to:`, currentVariant.name);
+        if (newName && newName !== currentVariant.name) {
+          const newValues = v.values.map((val, idx) => 
+            idx === v.activeIndex ? { ...val, name: newName } : val
+          );
+          onUpdateVariable(v.id, { values: newValues }, true);
+        }
+      }
+    },
+    // 7. Rename Variable (Ctrl + Shift + R)
+    {
+      key: 'r',
+      ctrl: true,
+      shift: true,
+      enabled: isOpen && !!v,
+      ignoreInputs: false,
+      stopPropagation: true,
+      handler: async (e) => {
+        e.preventDefault();
+        const newName = await prompt(`Rename Variable`, `Rename variable "${v.name}" to:`, v.name);
+        if (newName && newName !== v.name) {
+          onUpdateVariable(v.id, { name: newName }, true);
+        }
+      }
+    },
+    // Navigation
     {
       key: 'ArrowDown',
-      enabled: isOpen && !commandMode,
+      enabled: isOpen,
       ignoreInputs: false,
       stopPropagation: true,
       handler: (e) => {
@@ -158,13 +203,13 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
             }
           }
         } else {
-          setSelectedIndex(prev => (prev + 1) % filtered.length);
+          setSelectedIndex(prev => (prev + 1) % Math.max(1, filtered.length));
         }
       }
     },
     {
       key: 'ArrowUp',
-      enabled: isOpen && !commandMode,
+      enabled: isOpen,
       ignoreInputs: false,
       stopPropagation: true,
       handler: (e) => {
@@ -182,13 +227,13 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
             }
           }
         } else {
-          setSelectedIndex(prev => (prev - 1 + filtered.length) % filtered.length);
+          setSelectedIndex(prev => (prev - 1 + filtered.length) % Math.max(1, filtered.length));
         }
       }
     },
     {
       key: 'ArrowLeft',
-      enabled: isOpen && !commandMode,
+      enabled: isOpen && !!v,
       ignoreInputs: false,
       stopPropagation: true,
       handler: () => {
@@ -200,7 +245,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
     },
     {
       key: 'ArrowRight',
-      enabled: isOpen && !commandMode,
+      enabled: isOpen && !!v,
       ignoreInputs: false,
       stopPropagation: true,
       handler: () => {
@@ -211,94 +256,78 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
       }
     },
     {
-      key: 'Enter',
-      enabled: isOpen && !commandMode,
-      ignoreInputs: false,
-      stopPropagation: true,
-      handler: () => setCommandMode(true),
-    },
-    {
       key: 'Escape',
-      enabled: isOpen && !commandMode,
+      enabled: isOpen,
       ignoreInputs: false,
       stopPropagation: true,
       handler: () => onClose(),
     },
     {
       key: 'm',
-      enabled: isOpen && !commandMode && filter === '',
+      ctrl: true,
+      enabled: isOpen,
+      ignoreInputs: false,
       stopPropagation: true,
-      handler: () => {
+      handler: (e) => {
+        e.preventDefault();
         onEdit();
         onClose();
       }
     }
-  ], [isOpen, commandMode, selectedIndex, filtered, filter, envVars]);
+  ], [isOpen, selectedIndex, filtered, filter, envVars, v]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Quick Variable Switcher" maxWidth="lg">
       <div className="p-4 space-y-4">
         <input 
           autoFocus
-          className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded text-amber-400 font-bold outline-none focus:border-amber-500 transition-colors text-sm font-mono"
-          placeholder="Filter variables..."
+          className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded text-amber-400 font-bold outline-none focus:border-amber-500 transition-colors text-sm font-mono shadow-inner"
+          placeholder="Type to filter variables..."
           value={filter}
           onChange={e => setFilter(e.target.value)}
         />
         
-        <div ref={listRef} className="space-y-1 max-h-96 overflow-y-auto">
+        <div ref={listRef} className="space-y-1 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
           {filtered.map((v, idx) => (
             <div 
               key={v.id} 
-              className={`p-3 rounded flex items-center justify-between cursor-pointer border ${selectedIndex === idx ? (commandMode ? 'bg-sky-500/10 border-sky-500/50' : 'bg-amber-500/10 border-amber-500/50') : 'bg-transparent border-transparent hover:bg-zinc-900'}`}
-              onClick={() => {
-                const nextIdx = (v.activeIndex + 1) % v.values.length;
-                onUpdateVariable(v.id, { activeIndex: nextIdx }, true);
-              }}
+              className={`p-3 rounded flex items-center justify-between cursor-pointer border transition-all ${selectedIndex === idx ? 'bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/5' : 'bg-transparent border-transparent hover:bg-zinc-900/50'}`}
+              onClick={() => setSelectedIndex(idx)}
             >
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
-                   <span className="text-xs font-bold text-zinc-200">{v.name}</span>
-                   {commandMode && selectedIndex === idx && (
-                     <div className="flex items-center gap-1 animate-in fade-in zoom-in duration-200">
-                       <span className="text-[8px] px-1.5 py-0.5 bg-sky-500 text-zinc-950 font-black rounded shadow-lg shadow-sky-500/20">COMMAND:</span>
-                       <div className="flex gap-0.5">
-                         {['E','V','D','R','N'].map(k => (
-                           <span key={k} className="text-[8px] px-1 bg-zinc-800 text-sky-400 font-bold border border-zinc-700 rounded">{k}</span>
-                         ))}
-                       </div>
-                     </div>
-                   )}
+                   <span className={`text-xs font-bold ${selectedIndex === idx ? 'text-amber-400' : 'text-zinc-200'}`}>{v.name}</span>
                 </div>
-                <span className="text-[10px] text-zinc-500 font-mono">Current: <span className="text-purple-400">{v.values[v.activeIndex]?.name}</span></span>
+                <span className="text-[10px] text-zinc-500 font-mono">
+                  Variant: <span className="text-purple-400 font-bold">{v.values[v.activeIndex]?.name}</span>
+                </span>
               </div>
-              <div className="text-[10px] font-mono text-emerald-text truncate max-w-40">
-                {v.values[v.activeIndex]?.value}
+              <div className="text-[10px] font-mono text-emerald-text truncate max-w-40 bg-zinc-950/50 px-2 py-1 rounded border border-zinc-800/50">
+                {v.values[v.activeIndex]?.value || <span className="opacity-30 italic">empty</span>}
               </div>
             </div>
           ))}
+          {filtered.length === 0 && (
+            <div className="py-12 text-center border border-dashed border-zinc-800 rounded bg-zinc-900/20">
+               <p className="text-[10px] text-zinc-600 uppercase font-black tracking-widest text-balance px-4">
+                 No variables matching &quot;{filter}&quot;
+               </p>
+               <p className="text-[9px] text-zinc-700 mt-1 uppercase font-bold">Press Ctrl+Shift+N to create a new one</p>
+            </div>
+          )}
         </div>
         
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pt-4 border-t border-zinc-800 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-          {!commandMode ? (
-            <>
-              <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">↑↓</kbd> Nav</div>
-              <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">⇧↑↓</kbd> Move</div>
-              <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">←→</kbd> Cycle</div>
-              <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">Enter</kbd> Actions</div>
-              <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">M</kbd> Full Edit</div>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-2 text-sky-400/80"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-sky-900/50 text-sky-400">E</kbd> Edit Value</div>
-              <div className="flex items-center gap-2 text-sky-400/80"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-sky-900/50 text-sky-400">V</kbd> Add Variant</div>
-              <div className="flex items-center gap-2 text-sky-400/80"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-sky-900/50 text-sky-400">D</kbd> Del Variant</div>
-              <div className="flex items-center gap-2 text-sky-400/80"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-sky-900/50 text-sky-400">R</kbd> Rename</div>
-              <div className="flex items-center gap-2 text-sky-400/80"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-sky-900/50 text-sky-400">N</kbd> New Var</div>
-              <div className="flex items-center gap-2 text-rose-500/80"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-rose-900/50 text-rose-500">⇧D</kbd> Delete Var</div>
-              <div className="flex items-center gap-2 text-zinc-500 ml-auto"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-400">ESC</kbd> Cancel</div>
-            </>
-          )}
+        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800 text-[9px] text-zinc-500 font-bold uppercase tracking-widest font-mono">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">↑↓</kbd> Navigate</div>
+            <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">←→</kbd> Cycle Variant</div>
+            <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">ENTER</kbd> Edit Value</div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">^N</kbd> New Variant <span className="text-[7px] opacity-40 ml-auto">^⇧N for New Var</span></div>
+            <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">^D</kbd> Del Variant <span className="text-[7px] opacity-40 ml-auto">^⇧D for Del Var</span></div>
+            <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">^R</kbd> Rename Variant <span className="text-[7px] opacity-40 ml-auto">^⇧R for Ren Var</span></div>
+          </div>
         </div>
       </div>
     </Modal>
@@ -373,9 +402,12 @@ export function EnvironmentQuickSwitcherModal({ isOpen, onClose, environments, a
     },
     {
       key: 'm',
+      ctrl: true,
       enabled: isOpen,
+      ignoreInputs: false,
       stopPropagation: true,
-      handler: () => {
+      handler: (e) => {
+        e.preventDefault();
         onEdit();
         onClose();
       }
@@ -389,11 +421,11 @@ export function EnvironmentQuickSwitcherModal({ isOpen, onClose, environments, a
         className="p-4 space-y-4 outline-none" 
         tabIndex={0} 
       >
-        <div ref={listRef} className="space-y-1 max-h-96 overflow-y-auto outline-none">
+        <div ref={listRef} className="space-y-1 max-h-96 overflow-y-auto outline-none pr-1 custom-scrollbar">
           {environments.map((env, idx) => (
             <div 
               key={env.id} 
-              className={`p-3 rounded flex items-center justify-between cursor-pointer border outline-none ${selectedIndex === idx ? 'bg-amber-500/10 border-amber-500/50' : 'bg-transparent border-transparent hover:bg-zinc-900'}`}
+              className={`p-3 rounded flex items-center justify-between cursor-pointer border outline-none transition-all ${selectedIndex === idx ? 'bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/5' : 'bg-transparent border-transparent hover:bg-zinc-900/50'}`}
               onClick={() => {
                 onSetActive(env.id);
                 onClose();
@@ -407,10 +439,10 @@ export function EnvironmentQuickSwitcherModal({ isOpen, onClose, environments, a
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pt-4 border-t border-zinc-800 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pt-4 border-t border-zinc-800 text-[10px] text-zinc-500 font-bold uppercase tracking-widest font-mono">
           <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">↑↓</kbd> Navigate</div>
           <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">Enter</kbd> Select</div>
-          <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">M</kbd> Manage All</div>
+          <div className="flex items-center gap-2 ml-auto"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">^M</kbd> Manage</div>
         </div>
       </div>
     </Modal>

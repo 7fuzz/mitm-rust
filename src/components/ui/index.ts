@@ -2,6 +2,7 @@ export * from './Button';
 export * from './Input';
 export * from './Textarea';
 export * from './NotificationProvider';
+export * from './DialogProvider';
 export * from './StatusBadge';
 export * from './VariableSwitcher';
 export * from './Modal';

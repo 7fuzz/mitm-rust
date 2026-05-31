@@ -8,12 +8,13 @@ import HttpResponseViewer from '../ui/HttpResponseViewer';
 import { WorkspaceLayout } from '../Layout/WorkspaceLayout';
 import { useTraffic, RepeaterRequest } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
-import { PromptModal, ConfirmModal, ExtractionModal, RepeaterHistoryModal } from '../Modals';
-import { Button, Select } from '../ui';
+import { ExtractionModal, RepeaterHistoryModal } from '../Modals';
+import { Button, Select, useDialog } from '../ui';
 import { invoke } from '@/lib/utils/tauri';
 
 export function RepeaterView() {
   const { notify } = useNotification();
+  const { confirm, prompt } = useDialog();
   const {
     repeaterRequests, repeaterGroups, activeGroupId, switchGroup,
     addEmptyRequest, duplicateRequest, updateRequest, deleteRequest,
@@ -34,14 +35,6 @@ export function RepeaterView() {
   const [editHeaders, setEditHeaders] = useState<[string, string][]>([]);
   const [editBody, setEditBody] = useState('');
   const [editExtract, setEditExtract] = useState<Record<string, string>>({});
-
-  // Modals
-  const [promptConfig, setPromptConfig] = useState({ isOpen: false, title: '', initialValue: '', action: (_: string) => { } });
-  const openPrompt = (title: string, initialValue: string, action: (val: string) => void) => setPromptConfig({ isOpen: true, title, initialValue, action });
-  const closePrompt = () => setPromptConfig(prev => ({ ...prev, isOpen: false }));
-
-  const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: () => { } });
-  const openConfirm = (title: string, message: string, action: () => void) => setConfirmConfig({ isOpen: true, title, message, action });
 
   const [extractionModalOpen, setExtractionModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
@@ -109,13 +102,13 @@ export function RepeaterView() {
 
   const handleAdd = async () => {
     const targetGroup = (activeGroupId !== 'All' && activeGroupId !== 'null') ? activeGroupId : null;
-    const newId = await addEmptyRequest(targetGroup);
+    const newId = await addEmptyRequest(targetGroup, notify);
     if (newId) setSelectedId(newId);
   };
 
   const handleDuplicate = async () => {
     if (!currentReq) return;
-    const newId = await duplicateRequest(currentReq);
+    const newId = await duplicateRequest(currentReq, notify);
     if (newId) setSelectedId(newId);
   };
 
@@ -233,11 +226,6 @@ export function RepeaterView() {
 
   return (
     <>
-      <PromptModal isOpen={promptConfig.isOpen} title={promptConfig.title} initialValue={promptConfig.initialValue} onClose={closePrompt} onSubmit={promptConfig.action} />
-      <ConfirmModal
-        isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} isDestructive={true} confirmText="Delete"
-        onClose={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))} onConfirm={confirmConfig.action}
-      />
       <ExtractionModal
         isOpen={extractionModalOpen}
         onClose={() => setExtractionModalOpen(false)}
@@ -289,7 +277,12 @@ export function RepeaterView() {
 
             <div className="flex items-center gap-1 border-l border-zinc-800 pl-2 ml-1">
               <button
-                onClick={() => activeGroupObj && openPrompt('Rename Collection', activeGroupObj.name, (newName) => renameGroup(activeGroupObj.id, newName))}
+                onClick={async () => {
+                  if (activeGroupObj) {
+                    const newName = await prompt('Rename Collection', 'Enter new collection name:', activeGroupObj.name);
+                    if (newName) renameGroup(activeGroupObj.id, newName);
+                  }
+                }}
                 disabled={activeGroupId === 'All' || activeGroupId === 'null'}
                 className="p-1 text-zinc-500 hover:text-purple-400 disabled:opacity-20 disabled:hover:text-zinc-500 transition-colors"
                 title="Rename Collection"
@@ -297,13 +290,15 @@ export function RepeaterView() {
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (activeGroupObj) {
-                    openConfirm(
+                    if (await confirm(
                       'Delete Collection',
                       `Are you sure you want to delete "${activeGroupObj.name}"? ALL requests inside this collection will be permanently destroyed.`,
-                      () => deleteGroup(activeGroupObj.id)
-                    );
+                      true
+                    )) {
+                      deleteGroup(activeGroupObj.id);
+                    }
                   }
                 }}
                 disabled={activeGroupId === 'All' || activeGroupId === 'null'}
@@ -376,10 +371,13 @@ export function RepeaterView() {
                           <Button
                             variant="secondary"
                             size="sm"
-                            onClick={() => openPrompt('New Collection Name', '', async (name) => {
-                              const newId = await createGroup(name);
-                              if (newId) { setEditGroupId(newId); updateRequest(currentReq.id, { groupId: newId }); }
-                            })}
+                            onClick={async () => {
+                              const name = await prompt('New Collection', 'Enter collection name:');
+                              if (name) {
+                                const newId = await createGroup(name, notify);
+                                if (newId) { setEditGroupId(newId); updateRequest(currentReq.id, { groupId: newId }); }
+                              }
+                            }}
                             className="text-purple-400"
                           >
                             + New

@@ -39,17 +39,20 @@ export function useRepeater(activeEnvId?: string) {
     await fetchGroupRequests(groupId);
   }, [fetchGroupRequests]);
 
-  const addEmptyRequest = useCallback(async (targetGroup: string | null = null) => {
+  const addEmptyRequest = useCallback(async (targetGroup: string | null = null, notify?: any) => {
     try {
       const id = await invoke<string>('create_repeater_item', { 
         item: { name: 'New Request', method: 'GET', url: 'https://example.com/api/', headers: [], body: '', response: null, group_id: targetGroup } 
       });
       if (id) { await fetchGroupRequests(activeGroupId); return id; }
-    } catch (error) { alert('Error creating request: ' + error); }
+    } catch (error) { 
+      console.error('Error creating request:', error);
+      notify?.error?.('Error creating request: ' + error);
+    }
     return null;
   }, [activeGroupId, fetchGroupRequests]);
 
-  const duplicateRequest = useCallback(async (currentReq: RepeaterRequest) => {
+  const duplicateRequest = useCallback(async (currentReq: RepeaterRequest, notify?: any) => {
     try {
       const id = await invoke<string>('create_repeater_item', { 
         item: {
@@ -63,7 +66,10 @@ export function useRepeater(activeEnvId?: string) {
         } 
       });
       if (id) { await fetchGroupRequests(activeGroupId); return id; }
-    } catch (error) { alert('Error duplicating request: ' + error); }
+    } catch (error) { 
+      console.error('Error duplicating request:', error);
+      notify?.error?.('Error duplicating request: ' + error);
+    }
     return null;
   }, [activeGroupId, fetchGroupRequests]);
 
@@ -86,7 +92,7 @@ export function useRepeater(activeEnvId?: string) {
     });
   }, []);
 
-  const importPostman = useCallback(async () => {
+  const importPostman = useCallback(async (notify?: any) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json,application/json';
@@ -105,15 +111,15 @@ export function useRepeater(activeEnvId?: string) {
         const result = await response.json();
 
         if (result.success) {
-          alert(`✓ Imported ${result.imported} request(s)`);
+          notify?.success?.(`✓ Imported ${result.imported} request(s)`);
           await switchGroup('null');
-        } else alert(`Error: ${result.error}`);
-      } catch (error) { alert(`Failed to import: ${error}`); }
+        } else notify?.error?.(`Error: ${result.error}`);
+      } catch (error) { notify?.error?.(`Failed to import: ${error}`); }
     };
     input.click();
   }, [switchGroup]);
 
-  const importProject = useCallback(async (onFileLoaded: (data: Record<string, unknown>) => void) => {
+  const importProject = useCallback(async (onFileLoaded: (data: Record<string, unknown>) => void, notify?: any) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json,application/json';
@@ -124,7 +130,7 @@ export function useRepeater(activeEnvId?: string) {
         const text = await file.text();
         const data = JSON.parse(text);
         onFileLoaded(data);
-      } catch (error) { alert(`Failed to load file: ${error}`); }
+      } catch (error) { notify?.error?.(`Failed to load file: ${error}`); }
     };
     input.click();
   }, []);

@@ -1,5 +1,5 @@
 import { GlobalVariable } from '@/hooks/traffic/types';
-import { Button, Modal, DebouncedInput } from '../ui';
+import { Button, Modal, DebouncedInput, useDialog } from '../ui';
 
 interface VariableEditorModalProps {
   isOpen: boolean;
@@ -10,6 +10,7 @@ interface VariableEditorModalProps {
 }
 
 export function VariableEditorModal({ isOpen, variable, onClose, onUpdate, onDelete }: VariableEditorModalProps) {
+  const { confirm } = useDialog();
   if (!variable) return null;
 
   return (
@@ -23,8 +24,8 @@ export function VariableEditorModal({ isOpen, variable, onClose, onUpdate, onDel
           <Button 
             variant="destructive" 
             size="sm" 
-            onClick={() => {
-              if (confirm(`Delete variable "${variable.name}"?`)) {
+            onClick={async () => {
+              if (await confirm(`Delete Variable`, `Delete variable "${variable.name}"?`, true)) {
                 onDelete(variable.id);
                 onClose();
               }

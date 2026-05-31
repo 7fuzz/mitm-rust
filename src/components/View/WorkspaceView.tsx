@@ -5,7 +5,7 @@ import { ConfirmModal, PromptModal, MultiGroupExportModal, ImportModal } from '.
 import { EnvironmentsSection } from '../modules/workspace/EnvironmentsSection';
 import { CollectionsSection } from '../modules/workspace/CollectionsSection';
 import { ReplacementsSection } from '../modules/workspace/ReplacementsSection';
-import { Button } from '../ui/Button';
+import { Button, useDialog } from '../ui';
 import { useNotification } from '../ui/NotificationProvider';
 
 export type WorkspaceTab = 'env' | 'collections' | 'replacements';
@@ -16,6 +16,7 @@ export interface WorkspaceViewHandle {
 
 export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) => {
   const { notify } = useNotification();
+  const { confirm, alert } = useDialog();
   const {
     uiLayout, updateUILayout,
     variables, activeEnvId,
@@ -79,7 +80,10 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
     try {
       const flattenedRequests = repeaterRequests.filter(r => selectedGroupIds.includes(r.groupId || 'null'));
 
-      if (flattenedRequests.length === 0) return alert('No requests found in selected groups.');
+      if (flattenedRequests.length === 0) {
+        await alert('No requests', 'No requests found in selected groups.');
+        return;
+      }
 
       // --- FULL ENVIRONMENT EXPORT ---
       const exportEnvironments = environments;
@@ -217,7 +221,7 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-    } catch (_err) { alert('Export failed: ' + _err); }
+    } catch (err) { await alert('Export failed', 'Export failed: ' + err); }
   };
 
   return (

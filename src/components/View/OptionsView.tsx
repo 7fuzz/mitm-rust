@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTraffic } from '@/hooks/traffic';
 import { DEFAULT_SHORTCUTS } from '@/hooks/traffic/useConfig';
-import { Button, Toggle } from '../ui';
+import { Button, Toggle, useDialog } from '../ui';
 import { WorkspaceLayout } from '../Layout/WorkspaceLayout';
 import { KeyboardShortcuts } from '@/hooks/traffic/types';
 import { invoke } from '@/lib/utils/tauri';
@@ -22,6 +22,7 @@ type OptionSectionKey = typeof OPTION_SECTIONS[number]['key'];
 
 export function OptionsView() {
   const { prefs, updatePrefs, isProxyActive, setIsProxyActive, purgeAllData, uiLayout, updateUILayout } = useTraffic();
+  const { confirm } = useDialog();
 
   const [bindings, setBindings] = useState<string[]>(['8080']);
   const [isSaving, setIsSaving] = useState(false);
@@ -111,18 +112,18 @@ export function OptionsView() {
   };
 
   const handleRegenerateCert = async () => {
-    if (!confirm('This will invalidate all current interceptions. Devices will need to re-trust the new certificate. Proceed?')) return;
-    
-    setIsRegenerating(true);
-    try {
-      await invoke('regenerate_root_ca');
-      setSaveMessage('CA regenerated and proxy restarted!');
-    } catch (e) {
-      console.error(e);
-      setSaveMessage('Error: Failed to regenerate CA');
+    if (await confirm('Regenerate Root CA', 'This will invalidate all current interceptions. Devices will need to re-trust the new certificate. Proceed?', true)) {
+      setIsRegenerating(true);
+      try {
+        await invoke('regenerate_root_ca');
+        setSaveMessage('CA regenerated and proxy restarted!');
+      } catch (e) {
+        console.error(e);
+        setSaveMessage('Error: Failed to regenerate CA');
+      }
+      setIsRegenerating(false);
+      setTimeout(() => setSaveMessage(''), 3000);
     }
-    setIsRegenerating(false);
-    setTimeout(() => setSaveMessage(''), 3000);
   };
 
   const togglePref = (key: keyof typeof prefs) => {

@@ -7,9 +7,8 @@ import { UrlEditor } from '../Editor/UrlEditor';
 import HttpResponseViewer from '../ui/HttpResponseViewer';
 import { useTraffic } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
-import { Button } from '../ui/Button';
+import { Button, useDialog } from '../ui';
 import { invoke } from '@/lib/utils/tauri';
-import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { TrafficFilterModal } from '../Modals/TrafficFilterModal';
 
 // === NEW: HTTP Formatters for the Viewer ===
@@ -44,11 +43,11 @@ export function HistoryView() {
   } = useTraffic();
 
   const { notify } = useNotification();
+  const { confirm } = useDialog();
 
   const [localLimit, setLocalLimit] = useState(historyLimit.toString());
   const [prevHistoryLimit, setPrevHistoryLimit] = useState(historyLimit);
   const [activeSection, setActiveSection] = useState<HistorySection>('sidebar');
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
 
   // Refs for navigation
@@ -72,9 +71,11 @@ export function HistoryView() {
     if (selectedId === id) setSelectedId(null);
   }, [traffic, selectedId, setTraffic, setSelectedId]);
 
-  const handleClearHistory = () => {
-    setTraffic([]); setSelectedId(null);
-    notify.success('History cleared');
+  const handleClearHistory = async () => {
+    if (await confirm('Clear History', 'Are you sure you want to permanently delete all intercepted traffic? This action cannot be undone.', true)) {
+      setTraffic([]); setSelectedId(null);
+      notify.success('History cleared');
+    }
   };
 
   const handleAddToRepeater = async (req: Traffic, raw: boolean = false) => {
@@ -187,7 +188,7 @@ export function HistoryView() {
     {
       key: 'c',
       enabled: activeSection === 'sidebar' && traffic.length > 0,
-      handler: () => setShowClearConfirm(true),
+      handler: () => handleClearHistory(),
     }
   ], [activeSection, selectedId, headerButtonIndex, simpleMode, selectedReq, traffic.length], false);
 
@@ -261,7 +262,7 @@ export function HistoryView() {
             <Button
               variant="destructive"
               size="sm"
-              onClick={() => setShowClearConfirm(true)}
+              onClick={handleClearHistory}
             >
               Clear_History
             </Button>
@@ -339,16 +340,6 @@ export function HistoryView() {
             </div>
           )
         )}
-      />
-
-      <ConfirmationModal
-        isOpen={showClearConfirm}
-        onClose={() => setShowClearConfirm(false)}
-        onConfirm={handleClearHistory}
-        title="Clear History"
-        message="Are you sure you want to permanently delete all intercepted traffic? This action cannot be undone."
-        confirmText="Clear All"
-        variant="destructive"
       />
 
       <TrafficFilterModal

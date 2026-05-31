@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Modal, Button } from '../ui';
+import { Modal, Button, useDialog } from '../ui';
 import HttpResponseViewer from '../ui/HttpResponseViewer';
 import { TrafficItem } from '../Sidebar/TrafficItem';
 import { invoke } from '@/lib/utils/tauri';
@@ -33,6 +33,7 @@ export function RepeaterHistoryModal({ isOpen, onClose, repeaterId, repeaterName
   const [history, setHistory] = useState<ParsedHistoryItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<ParsedHistoryItem | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const { confirm } = useDialog();
 
   const fetchHistory = useCallback(async () => {
     setIsLoading(true);
@@ -61,7 +62,7 @@ export function RepeaterHistoryModal({ isOpen, onClose, repeaterId, repeaterName
   }, [isOpen, repeaterId, fetchHistory]);
 
   const clearHistory = async () => {
-    if (!confirm('Are you sure you want to clear the history for this request?')) return;
+    if (!await confirm('Clear History', 'Are you sure you want to clear the history for this request?')) return;
     try {
       await invoke('clear_repeater_history', { repeaterId });
       setHistory([]);
@@ -72,7 +73,7 @@ export function RepeaterHistoryModal({ isOpen, onClose, repeaterId, repeaterName
   };
 
   const deleteHistoryItem = async (itemId: string) => {
-    if (!confirm('Delete this history item?')) return;
+    if (!await confirm('Delete Item', 'Delete this history item?')) return;
     try {
       await invoke('delete_repeater_history_item', { id: itemId });
       setHistory(prev => prev.filter(item => item.id !== itemId));

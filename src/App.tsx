@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { NotificationProvider } from '@/components/ui/NotificationProvider';
+import { NotificationProvider, DialogProvider } from '@/components/ui';
 import { TrafficProvider, useTraffic } from '@/hooks/traffic';
 import { ThemeProvider, useTheme } from '@/hooks/ui/useTheme';
 import { InterceptView } from '@/components/View/InterceptView';
@@ -207,11 +207,13 @@ function TrafficApp() {
 export default function App() {
   return (
     <NotificationProvider>
-      <TrafficProvider>
-        <ThemeProvider>
-          <TrafficApp />
-        </ThemeProvider>
-      </TrafficProvider>
+      <DialogProvider>
+        <TrafficProvider>
+          <ThemeProvider>
+            <TrafficApp />
+          </ThemeProvider>
+        </TrafficProvider>
+      </DialogProvider>
     </NotificationProvider>
   );
 }

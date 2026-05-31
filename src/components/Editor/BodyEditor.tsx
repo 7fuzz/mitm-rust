@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { JsonEditor } from './JsonEditor';
 import { FormEditor } from './FormEditor';
 import { formToJson, jsonToUrlEncoded, jsonToMultipartStructured } from '@/lib/utils/converter';
-import { Textarea } from '../ui';
+import { Textarea, useDialog } from '../ui';
 
 interface Props {
   body: string;
@@ -12,6 +12,7 @@ interface Props {
 }
 
 export function BodyEditor({ body, headers, onChange, onHeadersChange }: Props) {
+  const { alert } = useDialog();
   const contentTypeEntry = headers.find(([k]) => k.toLowerCase() === 'content-type');
   const contentType = contentTypeEntry ? contentTypeEntry[1].toLowerCase() : '';
 
@@ -46,25 +47,25 @@ export function BodyEditor({ body, headers, onChange, onHeadersChange }: Props) 
     onHeadersChange(newHeaders);
   };
 
-  const handleConvertToJSON = () => {
+  const handleConvertToJSON = async () => {
     const converted = formToJson(body, contentType);
     if (converted) {
       onChange(converted);
       updateContentType('application/json');
       setMode('json');
     } else {
-      alert("Could not convert to JSON. Make sure no files are attached.");
+      await alert("Conversion Failed", "Could not convert to JSON. Make sure no files are attached.");
     }
   };
 
-  const handleConvertToForm = (type: 'urlencoded' | 'multipart') => {
+  const handleConvertToForm = async (type: 'urlencoded' | 'multipart') => {
     const converted = type === 'urlencoded' ? jsonToUrlEncoded(body) : jsonToMultipartStructured(body);
     if (converted) {
       onChange(converted);
       updateContentType(type === 'urlencoded' ? 'application/x-www-form-urlencoded' : 'multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW');
       setMode('form');
     } else {
-      alert("Could not convert to Form Data. Ensure body is valid JSON.");
+      await alert("Conversion Failed", "Could not convert to Form Data. Ensure body is valid JSON.");
     }
   };
 
