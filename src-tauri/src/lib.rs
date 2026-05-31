@@ -6,6 +6,7 @@ pub mod models;
 pub mod workspace;
 pub mod state;
 pub mod history;
+pub mod db_viewer;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -263,6 +264,9 @@ pub fn run() {
             state::update_ui_layout,
             state::save_state,
             state::upload_file,
+            history::save_traffic_history,
+            db_viewer::get_database_tables,
+            db_viewer::get_table_data,
             get_proxy_status,
             toggle_proxy,
             update_network_settings
