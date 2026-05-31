@@ -55,11 +55,26 @@ export function RepeaterView() {
     }, 300);
   }, [updateRequest]);
 
-  const currentReq = repeaterRequests.find(r => r.id === selectedId) || repeaterRequests[0];
+  const filteredRequests = activeGroupId === 'All'
+    ? repeaterRequests
+    : repeaterRequests.filter((req) => activeGroupId === 'null' ? req.groupId === null : req.groupId === activeGroupId);
+
+  const currentReq = filteredRequests.find(r => r.id === selectedId) || filteredRequests[0] || null;
 
   const [prevReqId, setPrevReqId] = useState<string | null>(null);
 
-  // Auto-update selectedId if we defaulted to repeaterRequests[0]
+  useEffect(() => {
+    if (!filteredRequests.length) {
+      if (selectedId && setSelectedId) setSelectedId(null);
+      return;
+    }
+
+    if (!selectedId || !filteredRequests.some(r => r.id === selectedId)) {
+      setSelectedId(filteredRequests[0].id);
+    }
+  }, [filteredRequests, selectedId, setSelectedId]);
+
+  // Auto-update selectedId if we defaulted to filteredRequests[0]
   useEffect(() => {
     if (currentReq && currentReq.id !== selectedId && setSelectedId) {
       setSelectedId(currentReq.id);
@@ -77,7 +92,7 @@ export function RepeaterView() {
     setEditExtract(currentReq.extract || {});
   }
 
-  const trafficMapped: Traffic[] = repeaterRequests.map(req => {
+  const trafficMapped: Traffic[] = filteredRequests.map(req => {
     const groupName = req.groupId ? repeaterGroups.find(g => g.id === req.groupId)?.name : 'Default';
     return { 
       id: req.id, 

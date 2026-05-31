@@ -5,21 +5,25 @@ A powerful, developer-centric intercepting proxy and debugging dashboard. This v
 ## 🚀 Development Setup
 
 ### 1. Prerequisites
+
 - **Rust**: [Install Rust](https://www.rust-lang.org/tools/install)
 - **Node.js**: [Install Node.js](https://nodejs.org/)
 - **Tauri Dependencies**: Follow the [Tauri Setup Guide](https://tauri.app/v1/guides/getting-started/prerequisites) for your OS.
 
 ### 2. Install Dependencies
+
 ```bash
 npm install
 ```
 
 ### 3. Run in Development
+
 ```bash
 npm run tauri dev
 ```
 
 ### 4. Build for Production
+
 ```bash
 npm run tauri build
 ```
@@ -29,29 +33,34 @@ npm run tauri build
 ## 🏃 Features & Migration Status
 
 ### 1. HTTP History (Ported)
+
 - [x] Traffic capture in Rust (Custom Hyper/Rustls engine).
 - [x] Real-time update via Tauri Events.
 - [x] Advanced Traffic Filter (Allow/Block rules, multiple patterns).
 - [x] Search and filter UI.
 
 ### 2. Intercept & Modify (Ported)
+
 - [x] Request/Response pausing logic in Rust.
 - [x] UI for editing URL, headers, and body.
 - [x] Stage to Repeater logic.
 
 ### 3. Repeater (Ported)
+
 - [x] Backend Execution Engine (Rust/Hyper).
 - [x] Multi-value header support (Set-Cookie preservation).
-- [x] Collection management (Groups).
+- [ ] Collection management (Groups).
 - [x] Persistent workspace (SQLite via Rust).
 - [x] **Import/Export**: Selectively import projects with environments, variables, and collections (see [IMPORT.md](IMPORT.md)).
 
 ### 4. Environments & Variables (Ported)
+
 - [x] Variable storage and variants.
 - [x] Workspace context switching.
 - [ ] Dynamic interpolation engine in Rust.
 
 ### 5. Maintenance & UI
+
 - [x] Unified Data Synchronization engine (Atomic bulk fetch).
 - [x] Database maintenance tools (Manual Sync, Integrity check).
 - [x] Standardized Semantic Theme system (Light/Dark support).
@@ -62,19 +71,20 @@ npm run tauri build
 
 The application follows a modular, backend-heavy architecture designed for high performance and reliable persistence.
 
-1.  **Backend (Rust/Tauri)**:
-    *   **Modular Design**: Logic is separated into specialized modules (`repeater`, `workspace`, `proxy`, etc.) for maintainability.
-    *   **Proxy Engine**: Custom `Hyper` and `Tokio` based listener handling TLS termination and traffic modification.
-    *   **State Management**: Unified synchronization engine that bulk-fetches all application data in a single transaction.
-    *   **Persistence**: SQLite database with a robust migration system and an `init_database` safety layer.
-2.  **Frontend (React/Vite)**:
-    *   **Modern React 19**: Utilizing the latest React features and a centralized theme system.
-    *   **Unified IPC**: All communication is handled via Tauri `invoke` commands, completely removing dependency on traditional REST APIs.
-    *   **Semantic UI**: Standardized styling using theme-aware CSS variables for consistent light/dark mode support.
+1. **Backend (Rust/Tauri)**:
+    - **Modular Design**: Logic is separated into specialized modules (`repeater`, `workspace`, `proxy`, etc.) for maintainability.
+    - **Proxy Engine**: Custom `Hyper` and `Tokio` based listener handling TLS termination and traffic modification.
+    - **State Management**: Unified synchronization engine that bulk-fetches all application data in a single transaction.
+    - **Persistence**: SQLite database with a robust migration system and an `init_database` safety layer.
+2. **Frontend (React/Vite)**:
+    - **Modern React 19**: Utilizing the latest React features and a centralized theme system.
+    - **Unified IPC**: All communication is handled via Tauri `invoke` commands, completely removing dependency on traditional REST APIs.
+    - **Semantic UI**: Standardized styling using theme-aware CSS variables for consistent light/dark mode support.
 
 ## 📁 File Structure
 
 ### 🦀 Rust Backend (`src-tauri/src/`)
+
 - **`lib.rs`**: The heart of the app. Handles command registration and lifecycle management.
 - **`db.rs`**: Database engine. Handles SQLite initialization, migrations, and path resolving.
 - **`models.rs`**: Centralized data models. Shared structs and state definitions.
@@ -86,6 +96,7 @@ The application follows a modular, backend-heavy architecture designed for high 
 - **`ca.rs`**: Certificate Authority logic for generating and managing the Root CA.
 
 ### ⚛️ React Frontend (`src/`)
+
 - **`hooks/traffic/`**: Encapsulated state logic for each major feature.
 - **`components/View/`**: Main application views (History, Intercept, Repeater, etc.).
 - **`components/ui/`**: Reusable, theme-aware component library.
@@ -94,6 +105,7 @@ The application follows a modular, backend-heavy architecture designed for high 
 ---
 
 ## 📝 Developer Patterns & Resources
+
 - **Variable Syntax**: Still uses `{{variable_name}}`.
 - **Persistence**: Using SQLite via Rust for high-performance state management.
 - **Commands**: All major operations are implemented as `#[tauri::command]`.
@@ -102,6 +114,8 @@ The application follows a modular, backend-heavy architecture designed for high 
 ---
 
 ## 🔒 SSL Certificate Setup
+
 To intercept HTTPS traffic, the application will generate and manage a Root CA certificate.
+
 1. Trust the certificate generated by the app (Exportable from settings).
 2. Enable full trust for the certificate on your target device.

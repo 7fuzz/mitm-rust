@@ -53,7 +53,7 @@ export function WorkspaceLayout({ children, listComponent, mainContent, toolbarL
   return (
     <div className="flex flex-col w-full h-full bg-zinc-950 select-none">
       {children}
-      
+
       {/* Global Toolbar Area */}
       <div className="flex flex-col border-b border-zinc-800 bg-zinc-900/40 shrink-0 relative z-20">
         <div className="flex items-center justify-between p-2 min-h-12 gap-4">
@@ -114,11 +114,8 @@ export function WorkspaceLayout({ children, listComponent, mainContent, toolbarL
                 {isProxyActive && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
                 <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${isProxyActive ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
               </div>
-              <span className={`text-[9px] font-black uppercase tracking-widest ${isProxyActive ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>
-                {isProxyActive ? 'Live' : 'Off'}
-              </span>
             </div>
-            
+
             <div className="flex items-center gap-2">
               {toolbarRight}
             </div>
@@ -132,7 +129,7 @@ export function WorkspaceLayout({ children, listComponent, mainContent, toolbarL
       <div className="flex flex-1 overflow-hidden flex-row">
         {isListOpen && listComponent && (
           <>
-            <div 
+            <div
               ref={sidebarRef}
               style={{ width: sidebarWidth }}
               className="border-r border-zinc-800 flex flex-col shrink-0 bg-zinc-950"
@@ -144,7 +141,7 @@ export function WorkspaceLayout({ children, listComponent, mainContent, toolbarL
               onMouseDown={startResizing}
               className={`w-1.5 flex items-center justify-center cursor-col-resize hover:bg-sky-500/30 transition-all z-10 group relative ${isResizing ? 'bg-sky-500/40' : 'bg-transparent hover:w-2'}`}
             >
-               <div className={`w-0.5 h-10 rounded-full transition-all ${isResizing ? 'bg-sky-400 h-20' : 'bg-zinc-800 group-hover:bg-zinc-500 group-hover:h-12'}`} />
+              <div className={`w-0.5 h-10 rounded-full transition-all ${isResizing ? 'bg-sky-400 h-20' : 'bg-zinc-800 group-hover:bg-zinc-500 group-hover:h-12'}`} />
             </div>
           </>
         )}
