@@ -20,6 +20,7 @@ use rcgen::{CertificateParams, KeyPair, DnType};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::Read;
 use flate2::read::{GzDecoder, ZlibDecoder};
+use base64::Engine;
 
 use crate::ca::CA;
 
@@ -60,6 +61,15 @@ fn decompress_body(body: &[u8], encoding: &str) -> Option<Vec<u8>> {
                     return None;
                 }
             }
+            "zstd" => {
+                match zstd::decode_all(&current_body[..]) {
+                    Ok(decoded) => {
+                        current_body = decoded;
+                        decompressed = true;
+                    }
+                    Err(_) => return None,
+                }
+            }
             "identity" | "" => {}
             _ => {
                 // Unknown encoding, stop decompressing
@@ -72,6 +82,31 @@ fn decompress_body(body: &[u8], encoding: &str) -> Option<Vec<u8>> {
         Some(current_body)
     } else {
         None
+    }
+}
+
+/// Encode a body as string, using base64 for binary content
+fn encode_body_for_ui(body: &[u8], content_type: &str) -> String {
+    // Check if content is binary based on content-type
+    let is_binary = !content_type.is_empty() && (
+        content_type.contains("image/") ||
+        content_type.contains("video/") ||
+        content_type.contains("audio/") ||
+        content_type.contains("application/octet-stream") ||
+        content_type.contains("application/pdf") ||
+        content_type.contains("application/zip") ||
+        content_type.contains("application/gzip") ||
+        content_type.contains("font/")
+    );
+
+    if is_binary {
+        // Base64 encode binary content with prefix
+        let encoded = base64::engine::general_purpose::STANDARD.encode(body);
+        format!("base64:{}", encoded)
+    } else {
+        // Try to parse as UTF-8, fall back to lossy conversion
+        String::from_utf8(body.to_vec())
+            .unwrap_or_else(|_| String::from_utf8_lossy(body).to_string())
     }
 }
 
@@ -415,10 +450,15 @@ async fn handle_http(
         .map(|(_, v)| v.clone())
         .unwrap_or_default();
     
+    let req_content_type = request_headers.iter()
+        .find(|(k, _)| k == "content-type")
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default();
+    
     let decompressed_req_body = decompress_body(&request_body_bytes, &req_encoding);
     let mut req_body_for_ui = match &decompressed_req_body {
-        Some(b) => String::from_utf8_lossy(b).to_string(),
-        None => String::from_utf8_lossy(&request_body_bytes).to_string(),
+        Some(b) => encode_body_for_ui(b, &req_content_type),
+        None => encode_body_for_ui(&request_body_bytes, &req_content_type),
     };
 
     if intercept_config.enabled && 
@@ -505,11 +545,16 @@ async fn handle_http(
                 .find(|(k, _)| k == "content-encoding")
                 .map(|(_, v)| v.clone())
                 .unwrap_or_default();
+            
+            let res_content_type = response_headers.iter()
+                .find(|(k, _)| k == "content-type")
+                .map(|(_, v)| v.clone())
+                .unwrap_or_default();
                 
             let decompressed_res_body = decompress_body(&response_body_bytes, &res_encoding);
             let res_body_for_ui = match &decompressed_res_body {
-                Some(b) => String::from_utf8_lossy(b).to_string(),
-                None => String::from_utf8_lossy(&response_body_bytes).to_string(),
+                Some(b) => encode_body_for_ui(b, &res_content_type),
+                None => encode_body_for_ui(&response_body_bytes, &res_content_type),
             };
 
             // 2. Check Response Interception

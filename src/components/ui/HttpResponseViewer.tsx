@@ -44,7 +44,18 @@ const parseHttpMessage = (text: string) => {
   }
 
   const headersStr = text.substring(0, splitIndex);
-  const rawBody = text.substring(splitIndex + gap);
+  let rawBody = text.substring(splitIndex + gap);
+
+  // Handle base64-encoded binary bodies
+  if (rawBody.startsWith("base64:")) {
+    const base64Data = rawBody.substring(7); // Remove "base64:" prefix
+    try {
+      const binaryString = atob(base64Data);
+      rawBody = `[Binary data - ${binaryString.length} bytes]\n\nBase64 encoded content:\n${base64Data.substring(0, 100)}${base64Data.length > 100 ? '...' : ''}`;
+    } catch (e) {
+      rawBody = "[Failed to decode base64 data]";
+    }
+  }
 
   const lines = headersStr.split(/\r?\n/).filter(line => line.trim());
   const firstLine = lines.length > 0 && lines[0].indexOf(':') === -1 ? lines.shift() : "";
