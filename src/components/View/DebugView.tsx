@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useTraffic } from '@/hooks/traffic';
 import JsonViewer from '@/components/ui/JsonViewer';
+import DbTableViewer from '@/components/ui/DbTableViewer';
 import { WorkspaceLayout } from '../Layout/WorkspaceLayout';
 import { Button } from '../ui/Button';
 import { invoke } from '@/lib/utils/tauri';
@@ -302,7 +303,7 @@ export function DebugView() {
                       <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
                         <span className="opacity-50">#</span> Table_Data
                       </h3>
-                      <JsonViewer value={tableData.rows} path="db-table-data" />
+                      <DbTableViewer data={tableData} />
                     </div>
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-zinc-500">
