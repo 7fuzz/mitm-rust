@@ -88,20 +88,20 @@ export function HistoryView() {
         ? { url: req.url, headers: req.request_headers || [], body: req.request_body || '' }
         : applyAllReplacements({ url: req.url, headers: req.request_headers || [], body: req.request_body || '' });
 
-      const itemId = await invoke<string>('create_repeater_item', { 
-        item: {
-          name: `${req.method} ${path}`,
-          method: req.method,
-          url: transformedUrl,
-          headers: transformedHeaders,
-          body: transformedBody,
-          response: req.status_code !== 0 ? {
-            status_code: req.status_code,
-            response_headers: req.response_headers || [],
-            response_body: req.response_body || '',
-          } : undefined
-        }
-      });
+      const itemPayload = {
+        name: `${req.method} ${path}`,
+        method: req.method,
+        url: transformedUrl,
+        headers: transformedHeaders,
+        body: transformedBody,
+        response: req.status_code !== 0 ? {
+          status_code: req.status_code,
+          response_headers: req.response_headers || [],
+          response_body: req.response_body || '',
+        } : undefined
+      };
+
+      const itemId = await invoke<string>('create_repeater_item', { item: itemPayload });
 
       if (itemId) {
         if (refreshRepeater) await refreshRepeater();

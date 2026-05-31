@@ -39,7 +39,18 @@ pub struct CreateRepeaterItem {
     pub headers: Vec<(String, String)>,
     pub body: String,
     pub group_id: Option<String>,
-    pub response: Option<proxy::Traffic>,
+    pub response: Option<RepeaterResponse>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RepeaterResponse {
+    #[serde(alias = "status", alias = "status_code")]
+    pub status: Option<u16>,
+    #[serde(alias = "headers", alias = "response_headers")]
+    pub headers: Option<Vec<(String, String)>>,
+    #[serde(alias = "body", alias = "response_body")]
+    pub body: Option<String>,
 }
 
 fn get_db_path(app_handle: &AppHandle) -> std::path::PathBuf {
@@ -55,7 +66,10 @@ pub async fn create_repeater_item(app_handle: AppHandle, item: CreateRepeaterIte
     let headers_json = serde_json::to_string(&item.headers).unwrap_or_default();
     
     let (res_status, res_headers, res_body) = if let Some(res) = &item.response {
-        (Some(res.status_code), Some(serde_json::to_string(&res.response_headers).unwrap_or_default()), Some(res.response_body.clone()))
+        let status = res.status;
+        let headers_json = res.headers.as_ref().map(|h| serde_json::to_string(h).unwrap_or_default());
+        let body = res.body.clone();
+        (status, headers_json, body)
     } else {
         (None, None, None)
     };
