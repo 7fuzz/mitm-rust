@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTraffic } from '@/hooks/traffic';
 import { DEFAULT_SHORTCUTS } from '@/hooks/traffic/useConfig';
-import { Button } from '../ui/Button';
+import { Button, Toggle } from '../ui';
 import { KeyboardShortcuts } from '@/hooks/traffic/types';
 import { invoke } from '@/lib/utils/tauri';
 import { save } from '@tauri-apps/plugin-dialog';
@@ -136,53 +136,35 @@ export function OptionsView() {
 
         {/* Global Controls Grid */}
         <div className="grid grid-cols-3 gap-4 mb-8">
-          <label className="flex items-center justify-between p-4 bg-zinc-900 border border-zinc-800 rounded-lg cursor-pointer hover:border-sky-500/50 transition-all shadow-sm">
-            <div className="flex flex-col">
-              <span className="text-[10px] text-zinc-300 font-black uppercase tracking-widest">Proxy_Engine</span>
-              <span className={`text-[8px] font-mono ${isProxyActive ? 'text-sky-400' : 'text-zinc-500'}`}>{isProxyActive ? 'ACTIVE_LISTENING' : 'OFFLINE'}</span>
-            </div>
-            <div className="relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-zinc-700">
-              <input
-                type="checkbox"
-                checked={isProxyActive}
-                onChange={handleToggleProxy}
-                className="sr-only peer"
-              />
-              <div className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-zinc-950 shadow-sm ring-0 transition duration-200 ease-in-out ${isProxyActive ? 'translate-x-5 bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]' : 'translate-x-0 bg-zinc-400'}`}></div>
-            </div>
-          </label>
+          <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg shadow-sm hover:border-sky-500/30 transition-all">
+            <Toggle
+              checked={isProxyActive}
+              onChange={handleToggleProxy}
+              label="Proxy_Engine"
+              subLabel={isProxyActive ? 'ACTIVE_LISTENING' : 'OFFLINE'}
+              variant="sky"
+            />
+          </div>
 
-          <label className="flex items-center justify-between p-4 bg-zinc-900 border border-zinc-800 rounded-lg cursor-pointer hover:border-emerald-500/50 transition-all shadow-sm">
-            <div className="flex flex-col">
-              <span className="text-[10px] text-zinc-300 font-black uppercase tracking-widest">Debug_Mode</span>
-              <span className={`text-[8px] font-mono ${prefs.debugMode ? 'text-emerald-400' : 'text-zinc-500'}`}>{prefs.debugMode ? 'LOGGING_COMM' : 'SILENT'}</span>
-            </div>
-            <div className="relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-zinc-700">
-              <input
-                type="checkbox"
-                checked={prefs.debugMode}
-                onChange={() => togglePref('debugMode')}
-                className="sr-only peer"
-              />
-              <div className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-zinc-950 shadow-sm ring-0 transition duration-200 ease-in-out ${prefs.debugMode ? 'translate-x-5 bg-emerald-500' : 'translate-x-0 bg-zinc-400'}`}></div>
-            </div>
-          </label>
+          <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg shadow-sm hover:border-emerald-500/30 transition-all">
+            <Toggle
+              checked={prefs.debugMode}
+              onChange={() => togglePref('debugMode')}
+              label="Debug_Mode"
+              subLabel={prefs.debugMode ? 'LOGGING_COMM' : 'SILENT'}
+              variant="emerald"
+            />
+          </div>
 
-          <label className="flex items-center justify-between p-4 bg-zinc-900 border border-zinc-800 rounded-lg cursor-pointer hover:border-amber-500/50 transition-all shadow-sm">
-            <div className="flex flex-col">
-              <span className="text-[10px] text-zinc-300 font-black uppercase tracking-widest">Simple_Mode</span>
-              <span className={`text-[8px] font-mono ${prefs.simpleMode ? 'text-amber-400' : 'text-zinc-500'}`}>{prefs.simpleMode ? 'MINIMAL_UI' : 'FULL_SUITE'}</span>
-            </div>
-            <div className="relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-zinc-700">
-              <input
-                type="checkbox"
-                checked={prefs.simpleMode}
-                onChange={() => togglePref('simpleMode')}
-                className="sr-only peer"
-              />
-              <div className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-zinc-950 shadow-sm ring-0 transition duration-200 ease-in-out ${prefs.simpleMode ? 'translate-x-5 bg-amber-500' : 'translate-x-0 bg-zinc-400'}`}></div>
-            </div>
-          </label>
+          <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg shadow-sm hover:border-amber-500/30 transition-all">
+            <Toggle
+              checked={prefs.simpleMode}
+              onChange={() => togglePref('simpleMode')}
+              label="Simple_Mode"
+              subLabel={prefs.simpleMode ? 'MINIMAL_UI' : 'FULL_SUITE'}
+              variant="amber"
+            />
+          </div>
         </div>
 
         {/* Listen Settings */}
@@ -296,53 +278,65 @@ export function OptionsView() {
           </p>
 
           <div className="grid grid-cols-2 gap-4">
-            <label className="flex items-center gap-3 p-3 bg-zinc-950 border border-zinc-800 rounded cursor-pointer hover:border-purple-500/50 transition-colors">
-              <input type="checkbox" checked={prefs.history} onChange={() => togglePref('history')} className="accent-purple-500 w-4 h-4" />
-              <div className="flex flex-col">
-                <span className="text-xs text-zinc-300 font-bold uppercase tracking-widest">HTTP History</span>
-                <span className="text-[10px] text-zinc-600 font-mono">Logs traffic to DB</span>
-              </div>
-            </label>
+            <div className="p-3 bg-zinc-950 border border-zinc-800 rounded hover:border-purple-500/50 transition-colors">
+              <Toggle
+                checked={prefs.history}
+                onChange={() => togglePref('history')}
+                label="HTTP History"
+                subLabel="Logs traffic to DB"
+                variant="purple"
+              />
+            </div>
 
-            <label className="flex items-center gap-3 p-3 bg-zinc-950 border border-zinc-800 rounded cursor-pointer hover:border-purple-500/50 transition-colors">
-              <input type="checkbox" checked={prefs.repeater} onChange={() => togglePref('repeater')} className="accent-purple-500 w-4 h-4" />
-              <div className="flex flex-col">
-                <span className="text-xs text-zinc-300 font-bold uppercase tracking-widest">Repeater Workspace</span>
-                <span className="text-[10px] text-zinc-600 font-mono">Saves tabs & payloads</span>
-              </div>
-            </label>
+            <div className="p-3 bg-zinc-950 border border-zinc-800 rounded hover:border-purple-500/50 transition-colors">
+              <Toggle
+                checked={prefs.repeater}
+                onChange={() => togglePref('repeater')}
+                label="Repeater Workspace"
+                subLabel="Saves tabs & payloads"
+                variant="purple"
+              />
+            </div>
 
-            <label className="flex items-center gap-3 p-3 bg-zinc-950 border border-zinc-800 rounded cursor-pointer hover:border-purple-500/50 transition-colors">
-              <input type="checkbox" checked={prefs.bindings} onChange={() => togglePref('bindings')} className="accent-purple-500 w-4 h-4" />
-              <div className="flex flex-col">
-                <span className="text-xs text-zinc-300 font-bold uppercase tracking-widest">Network Bindings</span>
-                <span className="text-[10px] text-zinc-600 font-mono">Saves IP & Ports</span>
-              </div>
-            </label>
+            <div className="p-3 bg-zinc-950 border border-zinc-800 rounded hover:border-purple-500/50 transition-colors">
+              <Toggle
+                checked={prefs.bindings}
+                onChange={() => togglePref('bindings')}
+                label="Network Bindings"
+                subLabel="Saves IP & Ports"
+                variant="purple"
+              />
+            </div>
 
-            <label className="flex items-center gap-3 p-3 bg-zinc-950 border border-zinc-800 rounded cursor-pointer hover:border-purple-500/50 transition-colors">
-              <input type="checkbox" checked={prefs.intercept} onChange={() => togglePref('intercept')} className="accent-purple-500 w-4 h-4" />
-              <div className="flex flex-col">
-                <span className="text-xs text-zinc-300 font-bold uppercase tracking-widest">Intercept Config</span>
-                <span className="text-[10px] text-zinc-600 font-mono">Saves rules & state</span>
-              </div>
-            </label>
+            <div className="p-3 bg-zinc-950 border border-zinc-800 rounded hover:border-purple-500/50 transition-colors">
+              <Toggle
+                checked={prefs.intercept}
+                onChange={() => togglePref('intercept')}
+                label="Intercept Config"
+                subLabel="Saves rules & state"
+                variant="purple"
+              />
+            </div>
 
-            <label className="flex items-center gap-3 p-3 bg-zinc-950 border border-zinc-800 rounded cursor-pointer hover:border-purple-500/50 transition-colors">
-              <input type="checkbox" checked={prefs.limits} onChange={() => togglePref('limits')} className="accent-purple-500 w-4 h-4" />
-              <div className="flex flex-col">
-                <span className="text-xs text-zinc-300 font-bold uppercase tracking-widest">Memory Limits</span>
-                <span className="text-[10px] text-zinc-600 font-mono">Saves max history size</span>
-              </div>
-            </label>
+            <div className="p-3 bg-zinc-950 border border-zinc-800 rounded hover:border-purple-500/50 transition-colors">
+              <Toggle
+                checked={prefs.limits}
+                onChange={() => togglePref('limits')}
+                label="Memory Limits"
+                subLabel="Saves max history size"
+                variant="purple"
+              />
+            </div>
 
-            <label className="flex items-center gap-3 p-3 bg-zinc-950 border border-zinc-800 rounded cursor-pointer hover:border-purple-500/50 transition-colors">
-              <input type="checkbox" checked={prefs.replacementsAutoSave} onChange={() => togglePref('replacementsAutoSave')} className="accent-purple-500 w-4 h-4" />
-              <div className="flex flex-col">
-                <span className="text-xs text-zinc-300 font-bold uppercase tracking-widest">Auto-Save</span>
-                <span className="text-[10px] text-zinc-600 font-mono">Automatically save Workspace changes</span>
-              </div>
-            </label>
+            <div className="p-3 bg-zinc-950 border border-zinc-800 rounded hover:border-purple-500/50 transition-colors">
+              <Toggle
+                checked={prefs.replacementsAutoSave}
+                onChange={() => togglePref('replacementsAutoSave')}
+                label="Auto-Save"
+                subLabel="Automatically save Workspace changes"
+                variant="purple"
+              />
+            </div>
           </div>
         </div>
 

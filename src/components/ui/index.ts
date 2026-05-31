@@ -7,3 +7,4 @@ export * from './VariableSwitcher';
 export * from './Modal';
 export * from './DebouncedInput';
 export * from './Select';
+export * from './Toggle';

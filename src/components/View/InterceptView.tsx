@@ -7,7 +7,7 @@ import { InterceptTimer } from '../ui/InterceptTimer';
 import { WorkspaceLayout } from '../Layout/WorkspaceLayout';
 import { useTraffic } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
-import { Button, Select } from '../ui';
+import { Button, Select, Toggle } from '../ui';
 import { invoke } from '@/lib/utils/tauri';
 
 export function InterceptView() {
@@ -234,14 +234,13 @@ export function InterceptView() {
             </div>
 
             <div className="flex items-center gap-2 px-3 py-1 bg-zinc-950 rounded border border-zinc-800 shrink-0">
-              <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest whitespace-nowrap">Auto Focus:</span>
-              <button 
-                onClick={() => updateConfig(isIntercepting, interceptMode, ignoredMethods, urlFilter, !autoFocus)}
-                className={`w-8 h-4 rounded-full relative transition-colors ${autoFocus ? 'bg-sky-500/50' : 'bg-zinc-800'}`}
-                title="Automatically focus app when traffic is intercepted"
-              >
-                <div className={`absolute top-1 w-2 h-2 rounded-full transition-all ${autoFocus ? 'right-1 bg-sky-400' : 'left-1 bg-zinc-600'}`} />
-              </button>
+              <Toggle
+                checked={autoFocus}
+                onChange={(val) => updateConfig(isIntercepting, interceptMode, ignoredMethods, urlFilter, val)}
+                label="Auto Focus"
+                variant="sky"
+                size="sm"
+              />
             </div>
           </div>
           {currentReq && (
