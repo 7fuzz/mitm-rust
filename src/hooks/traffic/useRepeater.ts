@@ -123,7 +123,8 @@ export function useRepeater(activeEnvId?: string) {
         test_cases: data.test_cases,
         import_environments: options.selectedEnvIds || [],
         import_groups: options.selectedGroupNames || [],
-        link_to_environment: options.smartSync && options.targetEnvIds?.length > 0 ? options.targetEnvIds[0] : null,
+        link_to_environments: options.targetEnvIds || [],
+        smart_link: options.smartSync || false,
       };
 
       const result = await invoke<any>('import_repeater_data', { data: importPayload });

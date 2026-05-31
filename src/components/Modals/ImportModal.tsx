@@ -22,7 +22,7 @@ export function ImportModal({ isOpen, projectName, environments, groups, onClose
   const { environments: existingEnvs, activeEnvId } = useTraffic();
   const [selectedEnvIds, setSelectedEnvIds] = useState<string[]>(environments.map(e => e.id));
   const [selectedGroupNames, setSelectedGroupNames] = useState<string[]>(groups.map(g => g.name));
-  const [targetEnvIds, setTargetEnvIds] = useState<string[]>(activeEnvId ? [activeEnvId] : []);
+  const [targetEnvIds, setTargetEnvIds] = useState<string[]>(activeEnvId && existingEnvs.some(e => e.id === activeEnvId) ? [activeEnvId] : []);
   const [smartSync, setSmartSync] = useState(true);
 
   const toggleEnv = (id: string) => {

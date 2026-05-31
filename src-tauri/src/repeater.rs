@@ -334,18 +334,20 @@ pub async fn delete_repeater_history_item(app_handle: AppHandle, id: String) -> 
     Ok(())
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ImportRepeaterData {
     pub name: Option<String>,
     pub url: Option<String>,
     pub header: Option<serde_json::Value>,
-    pub placeholders: Option<std::collections::HashMap<String, String>>,
+    pub placeholders: Option<serde_json::Value>,
     pub all_environments: Option<Vec<serde_json::Value>>,
     pub all_variables: Option<Vec<serde_json::Value>>,
     pub test_cases: Option<Vec<serde_json::Value>>,
     pub import_environments: Option<Vec<String>>,
     pub import_groups: Option<Vec<String>>,
     pub link_to_environment: Option<String>,
+    pub link_to_environments: Option<Vec<String>>,
+    pub smart_link: Option<bool>,
 }
 
 #[tauri::command]
@@ -357,6 +359,8 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
     let mut imported_vars = 0;
     let mut imported_groups = 0;
     let mut imported_requests = 0;
+    
+    let mut newly_imported_env_ids = Vec::new();
 
     // 1. Import environments and variables if requested
     if let (Some(envs), Some(import_env_ids)) = (&data.all_environments, &data.import_environments) {
@@ -371,6 +375,7 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
             }
 
             let new_env_id = Uuid::new_v4().to_string();
+            newly_imported_env_ids.push(new_env_id.clone());
             conn.execute(
                 "INSERT INTO environments (id, name, is_active) VALUES (?, ?, 0)",
                 rusqlite::params![new_env_id, env_name],
@@ -419,6 +424,23 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
     if let Some(test_cases) = &data.test_cases {
         let import_group_names = data.import_groups.clone().unwrap_or_default();
         let link_env_id = data.link_to_environment.clone();
+        let mut target_env_ids = data.link_to_environments.clone().unwrap_or_default();
+        
+        // Add single link_to_environment for backwards compatibility
+        if let Some(id) = link_env_id {
+            if !target_env_ids.contains(&id) {
+                target_env_ids.push(id);
+            }
+        }
+        
+        // Add newly imported environments if smart_link is true
+        if data.smart_link.unwrap_or(false) {
+            for id in &newly_imported_env_ids {
+                if !target_env_ids.contains(id) {
+                    target_env_ids.push(id.clone());
+                }
+            }
+        }
 
         for (group_idx, tc) in test_cases.iter().enumerate() {
             let tc_obj = tc.as_object().ok_or("Invalid test case object")?;
@@ -440,8 +462,8 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
 
             imported_groups += 1;
 
-            // Link group to environment if specified
-            if let Some(ref env_id) = link_env_id {
+            // Link group to environments
+            for env_id in &target_env_ids {
                 conn.execute(
                     "INSERT OR IGNORE INTO environment_groups (group_id, environment_id) VALUES (?, ?)",
                     rusqlite::params![new_group_id, env_id],
