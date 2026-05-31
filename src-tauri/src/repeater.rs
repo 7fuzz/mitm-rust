@@ -39,6 +39,18 @@ pub struct CreateRepeaterItem {
     pub response: Option<RepeaterResponse>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateRepeaterItem {
+    pub name: String,
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: String,
+    pub extract: Option<serde_json::Value>,
+    pub group_id: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RepeaterResponse {
@@ -81,7 +93,7 @@ pub async fn create_repeater_item(app_handle: AppHandle, item: CreateRepeaterIte
 }
 
 #[tauri::command]
-pub async fn update_repeater_request(app_handle: AppHandle, id: String, updates: RepeaterRequest) -> Result<(), String> {
+pub async fn update_repeater_request(app_handle: AppHandle, id: String, updates: UpdateRepeaterItem) -> Result<(), String> {
     let db_path = get_db_path(&app_handle);
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
     
