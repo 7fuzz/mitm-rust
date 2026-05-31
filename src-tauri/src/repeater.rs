@@ -21,6 +21,7 @@ pub struct RepeaterRequest {
     pub url: String,
     pub headers: Vec<(String, String)>,
     pub body: String,
+    pub extract: Option<serde_json::Value>,
     pub response: Option<proxy::Traffic>,
     pub hit_count: i32,
 }
@@ -33,6 +34,7 @@ pub struct CreateRepeaterItem {
     pub url: String,
     pub headers: Vec<(String, String)>,
     pub body: String,
+    pub extract: Option<serde_json::Value>,
     pub group_id: Option<String>,
     pub response: Option<RepeaterResponse>,
 }
@@ -59,6 +61,7 @@ pub async fn create_repeater_item(app_handle: AppHandle, item: CreateRepeaterIte
     
     let id = Uuid::new_v4().to_string();
     let headers_json = serde_json::to_string(&item.headers).unwrap_or_default();
+    let extract_json: Option<String> = item.extract.as_ref().and_then(|v| serde_json::to_string(v).ok());
     
     let (res_status, res_headers, res_body) = if let Some(res) = &item.response {
         let status = res.status;
@@ -70,8 +73,8 @@ pub async fn create_repeater_item(app_handle: AppHandle, item: CreateRepeaterIte
     };
 
     conn.execute(
-        "INSERT INTO repeater_requests (id, name, method, url, headers, body, response_status, response_headers, response_body, group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        rusqlite::params![id, item.name, item.method, item.url, headers_json, item.body, res_status, res_headers, res_body, item.group_id],
+        "INSERT INTO repeater_requests (id, name, method, url, headers, body, extract, response_status, response_headers, response_body, group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        rusqlite::params![id, item.name, item.method, item.url, headers_json, item.body, extract_json, res_status, res_headers, res_body, item.group_id],
     ).map_err(|e| e.to_string())?;
 
     Ok(id)
@@ -83,10 +86,11 @@ pub async fn update_repeater_request(app_handle: AppHandle, id: String, updates:
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
     
     let headers_json = serde_json::to_string(&updates.headers).unwrap_or_default();
+    let extract_json: Option<String> = updates.extract.as_ref().and_then(|v| serde_json::to_string(v).ok());
     
     conn.execute(
-        "UPDATE repeater_requests SET name = ?, method = ?, url = ?, headers = ?, body = ?, group_id = ? WHERE id = ?",
-        rusqlite::params![updates.name, updates.method, updates.url, headers_json, updates.body, updates.group_id, id],
+        "UPDATE repeater_requests SET name = ?, method = ?, url = ?, headers = ?, body = ?, extract = ?, group_id = ? WHERE id = ?",
+        rusqlite::params![updates.name, updates.method, updates.url, headers_json, updates.body, extract_json, updates.group_id, id],
     ).map_err(|e| e.to_string())?;
 
     Ok(())

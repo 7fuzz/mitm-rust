@@ -122,18 +122,19 @@ pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
 
     // 3. Repeater Requests
     let request_query = if active_env_id.is_some() {
-        "SELECT id, name, group_id, method, url, headers, body, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id IS NULL OR group_id IN (SELECT group_id FROM environment_groups WHERE environment_id = ?) ORDER BY order_index"
+        "SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id IS NULL OR group_id IN (SELECT group_id FROM environment_groups WHERE environment_id = ?) ORDER BY order_index"
     } else {
-        "SELECT id, name, group_id, method, url, headers, body, response_status, response_headers, response_body, hit_count FROM repeater_requests ORDER BY order_index"
+        "SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests ORDER BY order_index"
     };
 
     let mut stmt = conn.prepare(request_query).map_err(|e| e.to_string())?;
     let repeater_requests = if let Some(ref env_id) = active_env_id {
         stmt.query_map([env_id], |row| {
             let headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or_default();
-            let res_status: Option<u16> = row.get(7).ok();
+            let extract: Option<serde_json::Value> = row.get::<_, Option<String>>(7)?.and_then(|s| serde_json::from_str(&s).ok());
+            let res_status: Option<u16> = row.get(8).ok();
             let response = if let Some(status) = res_status {
-                 let res_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(8)?).unwrap_or_default();
+                 let res_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default();
                  Some(proxy::Traffic {
                      id: row.get::<_, String>(0)? + "_res",
                      method: row.get(3)?,
@@ -143,7 +144,7 @@ pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
                      request_headers: headers.clone(),
                      response_headers: res_headers,
                      request_body: row.get(6)?,
-                     response_body: row.get(9)?,
+                     response_body: row.get(10)?,
                      phase: "response".to_string(),
                      is_intercepted: false,
                      intercepted_at: None,
@@ -158,16 +159,18 @@ pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
                 url: row.get(4)?,
                 headers,
                 body: row.get(6)?,
+                extract,
                 response,
-                hit_count: row.get(10)?,
+                hit_count: row.get(11)?,
             })
         }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect()
     } else {
         stmt.query_map([], |row| {
             let headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or_default();
-            let res_status: Option<u16> = row.get(7).ok();
+            let extract: Option<serde_json::Value> = row.get::<_, Option<String>>(7)?.and_then(|s| serde_json::from_str(&s).ok());
+            let res_status: Option<u16> = row.get(8).ok();
             let response = if let Some(status) = res_status {
-                 let res_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(8)?).unwrap_or_default();
+                 let res_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default();
                  Some(proxy::Traffic {
                      id: row.get::<_, String>(0)? + "_res",
                      method: row.get(3)?,
@@ -177,7 +180,7 @@ pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
                      request_headers: headers.clone(),
                      response_headers: res_headers,
                      request_body: row.get(6)?,
-                     response_body: row.get(9)?,
+                     response_body: row.get(10)?,
                      phase: "response".to_string(),
                      is_intercepted: false,
                      intercepted_at: None,
@@ -192,8 +195,9 @@ pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
                 url: row.get(4)?,
                 headers,
                 body: row.get(6)?,
+                extract,
                 response,
-                hit_count: row.get(10)?,
+                hit_count: row.get(11)?,
             })
         }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect()
     };

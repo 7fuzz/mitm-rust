@@ -9,6 +9,11 @@ use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use http_body_util::{Full, BodyExt};
 use bytes::Bytes;
+use flate2::read::GzDecoder;
+use flate2::read::ZlibDecoder;
+use brotli::Decompressor;
+use std::io::Read;
+use zstd;
 
 fn build_variable_map(conn: &rusqlite::Connection, active_env_id: Option<&str>) -> Result<HashMap<String, String>, String> {
     let mut vars = HashMap::new();
@@ -128,6 +133,61 @@ fn parse_date_token(raw: &str) -> (&str, i32) {
     }
 }
 
+fn decompress_body(body: &[u8], encoding: &str) -> Option<Vec<u8>> {
+    let encodings: Vec<&str> = encoding.split(',').map(|s| s.trim()).collect();
+    let mut current_body = body.to_vec();
+    let mut decompressed = false;
+
+    for enc in encodings.iter().rev() {
+        let enc = enc.to_lowercase();
+        match enc.as_str() {
+            "gzip" | "x-gzip" => {
+                let mut decoder = GzDecoder::new(&current_body[..]);
+                let mut decoded = Vec::new();
+                if decoder.read_to_end(&mut decoded).is_ok() {
+                    current_body = decoded;
+                    decompressed = true;
+                } else {
+                    return None;
+                }
+            }
+            "deflate" => {
+                let mut decoder = ZlibDecoder::new(&current_body[..]);
+                let mut decoded = Vec::new();
+                if decoder.read_to_end(&mut decoded).is_ok() {
+                    current_body = decoded;
+                    decompressed = true;
+                } else {
+                    return None;
+                }
+            }
+            "br" => {
+                let mut decoded = Vec::new();
+                if Decompressor::new(&current_body[..], 4096).read_to_end(&mut decoded).is_ok() {
+                    current_body = decoded;
+                    decompressed = true;
+                } else {
+                    return None;
+                }
+            }
+            "zstd" => {
+                if let Ok(decoded) = zstd::decode_all(&current_body[..]) {
+                    current_body = decoded;
+                    decompressed = true;
+                } else {
+                    return None;
+                }
+            }
+            "identity" | "" => {}
+            _ => {
+                return if decompressed { Some(current_body) } else { None };
+            }
+        }
+    }
+
+    if decompressed { Some(current_body) } else { None }
+}
+
 fn interpolate_text(input: &str, vars: &HashMap<String, String>) -> String {
     let with_vars = interpolate_variables(input, vars);
     interpolate_dates(&with_vars)
@@ -187,7 +247,17 @@ pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Resu
     }
 
     let collected_body = res.into_body().collect().await.map_err(|e| e.to_string())?.to_bytes();
-    let res_body_str = String::from_utf8_lossy(&collected_body).to_string();
+    let res_encoding = res_headers.iter()
+        .find(|(k, _)| k.to_lowercase() == "content-encoding")
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default();
+
+    let decompressed_body = decompress_body(&collected_body, &res_encoding);
+    let response_body_bytes = decompressed_body.as_deref().unwrap_or(&collected_body);
+    if decompressed_body.is_some() {
+        res_headers.retain(|(k, _)| k.to_lowercase() != "content-encoding");
+    }
+    let res_body_str = String::from_utf8_lossy(response_body_bytes).to_string();
 
     let traffic = proxy::Traffic {
         id: format!("{}_res", id),
