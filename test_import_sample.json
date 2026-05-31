@@ -1,0 +1,105 @@
+{
+  "name": "Test Project",
+  "url": "https://api.example.com",
+  "header": {
+    "Content-Type": "application/json",
+    "Accept": "application/json"
+  },
+  "placeholders": {
+    "token": "test_token_12345",
+    "userId": "user_123"
+  },
+  "all_environments": [
+    {
+      "id": "env_dev",
+      "name": "Development"
+    },
+    {
+      "id": "env_prod",
+      "name": "Production"
+    }
+  ],
+  "all_variables": [
+    {
+      "environmentId": "env_dev",
+      "name": "token",
+      "activeIndex": 0,
+      "values": [
+        {
+          "name": "Default",
+          "value": "dev_token_abc123"
+        }
+      ]
+    },
+    {
+      "environmentId": "env_prod",
+      "name": "token",
+      "activeIndex": 0,
+      "values": [
+        {
+          "name": "Default",
+          "value": "prod_token_xyz789"
+        }
+      ]
+    }
+  ],
+  "test_cases": [
+    {
+      "name": "Authentication",
+      "url": "https://api.example.com/v1",
+      "target": [
+        {
+          "name": "Login",
+          "method": "POST",
+          "endpoint": "/auth/login",
+          "header": {
+            "Content-Type": "application/json"
+          },
+          "body": "{\"email\": \"test@example.com\", \"password\": \"password123\"}",
+          "extract": {}
+        },
+        {
+          "name": "Logout",
+          "method": "POST",
+          "endpoint": "/auth/logout",
+          "header": {
+            "Authorization": "Bearer {{token}}"
+          },
+          "extract": {}
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "url": "https://api.example.com/v1",
+      "target": [
+        {
+          "name": "Get User",
+          "method": "GET",
+          "endpoint": "/users/{{userId}}",
+          "header": {
+            "Authorization": "Bearer {{token}}"
+          },
+          "params": {
+            "include": "profile"
+          },
+          "extract": {
+            "user_id": "body.id",
+            "user_name": "body.name"
+          }
+        },
+        {
+          "name": "Create User",
+          "method": "POST",
+          "endpoint": "/users",
+          "header": {
+            "Authorization": "Bearer {{token}}",
+            "Content-Type": "application/json"
+          },
+          "body": "{\"name\": \"New User\", \"email\": \"newuser@example.com\"}",
+          "extract": {}
+        }
+      ]
+    }
+  ]
+}

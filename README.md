@@ -44,6 +44,7 @@ npm run tauri build
 - [x] Multi-value header support (Set-Cookie preservation).
 - [x] Collection management (Groups).
 - [x] Persistent workspace (SQLite via Rust).
+- [x] **Import/Export**: Selectively import projects with environments, variables, and collections (see [IMPORT.md](IMPORT.md)).
 
 ### 4. Environments & Variables (Ported)
 - [x] Variable storage and variants.
@@ -92,10 +93,11 @@ The application follows a modular, backend-heavy architecture designed for high 
 
 ---
 
-## 📝 Developer Patterns
+## 📝 Developer Patterns & Resources
 - **Variable Syntax**: Still uses `{{variable_name}}`.
 - **Persistence**: Using SQLite via Rust for high-performance state management.
 - **Commands**: All major operations are implemented as `#[tauri::command]`.
+- **Import/Export**: See [IMPORT.md](IMPORT.md) for project import documentation.
 
 ---
 
