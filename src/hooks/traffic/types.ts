@@ -60,6 +60,7 @@ export interface SyncData {
   toolkitJson: string;
   historyLimits: any;
   activeGroupId?: string | null;
+  filterConfig: { rules: Array<{ id: string, is_active: boolean, field: string, rule_type: string, mode: 'whitelist' | 'blacklist', pattern: string }> };
 }
 
 export interface SyncStatus {

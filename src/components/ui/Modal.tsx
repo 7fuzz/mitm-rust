@@ -23,17 +23,22 @@ export function Modal({
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
+      if (e.key === 'Escape' && !e.defaultPrevented) {
+        e.stopPropagation();
+        onClose();
+      }
     };
 
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
       document.body.style.overflow = 'hidden';
+      document.body.setAttribute('data-modal-open', 'true');
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = 'unset';
+      document.body.removeAttribute('data-modal-open');
     };
   }, [isOpen, onClose]);
 

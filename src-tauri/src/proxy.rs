@@ -139,6 +139,7 @@ pub struct InterceptConfig {
 pub struct FilterRule {
     pub id: String,
     pub is_active: bool,
+    pub field: String,     // "url", "method", "status_code"
     pub rule_type: String, // "contains", "starts_with", "ends_with", "exact"
     pub mode: String,      // "whitelist", "blacklist"
     pub pattern: String,
@@ -158,7 +159,7 @@ impl Default for FilterConfig {
 }
 
 impl FilterConfig {
-    pub fn should_process(&self, url: &str) -> bool {
+    pub fn should_process(&self, url: &str, method: &str, status_code: u16) -> bool {
         let active_rules: Vec<&FilterRule> = self.rules.iter().filter(|r| r.is_active).collect();
         
         if active_rules.is_empty() {
@@ -170,12 +171,28 @@ impl FilterConfig {
 
         let matches = |rules: &[&FilterRule]| -> bool {
             rules.iter().any(|rule| {
-                match rule.rule_type.as_str() {
-                    "contains" => url.contains(&rule.pattern),
-                    "starts_with" => url.starts_with(&rule.pattern),
-                    "ends_with" => url.ends_with(&rule.pattern),
-                    "exact" => url == rule.pattern,
-                    _ => false,
+                let value_to_check = match rule.field.as_str() {
+                    "method" => Some(method.to_string()),
+                    "status_code" => {
+                        if status_code == 0 {
+                            None // Can't match status code yet
+                        } else {
+                            Some(status_code.to_string())
+                        }
+                    },
+                    _ => Some(url.to_string()), // default to url
+                };
+
+                if let Some(val) = value_to_check {
+                    match rule.rule_type.as_str() {
+                        "contains" => val.contains(&rule.pattern),
+                        "starts_with" => val.starts_with(&rule.pattern),
+                        "ends_with" => val.ends_with(&rule.pattern),
+                        "exact" => val == rule.pattern,
+                        _ => false,
+                    }
+                } else {
+                    false
                 }
             })
         };
@@ -185,10 +202,16 @@ impl FilterConfig {
             !matches(&blacklists)
         } else if blacklists.is_empty() {
             // Only whitelists: Allow ONLY matches
-            matches(&whitelists)
+            // If status_code is 0, we allow it to proceed so we can check the status code later,
+            // UNLESS there are no whitelists for URL or Method.
+            // Actually, simpler: if it matches ANY whitelist, it's allowed.
+            // If we are at status 0, and there's a status_code whitelist, we don't know yet.
+            matches(&whitelists) || (status_code == 0 && whitelists.iter().any(|r| r.field == "status_code"))
         } else {
             // Both: Allow if matches any whitelist AND matches no blacklist
-            matches(&whitelists) && !matches(&blacklists)
+            let is_whitelisted = matches(&whitelists) || (status_code == 0 && whitelists.iter().any(|r| r.field == "status_code"));
+            let is_blacklisted = matches(&blacklists);
+            is_whitelisted && !is_blacklisted
         }
     }
 }
@@ -396,7 +419,7 @@ async fn handle_http(
         intercept.filter_config.clone()
     };
 
-    if !filter_config.should_process(&url) {
+    if !filter_config.should_process(&url, &method.to_string(), 0) {
         let mut new_req = Request::builder()
             .method(method.clone())
             .uri(url.clone());
@@ -615,7 +638,7 @@ async fn handle_http(
             let traffic = Traffic {
                 id: traffic_id,
                 method: method.to_string(),
-                url,
+                url: url.clone(),
                 host,
                 status_code: status,
                 request_headers,
@@ -627,7 +650,9 @@ async fn handle_http(
                 intercepted_at: None,
             };
             
-            let _ = state.app_handle.emit("traffic_captured", &traffic);
+            if filter_config.should_process(&url, &method.to_string(), status) {
+                let _ = state.app_handle.emit("traffic_captured", &traffic);
+            }
 
             // Remove content-length/transfer-encoding to let hyper recalculate
             response_headers.retain(|(k, _)| k != "content-length" && k != "transfer-encoding");

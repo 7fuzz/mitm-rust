@@ -277,5 +277,10 @@ pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
         if let Ok(v) = serde_json::from_str(&config_str) { history_limits = v; }
     }
 
-    Ok(SyncData { history, repeater_groups, repeater_requests, environments, variables, replacements, prefs, ui_layout, toolkit_json, history_limits, active_group_id })
+    let mut filter_config = proxy::FilterConfig::default();
+    if let Ok(config_str) = conn.query_row::<String, _, _>("SELECT value FROM app_state WHERE key = 'filter_config'", [], |row| row.get(0)) {
+        if let Ok(v) = serde_json::from_str(&config_str) { filter_config = v; }
+    }
+
+    Ok(SyncData { history, repeater_groups, repeater_requests, environments, variables, replacements, prefs, ui_layout, toolkit_json, history_limits, active_group_id, filter_config })
 }

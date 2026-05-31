@@ -61,6 +61,7 @@ function useTrafficState() {
       if (data.uiLayout) config.initConfig.setUiLayout(data.uiLayout as any);
       if (data.toolkitJson) jsonToolkit._initToolkitJson(data.toolkitJson);
       if (proxyStatus) config.initConfig.setIsProxyActive(proxyStatus.enabled);
+      if (data.filterConfig) config.initConfig.setFilterConfig(data.filterConfig);
       if (data.historyLimits) {
         const hl = data.historyLimits as any;
         if (typeof hl.enabled === 'boolean') config.initConfig.setIsLimitEnabled(hl.enabled);

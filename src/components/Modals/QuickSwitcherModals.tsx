@@ -53,6 +53,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
     {
       key: ['e', 'Enter'],
       enabled: isOpen && commandMode && !!v,
+      stopPropagation: true,
       handler: () => {
         const currentVariant = v.values[v.activeIndex];
         const newValue = window.prompt(`Update value for "${v.name}" [${currentVariant.name}]:`, currentVariant.value);
@@ -68,6 +69,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
     {
       key: 'v',
       enabled: isOpen && commandMode && !!v,
+      stopPropagation: true,
       handler: () => {
         const varName = window.prompt(`Add new variant name for "${v.name}":`, 'New Variant');
         if (varName) {
@@ -81,6 +83,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
     {
       key: 'd',
       enabled: isOpen && commandMode && !!v,
+      stopPropagation: true,
       handler: (e) => {
         if (e.shiftKey) {
           if (window.confirm(`Permanently delete variable "${v.name}"?`)) {
@@ -103,6 +106,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
     {
       key: 'r',
       enabled: isOpen && commandMode && !!v,
+      stopPropagation: true,
       handler: () => {
         const newName = window.prompt(`Rename variable "${v.name}" to:`, v.name);
         if (newName && newName !== v.name) {
@@ -114,6 +118,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
     {
       key: 'n',
       enabled: isOpen && commandMode,
+      stopPropagation: true,
       handler: () => {
         const newName = window.prompt('New variable name:', '');
         if (newName) {
@@ -137,6 +142,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
       key: 'ArrowDown',
       enabled: isOpen && !commandMode,
       ignoreInputs: false,
+      stopPropagation: true,
       handler: (e) => {
         if (e.shiftKey) {
           const currentVar = filtered[selectedIndex];
@@ -160,6 +166,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
       key: 'ArrowUp',
       enabled: isOpen && !commandMode,
       ignoreInputs: false,
+      stopPropagation: true,
       handler: (e) => {
         if (e.shiftKey) {
           const currentVar = filtered[selectedIndex];
@@ -183,6 +190,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
       key: 'ArrowLeft',
       enabled: isOpen && !commandMode,
       ignoreInputs: false,
+      stopPropagation: true,
       handler: () => {
         if (v && v.values.length > 0) {
           const nextIdx = (v.activeIndex - 1 + v.values.length) % v.values.length;
@@ -194,6 +202,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
       key: 'ArrowRight',
       enabled: isOpen && !commandMode,
       ignoreInputs: false,
+      stopPropagation: true,
       handler: () => {
         if (v && v.values.length > 0) {
           const nextIdx = (v.activeIndex + 1) % v.values.length;
@@ -205,6 +214,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
       key: 'Enter',
       enabled: isOpen && !commandMode,
       ignoreInputs: false,
+      stopPropagation: true,
       handler: () => setCommandMode(true),
     },
     {
@@ -217,6 +227,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
     {
       key: 'm',
       enabled: isOpen && !commandMode && filter === '',
+      stopPropagation: true,
       handler: () => {
         onEdit();
         onClose();
@@ -330,18 +341,21 @@ export function EnvironmentQuickSwitcherModal({ isOpen, onClose, environments, a
       key: 'ArrowDown',
       enabled: isOpen,
       ignoreInputs: false,
+      stopPropagation: true,
       handler: () => setSelectedIndex(prev => (prev + 1) % environments.length),
     },
     {
       key: 'ArrowUp',
       enabled: isOpen,
       ignoreInputs: false,
+      stopPropagation: true,
       handler: () => setSelectedIndex(prev => (prev - 1 + environments.length) % environments.length),
     },
     {
       key: 'Enter',
       enabled: isOpen,
       ignoreInputs: false,
+      stopPropagation: true,
       handler: () => {
         const env = environments[selectedIndex];
         if (env) {
@@ -360,6 +374,7 @@ export function EnvironmentQuickSwitcherModal({ isOpen, onClose, environments, a
     {
       key: 'm',
       enabled: isOpen,
+      stopPropagation: true,
       handler: () => {
         onEdit();
         onClose();

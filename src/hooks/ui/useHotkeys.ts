@@ -11,6 +11,7 @@ interface HotkeyConfig {
   preventDefault?: boolean;
   stopPropagation?: boolean;
   enabled?: boolean;
+  allowInModal?: boolean;
 }
 
 /**
@@ -33,9 +34,14 @@ export function useHotkeys(hotkeys: HotkeyConfig[], deps: any[] = [], capture = 
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       
+      const isModalOpen = document.body.getAttribute('data-modal-open') === 'true';
+
       for (const hotkey of hotkeys) {
         if (hotkey.enabled === false) continue;
         
+        // Skip background hotkeys if modal is open, unless explicitly allowed
+        if (isModalOpen && !hotkey.allowInModal && !capture) continue;
+
         // By default, ignore inputs unless explicitly set to false
         if (hotkey.ignoreInputs !== false && isInputTarget(target)) continue;
 
