@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { RepeaterGroup, SyncData, RepeaterRequest } from './types';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/utils/tauri';
 
 export function useRepeater(activeEnvId?: string) {
   const [repeaterRequests, setRepeaterRequests] = useState<RepeaterRequest[]>([]);

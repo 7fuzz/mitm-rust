@@ -8,7 +8,7 @@ import { WorkspaceLayout } from '../Layout/WorkspaceLayout';
 import { useTraffic } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
 import { Button, Select } from '../ui';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/utils/tauri';
 
 export function InterceptView() {
   const {

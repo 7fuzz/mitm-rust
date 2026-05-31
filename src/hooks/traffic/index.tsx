@@ -1,6 +1,5 @@
 import { useState, useEffect, createContext, useContext, ReactNode, useRef } from 'react';
-import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
+import { listen, invoke } from '@/lib/utils/tauri';
 import { Traffic } from '@/types/traffic';
 import { SyncData, SyncStatus } from './types';
 import { useNotification } from '@/components/ui/NotificationProvider';
@@ -13,9 +12,12 @@ import { useRepeater } from './useRepeater';
 import { useTrafficLog } from './useTrafficLog';
 import { useJsonToolkit } from './useJsonToolkit';
 import { useReplacements } from './useReplacements';
+import { useDebugLog } from './useDebugLog';
+import { setDebugLogger } from '@/lib/utils/tauri';
 
 // Re-export types so other components can still import them from '@/hooks/traffic'
 export * from './types';
+export * from './useDebugLog';
 
 // ============================================================================
 // MAIN ROOT HOOK
@@ -27,7 +29,13 @@ function useTrafficState() {
   const repeater = useRepeater(variables.activeEnvId);
   const trafficData = useTrafficLog();
   const replacements = useReplacements();
+  const debugLog = useDebugLog();
   const { notify } = useNotification();
+
+  // Sync debug logger with current state
+  useEffect(() => {
+    setDebugLogger(debugLog.addLog, config.prefs.debugMode);
+  }, [debugLog.addLog, config.prefs.debugMode]);
   
   const isFirstSync = useRef(true);
   const jsonToolkit = useJsonToolkit();
@@ -149,6 +157,7 @@ function useTrafficState() {
     ...jsonToolkitRest,
     ...trafficData,
     ...replacements,
+    ...debugLog,
     syncAll,
     syncStatus,
     selectedReq: trafficData.traffic.find((r) => r.id === selections.selectedId) || null,

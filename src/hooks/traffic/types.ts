@@ -83,4 +83,4 @@ export interface KeyboardShortcuts {
   cycle_next: string;
 }
 
-export type TabType = 'history' | 'intercept' | 'repeater' | 'options' | 'utilities' | 'workspace';
+export type TabType = 'history' | 'intercept' | 'repeater' | 'options' | 'utilities' | 'workspace' | 'debug';

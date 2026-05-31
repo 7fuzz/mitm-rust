@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/utils/tauri';
 
 export function useJsonToolkit() {
   const [toolkitJson, setToolkitJson] = useState('{\n  "status": "waiting",\n  "message": "Send a JSON payload here to begin"\n}');

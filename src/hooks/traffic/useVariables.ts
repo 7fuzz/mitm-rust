@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { GlobalVariable, Environment, SyncData } from './types';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/utils/tauri';
 
 export function useVariables(prefs?: { autoSave: boolean }) {
   const [variables, setVariables] = useState<GlobalVariable[]>([]);

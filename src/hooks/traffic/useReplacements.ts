@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SyncData, ReplacementEntry, ReplacementCategory } from './types';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/utils/tauri';
 
 export interface ReplacementsData {
   URL_REPLACEMENTS: Record<string, string>;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Input, Textarea, Select } from '../ui';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/utils/tauri';
 
 interface FormEntry {
   id: string;

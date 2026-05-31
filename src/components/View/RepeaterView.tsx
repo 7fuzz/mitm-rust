@@ -10,7 +10,7 @@ import { useTraffic, RepeaterRequest } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
 import { PromptModal, ConfirmModal, ExtractionModal, RepeaterHistoryModal } from '../Modals';
 import { Button, Select } from '../ui';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/utils/tauri';
 
 export function RepeaterView() {
   const { notify } = useNotification();

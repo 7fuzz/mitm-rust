@@ -8,7 +8,7 @@ import HttpResponseViewer from '../ui/HttpResponseViewer';
 import { useTraffic } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
 import { Button } from '../ui/Button';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/utils/tauri';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { TrafficFilterModal } from '../Modals/TrafficFilterModal';
 

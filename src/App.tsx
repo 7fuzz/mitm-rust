@@ -7,6 +7,7 @@ import { RepeaterView } from '@/components/View/RepeaterView';
 import { HistoryView } from '@/components/View/HistoryView';
 import { OptionsView } from '@/components/View/OptionsView';
 import { UtilitiesView } from '@/components/View/UtilitiesView';
+import { DebugView } from '@/components/View/DebugView';
 import { WorkspaceView, WorkspaceViewHandle } from '@/components/View/WorkspaceView';
 import { useKeyboardShortcuts } from '@/hooks/ui/useKeyboardShortcuts';
 import { ShortcutHint } from '@/components/ui/ShortcutHint';
@@ -21,7 +22,7 @@ function TrafficApp() {
   } = useTraffic();
   const { theme, toggleTheme } = useTheme();
 
-  const [activeTab, setActiveTab] = useState<'history' | 'intercept' | 'repeater' | 'options' | 'utilities' | 'workspace'>('history');
+  const [activeTab, setActiveTab] = useState<'history' | 'intercept' | 'repeater' | 'options' | 'utilities' | 'workspace' | 'debug'>('history');
   const workspaceRef = useRef<WorkspaceViewHandle>(null);
 
   const [isVarModalOpen, setIsVarModalOpen] = useState(false);
@@ -115,6 +116,15 @@ function TrafficApp() {
           >
             Options
           </button>
+
+          {prefs.debugMode && (
+            <button
+              onClick={() => setActiveTab('debug')}
+              className={`px-6 h-full flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest border-b-2 transition-all ${activeTab === 'debug' ? 'border-zinc-400 text-zinc-300 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/30'}`}
+            >
+              Debug
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-4">
@@ -148,6 +158,7 @@ function TrafficApp() {
         {!simpleMode && activeTab === 'workspace' && <WorkspaceView ref={workspaceRef} />}
         {!simpleMode && activeTab === 'utilities' && <UtilitiesView />}
         {activeTab === 'options' && <OptionsView />}
+        {activeTab === 'debug' && <DebugView />}
       </main>
 
       <ShortcutHint isOpen={isWaiting} simpleMode={simpleMode} />

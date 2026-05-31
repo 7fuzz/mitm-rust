@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Traffic } from '@/types/traffic';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/utils/tauri';
 
 export interface ResumeData {
   method?: string;

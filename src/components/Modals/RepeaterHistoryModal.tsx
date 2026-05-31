@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Modal, Button } from '../ui';
 import HttpResponseViewer from '../ui/HttpResponseViewer';
 import { TrafficItem } from '../Sidebar/TrafficItem';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/utils/tauri';
 
 interface HistoryItem {
   id: string;

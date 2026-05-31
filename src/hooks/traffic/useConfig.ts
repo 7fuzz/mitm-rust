@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { UILayout } from './types';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@/lib/utils/tauri';
 
 export const DEFAULT_SHORTCUTS = {
   goto_history: 'h',
@@ -28,6 +28,7 @@ export function useConfig() {
     simpleMode: true, 
     autoSave: true,
     replacementsAutoSave: true,
+    debugMode: false,
     theme: 'dark' as 'dark' | 'light',
     shortcuts: DEFAULT_SHORTCUTS
   });
