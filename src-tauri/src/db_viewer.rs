@@ -21,7 +21,7 @@ pub async fn get_database_tables(app_handle: AppHandle) -> Result<Vec<String>, S
 }
 
 #[tauri::command]
-pub async fn get_table_data(app_handle: AppHandle, table_name: String, limit: i32) -> Result<Value, String> {
+pub async fn get_table_data(app_handle: AppHandle, table_name: String, limit: i32, offset: i32) -> Result<Value, String> {
     let db_path = db::get_db_path(&app_handle);
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
     
@@ -53,26 +53,33 @@ pub async fn get_table_data(app_handle: AppHandle, table_name: String, limit: i3
     
     // Get data
     let mut stmt = conn.prepare(&format!(
-        "SELECT {} FROM {} LIMIT ?",
+        "SELECT {} FROM {} LIMIT ? OFFSET ?",
         columns.join(","),
         table_name
     )).map_err(|e| e.to_string())?;
     
     let mut rows = Vec::new();
-    let mut row_iter = stmt.query([&limit.to_string()])
+    let mut row_iter = stmt.query(rusqlite::params![limit, offset])
         .map_err(|e| e.to_string())?;
     
     while let Some(row) = row_iter.next().map_err(|e| e.to_string())? {
         let mut row_data = json!({});
         for (idx, col_name) in columns.iter().enumerate() {
-            let value: Result<String, _> = row.get(idx);
+            let value: Result<rusqlite::types::Value, _> = row.get(idx);
             match value {
                 Ok(v) => {
-                    // Try to parse as JSON for better display
-                    if let Ok(json_val) = serde_json::from_str::<Value>(&v) {
-                        row_data[col_name] = json_val;
-                    } else {
-                        row_data[col_name] = Value::String(v);
+                    match v {
+                        rusqlite::types::Value::Null => row_data[col_name] = Value::Null,
+                        rusqlite::types::Value::Integer(i) => row_data[col_name] = json!(i),
+                        rusqlite::types::Value::Real(f) => row_data[col_name] = json!(f),
+                        rusqlite::types::Value::Text(s) => {
+                            if let Ok(json_val) = serde_json::from_str::<Value>(&s) {
+                                row_data[col_name] = json_val;
+                            } else {
+                                row_data[col_name] = Value::String(s);
+                            }
+                        },
+                        rusqlite::types::Value::Blob(b) => row_data[col_name] = json!(format!("<{} bytes blob>", b.len())),
                     }
                 }
                 Err(_) => {
@@ -88,6 +95,7 @@ pub async fn get_table_data(app_handle: AppHandle, table_name: String, limit: i3
         "columns": columns,
         "row_count": row_count,
         "rows": rows,
-        "limit": limit
+        "limit": limit,
+        "offset": offset
     }))
 }

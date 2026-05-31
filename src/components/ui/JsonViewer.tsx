@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 interface JsonViewerProps {
   label?: string;
@@ -54,15 +54,25 @@ export default function JsonViewer({
   searchTerm = "", filterMode = false, forceShow = false,
   redactedKeys = [],
   onToggleRedact = undefined,
-  collapsedPaths = new Set<string>(),
-  onToggleCollapse = undefined,
-  expandedArrays = new Set<string>(),
-  onExpandArray = undefined
+  collapsedPaths,
+  onToggleCollapse,
+  expandedArrays,
+  onExpandArray
 }: JsonViewerProps) {
+  // --- INTERNAL STATE FALLBACKS ---
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
+  const [internalArrayExpanded, setInternalArrayExpanded] = useState(false);
 
-  // Use centralized collapse state if provided, otherwise default to expanded
-  const isCollapsed = collapsedPaths.has(path);
+  // Use centralized collapse state if provided, otherwise fallback to internal state
+  const isCollapsed = onToggleCollapse !== undefined 
+    ? (collapsedPaths?.has(path) ?? false)
+    : internalCollapsed;
+  
   const expanded = !isCollapsed;
+
+  const isArrayExpanded = onExpandArray !== undefined
+    ? (expandedArrays?.has(path) ?? false)
+    : internalArrayExpanded;
 
   const termLower = searchTerm.toLowerCase();
   const labelMatches = label ? label.toLowerCase().includes(termLower) : false;
@@ -179,12 +189,24 @@ export default function JsonViewer({
 
   const isEmpty = processedItems.length === 0;
   const isLongArray = isArray && processedItems.length > 1;
-  const effectiveShowAll = expandedArrays.has(path) || !!searchTerm;
+  const effectiveShowAll = isArrayExpanded || !!searchTerm;
 
   const visibleItems = isLongArray && !effectiveShowAll ? processedItems.slice(0, 1) : processedItems;
 
   const handleToggle = () => {
-    if (onToggleCollapse) onToggleCollapse(path);
+    if (onToggleCollapse) {
+      onToggleCollapse(path);
+    } else {
+      setInternalCollapsed(!internalCollapsed);
+    }
+  };
+
+  const handleExpandArray = () => {
+    if (onExpandArray) {
+      onExpandArray(path);
+    } else {
+      setInternalArrayExpanded(true);
+    }
   };
 
   return (
@@ -221,7 +243,7 @@ export default function JsonViewer({
               <JsonViewer key={key} label={key} value={val} isLast={index === visibleItems.length - 1} path={`${path}-${encodeURIComponent(key)}`} searchTerm={searchTerm} filterMode={filterMode} forceShow={shouldForceShow} redactedKeys={redactedKeys} onToggleRedact={onToggleRedact} collapsedPaths={collapsedPaths} onToggleCollapse={onToggleCollapse} expandedArrays={expandedArrays} onExpandArray={onExpandArray} />
             ))}
           {isLongArray && !effectiveShowAll && (
-            <div className="text-zinc-500 hover:text-sky-text text-xs py-1 cursor-pointer select-none pl-2 flex items-center gap-1" onClick={() => onExpandArray && onExpandArray(path)}>
+            <div className="text-zinc-500 hover:text-sky-text text-xs py-1 cursor-pointer select-none pl-2 flex items-center gap-1" onClick={handleExpandArray}>
               <span className="bg-zinc-800 px-1.5 py-0.5 rounded">+{processedItems.length - 1} more items</span>
             </div>
           )}

@@ -25,6 +25,7 @@ export function DebugView() {
   const [tableData, setTableData] = useState<TableData | null>(null);
   const [isLoadingDb, setIsLoadingDb] = useState(false);
   const [dbLimit, setDbLimit] = useState(100);
+  const [dbOffset, setDbOffset] = useState(0);
 
   const selectedLog = logs.find(l => l.id === selectedLogId);
 
@@ -47,11 +48,11 @@ export function DebugView() {
     }
   };
 
-  const loadTableData = async (tableName: string) => {
+  const loadTableData = async (tableName: string, offset = dbOffset) => {
     if (!tableName) return;
     setIsLoadingDb(true);
     try {
-      const data = await invoke<TableData>('get_table_data', { tableName, limit: dbLimit });
+      const data = await invoke<TableData>('get_table_data', { tableName, limit: dbLimit, offset });
       setTableData(data);
     } catch (error) {
       console.error('Failed to load table data:', error);
@@ -64,9 +65,15 @@ export function DebugView() {
   // Load data when selected table changes
   useEffect(() => {
     if (selectedTable) {
-      loadTableData(selectedTable);
+      loadTableData(selectedTable, dbOffset);
     }
-  }, [selectedTable, dbLimit]);
+  }, [selectedTable, dbLimit, dbOffset]);
+
+  // Reset offset when changing table
+  const handleTableSelect = (table: string) => {
+    setDbOffset(0);
+    setSelectedTable(table);
+  };
 
   const logsListElement = useMemo(() => (
     <div className="flex flex-col h-full bg-zinc-950">
@@ -126,7 +133,7 @@ export function DebugView() {
           {dbTables.map((table) => (
             <button
               key={table}
-              onClick={() => setSelectedTable(table)}
+              onClick={() => handleTableSelect(table)}
               className={`w-full text-left px-3 py-2 rounded text-sm font-mono transition-colors ${
                 selectedTable === table
                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
@@ -303,7 +310,10 @@ export function DebugView() {
                       <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
                         <span className="opacity-50">#</span> Table_Data
                       </h3>
-                      <DbTableViewer data={tableData} />
+                      <DbTableViewer 
+                        data={tableData} 
+                        onPageChange={(offset) => setDbOffset(offset)}
+                      />
                     </div>
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-zinc-500">
