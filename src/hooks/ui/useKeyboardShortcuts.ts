@@ -79,7 +79,37 @@ export function useKeyboardShortcuts({
         onTabChange(tabs[nextIndex]);
       }
     },
-    // 4. Prefix Key
+    // 4. View-specific Action Shortcuts
+    {
+      key: shortcuts?.clear_history || 'd',
+      ctrl: true,
+      enabled: !!shortcuts && !isModalOpen && activeTab === 'history',
+      handler: () => window.dispatchEvent(new CustomEvent('shortcut-clear-history')),
+    },
+    {
+      key: shortcuts?.execute_request || 'Enter',
+      ctrl: true,
+      enabled: !!shortcuts && !isModalOpen && activeTab === 'repeater',
+      handler: () => window.dispatchEvent(new CustomEvent('shortcut-execute-request')),
+    },
+    {
+      key: shortcuts?.forward_intercept || 'f',
+      ctrl: true,
+      enabled: !!shortcuts && !isModalOpen && activeTab === 'intercept',
+      handler: () => window.dispatchEvent(new CustomEvent('shortcut-forward-intercept')),
+    },
+    {
+      key: shortcuts?.drop_intercept || 'd',
+      ctrl: true,
+      enabled: !!shortcuts && !isModalOpen && activeTab === 'intercept',
+      handler: () => window.dispatchEvent(new CustomEvent('shortcut-drop-intercept')),
+    },
+    {
+      key: shortcuts?.focus_search || 's',
+      enabled: !!shortcuts && !isModalOpen && (activeTab === 'history' || activeTab === 'repeater' || activeTab === 'intercept'),
+      handler: () => window.dispatchEvent(new CustomEvent('shortcut-focus-search')),
+    },
+    // 5. Prefix Key
     {
       key: shortcuts?.prefix_key || '',
       enabled: !!shortcuts && !isModalOpen && !waitingForSecondKey.current,

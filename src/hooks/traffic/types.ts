@@ -80,6 +80,11 @@ export interface KeyboardShortcuts {
   open_environment_switcher: string;
   instant_variable_switcher: string;
   instant_environment_switcher: string;
+  clear_history: string;
+  execute_request: string;
+  forward_intercept: string;
+  drop_intercept: string;
+  focus_search: string;
   prefix_key: string;
   cycle_prev: string;
   cycle_next: string;

@@ -13,7 +13,12 @@ export const DEFAULT_SHORTCUTS = {
   open_environment_switcher: 'e',
   instant_variable_switcher: 'v',
   instant_environment_switcher: 'e',
-  prefix_key: 'g',
+  clear_history: 'd',
+  execute_request: 'Enter',
+  forward_intercept: 'f',
+  drop_intercept: 'd',
+  focus_search: 's',
+  prefix_key: '\\',
   cycle_prev: '[',
   cycle_next: ']'
 };

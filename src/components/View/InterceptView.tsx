@@ -135,6 +135,17 @@ export function InterceptView() {
     }
   };
 
+  useEffect(() => {
+    const fwdHandler = () => { if (currentReq) handleForward(); };
+    const dropHandler = () => { if (currentReq) handleDrop(); };
+    window.addEventListener('shortcut-forward-intercept', fwdHandler);
+    window.addEventListener('shortcut-drop-intercept', dropHandler);
+    return () => {
+      window.removeEventListener('shortcut-forward-intercept', fwdHandler);
+      window.removeEventListener('shortcut-drop-intercept', dropHandler);
+    };
+  }, [currentReq, handleForward, handleDrop]);
+
   const toggleIntercept = () => updateConfig(!isIntercepting, interceptMode, ignoredMethods, urlFilter, autoFocus);
 
   const toggleMethodIgnore = (method: string) => {

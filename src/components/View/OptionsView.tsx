@@ -400,7 +400,7 @@ export function OptionsView() {
                     className="w-12 bg-zinc-950 border border-zinc-700 p-2 rounded text-center text-amber-400 font-black text-xs font-mono"
                   />
                 </div>
-                <p className="text-[9px] text-zinc-600 font-mono leading-tight">Combine this with navigation keys below (e.g. g + h)</p>
+                <p className="text-[9px] text-zinc-600 font-mono leading-tight">Combine this with navigation keys below (e.g. \ + h)</p>
               </div>
 
               <div className="space-y-4">
@@ -438,6 +438,25 @@ export function OptionsView() {
                       type="text" maxLength={1} value={(shortcuts as any)[item.key]} 
                       onChange={(e) => handleShortcutChange(item.key as any, e.target.value)}
                       className="w-10 bg-zinc-950 border border-zinc-700 p-1.5 rounded text-center text-sky-text font-black text-xs font-mono"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-[9px] text-zinc-500 font-black uppercase tracking-widest border-b border-zinc-800 pb-2">Action Shortcuts (Ctrl + Key)</h4>
+                {[
+                  { label: 'Clear History', key: 'clear_history' },
+                  { label: 'Execute Request', key: 'execute_request' },
+                  { label: 'Forward Intercept', key: 'forward_intercept' },
+                  { label: 'Drop Intercept', key: 'drop_intercept' },
+                ].map(item => (
+                  <div key={item.key} className="flex items-center justify-between gap-4">
+                    <span className="text-xs text-zinc-400 font-mono">{item.label}</span>
+                    <input 
+                      type="text" value={(shortcuts as any)[item.key]} 
+                      onChange={(e) => handleShortcutChange(item.key as any, e.target.value)}
+                      className="w-16 bg-zinc-950 border border-zinc-700 p-1.5 rounded text-center text-rose-400 font-black text-xs font-mono"
                     />
                   </div>
                 ))}

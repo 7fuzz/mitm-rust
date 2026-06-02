@@ -165,6 +165,16 @@ export function RepeaterView() {
     }
   };
 
+  useEffect(() => {
+    const handler = () => {
+      if (currentReq && !isLoading) {
+        handleSend();
+      }
+    };
+    window.addEventListener('shortcut-execute-request', handler);
+    return () => window.removeEventListener('shortcut-execute-request', handler);
+  }, [currentReq, isLoading, handleSend]);
+
   const getPreviewRequestText = () => {
     const varDict: Record<string, string> = {};
     variables.filter(v => v.environmentId === activeEnvId).forEach(v => {

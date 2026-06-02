@@ -123,12 +123,18 @@ export function TrafficList({ items, activeId, onSelect, onDelete, onReorder, ac
     return matchesSearch && matchesMethod && matchesStatus;
   });
 
+  useEffect(() => {
+    const handler = () => {
+      if (isFocused) {
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener('shortcut-focus-search', handler);
+    return () => window.removeEventListener('shortcut-focus-search', handler);
+  }, [isFocused]);
+
   useHotkeys([
-    {
-      key: 's',
-      enabled: isFocused,
-      handler: () => searchInputRef.current?.focus(),
-    },
     {
       key: 'ArrowDown',
       enabled: isFocused,

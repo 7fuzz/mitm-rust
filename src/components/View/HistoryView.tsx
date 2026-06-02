@@ -73,10 +73,26 @@ export function HistoryView() {
 
   const handleClearHistory = async () => {
     if (await confirm('Clear History', 'Are you sure you want to permanently delete all intercepted traffic? This action cannot be undone.', true)) {
-      setTraffic([]); setSelectedId(null);
-      notify.success('History cleared');
+      try {
+        await invoke('clear_history');
+        setTraffic([]); 
+        setSelectedId(null);
+        notify.success('History cleared');
+      } catch (e) {
+        notify.error('Failed to clear history: ' + e);
+      }
     }
   };
+
+  useEffect(() => {
+    const handler = () => {
+      if (activeSection === 'sidebar' && traffic.length > 0) {
+        handleClearHistory();
+      }
+    };
+    window.addEventListener('shortcut-clear-history', handler);
+    return () => window.removeEventListener('shortcut-clear-history', handler);
+  }, [activeSection, traffic.length, handleClearHistory]);
 
   const handleAddToRepeater = async (req: Traffic, raw: boolean = false) => {
     try {
@@ -184,13 +200,8 @@ export function HistoryView() {
           headerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       },
-    },
-    {
-      key: 'c',
-      enabled: activeSection === 'sidebar' && traffic.length > 0,
-      handler: () => handleClearHistory(),
     }
-  ], [activeSection, selectedId, headerButtonIndex, simpleMode, selectedReq, traffic.length], false);
+  ], [activeSection, selectedId, headerButtonIndex, simpleMode, selectedReq, traffic.length, prefs.shortcuts], false);
 
   const listElement = useMemo(() => (
     <TrafficList 
