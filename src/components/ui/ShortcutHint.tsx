@@ -28,7 +28,7 @@ export function ShortcutHint({ isOpen, simpleMode }: ShortcutHintProps) {
   shortcuts.push({ key: s.goto_options, label: 'Options' });
 
   return (
-    <div className="fixed bottom-6 left-6 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-200">
+    <div className="fixed bottom-6 right-6 z-[100] animate-in fade-in slide-in-from-right-2 duration-200">
       <div className="bg-zinc-950/90 backdrop-blur-xl border border-zinc-800 rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden min-w-[320px]">
         {/* Header / Title Bar */}
         <div className="bg-zinc-900/50 border-b border-zinc-800 px-4 py-2 flex items-center justify-between">
@@ -37,7 +37,7 @@ export function ShortcutHint({ isOpen, simpleMode }: ShortcutHintProps) {
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Prefix:</span>
-            <kbd className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-700 rounded text-[10px] font-bold text-sky-text font-mono shadow-sm">
+            <kbd className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-700 rounded text-[10px] font-bold text-sky-text font-mono shadow-sm uppercase">
               {s.prefix_key}
             </kbd>
           </div>

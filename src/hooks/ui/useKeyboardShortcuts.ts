@@ -29,6 +29,20 @@ export function useKeyboardShortcuts({
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [isWaiting, setIsWaiting] = useState(false);
 
+  const parseKey = (str: string) => {
+    if (!str) return { key: '', ctrl: false, shift: false, alt: false, meta: false };
+    const parts = str.toLowerCase().split('+');
+    return {
+      key: parts[parts.length - 1],
+      ctrl: parts.includes('ctrl'),
+      shift: parts.includes('shift'),
+      alt: parts.includes('alt'),
+      meta: parts.includes('meta')
+    };
+  };
+
+  const prefix = parseKey(shortcuts?.prefix_key || '');
+
   const resetWaiting = () => {
     waitingForSecondKey.current = false;
     setIsWaiting(false);
@@ -111,7 +125,11 @@ export function useKeyboardShortcuts({
     },
     // 5. Prefix Key
     {
-      key: shortcuts?.prefix_key || '',
+      key: prefix.key,
+      ctrl: prefix.ctrl,
+      shift: prefix.shift,
+      alt: prefix.alt,
+      meta: prefix.meta,
       enabled: !!shortcuts && !isModalOpen && !waitingForSecondKey.current,
       handler: () => {
         waitingForSecondKey.current = true;
@@ -119,7 +137,7 @@ export function useKeyboardShortcuts({
         timerRef.current = setTimeout(resetWaiting, 1500);
       }
     }
-  ], [activeTab, shortcuts, isModalOpen, simpleMode]);
+  ], [activeTab, shortcuts, isModalOpen, simpleMode, prefix]);
 
   // Handle sequences (the second key)
   useHotkeys([

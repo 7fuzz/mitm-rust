@@ -393,14 +393,14 @@ export function OptionsView() {
               <div className="space-y-4">
                 <h4 className="text-[9px] text-zinc-500 font-black uppercase tracking-widest border-b border-zinc-800 pb-2">Global Prefix</h4>
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-xs text-zinc-300 font-mono">Prefix (e.g. &apos;g&apos;)</span>
+                  <span className="text-xs text-zinc-300 font-mono">Prefix (e.g. &apos;ctrl+/&apos;)</span>
                   <input 
-                    type="text" maxLength={1} value={shortcuts.prefix_key} 
+                    type="text" value={shortcuts.prefix_key} 
                     onChange={(e) => handleShortcutChange('prefix_key', e.target.value)}
-                    className="w-12 bg-zinc-950 border border-zinc-700 p-2 rounded text-center text-amber-400 font-black text-xs font-mono"
+                    className="w-24 bg-zinc-950 border border-zinc-700 p-2 rounded text-center text-amber-400 font-black text-xs font-mono"
                   />
                 </div>
-                <p className="text-[9px] text-zinc-600 font-mono leading-tight">Combine this with navigation keys below (e.g. \ + h)</p>
+                <p className="text-[9px] text-zinc-600 font-mono leading-tight">Combine this with navigation keys below (e.g. ctrl+/ then h)</p>
               </div>
 
               <div className="space-y-4">

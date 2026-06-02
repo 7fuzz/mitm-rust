@@ -18,7 +18,7 @@ export const DEFAULT_SHORTCUTS = {
   forward_intercept: 'f',
   drop_intercept: 'd',
   focus_search: 's',
-  prefix_key: '\\',
+  prefix_key: 'ctrl+/',
   cycle_prev: '[',
   cycle_next: ']'
 };

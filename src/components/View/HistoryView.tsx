@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useCallback } from 'react';
+import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useHotkeys } from '@/hooks/ui/useHotkeys';
 import { Traffic } from '@/types/traffic';
 import { TrafficList } from '../Sidebar/TrafficList';
@@ -39,7 +39,7 @@ export function HistoryView() {
     uiLayout, updateUILayout,
     refreshRepeater, setRepeaterSelectedId,
     applyAllReplacements,
-    simpleMode
+    simpleMode, prefs
   } = useTraffic();
 
   const { notify } = useNotification();
@@ -75,7 +75,7 @@ export function HistoryView() {
     if (await confirm('Clear History', 'Are you sure you want to permanently delete all intercepted traffic? This action cannot be undone.', true)) {
       try {
         await invoke('clear_history');
-        setTraffic([]); 
+        setTraffic([]);
         setSelectedId(null);
         notify.success('History cleared');
       } catch (e) {
@@ -204,13 +204,13 @@ export function HistoryView() {
   ], [activeSection, selectedId, headerButtonIndex, simpleMode, selectedReq, traffic.length, prefs.shortcuts], false);
 
   const listElement = useMemo(() => (
-    <TrafficList 
-      items={traffic} 
-      activeId={selectedId} 
+    <TrafficList
+      items={traffic}
+      activeId={selectedId}
       isFocused={activeSection === 'sidebar'}
-      onSelect={handleSelect} 
-      onDelete={handleDeleteHistoryRequest} 
-      layout="sidebar" 
+      onSelect={handleSelect}
+      onDelete={handleDeleteHistoryRequest}
+      layout="sidebar"
     />
   ), [traffic, selectedId, activeSection, handleSelect, handleDeleteHistoryRequest]);
 
@@ -293,7 +293,7 @@ export function HistoryView() {
                   >
                     Send_to_Repeater
                   </Button>
-                  
+
                   {!simpleMode && (
                     <Button
                       variant="secondary"
