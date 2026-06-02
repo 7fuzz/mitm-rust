@@ -2,6 +2,7 @@ import { createContext, useContext, useState, ReactNode, useCallback, useRef } f
 import { Modal } from './Modal';
 import { Button } from './Button';
 import { Input } from './Input';
+import { useHotkeys } from '@/hooks/ui/useHotkeys';
 
 interface DialogOptions {
   title: string;
@@ -71,18 +72,31 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     if (!state) return;
     state.resolve(state.type === 'prompt' ? null : false);
     setState(null);
-  };
+  }, [state]);
 
-  const handleConfirm = () => {
+  const handleConfirm = useCallback(() => {
     if (!state) return;
     const value = state.type === 'prompt' ? promptValue : true;
     state.resolve(value);
     setState(null);
-  };
+  }, [state, promptValue]);
+
+  useHotkeys([
+    {
+      key: 'Enter',
+      enabled: !!state,
+      handler: handleConfirm,
+    },
+    {
+      key: 'Escape',
+      enabled: !!state,
+      handler: handleClose,
+    }
+  ], [state, handleConfirm, handleClose]);
 
   return (
     <DialogContext.Provider value={{ confirm, prompt, alert }}>

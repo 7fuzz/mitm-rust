@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { Button, Modal } from '../ui';
+import { useHotkeys } from '@/hooks/ui/useHotkeys';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -24,16 +25,29 @@ export function ConfirmModal({
 }: ConfirmModalProps) {
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
 
+  const handleConfirm = useCallback(() => {
+    onConfirm();
+    onClose();
+  }, [onConfirm, onClose]);
+
+  useHotkeys([
+    {
+      key: 'Enter',
+      enabled: isOpen,
+      handler: handleConfirm,
+    },
+    {
+      key: 'Escape',
+      enabled: isOpen,
+      handler: onClose,
+    }
+  ], [isOpen, handleConfirm, onClose]);
+
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => confirmBtnRef.current?.focus(), 10);
     }
   }, [isOpen]);
-
-  const handleConfirm = () => {
-    onConfirm();
-    onClose();
-  };
 
   return (
     <Modal

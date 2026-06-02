@@ -152,10 +152,10 @@ export function TrafficFilterModal({ isOpen, onClose, config, onSave }: Props) {
   ], [isOpen, localRules, selectedIndex]);
 
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose} 
-      title="Traffic Filter Engine" 
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Traffic Filter Engine"
       maxWidth="3xl"
       footer={
         <div className="flex items-center justify-between w-full">
@@ -172,7 +172,7 @@ export function TrafficFilterModal({ isOpen, onClose, config, onSave }: Props) {
         </div>
       }
     >
-      <div className="p-4 flex flex-col min-h-[400px]">
+      <div className="p-4 flex flex-col min-h-100">
         <div className="flex items-center justify-between mb-4 shrink-0">
           <div className="space-y-0.5">
             <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Filter Pipeline</h4>
@@ -189,8 +189,8 @@ export function TrafficFilterModal({ isOpen, onClose, config, onSave }: Props) {
             </div>
           )}
           {localRules.map((rule, idx) => (
-            <div 
-              key={rule.id} 
+            <div
+              key={rule.id}
               className={`p-2 rounded flex items-center gap-3 border transition-all ${selectedIndex === idx ? 'bg-zinc-900/50 border-zinc-700 ring-1 ring-zinc-800' : 'bg-transparent border-transparent hover:bg-zinc-900/30'}`}
               onClick={() => setSelectedIndex(idx)}
             >
@@ -200,15 +200,15 @@ export function TrafficFilterModal({ isOpen, onClose, config, onSave }: Props) {
                 onChange={(e) => updateRule(rule.id, { is_active: e.target.checked })}
                 className="w-4 h-4 rounded bg-zinc-950 border-zinc-800 text-purple-500 focus:ring-purple-500/20"
               />
-              
+
               <div className="flex bg-zinc-950 p-0.5 rounded border border-zinc-800 shrink-0">
-                <button 
+                <button
                   onClick={() => updateRule(rule.id, { mode: 'whitelist' })}
                   className={`px-3 py-1 text-[8px] font-black uppercase rounded transition-all ${rule.mode === 'whitelist' ? 'bg-emerald-500/20 text-emerald-400' : 'text-zinc-600 hover:text-zinc-400'}`}
                 >
                   Allow
                 </button>
-                <button 
+                <button
                   onClick={() => updateRule(rule.id, { mode: 'blacklist' })}
                   className={`px-3 py-1 text-[8px] font-black uppercase rounded transition-all ${rule.mode === 'blacklist' ? 'bg-rose-500/20 text-rose-400' : 'text-zinc-600 hover:text-zinc-400'}`}
                 >
@@ -227,7 +227,7 @@ export function TrafficFilterModal({ isOpen, onClose, config, onSave }: Props) {
                   ]}
                   className="w-24 text-[9px] font-black"
                 />
-                
+
                 {rule.field === 'url' ? (
                   <Select
                     value={rule.rule_type}
@@ -260,7 +260,7 @@ export function TrafficFilterModal({ isOpen, onClose, config, onSave }: Props) {
                     className="w-32 text-[9px] font-black"
                   />
                 ) : (
-                   <div className="w-24 text-[9px] font-black text-zinc-500 bg-zinc-950/50 border border-zinc-800 rounded px-3 py-1.5 uppercase tracking-widest flex items-center justify-center">EXACT</div>
+                  <div className="w-24 text-[9px] font-black text-zinc-500 bg-zinc-950/50 border border-zinc-800 rounded px-3 py-1.5 uppercase tracking-widest flex items-center justify-center">EXACT</div>
                 )}
               </div>
 
@@ -291,7 +291,7 @@ export function TrafficFilterModal({ isOpen, onClose, config, onSave }: Props) {
                 className="p-1 text-zinc-700 hover:text-rose-500 transition-colors"
                 title="Remove Rule"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
               </button>
             </div>
           ))}

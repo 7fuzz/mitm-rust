@@ -83,20 +83,20 @@ export function RepeaterView() {
 
   const trafficMapped: Traffic[] = repeaterRequests.map(req => {
     const groupName = req.groupId ? repeaterGroups.find(g => g.id === req.groupId)?.name : 'Default';
-    return { 
-      id: req.id, 
-      method: req.method, 
-      url: req.name, 
-      status_code: req.response?.status ?? 0, 
-      host: '', 
-      phase: 'history', 
-      request_headers: [], 
-      response_headers: [], 
-      request_body: '', 
-      response_body: '', 
-      is_intercepted: false, 
-      group: groupName || 'Default', 
-      hit_count: req.hitCount 
+    return {
+      id: req.id,
+      method: req.method,
+      url: req.name,
+      status_code: req.response?.status ?? 0,
+      host: '',
+      phase: 'history',
+      request_headers: [],
+      response_headers: [],
+      request_body: '',
+      response_body: '',
+      is_intercepted: false,
+      group: groupName || 'Default',
+      hit_count: req.hitCount
     };
   });
 
@@ -128,18 +128,18 @@ export function RepeaterView() {
 
       // 2. Execute
       const response = await invoke<Traffic>('execute_repeater_request', { id: currentReq.id });
-      
+
       // 3. Update local state with response
       const updatedWithRes: RepeaterRequest = {
         ...updatedReq,
         hitCount: (updatedReq.hitCount || 0) + 1,
         response: {
-           status: response.status_code,
-           headers: response.response_headers,
-           body: response.response_body
+          status: response.status_code,
+          headers: response.response_headers,
+          body: response.response_body
         }
       };
-      
+
       _setRawRepeater((prev: RepeaterRequest[]) => prev.map((r: RepeaterRequest) => r.id === currentReq.id ? updatedWithRes : r));
 
       // --- EXTRACTION LOGIC ---
@@ -384,7 +384,7 @@ export function RepeaterView() {
                             onClick={async () => {
                               const name = await prompt('New Collection', 'Enter collection name:');
                               if (name) {
-                                const newId = await createGroup(name, notify);
+                                const newId = await createGroup(name);
                                 if (newId) { setEditGroupId(newId); updateRequest(currentReq.id, { groupId: newId }); }
                               }
                             }}
@@ -434,10 +434,10 @@ export function RepeaterView() {
                       <div className="flex flex-col space-y-3">
                         <h3 className="text-purple-text font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Request_Body</h3>
                         <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-87.5">
-                          <BodyEditor 
-                            body={editBody} 
-                            headers={editHeaders} 
-                            onChange={setEditBody} 
+                          <BodyEditor
+                            body={editBody}
+                            headers={editHeaders}
+                            onChange={setEditBody}
                             onHeadersChange={(newHeaders) => {
                               setEditHeaders(newHeaders);
                               updateRequest(currentReq.id, { headers: newHeaders });
