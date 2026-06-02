@@ -238,7 +238,10 @@ pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Resu
     }
 
     let req = builder.body(Full::new(Bytes::from(body.clone()))).map_err(|e| e.to_string())?;
+    
+    let start_time = std::time::SystemTime::now();
     let res = client.request(req).await.map_err(|e| e.to_string())?;
+    let duration = start_time.elapsed().map(|d| d.as_millis() as u64).unwrap_or(0);
 
     let status = res.status().as_u16();
     let mut res_headers = Vec::new();
@@ -272,6 +275,7 @@ pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Resu
         phase: "response".to_string(),
         is_intercepted: false,
         intercepted_at: None,
+        duration_ms: Some(duration),
     };
 
     let res_headers_json = serde_json::to_string(&res_headers).unwrap_or_default();

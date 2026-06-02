@@ -124,6 +124,7 @@ pub struct Traffic {
     pub phase: String,
     pub is_intercepted: bool,
     pub intercepted_at: Option<u64>,
+    pub duration_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -556,8 +557,10 @@ async fn handle_http(
     
     let new_req = new_req.body(Full::new(request_body_bytes.clone())).unwrap();
     
+    let start_time = SystemTime::now();
     match client.request(new_req).await {
         Ok(res) => {
+            let duration = start_time.elapsed().map(|d| d.as_millis() as u64).unwrap_or(0);
             let mut status = res.status().as_u16();
             let mut response_headers = headers_to_vec(res.headers());
             let (_parts, body) = res.into_parts();
@@ -600,6 +603,7 @@ async fn handle_http(
                     phase: "response".to_string(),
                     is_intercepted: true,
                     intercepted_at: Some(now),
+                    duration_ms: Some(duration),
                 };
 
 
@@ -648,6 +652,7 @@ async fn handle_http(
                 phase: "response".to_string(),
                 is_intercepted: false,
                 intercepted_at: None,
+                duration_ms: Some(duration),
             };
             
             if filter_config.should_process(&url, &method.to_string(), status) {

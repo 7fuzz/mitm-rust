@@ -270,6 +270,12 @@ export function HistoryView() {
               Total: {traffic.length}
             </span>
 
+            {selectedReq?.duration_ms !== undefined && selectedReq.duration_ms > 0 && (
+              <span className="text-[10px] text-sky-text font-bold uppercase tracking-widest ml-2 mr-2">
+                Latency: {selectedReq.duration_ms}ms
+              </span>
+            )}
+
             <Button
               variant="destructive"
               size="sm"

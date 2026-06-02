@@ -137,7 +137,7 @@ pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     // 1. History
-    let mut stmt = conn.prepare("SELECT id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase FROM history ORDER BY created_at DESC LIMIT 500").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms FROM history ORDER BY created_at DESC LIMIT 500").map_err(|e| e.to_string())?;
     let history = stmt.query_map([], |row| {
         let req_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or_default();
         let res_headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(6)?).unwrap_or_default();
@@ -145,7 +145,7 @@ pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
             id: row.get(0)?, method: row.get(1)?, url: row.get(2)?, host: row.get(3)?, status_code: row.get(4)?,
             request_headers: req_headers, response_headers: res_headers,
             request_body: row.get(7)?, response_body: row.get(8)?, phase: row.get(9)?,
-            is_intercepted: false, intercepted_at: None,
+            is_intercepted: false, intercepted_at: None, duration_ms: row.get(10)?,
         })
     }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
 

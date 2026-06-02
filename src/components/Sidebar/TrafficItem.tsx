@@ -9,6 +9,7 @@ interface TrafficItemProps {
   timestamp?: number;
   group?: string;
   hitCount?: number;
+  duration_ms?: number;
   isIntercepted?: boolean;
   isActive: boolean;
   isHighlighted?: boolean;
@@ -84,6 +85,11 @@ export const TrafficItem = memo(({
             {hitCount !== undefined && hitCount > 0 && (
               <span className="text-[8px] bg-emerald-highlight-bg text-emerald-text px-1.5 py-0.5 rounded border border-emerald-highlight-border font-mono shrink-0">
                 Hits: {hitCount}
+              </span>
+            )}
+            {duration_ms !== undefined && duration_ms > 0 && (
+              <span className="text-[8px] bg-sky-highlight-bg text-sky-text px-1.5 py-0.5 rounded border border-sky-highlight-border font-mono shrink-0">
+                {duration_ms}ms
               </span>
             )}
           </div>

@@ -13,6 +13,7 @@ export interface Traffic {
   // Add this line (the '?' makes it optional for backwards compatibility)
   is_intercepted?: boolean;
   intercepted_at?: number;
+  duration_ms?: number;
   group?: string;
   hit_count?: number;
 }

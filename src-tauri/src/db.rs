@@ -23,6 +23,7 @@ pub fn init_database(app_handle: &AppHandle) -> Result<(), String> {
             request_body TEXT,
             response_body TEXT,
             phase TEXT,
+            duration_ms INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS repeater_groups (
@@ -122,6 +123,7 @@ pub fn get_migrations() -> Vec<Migration> {
                 request_body TEXT,
                 response_body TEXT,
                 phase TEXT,
+                duration_ms INTEGER,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );",
             kind: MigrationKind::Up,
@@ -215,6 +217,12 @@ pub fn get_migrations() -> Vec<Migration> {
                 created_at INTEGER DEFAULT (strftime('%s', 'now')),
                 updated_at INTEGER DEFAULT (strftime('%s', 'now'))
             );",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 5,
+            description: "add duration_ms to history",
+            sql: "ALTER TABLE history ADD COLUMN duration_ms INTEGER;",
             kind: MigrationKind::Up,
         },
     ]

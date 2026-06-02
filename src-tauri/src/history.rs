@@ -27,8 +27,8 @@ pub async fn save_traffic_history(app_handle: AppHandle, traffic: Traffic) -> Re
     let res_headers_json = serde_json::to_string(&traffic.response_headers).map_err(|e| e.to_string())?;
     
     conn.execute(
-        "INSERT OR REPLACE INTO history (id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase, created_at) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+        "INSERT OR REPLACE INTO history (id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
         rusqlite::params![
             traffic.id,
             traffic.method,
@@ -40,6 +40,7 @@ pub async fn save_traffic_history(app_handle: AppHandle, traffic: Traffic) -> Re
             traffic.request_body,
             traffic.response_body,
             traffic.phase,
+            traffic.duration_ms,
         ],
     ).map_err(|e| e.to_string())?;
     

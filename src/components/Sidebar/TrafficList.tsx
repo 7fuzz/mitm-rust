@@ -31,6 +31,7 @@ function SortableTrafficItem({ req, activeId, highlightedId, activeColor, onSele
         title={req.url}
         group={req.group}
         hitCount={req.hit_count}
+        duration_ms={req.duration_ms}
         isIntercepted={req.is_intercepted}
         isActive={activeId === req.id}
         isHighlighted={highlightedId === req.id}
@@ -234,6 +235,7 @@ export function TrafficList({ items, activeId, onSelect, onDelete, onReorder, ac
                 <th className="p-2 font-bold">Host</th>
                 <th className="p-2 font-bold">Path</th>
                 <th className="p-2 font-bold">Status</th>
+                <th className="p-2 font-bold">Timing</th>
                 <th className="p-2 font-bold">Hits</th>
                 <th className="p-2 pr-4 font-bold text-right">Actions</th>
               </tr>
@@ -250,6 +252,7 @@ export function TrafficList({ items, activeId, onSelect, onDelete, onReorder, ac
                   <td className="p-2 text-zinc-400">{getSafeHostname(req.url, req.host)}</td>
                   <td className="p-2 truncate max-w-xl" title={req.url}>{req.url}</td>
                   <td className={`p-2 font-bold ${getStatusColor(req.status_code)}`}>{req.status_code === 0 ? 'PENDING' : req.status_code}</td>
+                  <td className="p-2 text-sky-text">{req.duration_ms ? `${req.duration_ms}ms` : '-'}</td>
                   <td className="p-2 text-zinc-500">{req.hit_count || 0}</td>
                   <td className="p-2 pr-4 text-right">
                     {onDelete && (
@@ -286,6 +289,7 @@ export function TrafficList({ items, activeId, onSelect, onDelete, onReorder, ac
                   title={req.url} 
                   group={req.group} 
                   hitCount={req.hit_count} 
+                  duration_ms={req.duration_ms}
                   isIntercepted={req.is_intercepted} 
                   isActive={activeId === req.id} 
                   isHighlighted={highlightedId === req.id}
