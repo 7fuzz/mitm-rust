@@ -504,6 +504,7 @@ async fn handle_http(
             phase: "request".to_string(),
             is_intercepted: true,
             intercepted_at: Some(now),
+            duration_ms: None,
         };
 
 

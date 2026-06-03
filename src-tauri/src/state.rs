@@ -111,6 +111,7 @@ pub async fn get_repeater_requests(app_handle: AppHandle, group_id: String) -> R
                  phase: "response".to_string(),
                  is_intercepted: false,
                  intercepted_at: None,
+                 duration_ms: None,
              })
         } else { None };
 
@@ -209,6 +210,7 @@ pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
                  phase: "response".to_string(),
                  is_intercepted: false,
                  intercepted_at: None,
+                 duration_ms: None,
              })
         } else { None };
 
