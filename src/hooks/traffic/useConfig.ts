@@ -46,8 +46,8 @@ export function useConfig() {
   const [isLimitEnabled, setIsLimitEnabled] = useState(true);
   const [historyLimit, setHistoryLimit] = useState(100);
   const [uiLayout, setUiLayout] = useState<UILayout>({ isListOpen: true, sidebarWidth: 350, splitMode: 'vertical' });
-  const [filterConfig, setFilterConfig] = useState<{ rules: Array<{ id: string, is_active: boolean, rule_type: string, mode: 'whitelist' | 'blacklist', pattern: string }> }>({ 
-    rules: [] 
+  const [filterConfig, setFilterConfig] = useState<{ rules: Array<{ id: string, is_active: boolean, field: string, rule_type: string, mode: 'whitelist' | 'blacklist', pattern: string }> }>({
+    rules: []
   });
 
   const limitRef = useRef({ enabled: isLimitEnabled, value: historyLimit });

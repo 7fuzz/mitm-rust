@@ -19,7 +19,7 @@ interface TrafficItemProps {
 }
 
 export const TrafficItem = memo(({
-  id, method, status, title, subtitle, timestamp, group, hitCount, isIntercepted, isActive, isHighlighted, activeColor = 'emerald', onClick, onDelete
+  id, method, status, title, subtitle, timestamp, group, hitCount, duration_ms, isIntercepted, isActive, isHighlighted, activeColor = 'emerald', onClick, onDelete
 }: TrafficItemProps) => {
 
   const itemRef = useRef<HTMLDivElement>(null);

@@ -16,14 +16,13 @@ export interface WorkspaceViewHandle {
 
 export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) => {
   const { notify } = useNotification();
-  const { confirm, alert } = useDialog();
+  const { alert } = useDialog();
   const {
     uiLayout, updateUILayout,
     variables, activeEnvId,
     environments,
     repeaterGroups, repeaterRequests,
     importPostman, importProject, finalizeImport,
-    purgeAllData,
   } = useTraffic();
 
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('env');
@@ -40,15 +39,6 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
 
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: () => { } });
   const openConfirm = (title: string, message: string, action: () => void) => setConfirmConfig({ isOpen: true, title, message, action });
-
-  const handlePurge = async () => {
-    setConfirmConfig(prev => ({ ...prev, isOpen: false }));
-    try {
-      await purgeAllData();
-    } catch (_err) {
-      // Notification already shown by purgeAllData
-    }
-  };
 
   const [exportModalOpen, setExportModalOpen] = useState(false);
 

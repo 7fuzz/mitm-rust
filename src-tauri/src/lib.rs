@@ -200,8 +200,6 @@ pub fn run() {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    let migrations = db::get_migrations();
-
     let proxy_manager = Arc::new(Mutex::new(ProxyManager {
         active_listeners: HashMap::new(),
         config: ProxyConfig {
@@ -226,9 +224,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_sql::Builder::default()
-            .add_migrations("sqlite:mitm.db", migrations)
-            .build())
+        .plugin(tauri_plugin_sql::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             greet, 
             state::sync_data,

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import { Modal } from './Modal';
 import { Button } from './Button';
 import { Input } from './Input';
@@ -29,7 +29,6 @@ const DialogContext = createContext<DialogContextType | null>(null);
 export function DialogProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DialogState | null>(null);
   const [promptValue, setPromptValue] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const confirm = useCallback((title: string, message: string, isDestructive = false) => {
     return new Promise<boolean>((resolve) => {
