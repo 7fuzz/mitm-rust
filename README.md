@@ -22,12 +22,24 @@ npm install
 npm run tauri dev
 ```
 
-### 4. Build for Production
+### 4. Build for Production (Manual)
 
 ```bash
 npm run tauri build
 ```
 
+### 5. Automated Releases (CI/CD)
+
+This project uses **GitHub Actions** to automatically build and release the application for Windows, macOS, and Linux.
+
+- **Trigger**: Pushing a tag starting with `v` (e.g., `v1.0.0`).
+- **Process**: The [publish workflow](.github/workflows/release.yml) compiles the app for all platforms and creates a **Draft Release** on GitHub.
+- **How to release**:
+  ```bash
+  # Update version in src-tauri/tauri.conf.json and package.json first
+  git tag v1.0.0
+  git push origin v1.0.0
+  ```
 ---
 
 ## 🏃 Features & Migration Status
