@@ -251,7 +251,7 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
 
       toolbarRight={
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={importPostman} className="text-zinc-500 hover:text-sky-text">Import PM</Button>
+          <Button variant="ghost" size="sm" onClick={() => importPostman(handleImportFileLoaded, notify)} className="text-zinc-500 hover:text-sky-text">Import PM</Button>
           <Button variant="ghost" size="sm" onClick={() => importProject(handleImportFileLoaded)} className="text-zinc-500 hover:text-sky-text">Import Project</Button>
           <Button variant="ghost" size="sm" onClick={() => setExportModalOpen(true)} className="text-zinc-500 hover:text-amber-400">Export</Button>
         </div>

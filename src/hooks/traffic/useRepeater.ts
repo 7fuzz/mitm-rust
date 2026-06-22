@@ -92,7 +92,7 @@ export function useRepeater(activeEnvId?: string) {
     });
   }, []);
 
-  const importPostman = useCallback(async (notify?: any) => {
+  const importPostman = useCallback(async (onFileLoaded: (data: Record<string, any>) => void, notify?: any) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json,application/json';
@@ -102,22 +102,20 @@ export function useRepeater(activeEnvId?: string) {
       try {
         const text = await file.text();
         const collection = JSON.parse(text);
-        const groupName = collection.info?.name || 'Postman Import';
-
-        const response = await fetch('/api/repeater-import', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ collection, group: groupName }),
-        });
-        const result = await response.json();
-
-        if (result.success) {
-          notify?.success?.(`✓ Imported ${result.imported} request(s)`);
-          await switchGroup('null');
-        } else notify?.error?.(`Error: ${result.error}`);
-      } catch (error) { notify?.error?.(`Failed to import: ${error}`); }
+        
+        if (!collection.info && !collection.item) {
+          throw new Error("Invalid format. Make sure you are selecting a valid Postman collection export.");
+        }
+        
+        const converted = convertPostmanToMitmFormat(collection);
+        onFileLoaded(converted);
+      } catch (error) { 
+        console.error('Failed to import Postman collection:', error);
+        notify?.error?.(`Failed to import Postman collection: ${error instanceof Error ? error.message : error}`);
+      }
     };
     input.click();
-  }, [switchGroup]);
+  }, []);
 
   const importProject = useCallback(async (onFileLoaded: (data: Record<string, unknown>) => void, notify?: any) => {
     const input = document.createElement('input');
@@ -295,4 +293,128 @@ export function useRepeater(activeEnvId?: string) {
     importProject, finalizeImport, createGroup, renameGroup, deleteGroup, cloneGroup, reorderRequests, reorderGroups,
     manageGroupAssignment, getAllGroups, bulkSync
   ]);
+}
+
+function convertPostmanToMitmFormat(collection: any): any {
+  const projectName = collection.info?.name || "Postman Import";
+  const test_cases: any[] = [];
+  const placeholders: Record<string, string> = {};
+  const all_environments: any[] = [];
+  const all_variables: any[] = [];
+
+  // Parse collection variables
+  if (Array.isArray(collection.variable)) {
+    const envId = "postman-env";
+    all_environments.push({ id: envId, name: `${projectName} (Collection Variables)` });
+
+    collection.variable.forEach((v: any) => {
+      if (v.key) {
+        placeholders[v.key] = v.value || "";
+        all_variables.push({
+          environmentId: envId,
+          name: v.key,
+          activeIndex: 0,
+          values: [
+            {
+              name: "default",
+              value: v.value || ""
+            }
+          ]
+        });
+      }
+    });
+  }
+
+  function parseRequest(item: any) {
+    const req = item.request || {};
+    const method = req.method || "GET";
+    let urlStr = "";
+
+    if (typeof req.url === "string") {
+      urlStr = req.url;
+    } else if (req.url && typeof req.url === "object") {
+      urlStr = req.url.raw || "";
+    }
+
+    const headers: Record<string, string> = {};
+    if (Array.isArray(req.header)) {
+      req.header.forEach((h: any) => {
+        if (h.key && !h.disabled) {
+          headers[h.key] = h.value || "";
+        }
+      });
+    }
+
+    let body = "";
+    if (req.body) {
+      if (req.body.mode === "raw") {
+        body = req.body.raw || "";
+      } else if (req.body.mode === "urlencoded" && Array.isArray(req.body.urlencoded)) {
+        const parts = req.body.urlencoded
+          .filter((f: any) => !f.disabled && f.key)
+          .map((f: any) => `${encodeURIComponent(f.key)}=${encodeURIComponent(f.value || "")}`);
+        body = parts.join("&");
+      } else if (req.body.mode === "formdata" && Array.isArray(req.body.formdata)) {
+        const parts = req.body.formdata
+          .filter((f: any) => !f.disabled && f.key)
+          .map((f: any) => `${f.key}=${f.value || ""}`);
+        body = parts.join("\n");
+      }
+    }
+
+    return {
+      name: item.name || "Untitled Request",
+      method,
+      endpoint: urlStr,
+      header: headers,
+      body,
+      params: {},
+      extract: {}
+    };
+  }
+
+  function traverse(item: any, parentNamePath: string[] = []) {
+    const currentPath = [...parentNamePath, item.name || ""];
+    if (Array.isArray(item.item) && !item.request) {
+      // It's a folder
+      const directRequests = item.item.filter((sub: any) => sub.request);
+      if (directRequests.length > 0) {
+        const groupName = currentPath.filter(Boolean).join(" / ");
+        test_cases.push({
+          name: groupName,
+          url: "",
+          target: directRequests.map(parseRequest)
+        });
+      }
+      
+      const subFolders = item.item.filter((sub: any) => !sub.request);
+      subFolders.forEach((sub: any) => traverse(sub, currentPath));
+    } else if (item.request) {
+      // Root-level request
+      let rootGroup = test_cases.find(tc => tc.name === projectName);
+      if (!rootGroup) {
+        rootGroup = {
+          name: projectName,
+          url: "",
+          target: []
+        };
+        test_cases.push(rootGroup);
+      }
+      rootGroup.target.push(parseRequest(item));
+    }
+  }
+
+  if (Array.isArray(collection.item)) {
+    collection.item.forEach((item: any) => traverse(item, []));
+  }
+
+  return {
+    name: projectName,
+    url: "",
+    header: {},
+    placeholders,
+    all_environments,
+    all_variables,
+    test_cases
+  };
 }
