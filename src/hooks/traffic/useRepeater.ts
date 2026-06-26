@@ -325,7 +325,7 @@ function convertPostmanToMitmFormat(collection: any): any {
     });
   }
 
-  function parseRequest(item: any) {
+  function parseRequest(item: any, inheritedAuth: any = null) {
     const req = item.request || {};
     const method = req.method || "GET";
     let urlStr = "";
@@ -343,6 +343,33 @@ function convertPostmanToMitmFormat(collection: any): any {
           headers[h.key] = h.value || "";
         }
       });
+    }
+
+    // --- AUTO-GENERATE BEARER AUTH HEADER ---
+    const auth = req.auth || inheritedAuth;
+    if (auth && auth.type === "bearer") {
+      let tokenVal = "";
+      if (Array.isArray(auth.bearer)) {
+        const tokenObj = auth.bearer.find((b: any) => b.key === "token");
+        tokenVal = tokenObj ? tokenObj.value : "";
+      } else if (auth.bearer && typeof auth.bearer === "object") {
+        tokenVal = auth.bearer.token || auth.bearer.value || "";
+      }
+      if (tokenVal && !headers["Authorization"] && !headers["authorization"]) {
+        headers["Authorization"] = `Bearer ${tokenVal}`;
+      }
+    }
+
+    // --- AUTO-GENERATE CONTENT-TYPE/ACCEPT FOR JSON RAW BODY ---
+    if (req.body && req.body.mode === "raw" && req.body.options?.raw?.language === "json") {
+      const hasContentType = Object.keys(headers).some(k => k.toLowerCase() === "content-type");
+      if (!hasContentType) {
+        headers["Content-Type"] = "application/json";
+      }
+      const hasAccept = Object.keys(headers).some(k => k.toLowerCase() === "accept");
+      if (!hasAccept) {
+        headers["Accept"] = "application/json";
+      }
     }
 
     let body = "";
@@ -373,8 +400,9 @@ function convertPostmanToMitmFormat(collection: any): any {
     };
   }
 
-  function traverse(item: any, parentNamePath: string[] = []) {
+  function traverse(item: any, parentNamePath: string[] = [], parentAuth: any = null) {
     const currentPath = [...parentNamePath, item.name || ""];
+    const currentAuth = item.auth || parentAuth;
     if (Array.isArray(item.item) && !item.request) {
       // It's a folder
       const directRequests = item.item.filter((sub: any) => sub.request);
@@ -383,12 +411,12 @@ function convertPostmanToMitmFormat(collection: any): any {
         test_cases.push({
           name: groupName,
           url: "",
-          target: directRequests.map(parseRequest)
+          target: directRequests.map((sub: any) => parseRequest(sub, currentAuth))
         });
       }
       
       const subFolders = item.item.filter((sub: any) => !sub.request);
-      subFolders.forEach((sub: any) => traverse(sub, currentPath));
+      subFolders.forEach((sub: any) => traverse(sub, currentPath, currentAuth));
     } else if (item.request) {
       // Root-level request
       let rootGroup = test_cases.find(tc => tc.name === projectName);
@@ -400,12 +428,12 @@ function convertPostmanToMitmFormat(collection: any): any {
         };
         test_cases.push(rootGroup);
       }
-      rootGroup.target.push(parseRequest(item));
+      rootGroup.target.push(parseRequest(item, currentAuth));
     }
   }
 
   if (Array.isArray(collection.item)) {
-    collection.item.forEach((item: any) => traverse(item, []));
+    collection.item.forEach((item: any) => traverse(item, [], collection.auth));
   }
 
   return {
