@@ -1,21 +1,43 @@
-import { memo, useRef, useEffect } from 'react';
+import { memo, useRef, useEffect, useMemo } from 'react';
+import { useTraffic } from '@/hooks/traffic';
 
 const splitUrlForDisplay = (url: string): [string, string] => {
-  try {
-    const parsed = new URL(url);
-    const hostPart = parsed.origin;
-    const pathPart = parsed.pathname + parsed.search + parsed.hash;
-    return [hostPart, pathPart || '/'];
-  } catch {
-    const protocolIndex = url.indexOf('://');
-    if (protocolIndex !== -1) {
-      const firstSlash = url.indexOf('/', protocolIndex + 3);
-      if (firstSlash !== -1) {
-        return [url.substring(0, firstSlash), url.substring(firstSlash)];
-      }
+  if (!url) return ['', ''];
+
+  // 1. If it's a relative path starting with /
+  if (url.startsWith('/')) {
+    return ['', url];
+  }
+
+  // 2. If it has a protocol ://
+  const protocolIndex = url.indexOf('://');
+  if (protocolIndex !== -1) {
+    const firstSlash = url.indexOf('/', protocolIndex + 3);
+    if (firstSlash !== -1) {
+      return [url.substring(0, firstSlash), url.substring(firstSlash)];
     }
     return [url, ''];
   }
+
+  // 3. If it starts with a variable placeholder {{...}}
+  if (url.startsWith('{{')) {
+    const closeIndex = url.indexOf('}}');
+    if (closeIndex !== -1) {
+      const firstSlash = url.indexOf('/', closeIndex + 2);
+      if (firstSlash !== -1) {
+        return [url.substring(0, firstSlash), url.substring(firstSlash)];
+      }
+      return [url, ''];
+    }
+  }
+
+  // 4. Fallback for host-first relative or other formats (e.g. localhost:3000/api or example.com/api)
+  const firstSlash = url.indexOf('/');
+  if (firstSlash !== -1) {
+    return [url.substring(0, firstSlash), url.substring(firstSlash)];
+  }
+
+  return ['', url];
 };
 
 interface TrafficItemProps {
@@ -40,6 +62,26 @@ interface TrafficItemProps {
 export const TrafficItem = memo(({
   id, method, status, title, subtitle, timestamp, group, hitCount, duration_ms, isIntercepted, isActive, isHighlighted, activeColor = 'emerald', onClick, onDelete, dragHandleProps
 }: TrafficItemProps) => {
+
+  const { variables, activeEnvId } = useTraffic();
+
+  const interpolatedTitle = useMemo(() => {
+    if (!title || !title.includes('{{')) return title;
+
+    const varDict: Record<string, string> = {};
+    variables
+      .filter((v) => v.environmentId === activeEnvId)
+      .forEach((v) => {
+        if (v.name.trim()) {
+          const activeVal = v.values[v.activeIndex] || v.values[0];
+          varDict[v.name.trim()] = activeVal ? activeVal.value : '';
+        }
+      });
+
+    let result = title.replace(/\{\{([^}]+)\}\}/g, (match, key) => varDict[key.trim()] ?? match);
+    result = result.replace(/%7B%7B(.*?)%7D%7D/gi, (match, key) => varDict[decodeURIComponent(key).trim()] ?? match);
+    return result;
+  }, [title, variables, activeEnvId]);
 
   const itemRef = useRef<HTMLDivElement>(null);
 
@@ -142,9 +184,9 @@ export const TrafficItem = memo(({
           </div>
         </div>
         {(() => {
-          const [host, path] = splitUrlForDisplay(title);
+          const [host, path] = splitUrlForDisplay(interpolatedTitle);
           return (
-            <div className="text-xs w-full flex flex-col min-w-0 font-medium" title={title}>
+            <div className="text-xs w-full flex flex-col min-w-0 font-medium" title={interpolatedTitle}>
               {host && <span className="text-zinc-500 text-[10px] font-normal truncate leading-tight">{host}</span>}
               <span className="text-zinc-300 truncate leading-normal">{path || '/'}</span>
             </div>
