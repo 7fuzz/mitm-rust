@@ -23,7 +23,7 @@ function SortableTrafficItem({ req, activeId, highlightedId, activeColor, onSele
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: req.id });
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 50 : undefined, opacity: isDragging ? 0.5 : 1 };
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="touch-none">
+    <div ref={setNodeRef} style={style} className="touch-none">
       <TrafficItem
         id={req.id}
         method={req.method}
@@ -38,6 +38,7 @@ function SortableTrafficItem({ req, activeId, highlightedId, activeColor, onSele
         activeColor={activeColor}
         onClick={onSelect}
         onDelete={onDelete}
+        dragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>
   );

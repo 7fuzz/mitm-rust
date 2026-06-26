@@ -50,8 +50,6 @@ export function RepeaterView() {
 
   const currentReq = repeaterRequests.find(r => r.id === selectedId) || repeaterRequests[0] || null;
 
-  const [prevReqId, setPrevReqId] = useState<string | null>(null);
-
   useEffect(() => {
     if (!repeaterRequests.length) {
       if (selectedId && setSelectedId) setSelectedId(null);
@@ -70,16 +68,18 @@ export function RepeaterView() {
     }
   }, [currentReq, selectedId, setSelectedId]);
 
-  if (currentReq && currentReq.id !== prevReqId) {
-    setPrevReqId(currentReq.id);
-    setEditName(currentReq.name);
-    setEditGroupId(currentReq.groupId || null);
-    setEditMethod(currentReq.method);
-    setEditUrl(currentReq.url);
-    setEditHeaders(currentReq.headers || []);
-    setEditBody(currentReq.body || '');
-    setEditExtract(currentReq.extract || {});
-  }
+  // Sync builder states when selected request changes
+  useEffect(() => {
+    if (currentReq) {
+      setEditName(currentReq.name);
+      setEditGroupId(currentReq.groupId || null);
+      setEditMethod(currentReq.method);
+      setEditUrl(currentReq.url);
+      setEditHeaders(currentReq.headers || []);
+      setEditBody(currentReq.body || '');
+      setEditExtract(currentReq.extract || {});
+    }
+  }, [currentReq?.id]);
 
   const trafficMapped: Traffic[] = repeaterRequests.map(req => {
     const groupName = req.groupId ? repeaterGroups.find(g => g.id === req.groupId)?.name : 'Default';
