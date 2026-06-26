@@ -49,6 +49,19 @@ const HighlightText = ({ text, query }: { text: string; query: string }) => {
   );
 };
 
+// --- Format Size Helper ---
+const formatSize = (str: string): string => {
+  let bytes = str.length;
+  try {
+    bytes = new Blob([str]).size;
+  } catch {
+    // fallback
+  }
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 export default function JsonViewer({
   label, value, isLast = true, path,
   searchTerm = "", filterMode = false, forceShow = false,
@@ -62,6 +75,7 @@ export default function JsonViewer({
   // --- INTERNAL STATE FALLBACKS ---
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const [internalArrayExpanded, setInternalArrayExpanded] = useState(false);
+  const [isLongTextExpanded, setIsLongTextExpanded] = useState(false);
 
   // Use centralized collapse state if provided, otherwise fallback to internal state
   const isCollapsed = onToggleCollapse !== undefined 
@@ -147,9 +161,16 @@ export default function JsonViewer({
       return null;
     }
 
+    // --- LONG TEXT TRUNCATION ---
+    const isLongText = isString && !isRedacted && (value as string).length > 200;
+    const shouldShowFullText = isLongTextExpanded || (searchTerm && valueMatches);
+    const displayedText = isLongText && !shouldShowFullText
+      ? (value as string).substring(0, 100)
+      : formattedValue;
+
     return (
-      <div className="font-mono text-[13px] leading-relaxed flex items-center group" data-path={path}>
-        <div className="w-6 shrink-0 flex justify-center">
+      <div className="font-mono text-[13px] leading-relaxed flex items-start group" data-path={path}>
+        <div className="w-6 shrink-0 flex justify-center mt-0.5">
           {/* Quick Toggle Lock Icon (Uses SVG Eyes) */}
           {label && onToggleRedact && (
             <button
@@ -165,7 +186,7 @@ export default function JsonViewer({
             </button>
           )}
         </div>
-        <div className="flex-1 min-w-0 break-all flex items-center">
+        <div className="flex-1 min-w-0 break-all flex items-center flex-wrap">
           {label && (
             <span className="text-sky-text mr-1 whitespace-nowrap">
               &quot;<HighlightText text={label} query={searchTerm} />&quot;:
@@ -173,9 +194,29 @@ export default function JsonViewer({
           )}
           <span className={valueColor}>
             {isString && !isRedacted && '"'}
-            <HighlightText text={formattedValue} query={searchTerm} />
+            <HighlightText text={displayedText} query={searchTerm} />
+            {isLongText && !shouldShowFullText && '...'}
             {isString && !isRedacted && '"'}
           </span>
+          {isLongText && (
+            <button
+              onClick={() => setIsLongTextExpanded(!shouldShowFullText)}
+              className="ml-2 my-0.5 text-[10px] font-sans text-zinc-500 hover:text-zinc-300 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-1.5 py-0.5 rounded transition-all select-none whitespace-nowrap flex items-center gap-1 shrink-0"
+              title={shouldShowFullText ? "Collapse value" : "Expand value"}
+            >
+              {shouldShowFullText ? (
+                <>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                  Collapse
+                </>
+              ) : (
+                <>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  Expand ({formatSize(value as string)})
+                </>
+              )}
+            </button>
+          )}
           {!isLast && <span className="text-zinc-500">,</span>}
         </div>
       </div>
