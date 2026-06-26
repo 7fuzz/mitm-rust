@@ -9,6 +9,7 @@ pub struct RepeaterGroup {
     pub id: String,
     pub name: String,
     pub order_index: i32,
+    pub extract: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -158,6 +159,15 @@ pub async fn rename_repeater_group(app_handle: AppHandle, id: String, name: Stri
     let db_path = get_db_path(&app_handle);
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute("UPDATE repeater_groups SET name = ? WHERE id = ?", [name, id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_repeater_group_extractions(app_handle: AppHandle, id: String, extract: serde_json::Value) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    let extract_json = serde_json::to_string(&extract).map_err(|e| e.to_string())?;
+    conn.execute("UPDATE repeater_groups SET extract = ? WHERE id = ?", rusqlite::params![extract_json, id]).map_err(|e| e.to_string())?;
     Ok(())
 }
 

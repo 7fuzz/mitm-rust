@@ -115,6 +115,8 @@ fn apply_migrations(conn: &mut Connection) -> rusqlite::Result<()> {
             created_at INTEGER DEFAULT (strftime('%s', 'now')),
             updated_at INTEGER DEFAULT (strftime('%s', 'now'))
         );",
+        // Version 5: Repeater Group Extractions
+        "ALTER TABLE repeater_groups ADD COLUMN extract TEXT;",
     ];
 
     let target_version = migrations.len() as i32;

@@ -192,6 +192,13 @@ export function useRepeater(activeEnvId?: string) {
     } catch (e) { console.error(e); }
   }, []);
 
+  const updateGroupExtractions = useCallback(async (id: string, extract: Record<string, string>) => {
+    setRepeaterGroups(prev => prev.map(g => g.id === id ? { ...g, extract } : g));
+    try {
+      await invoke('update_repeater_group_extractions', { id, extract });
+    } catch (e) { console.error(e); }
+  }, []);
+
   const deleteGroup = useCallback(async (id: string) => {
     setRepeaterGroups(prev => prev.filter(g => g.id !== id));
     setRepeaterRequests(prev => prev.filter(r => r.groupId !== id));
@@ -286,12 +293,12 @@ export function useRepeater(activeEnvId?: string) {
     _setRawRepeater: setRepeaterRequests, _setRawGroups: setRepeaterGroups, initActiveGroup,
     refreshRepeater, addEmptyRequest, duplicateRequest, deleteRequest, updateRequest, importPostman,
     importProject, finalizeImport, createGroup, renameGroup, deleteGroup, cloneGroup, reorderRequests, reorderGroups,
-    manageGroupAssignment, getAllGroups, bulkSync
+    manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions
   }), [
     repeaterRequests, repeaterGroups, activeGroupId, switchGroup, initActiveGroup,
     refreshRepeater, addEmptyRequest, duplicateRequest, deleteRequest, updateRequest, importPostman,
     importProject, finalizeImport, createGroup, renameGroup, deleteGroup, cloneGroup, reorderRequests, reorderGroups,
-    manageGroupAssignment, getAllGroups, bulkSync
+    manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions
   ]);
 }
 

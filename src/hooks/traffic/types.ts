@@ -15,6 +15,7 @@ export interface RepeaterGroup {
   id: string;
   name: string;
   orderIndex: number;
+  extract?: Record<string, string>;
 }
 
 export interface RepeaterRequest {

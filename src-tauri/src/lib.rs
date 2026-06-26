@@ -245,6 +245,7 @@ pub fn run() {
             repeater::delete_repeater_group,
             repeater::reorder_repeater_groups,
             repeater::rename_repeater_group,
+            repeater::update_repeater_group_extractions,
             repeater::manage_group_assignment,
             repeater_execute::execute_repeater_request,
             repeater::get_repeater_history,

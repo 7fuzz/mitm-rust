@@ -165,23 +165,27 @@ pub async fn sync_data(
     let fetch_unassigned = unassigned_only.unwrap_or(false);
 
     let mut stmt = if fetch_unassigned {
-        conn.prepare("SELECT id, name, order_index FROM repeater_groups WHERE id NOT IN (SELECT group_id FROM environment_groups) ORDER BY order_index")
+        conn.prepare("SELECT id, name, order_index, extract FROM repeater_groups WHERE id NOT IN (SELECT group_id FROM environment_groups) ORDER BY order_index")
             .map_err(|e| e.to_string())?
     } else if active_env_id.is_some() && !fetch_all {
-        conn.prepare("SELECT id, name, order_index FROM repeater_groups WHERE id IN (SELECT group_id FROM environment_groups WHERE environment_id = ?) ORDER BY order_index")
+        conn.prepare("SELECT id, name, order_index, extract FROM repeater_groups WHERE id IN (SELECT group_id FROM environment_groups WHERE environment_id = ?) ORDER BY order_index")
             .map_err(|e| e.to_string())?
     } else {
-        conn.prepare("SELECT id, name, order_index FROM repeater_groups ORDER BY order_index").map_err(|e| e.to_string())?
+        conn.prepare("SELECT id, name, order_index, extract FROM repeater_groups ORDER BY order_index").map_err(|e| e.to_string())?
     };
 
     let repeater_groups = if active_env_id.is_some() && !fetch_all && !fetch_unassigned {
         let env_id = active_env_id.as_ref().unwrap();
         stmt.query_map([env_id], |row| {
-            Ok(RepeaterGroup { id: row.get(0)?, name: row.get(1)?, order_index: row.get(2)? })
+            let extract_str: Option<String> = row.get(3)?;
+            let extract = extract_str.and_then(|s| serde_json::from_str(&s).ok());
+            Ok(RepeaterGroup { id: row.get(0)?, name: row.get(1)?, order_index: row.get(2)?, extract })
         }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect()
     } else {
         stmt.query_map([], |row| {
-            Ok(RepeaterGroup { id: row.get(0)?, name: row.get(1)?, order_index: row.get(2)? })
+            let extract_str: Option<String> = row.get(3)?;
+            let extract = extract_str.and_then(|s| serde_json::from_str(&s).ok());
+            Ok(RepeaterGroup { id: row.get(0)?, name: row.get(1)?, order_index: row.get(2)?, extract })
         }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect()
     };
 

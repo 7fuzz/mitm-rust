@@ -23,7 +23,8 @@ export function RepeaterView() {
     uiLayout, updateUILayout,
     repeaterSelectedId: selectedId, setRepeaterSelectedId: setSelectedId,
     _setRawRepeater,
-    simpleMode
+    simpleMode,
+    updateGroupExtractions
   } = useTraffic();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -37,6 +38,7 @@ export function RepeaterView() {
   const [editExtract, setEditExtract] = useState<Record<string, string>>({});
 
   const [extractionModalOpen, setExtractionModalOpen] = useState(false);
+  const [groupExtractionModalOpen, setGroupExtractionModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
 
   // Debounce for name updates
@@ -49,6 +51,7 @@ export function RepeaterView() {
   }, [updateRequest]);
 
   const currentReq = repeaterRequests.find(r => r.id === selectedId) || repeaterRequests[0] || null;
+  const activeGroup = repeaterGroups.find(g => g.id === currentReq?.groupId);
 
   useEffect(() => {
     if (!repeaterRequests.length) {
@@ -143,10 +146,13 @@ export function RepeaterView() {
       _setRawRepeater((prev: RepeaterRequest[]) => prev.map((r: RepeaterRequest) => r.id === currentReq.id ? updatedWithRes : r));
 
       // --- EXTRACTION LOGIC ---
-      if (editExtract && Object.keys(editExtract).length > 0) {
+      const collectionExtract = activeGroup?.extract || {};
+      const mergedExtract = { ...collectionExtract, ...editExtract };
+
+      if (mergedExtract && Object.keys(mergedExtract).length > 0) {
         try {
           const respJson = JSON.parse(response.response_body);
-          Object.entries(editExtract).forEach(([varName, path]) => {
+          Object.entries(mergedExtract).forEach(([varName, path]) => {
             const value = path.split('.').reduce((obj, key) => (obj as any)?.[key], respJson);
             if (value !== undefined) {
               updateVariableAutoValue(varName, String(value));
@@ -246,6 +252,23 @@ export function RepeaterView() {
         initialRules={editExtract}
         availableVariables={variables.filter(v => v.environmentId === activeEnvId)}
       />
+      <ExtractionModal
+        isOpen={groupExtractionModalOpen}
+        onClose={() => setGroupExtractionModalOpen(false)}
+        onSave={(rules) => {
+          if (activeGroupId && activeGroupId !== 'All' && activeGroupId !== 'null') {
+            updateGroupExtractions(activeGroupId, rules);
+          } else if (currentReq?.groupId) {
+            updateGroupExtractions(currentReq.groupId, rules);
+          }
+        }}
+        initialRules={
+          activeGroupId && activeGroupId !== 'All' && activeGroupId !== 'null'
+            ? (activeGroupObj?.extract || {})
+            : (activeGroup?.extract || {})
+        }
+        availableVariables={variables.filter(v => v.environmentId === activeEnvId)}
+      />
       <RepeaterHistoryModal
         isOpen={historyModalOpen}
         onClose={() => setHistoryModalOpen(false)}
@@ -298,6 +321,14 @@ export function RepeaterView() {
                 title="Rename Collection"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+              </button>
+              <button
+                onClick={() => setGroupExtractionModalOpen(true)}
+                disabled={activeGroupId === 'All' || activeGroupId === 'null'}
+                className="p-1 text-zinc-500 hover:text-amber-400 disabled:opacity-20 disabled:hover:text-zinc-500 transition-colors"
+                title="Collection Extraction Rules"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
               </button>
               <button
                 onClick={async () => {
@@ -397,14 +428,27 @@ export function RepeaterView() {
                     )}
                   </div>
                   {!simpleMode && (
-                    <div>
-                      <label className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest block mb-1.5">Variable Extractions</label>
-                      <button
-                        onClick={() => setExtractionModalOpen(true)}
-                        className="w-full bg-zinc-950 border border-zinc-700 px-3 py-2 rounded text-amber-400 text-[11px] font-mono text-left hover:border-amber-500 transition-colors truncate"
-                      >
-                        {Object.keys(editExtract).length > 0 ? `${Object.keys(editExtract).length} Rules Configured` : 'Configure Extractions...'}
-                      </button>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest block mb-1.5">Request Extractions</label>
+                        <button
+                          onClick={() => setExtractionModalOpen(true)}
+                          className="w-full bg-zinc-950 border border-zinc-700 px-3 py-2 rounded text-amber-400 text-[11px] font-mono text-left hover:border-amber-500 transition-colors truncate"
+                        >
+                          {Object.keys(editExtract).length > 0 ? `${Object.keys(editExtract).length} Rules Configured` : 'Configure Request Rules...'}
+                        </button>
+                      </div>
+                      {currentReq?.groupId && (
+                        <div>
+                          <label className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest block mb-1.5">Collection Extractions</label>
+                          <button
+                            onClick={() => setGroupExtractionModalOpen(true)}
+                            className="w-full bg-zinc-950 border border-zinc-700 px-3 py-2 rounded text-purple-text text-[11px] font-mono text-left hover:border-purple-border transition-colors truncate"
+                          >
+                            {Object.keys(activeGroup?.extract || {}).length > 0 ? `${Object.keys(activeGroup?.extract || {}).length} Rules Configured (Collection)` : 'Configure Collection Rules...'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
