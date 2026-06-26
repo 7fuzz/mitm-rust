@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useTraffic, RepeaterGroup } from '@/hooks/traffic';
+import { useTraffic, RepeaterGroup, SyncData } from '@/hooks/traffic';
 import { CollectionAssignmentModal } from '../../Modals';
+import { Select } from '../../ui';
+import { invoke } from '@/lib/utils/tauri';
 
 interface CollectionsSectionProps {
   selectedGroupId: string | null;
@@ -51,7 +53,25 @@ function SortableGroupItem({ group, isActive, onSelect, onRename, onDelete, onAs
 
 export function CollectionsSection({ selectedGroupId, setSelectedGroupId, openPrompt, openConfirm }: CollectionsSectionProps) {
   const { repeaterGroups, createGroup, renameGroup, deleteGroup, cloneGroup, reorderGroups } = useTraffic();
+  const [localGroups, setLocalGroups] = useState<RepeaterGroup[]>([]);
+  const [envFilter, setEnvFilter] = useState<'current' | 'all' | 'unassigned'>('all');
   const [assignModal, setAssignModal] = useState<{ isOpen: boolean, groupId: string | null, groupName: string }>({ isOpen: false, groupId: null, groupName: '' });
+
+  const loadLocalGroups = useCallback(async () => {
+    try {
+      const data = await invoke<SyncData>('sync_data', {
+        allGroups: envFilter === 'all',
+        unassignedOnly: envFilter === 'unassigned'
+      });
+      setLocalGroups(data.repeaterGroups);
+    } catch (e) {
+      console.error('Failed to load collections with filter:', e);
+    }
+  }, [envFilter]);
+
+  useEffect(() => {
+    loadLocalGroups();
+  }, [loadLocalGroups, repeaterGroups]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -61,9 +81,9 @@ export function CollectionsSection({ selectedGroupId, setSelectedGroupId, openPr
   const handleGroupReorder = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
-      const oldIndex = repeaterGroups.findIndex(g => g.id === active.id);
-      const newIndex = repeaterGroups.findIndex(g => g.id === over.id);
-      const newGroups = arrayMove(repeaterGroups, oldIndex, newIndex);
+      const oldIndex = localGroups.findIndex(g => g.id === active.id);
+      const newIndex = localGroups.findIndex(g => g.id === over.id);
+      const newGroups = arrayMove(localGroups, oldIndex, newIndex);
       reorderGroups(newGroups.map(g => g.id));
     }
   };
@@ -71,28 +91,49 @@ export function CollectionsSection({ selectedGroupId, setSelectedGroupId, openPr
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
       <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-purple-500 font-bold uppercase text-[10px] tracking-widest">Repeater Collections Management</h3>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h3 className="text-purple-500 font-bold uppercase text-[10px] tracking-widest shrink-0">Collections Management</h3>
+            <div className="flex items-center gap-1.5 bg-zinc-950 p-0.5 rounded-lg border border-zinc-800/80 pl-2">
+              <span className="text-[8px] text-zinc-500 font-black uppercase tracking-wider">Filter:</span>
+              <Select
+                value={envFilter}
+                onChange={(val) => setEnvFilter(val as any)}
+                options={[
+                  { value: 'all', label: 'All Collections' },
+                  { value: 'current', label: 'Current Environment Only' },
+                  { value: 'unassigned', label: 'Unassigned Only' }
+                ]}
+                className="w-48 !py-1 !px-2 border-none bg-transparent"
+              />
+            </div>
+          </div>
           <button onClick={() => openPrompt('New Collection Name', '', createGroup)} className="px-3 py-1.5 bg-purple-600/10 border border-purple-600/30 text-purple-500 hover:bg-purple-600/20 rounded text-[9px] font-black uppercase tracking-widest transition-all">+ Create Collection</button>
         </div>
         
         <div className="grid grid-cols-1 gap-3">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupReorder}>
-            <SortableContext items={repeaterGroups.map(g => g.id)} strategy={verticalListSortingStrategy}>
-              {repeaterGroups.map(group => (
-                <SortableGroupItem
-                  key={group.id}
-                  group={group}
-                  isActive={selectedGroupId === group.id}
-                  onSelect={setSelectedGroupId}
-                  onRename={(g: RepeaterGroup) => openPrompt('Rename Collection', g.name, (val) => renameGroup(g.id, val))}
-                  onDelete={(g: RepeaterGroup) => openConfirm('Delete Collection', `Permanently destroy "${g.name}" and all requests inside?`, () => deleteGroup(g.id))}
-                  onAssign={(g: RepeaterGroup) => setAssignModal({ isOpen: true, groupId: g.id, groupName: g.name })}
-                  onClone={(g: RepeaterGroup) => openPrompt('Clone Collection', `${g.name} (Copy)`, (val) => cloneGroup(g.id, val))}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
+          {localGroups.length === 0 ? (
+            <div className="text-center py-12 border border-zinc-800 border-dashed rounded text-zinc-500 text-xs font-mono">
+              No collections found in this view filter.
+            </div>
+          ) : (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupReorder}>
+              <SortableContext items={localGroups.map(g => g.id)} strategy={verticalListSortingStrategy}>
+                {localGroups.map(group => (
+                  <SortableGroupItem
+                    key={group.id}
+                    group={group}
+                    isActive={selectedGroupId === group.id}
+                    onSelect={setSelectedGroupId}
+                    onRename={(g: RepeaterGroup) => openPrompt('Rename Collection', g.name, (val) => renameGroup(g.id, val))}
+                    onDelete={(g: RepeaterGroup) => openConfirm('Delete Collection', `Permanently destroy "${g.name}" and all requests inside?`, () => deleteGroup(g.id))}
+                    onAssign={(g: RepeaterGroup) => setAssignModal({ isOpen: true, groupId: g.id, groupName: g.name })}
+                    onClone={(g: RepeaterGroup) => openPrompt('Clone Collection', `${g.name} (Copy)`, (val) => cloneGroup(g.id, val))}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          )}
         </div>
       </section>
 

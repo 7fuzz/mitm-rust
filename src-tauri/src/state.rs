@@ -133,7 +133,11 @@ pub async fn get_repeater_requests(app_handle: AppHandle, group_id: String) -> R
 }
 
 #[tauri::command]
-pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
+pub async fn sync_data(
+    app_handle: AppHandle,
+    all_groups: Option<bool>,
+    unassigned_only: Option<bool>,
+) -> Result<SyncData, String> {
     let db_path = db::get_db_path(&app_handle);
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
@@ -157,14 +161,21 @@ pub async fn sync_data(app_handle: AppHandle) -> Result<SyncData, String> {
         .optional()
         .map_err(|e| e.to_string())?;
 
-    let mut stmt = if active_env_id.is_some() {
+    let fetch_all = all_groups.unwrap_or(false);
+    let fetch_unassigned = unassigned_only.unwrap_or(false);
+
+    let mut stmt = if fetch_unassigned {
+        conn.prepare("SELECT id, name, order_index FROM repeater_groups WHERE id NOT IN (SELECT group_id FROM environment_groups) ORDER BY order_index")
+            .map_err(|e| e.to_string())?
+    } else if active_env_id.is_some() && !fetch_all {
         conn.prepare("SELECT id, name, order_index FROM repeater_groups WHERE id IN (SELECT group_id FROM environment_groups WHERE environment_id = ?) ORDER BY order_index")
             .map_err(|e| e.to_string())?
     } else {
         conn.prepare("SELECT id, name, order_index FROM repeater_groups ORDER BY order_index").map_err(|e| e.to_string())?
     };
 
-    let repeater_groups = if let Some(ref env_id) = active_env_id {
+    let repeater_groups = if active_env_id.is_some() && !fetch_all && !fetch_unassigned {
+        let env_id = active_env_id.as_ref().unwrap();
         stmt.query_map([env_id], |row| {
             Ok(RepeaterGroup { id: row.get(0)?, name: row.get(1)?, order_index: row.get(2)? })
         }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect()
