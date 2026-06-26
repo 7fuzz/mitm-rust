@@ -1,5 +1,23 @@
 import { memo, useRef, useEffect } from 'react';
 
+const splitUrlForDisplay = (url: string): [string, string] => {
+  try {
+    const parsed = new URL(url);
+    const hostPart = parsed.origin;
+    const pathPart = parsed.pathname + parsed.search + parsed.hash;
+    return [hostPart, pathPart || '/'];
+  } catch {
+    const protocolIndex = url.indexOf('://');
+    if (protocolIndex !== -1) {
+      const firstSlash = url.indexOf('/', protocolIndex + 3);
+      if (firstSlash !== -1) {
+        return [url.substring(0, firstSlash), url.substring(firstSlash)];
+      }
+    }
+    return [url, ''];
+  }
+};
+
 interface TrafficItemProps {
   id: string;
   method: string;
@@ -16,10 +34,11 @@ interface TrafficItemProps {
   activeColor?: 'emerald' | 'purple' | 'sky' | 'rose';
   onClick: (id: string) => void;
   onDelete?: (id: string) => void;
+  dragHandleProps?: Record<string, any>;
 }
 
 export const TrafficItem = memo(({
-  id, method, status, title, subtitle, timestamp, group, hitCount, duration_ms, isIntercepted, isActive, isHighlighted, activeColor = 'emerald', onClick, onDelete
+  id, method, status, title, subtitle, timestamp, group, hitCount, duration_ms, isIntercepted, isActive, isHighlighted, activeColor = 'emerald', onClick, onDelete, dragHandleProps
 }: TrafficItemProps) => {
 
   const itemRef = useRef<HTMLDivElement>(null);
@@ -55,7 +74,7 @@ export const TrafficItem = memo(({
     <div
       ref={itemRef}
       onClick={() => onClick(id)}
-      className={`cursor-pointer transition-all border-l-4 group relative ${
+      className={`cursor-pointer transition-all border-l-4 group relative flex items-center ${
         isActive 
           ? `bg-zinc-900/80 ${activeBorder}` 
           : isHighlighted 
@@ -63,7 +82,16 @@ export const TrafficItem = memo(({
             : 'bg-transparent border-l-transparent hover:border-l-zinc-800 hover:bg-zinc-900/40'
       } ${isIntercepted ? 'border-l-rose-border bg-rose-highlight-bg' : ''}`}
     >
-      <div className="p-3 space-y-1.5 flex flex-col min-w-0">
+      {dragHandleProps && (
+        <div 
+          {...dragHandleProps} 
+          className="pl-2 cursor-grab active:cursor-grabbing text-zinc-600 hover:text-zinc-400 transition-colors shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>
+        </div>
+      )}
+      <div className="p-3 space-y-1.5 flex flex-col min-w-0 flex-1">
         <div className="flex items-center gap-2 justify-between">
           <div className="flex items-center gap-2 text-[10px] uppercase font-black tracking-wider shrink-0">
             <span className={`px-1.5 py-0.5 rounded bg-zinc-950/50 border border-zinc-800/50 ${getMethodColor(method)}`}>{method}</span>
@@ -113,9 +141,15 @@ export const TrafficItem = memo(({
             )}
           </div>
         </div>
-        <div className="text-zinc-300 text-xs truncate w-full font-medium" title={title}>
-          {title}
-        </div>
+        {(() => {
+          const [host, path] = splitUrlForDisplay(title);
+          return (
+            <div className="text-xs w-full flex flex-col min-w-0 font-medium" title={title}>
+              {host && <span className="text-zinc-500 text-[10px] font-normal truncate leading-tight">{host}</span>}
+              <span className="text-zinc-300 truncate leading-normal">{path || '/'}</span>
+            </div>
+          );
+        })()}
         {subtitle && (
           <div className="text-zinc-400 text-[10px] truncate font-mono" title={subtitle}>
             {subtitle}
