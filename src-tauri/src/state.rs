@@ -61,6 +61,47 @@ pub async fn purge_all_data(app_handle: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn purge_selective_data(app_handle: AppHandle, target: String) -> Result<(), String> {
+    let db_path = db::get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    
+    conn.execute("PRAGMA foreign_keys = ON;", []).ok();
+
+    match target.as_str() {
+        "repeater_only" => {
+            conn.execute_batch(
+                "DELETE FROM repeater_requests;
+                 DELETE FROM repeater_history;"
+            ).map_err(|e| e.to_string())?;
+        }
+        "repeater_groups" => {
+            conn.execute_batch(
+                "DELETE FROM repeater_groups;
+                 DELETE FROM repeater_requests;
+                 DELETE FROM repeater_history;
+                 DELETE FROM environment_groups;"
+            ).map_err(|e| e.to_string())?;
+        }
+        "environments" => {
+            conn.execute_batch(
+                "DELETE FROM environments;
+                 DELETE FROM variables;
+                 DELETE FROM variable_values;
+                 DELETE FROM environment_groups;"
+            ).map_err(|e| e.to_string())?;
+        }
+        "history" => {
+            conn.execute("DELETE FROM history;", []).map_err(|e| e.to_string())?;
+        }
+        _ => return Err(format!("Invalid purge target: {}", target)),
+    }
+
+    conn.execute("VACUUM", []).ok();
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn upload_file(app_handle: AppHandle, name: String, content: Vec<u8>) -> Result<String, String> {
     let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
     let uploads_dir = app_data_dir.join("uploads");
