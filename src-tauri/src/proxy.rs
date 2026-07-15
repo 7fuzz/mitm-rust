@@ -376,6 +376,7 @@ async fn handle_connect(
 
     if let Err(err) = hyper::server::conn::http1::Builder::new()
         .serve_connection(io, service)
+        .with_upgrades()
         .await 
     {
         eprintln!("Error serving TLS connection for {}: {}", host, err);
@@ -383,6 +384,8 @@ async fn handle_connect(
 
     Ok(())
 }
+
+
 
 fn headers_to_vec(headers: &hyper::HeaderMap) -> Vec<(String, String)> {
     let mut vec = Vec::new();
@@ -399,6 +402,125 @@ async fn handle_http(
     req: Request<Incoming>,
     state: Arc<ProxyState>,
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
+    if crate::websocket::is_websocket_upgrade(req.headers()) {
+        let https = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_webpki_roots()
+            .https_or_http()
+            .enable_http1()
+            .build();
+        let client = Client::builder(hyper_util::rt::TokioExecutor::new()).build(https);
+        
+        let method = req.method().clone();
+        let url = req.uri().to_string();
+        let host = req.uri().host().unwrap_or_default().to_string();
+        let request_headers = headers_to_vec(req.headers());
+        let traffic_id = Uuid::new_v4().to_string();
+
+        let mut new_req = Request::builder()
+            .method(method.clone())
+            .uri(url.clone());
+        
+        let mut headers_cleaned = request_headers.clone();
+        headers_cleaned.retain(|(k, _)| k != "content-length" && k != "transfer-encoding");
+
+        for (k, v) in headers_cleaned.iter() {
+            new_req = new_req.header(k, v);
+        }
+        
+        let new_req = new_req.body(Full::new(Bytes::new())).unwrap();
+        
+        match client.request(new_req).await {
+            Ok(res) => {
+                let status = res.status().as_u16();
+                if status == 101 {
+                    let response_headers = headers_to_vec(res.headers());
+                    let mut client_res_builder = Response::builder()
+                        .status(StatusCode::SWITCHING_PROTOCOLS);
+                    
+                    for (k, v) in response_headers.iter() {
+                        client_res_builder = client_res_builder.header(k, v);
+                    }
+                    
+                    let client_res = client_res_builder.body(Full::new(Bytes::new())).unwrap();
+                    
+                    let db_path = crate::db::get_db_path(&state.app_handle);
+                    if let Ok(conn) = rusqlite::Connection::open(db_path) {
+                        let req_headers_json = serde_json::to_string(&request_headers).unwrap_or_default();
+                        let res_headers_json = serde_json::to_string(&response_headers).unwrap_or_default();
+                        let _ = conn.execute(
+                            "INSERT OR REPLACE INTO history (id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at) 
+                             VALUES (?, ?, ?, ?, 101, ?, ?, '', 'WebSocket Connection Established', 'response', 0, CURRENT_TIMESTAMP)",
+                            rusqlite::params![
+                                traffic_id,
+                                method.to_string(),
+                                url.clone(),
+                                host.clone(),
+                                req_headers_json,
+                                res_headers_json,
+                            ]
+                        );
+                    }
+
+                    let traffic = Traffic {
+                        id: traffic_id.clone(),
+                        method: method.to_string(),
+                        url: url.clone(),
+                        host: host.clone(),
+                        status_code: 101,
+                        request_headers: request_headers.clone(),
+                        response_headers: response_headers.clone(),
+                        request_body: String::new(),
+                        response_body: "WebSocket Connection Established".to_string(),
+                        phase: "response".to_string(),
+                        is_intercepted: false,
+                        intercepted_at: None,
+                        duration_ms: Some(0),
+                    };
+                    let _ = state.app_handle.emit("traffic_captured", &traffic);
+                    
+                    let state_clone = Arc::clone(&state);
+                    let traffic_id_clone = traffic_id.clone();
+                    
+                    tokio::spawn(async move {
+                        let client_upgraded = match hyper::upgrade::on(req).await {
+                            Ok(up) => up,
+                            Err(e) => { eprintln!("Error upgrading client: {}", e); return; }
+                        };
+                        let server_upgraded = match hyper::upgrade::on(res).await {
+                            Ok(up) => up,
+                            Err(e) => { eprintln!("Error upgrading server: {}", e); return; }
+                        };
+                        
+                        if let Err(e) = crate::websocket::run_ws_proxy(
+                            state_clone.app_handle.clone(),
+                            Arc::clone(&state_clone.intercept),
+                            traffic_id_clone,
+                            client_upgraded,
+                            server_upgraded
+                        ).await {
+                            eprintln!("WebSocket proxy error: {}", e);
+                        }
+                    });
+                    
+                    return Ok(client_res);
+                } else {
+                    let mut client_res_builder = Response::builder().status(status);
+                    for (k, v) in headers_to_vec(res.headers()).iter() {
+                        client_res_builder = client_res_builder.header(k, v);
+                    }
+                    let collected = res.into_body().collect().await?.to_bytes();
+                    return Ok(client_res_builder.body(Full::new(collected)).unwrap());
+                }
+            }
+            Err(e) => {
+                return Ok(Response::builder()
+                    .status(StatusCode::BAD_GATEWAY)
+                    .body(Full::new(Bytes::from(format!("WebSocket handshake failed: {}", e))))
+                    .unwrap());
+            }
+        }
+    }
+
     let https = hyper_rustls::HttpsConnectorBuilder::new()
         .with_webpki_roots()
         .https_or_http()

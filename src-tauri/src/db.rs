@@ -117,6 +117,17 @@ fn apply_migrations(conn: &mut Connection) -> rusqlite::Result<()> {
         );",
         // Version 5: Repeater Group Extractions
         "ALTER TABLE repeater_groups ADD COLUMN extract TEXT;",
+        // Version 6: WebSocket Message Logging
+        "CREATE TABLE IF NOT EXISTS websocket_messages (
+            id TEXT PRIMARY KEY,
+            connection_id TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            msg_type TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            is_intercepted INTEGER DEFAULT 0,
+            FOREIGN KEY(connection_id) REFERENCES history(id) ON DELETE CASCADE
+        );",
     ];
 
     let target_version = migrations.len() as i32;
