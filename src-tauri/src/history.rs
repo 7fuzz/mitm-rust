@@ -43,6 +43,28 @@ pub async fn save_traffic_history(app_handle: AppHandle, traffic: Traffic) -> Re
             traffic.duration_ms,
         ],
     ).map_err(|e| e.to_string())?;
+
+    // Enforce history limits from backend
+    if let Ok(config_str) = conn.query_row::<String, _, _>(
+        "SELECT value FROM app_state WHERE key = 'history_limits'",
+        [],
+        |row| row.get(0)
+    ) {
+        if let Ok(config_json) = serde_json::from_str::<serde_json::Value>(&config_str) {
+            if let Some(enabled) = config_json.get("enabled").and_then(|v| v.as_bool()) {
+                if enabled {
+                    if let Some(limit) = config_json.get("value").and_then(|v| v.as_i64()) {
+                        let _ = conn.execute(
+                            "DELETE FROM history WHERE id NOT IN (
+                                SELECT id FROM history ORDER BY created_at DESC, id DESC LIMIT ?
+                             )",
+                            rusqlite::params![limit],
+                        );
+                    }
+                }
+            }
+        }
+    }
     
     Ok(())
 }
