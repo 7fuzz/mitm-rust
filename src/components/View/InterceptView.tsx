@@ -9,6 +9,17 @@ import { useTraffic } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
 import { Button, Select, Toggle } from '../ui';
 import { invoke } from '@/lib/utils/tauri';
+import { listen } from '@tauri-apps/api/event';
+
+interface WsMessage {
+  id: string;
+  connectionId: string;
+  direction: string;
+  msgType: string;
+  payload: string;
+  timestamp: number;
+  isIntercepted: boolean;
+}
 
 export function InterceptView() {
   const {
@@ -36,7 +47,50 @@ export function InterceptView() {
   const [editHeaders, setEditHeaders] = useState<[string, string][]>([]);
   const [editBody, setEditBody] = useState('');
 
-  const pendingQueue = traffic.filter((t) => t.is_intercepted);
+  const [pendingWs, setPendingWs] = useState<WsMessage[]>([]);
+
+  useEffect(() => {
+    const unsub = listen<WsMessage>('ws_message_captured', (event) => {
+      const msg = event.payload;
+      if (msg.isIntercepted) {
+        setPendingWs(prev => {
+          if (prev.some(m => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+      } else {
+        setPendingWs(prev => prev.filter(m => m.id !== msg.id));
+      }
+    });
+
+    return () => {
+      unsub.then(f => f());
+    };
+  }, []);
+
+  const pendingQueue = [
+    ...traffic.filter((t) => t.is_intercepted).map(t => ({ ...t, isWs: false })),
+    ...pendingWs.map(msg => {
+      const parent = traffic.find(t => t.id === msg.connectionId);
+      const isClient = msg.direction === 'client_to_server';
+      return {
+        id: msg.id,
+        method: isClient ? 'WS_OUT' : 'WS_IN',
+        url: parent?.url || `ws://${msg.connectionId}`,
+        host: parent?.host || 'WebSocket',
+        status_code: 101,
+        request_headers: [] as [string, string][],
+        response_headers: [] as [string, string][],
+        request_body: msg.payload,
+        response_body: msg.payload,
+        phase: isClient ? 'request' : 'response',
+        is_intercepted: true,
+        duration_ms: 0,
+        isWs: true,
+        msgType: msg.msgType
+      } as any;
+    })
+  ];
+
   const currentReq = pendingQueue.find((t) => t.id === selectedId) || pendingQueue[0];
   const isRes = currentReq?.phase === 'response';
 
@@ -47,24 +101,31 @@ export function InterceptView() {
     setPrevReqId(currentReq.id);
     setPrevPhase(currentReq.phase);
     
-    if (currentReq.phase === 'response') {
-      setEditStatusCode(currentReq.status_code || 200);
-      setEditHeaders(currentReq.response_headers || []);
-    } else {
+    if (currentReq.isWs) {
       setEditMethod(currentReq.method);
       setEditUrl(currentReq.url);
-      setEditHeaders(currentReq.request_headers || []);
-    }
-
-    const targetBody = currentReq.phase === 'response' ? currentReq.response_body : currentReq.request_body;
-    let formattedBody = targetBody || '';
-    try {
-      if (formattedBody.trim()) {
-        const parsed = JSON.parse(formattedBody);
-        formattedBody = JSON.stringify(parsed, null, 2);
+      setEditHeaders([]);
+      setEditBody(currentReq.request_body);
+    } else {
+      if (currentReq.phase === 'response') {
+        setEditStatusCode(currentReq.status_code || 200);
+        setEditHeaders(currentReq.response_headers || []);
+      } else {
+        setEditMethod(currentReq.method);
+        setEditUrl(currentReq.url);
+        setEditHeaders(currentReq.request_headers || []);
       }
-    } catch { /* ignore */ }
-    setEditBody(formattedBody);
+
+      const targetBody = currentReq.phase === 'response' ? currentReq.response_body : currentReq.request_body;
+      let formattedBody = targetBody || '';
+      try {
+        if (formattedBody.trim()) {
+          const parsed = JSON.parse(formattedBody);
+          formattedBody = JSON.stringify(parsed, null, 2);
+        }
+      } catch { /* ignore */ }
+      setEditBody(formattedBody);
+    }
   }
 
   const handleStageToRepeater = async (raw: boolean = false) => {
@@ -107,22 +168,30 @@ export function InterceptView() {
 
   const handleForward = () => {
     if (currentReq) {
-      const varDict: Record<string, string> = {};
-      variables.filter(v => v.environmentId === activeEnvId).forEach(v => {
-        if (v.name.trim()) {
-          const activeVal = v.values[v.activeIndex] || v.values[0];
-          varDict[v.name.trim()] = activeVal ? activeVal.value : '';
-        }
-      });
-
-      if (currentReq.phase === 'response') {
-        resumeRequest(currentReq.id, {
-          status_code: editStatusCode, headers: editHeaders, body: editBody, variables: varDict
-        });
+      if (currentReq.isWs) {
+        invoke('resume_ws_flow', {
+          id: currentReq.id,
+          action: { payload: editBody }
+        }).catch(err => console.error('Failed to forward WS frame:', err));
+        setPendingWs(prev => prev.filter(m => m.id !== currentReq.id));
       } else {
-        resumeRequest(currentReq.id, {
-          method: editMethod, url: editUrl, headers: editHeaders, body: editBody, variables: varDict
+        const varDict: Record<string, string> = {};
+        variables.filter(v => v.environmentId === activeEnvId).forEach(v => {
+          if (v.name.trim()) {
+            const activeVal = v.values[v.activeIndex] || v.values[0];
+            varDict[v.name.trim()] = activeVal ? activeVal.value : '';
+          }
         });
+
+        if (currentReq.phase === 'response') {
+          resumeRequest(currentReq.id, {
+            status_code: editStatusCode, headers: editHeaders, body: editBody, variables: varDict
+          });
+        } else {
+          resumeRequest(currentReq.id, {
+            method: editMethod, url: editUrl, headers: editHeaders, body: editBody, variables: varDict
+          });
+        }
       }
       setSelectedId(null);
     }
@@ -130,7 +199,15 @@ export function InterceptView() {
 
   const handleDrop = () => {
     if (currentReq) {
-      resumeRequest(currentReq.id, { drop: true });
+      if (currentReq.isWs) {
+        invoke('resume_ws_flow', {
+          id: currentReq.id,
+          action: { drop: true }
+        }).catch(err => console.error('Failed to drop WS frame:', err));
+        setPendingWs(prev => prev.filter(m => m.id !== currentReq.id));
+      } else {
+        resumeRequest(currentReq.id, { drop: true });
+      }
       setSelectedId(null);
     }
   };
@@ -275,72 +352,105 @@ export function InterceptView() {
             <div className="p-3 bg-zinc-900/50 border border-zinc-800 rounded flex items-center justify-between shadow-inner shadow-app-shadow/20">
               <div className="flex items-center gap-3">
                 <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Target Endpoint:</span>
-                <span className={`text-xs font-black ${isRes ? 'text-amber-text' : 'text-emerald-text'}`}>{currentReq.method}</span>
+                <span className={`text-xs font-black ${currentReq.isWs ? 'text-cyan-400' : isRes ? 'text-amber-text' : 'text-emerald-text'}`}>{currentReq.method}</span>
                 <span className="text-zinc-300 text-xs font-mono break-all">{currentReq.url}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="purple"
-                  size="sm"
-                  onClick={() => handleStageToRepeater(false)}
-                >
-                  Stage_to_Repeater
-                </Button>
-                
-                {!simpleMode && (
+              {!currentReq.isWs && (
+                <div className="flex items-center gap-2">
                   <Button
-                    variant="secondary"
+                    variant="purple"
                     size="sm"
-                    onClick={() => handleStageToRepeater(true)}
+                    onClick={() => handleStageToRepeater(false)}
                   >
-                    Raw
+                    Stage_to_Repeater
                   </Button>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h3 className={`${isRes ? 'text-amber-text' : 'text-emerald-text'} font-bold uppercase text-[10px] tracking-widest flex items-center gap-2`}>
-                <span className="opacity-50">#</span> 1. {isRes ? 'Response_Status' : 'Request_Line'}
-              </h3>
-
-              {isRes ? (
-                <div className="flex items-center gap-3">
-                  <span className="text-zinc-500 text-xs font-mono">HTTP/2.0</span>
-                  <input
-                    type="number" value={editStatusCode} onChange={(e) => setEditStatusCode(Number(e.target.value))}
-                    className="w-24 bg-zinc-950 border border-zinc-800 p-3 rounded text-emerald-text font-black outline-none focus:border-amber-500 transition-colors text-sm text-center"
-                  />
-                </div>
-              ) : (
-                <div className="w-full">
-                  <UrlEditor
-                    method={editMethod} onMethodChange={setEditMethod}
-                    url={editUrl} onChange={setEditUrl}
-                  />
+                  
+                  {!simpleMode && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleStageToRepeater(true)}
+                    >
+                      Raw
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
 
-            <div className={`grid ${splitMode === 'horizontal' ? 'grid-cols-2 gap-8' : 'grid-cols-1 gap-10'}`}>
-              <div className="flex flex-col space-y-3">
-                <h3 className={`${isRes ? 'text-amber-text' : 'text-sky-text'} font-bold uppercase text-[10px] tracking-widest flex items-center gap-2`}>
-                  <span className="opacity-50">#</span> 2. {isRes ? 'Response_Headers' : 'Request_Headers'}
+            {currentReq.isWs ? (
+              <div className="space-y-3">
+                <h3 className="text-cyan-400 font-bold uppercase text-[10px] tracking-widest flex items-center gap-2">
+                  <span className="opacity-50">#</span> 1. WebSocket_Frame_Info
                 </h3>
-                <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-75">
-                  <HeaderEditor initialHeaders={isRes ? (currentReq.response_headers || {}) : (currentReq.request_headers || {})} onChange={setEditHeaders} />
+                <div className="p-4 bg-zinc-950 border border-zinc-800 rounded flex flex-col gap-2 font-mono text-xs max-w-md">
+                  <div>
+                    <span className="text-zinc-500 font-bold">Direction:</span>{' '}
+                    <span className={currentReq.phase === 'request' ? 'text-emerald-400' : 'text-sky-400 font-bold'}>
+                      {currentReq.phase === 'request' ? 'Client → Server (Outbound)' : 'Server → Client (Inbound)'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 font-bold">Frame Type:</span>{' '}
+                    <span className="text-zinc-300 font-bold uppercase">{currentReq.msgType}</span>
+                  </div>
                 </div>
               </div>
-
-              <div className="flex flex-col space-y-3">
-                <h3 className={`${isRes ? 'text-amber-text' : 'text-sky-text'} font-bold uppercase text-[10px] tracking-widest flex items-center gap-2`}>
-                  <span className="opacity-50">#</span> 3. {isRes ? 'Response_Body' : 'Request_Body'}
+            ) : (
+              <div className="space-y-3">
+                <h3 className={`${isRes ? 'text-amber-text' : 'text-emerald-text'} font-bold uppercase text-[10px] tracking-widest flex items-center gap-2`}>
+                  <span className="opacity-50">#</span> 1. {isRes ? 'Response_Status' : 'Request_Line'}
                 </h3>
-                <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-87.5">
+
+                {isRes ? (
+                  <div className="flex items-center gap-3">
+                    <span className="text-zinc-500 text-xs font-mono">HTTP/2.0</span>
+                    <input
+                      type="number" value={editStatusCode} onChange={(e) => setEditStatusCode(Number(e.target.value))}
+                      className="w-24 bg-zinc-950 border border-zinc-800 p-3 rounded text-emerald-text font-black outline-none focus:border-amber-500 transition-colors text-sm text-center"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-full">
+                    <UrlEditor
+                      method={editMethod} onMethodChange={setEditMethod}
+                      url={editUrl} onChange={setEditUrl}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {currentReq.isWs ? (
+              <div className="flex flex-col space-y-3">
+                <h3 className="text-cyan-400 font-bold uppercase text-[10px] tracking-widest flex items-center gap-2">
+                  <span className="opacity-50">#</span> 2. WebSocket_Frame_Payload
+                </h3>
+                <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-100">
                   <BodyEditor body={editBody} headers={editHeaders} onChange={setEditBody} />
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className={`grid ${splitMode === 'horizontal' ? 'grid-cols-2 gap-8' : 'grid-cols-1 gap-10'}`}>
+                <div className="flex flex-col space-y-3">
+                  <h3 className={`${isRes ? 'text-amber-text' : 'text-sky-text'} font-bold uppercase text-[10px] tracking-widest flex items-center gap-2`}>
+                    <span className="opacity-50">#</span> 2. {isRes ? 'Response_Headers' : 'Request_Headers'}
+                  </h3>
+                  <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-75">
+                    <HeaderEditor initialHeaders={isRes ? (currentReq.response_headers || {}) : (currentReq.request_headers || {})} onChange={setEditHeaders} />
+                  </div>
+                </div>
+
+                <div className="flex flex-col space-y-3">
+                  <h3 className={`${isRes ? 'text-amber-text' : 'text-sky-text'} font-bold uppercase text-[10px] tracking-widest flex items-center gap-2`}>
+                    <span className="opacity-50">#</span> 3. {isRes ? 'Response_Body' : 'Request_Body'}
+                  </h3>
+                  <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-87.5">
+                    <BodyEditor body={editBody} headers={editHeaders} onChange={setEditBody} />
+                  </div>
+                </div>
+              </div>
+            )}
 
           </div>
         ) : (
