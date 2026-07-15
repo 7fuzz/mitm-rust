@@ -46,21 +46,47 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
   const [importData, setImportData] = useState<{
     name?: string;
     all_environments?: Array<{ id: string; name: string }>;
+    all_variables?: Array<any>;
     test_cases?: Array<{ name: string; target: unknown[] }>;
-    placeholders?: Record<string, string>;
+    placeholders?: Record<string, any>;
     __isLegacy?: boolean;
   } | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const handleImportFileLoaded = (data: {
     all_environments?: Array<{ id: string; name: string }>;
-    placeholders?: Record<string, string>;
+    all_variables?: Array<any>;
+    placeholders?: Record<string, any>;
     __isLegacy?: boolean;
   }) => {
     // Detect legacy placeholders and present them as a virtual environment for selective import
     if ((!data.all_environments || data.all_environments.length === 0) && data.placeholders && Object.keys(data.placeholders).length > 0) {
       data.__isLegacy = true;
       data.all_environments = [{ id: 'legacy-env', name: 'Variables (Legacy Project Format)' }];
+      
+      // Convert placeholders to all_variables so the backend can import them correctly
+      const all_variables: any[] = [];
+      for (const [key, value] of Object.entries(data.placeholders)) {
+        let values: any[] = [];
+        if (Array.isArray(value)) {
+          values = value.map((val, idx) => ({
+            name: `Value ${idx}`,
+            value: String(val)
+          }));
+        } else {
+          values = [{
+            name: 'Default',
+            value: String(value)
+          }];
+        }
+        all_variables.push({
+          environmentId: 'legacy-env',
+          name: key,
+          activeIndex: 0,
+          values
+        });
+      }
+      data.all_variables = all_variables;
     }
     setImportData(data);
     setIsImportModalOpen(true);
