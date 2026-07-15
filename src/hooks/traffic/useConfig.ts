@@ -37,7 +37,7 @@ export function useConfig() {
     theme: 'dark' as 'dark' | 'light',
     shortcuts: DEFAULT_SHORTCUTS
   });
-  const [isProxyActive, setIsProxyActive] = useState(true);
+  const [proxyMode, setProxyModeState] = useState<'off' | 'normal' | 'halt_client' | 'halt_all'>('normal');
   const [isIntercepting, setIsIntercepting] = useState(false);
   const [interceptMode, setInterceptMode] = useState<'both' | 'request' | 'response'>('both');
   const [ignoredMethods, setIgnoredMethods] = useState<string[]>(['OPTIONS']);
@@ -52,6 +52,15 @@ export function useConfig() {
 
   const limitRef = useRef({ enabled: isLimitEnabled, value: historyLimit });
   const prefsRef = useRef(prefs);
+
+  const updateProxyMode = useCallback(async (mode: 'off' | 'normal' | 'halt_client' | 'halt_all') => {
+    setProxyModeState(mode);
+    try {
+      await invoke('set_proxy_mode', { mode });
+    } catch (e) {
+      console.error('Failed to update proxy mode:', e);
+    }
+  }, []);
 
   const updateConfig = useCallback(async (enabled: boolean, mode: 'both' | 'request' | 'response', ignored: string[], filter: string, autoFocusVal: boolean) => {
     setIsIntercepting(enabled); setInterceptMode(mode); setIgnoredMethods(ignored); setUrlFilter(filter); setAutoFocus(autoFocusVal);
@@ -116,7 +125,9 @@ export function useConfig() {
     },
     setIsLimitEnabled, 
     setHistoryLimit, 
-    setIsProxyActive,
+    setProxyMode: (mode: any) => {
+      if (mode) setProxyModeState(mode);
+    },
     setIsIntercepting, 
     setInterceptMode, 
     setIgnoredMethods, 
@@ -129,14 +140,14 @@ export function useConfig() {
   return useMemo(() => ({
     prefs, updatePrefs, prefsRef,
     simpleMode: prefs.simpleMode,
-    isProxyActive, setIsProxyActive,
+    proxyMode, updateProxyMode,
     isIntercepting, interceptMode, ignoredMethods, urlFilter, autoFocus, updateConfig,
     isLimitEnabled, setIsLimitEnabled, historyLimit, setHistoryLimit, limitRef,
     uiLayout, updateUILayout, 
     filterConfig, updateFilterConfig,
     initConfig
   }), [
-    prefs, updatePrefs, isProxyActive, isIntercepting, interceptMode, ignoredMethods,
+    prefs, updatePrefs, proxyMode, updateProxyMode, isIntercepting, interceptMode, ignoredMethods,
     urlFilter, autoFocus, updateConfig, isLimitEnabled, historyLimit, uiLayout,
     updateUILayout, filterConfig, updateFilterConfig, initConfig
   ]);

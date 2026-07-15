@@ -49,7 +49,7 @@ function useTrafficState() {
     
     try {
       const data = await invoke<SyncData>('sync_data');
-      const proxyStatus = await invoke<{ enabled: boolean }>('get_proxy_status');
+      const proxyStatus = await invoke<{ mode: string }>('get_proxy_status');
       
       // Update each hook with fresh data
       trafficData.setTraffic(data.history || []);
@@ -60,7 +60,9 @@ function useTrafficState() {
       if (data.prefs) config.initConfig.setPrefs(data.prefs);
       if (data.uiLayout) config.initConfig.setUiLayout(data.uiLayout as any);
       if (data.toolkitJson) jsonToolkit._initToolkitJson(data.toolkitJson);
-      if (proxyStatus) config.initConfig.setIsProxyActive(proxyStatus.enabled);
+      if (proxyStatus && proxyStatus.mode) {
+        config.initConfig.setProxyMode(proxyStatus.mode);
+      }
       if (data.filterConfig) config.initConfig.setFilterConfig(data.filterConfig);
       if (data.historyLimits) {
         const hl = data.historyLimits as any;
