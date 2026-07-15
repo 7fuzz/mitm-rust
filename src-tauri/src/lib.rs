@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use tokio::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 use crate::models::{ProxyConfig, ProxyManager, AppState};
+use serde::{Serialize, Deserialize};
 
 async fn spawn_proxy_listener(
     app_handle: AppHandle,
@@ -46,15 +47,19 @@ async fn spawn_proxy_listener(
 }
 
 #[tauri::command]
-async fn toggle_proxy(app_handle: AppHandle, state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
+async fn set_proxy_mode(app_handle: AppHandle, state: State<'_, AppState>, mode: String) -> Result<(), String> {
     let mut manager = state.proxy_manager.lock().await;
-    manager.config.enabled = enabled;
+    let old_mode = manager.config.proxy_mode.clone();
+    manager.config.proxy_mode = mode.clone();
     
-    if !enabled {
+    let is_now_enabled = mode != "off";
+    let was_enabled = old_mode != "off";
+    
+    if !is_now_enabled {
         for (_, tx) in manager.active_listeners.drain() {
             let _ = tx.send(());
         }
-    } else {
+    } else if !was_enabled {
         let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
         let ca = Arc::new(ca::get_ca(app_data_dir.join("ca")));
         let bindings = manager.config.bindings.clone();
@@ -85,7 +90,7 @@ async fn update_network_settings(app_handle: AppHandle, state: State<'_, AppStat
     let mut manager = state.proxy_manager.lock().await;
     manager.config.bindings = bindings;
     
-    if manager.config.enabled {
+    if manager.config.proxy_mode != "off" {
         for (_, tx) in manager.active_listeners.drain() {
             let _ = tx.send(());
         }
@@ -166,7 +171,7 @@ async fn regenerate_root_ca(app_handle: AppHandle, state: State<'_, AppState>) -
     let new_ca = Arc::new(ca::get_ca(ca_dir.clone()));
     let cert_pem = new_ca.cert_pem.clone();
 
-    if manager.config.enabled {
+    if manager.config.proxy_mode != "off" {
         let bindings = manager.config.bindings.clone();
         for addr_str in bindings {
             if let Ok(tx) = spawn_proxy_listener(
@@ -183,10 +188,19 @@ async fn regenerate_root_ca(app_handle: AppHandle, state: State<'_, AppState>) -
     Ok(cert_pem)
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProxyStatusResponse {
+    pub mode: String,
+    pub bindings: Vec<String>,
+}
+
 #[tauri::command]
-async fn get_proxy_status(state: State<'_, AppState>) -> Result<ProxyConfig, String> {
+async fn get_proxy_status(state: State<'_, AppState>) -> Result<ProxyStatusResponse, String> {
     let manager = state.proxy_manager.lock().await;
-    Ok(manager.config.clone())
+    Ok(ProxyStatusResponse {
+        mode: manager.config.proxy_mode.clone(),
+        bindings: manager.config.bindings.clone(),
+    })
 }
 
 #[tauri::command]
@@ -204,7 +218,7 @@ pub fn run() {
         active_listeners: HashMap::new(),
         config: ProxyConfig {
             bindings: vec!["8080".to_string()],
-            enabled: true,
+            proxy_mode: "normal".to_string(),
         }
     }));
 
@@ -265,11 +279,12 @@ pub fn run() {
             state::update_ui_layout,
             state::save_state,
             state::purge_all_data,
+            state::purge_selective_data,
             state::upload_file,
             db_viewer::get_database_tables,
             db_viewer::get_table_data,
             get_proxy_status,
-            toggle_proxy,
+            set_proxy_mode,
             update_network_settings
         ])
         .setup(|app| {
@@ -312,7 +327,7 @@ pub fn run() {
                     }
                 }
 
-                if manager.config.enabled {
+                if manager.config.proxy_mode != "off" {
                     let ca = Arc::new(ca::get_ca(ca_dir));
                     let bindings = manager.config.bindings.clone();
                     for addr_str in bindings {
