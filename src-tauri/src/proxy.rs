@@ -23,6 +23,7 @@ use flate2::read::{GzDecoder, ZlibDecoder};
 use base64::Engine;
 
 use crate::ca::CA;
+use crate::repeater_execute::reconstruct_multipart_if_needed;
 
 fn decompress_body(body: &[u8], encoding: &str) -> Option<Vec<u8>> {
     let encodings: Vec<&str> = encoding.split(',').map(|s| s.trim()).collect();
@@ -485,6 +486,38 @@ async fn handle_http(
         None => encode_body_for_ui(&request_body_bytes, &req_content_type),
     };
 
+    let proxy_mode = {
+        let app_state = state.app_handle.state::<crate::models::AppState>();
+        let proxy_manager = app_state.proxy_manager.lock().await;
+        proxy_manager.config.proxy_mode.clone()
+    };
+
+    if proxy_mode == "halt_all" {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+        let traffic = Traffic {
+            id: traffic_id.clone(),
+            method: method.to_string(),
+            url: url.clone(),
+            host: host.clone(),
+            status_code: 502,
+            request_headers: request_headers.clone(),
+            response_headers: vec![("Content-Type".to_string(), "text/plain".to_string())],
+            request_body: req_body_for_ui.clone(),
+            response_body: "Request halted by MITM proxy (no forwarding to server)".to_string(),
+            phase: "response".to_string(),
+            is_intercepted: false,
+            intercepted_at: Some(now),
+            duration_ms: Some(0),
+        };
+        let _ = state.app_handle.emit("traffic_captured", &traffic);
+        
+        return Ok(Response::builder()
+            .status(StatusCode::BAD_GATEWAY)
+            .header("Content-Type", "text/plain")
+            .body(Full::new(Bytes::from("Request halted by MITM proxy (no forwarding to server)")))
+            .unwrap());
+    }
+
     if intercept_config.enabled && 
        (intercept_config.mode == "both" || intercept_config.mode == "request") &&
        !intercept_config.ignored_methods.contains(&method.to_string()) &&
@@ -536,7 +569,11 @@ async fn handle_http(
             if let Some(u) = action.url { url = u; }
             if let Some(h) = action.headers { request_headers = h; }
             if let Some(b) = action.body { 
-                request_body_bytes = Bytes::from(b.clone());
+                let mut body_bytes = b.as_bytes().to_vec();
+                if let Some(reconstructed) = reconstruct_multipart_if_needed(&b, &mut request_headers) {
+                    body_bytes = reconstructed;
+                }
+                request_body_bytes = Bytes::from(body_bytes);
                 // Update UI representation of request body for the next phase
                 req_body_for_ui = b;
                 // If body was modified or even just resumed from UI, it's now decompressed
@@ -583,6 +620,31 @@ async fn handle_http(
                 Some(b) => encode_body_for_ui(b, &res_content_type),
                 None => encode_body_for_ui(&response_body_bytes, &res_content_type),
             };
+
+            if proxy_mode == "halt_client" {
+                let traffic = Traffic {
+                    id: traffic_id.clone(),
+                    method: method.to_string(),
+                    url: url.clone(),
+                    host: host.clone(),
+                    status_code: status,
+                    request_headers: request_headers.clone(),
+                    response_headers: response_headers.clone(),
+                    request_body: req_body_for_ui.clone(),
+                    response_body: res_body_for_ui.clone(),
+                    phase: "response".to_string(),
+                    is_intercepted: false,
+                    intercepted_at: None,
+                    duration_ms: Some(duration),
+                };
+                let _ = state.app_handle.emit("traffic_captured", &traffic);
+                
+                return Ok(Response::builder()
+                    .status(StatusCode::BAD_GATEWAY)
+                    .header("Content-Type", "text/plain")
+                    .body(Full::new(Bytes::from("Response halted by MITM proxy (forwarded to server but blocked to client)")))
+                    .unwrap());
+            }
 
             // 2. Check Response Interception
             if intercept_config.enabled && 

@@ -64,7 +64,7 @@ pub struct SyncData {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProxyConfig {
     pub bindings: Vec<String>,
-    pub enabled: bool,
+    pub proxy_mode: String, // "off", "normal", "halt_client", "halt_all"
 }
 
 pub struct ProxyManager {
