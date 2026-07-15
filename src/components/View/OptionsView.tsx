@@ -21,7 +21,7 @@ const OPTION_SECTIONS = [
 type OptionSectionKey = typeof OPTION_SECTIONS[number]['key'];
 
 export function OptionsView() {
-  const { prefs, updatePrefs, isProxyActive, setIsProxyActive, purgeAllData, uiLayout, updateUILayout } = useTraffic();
+  const { prefs, updatePrefs, proxyMode, updateProxyMode, purgeAllData, uiLayout, updateUILayout } = useTraffic();
   const { confirm } = useDialog();
 
   const [bindings, setBindings] = useState<string[]>(['8080']);
@@ -62,17 +62,7 @@ export function OptionsView() {
     }
   };
 
-  const handleToggleProxy = async () => {
-    const nextValue = !isProxyActive;
-    try {
-      await invoke('toggle_proxy', { enabled: nextValue });
-      setIsProxyActive(nextValue);
-      setSaveMessage(nextValue ? 'Proxy engine started' : 'Proxy engine stopped');
-    } catch (e) {
-      setSaveMessage(`Error: ${e}`);
-    }
-    setTimeout(() => setSaveMessage(''), 3000);
-  };
+
 
   const handleSaveSettings = async () => {
     setIsSaving(true);
@@ -152,10 +142,15 @@ export function OptionsView() {
             <div className="grid grid-cols-3 gap-4 mb-8">
               <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg shadow-sm hover:border-sky-500/30 transition-all">
                 <Toggle
-                  checked={isProxyActive}
-                  onChange={handleToggleProxy}
+                  checked={proxyMode !== 'off'}
+                  onChange={async () => {
+                    const nextMode = proxyMode === 'off' ? 'normal' : 'off';
+                    await updateProxyMode(nextMode);
+                    setSaveMessage(nextMode !== 'off' ? 'Proxy engine started' : 'Proxy engine stopped');
+                    setTimeout(() => setSaveMessage(''), 3000);
+                  }}
                   label="Proxy_Engine"
-                  subLabel={isProxyActive ? 'ACTIVE_LISTENING' : 'OFFLINE'}
+                  subLabel={proxyMode !== 'off' ? 'ACTIVE_LISTENING' : 'OFFLINE'}
                   variant="sky"
                 />
               </div>
@@ -234,6 +229,64 @@ export function OptionsView() {
                 >
                   {isSaving ? 'Rebinding...' : 'Apply & Restart'}
                 </Button>
+              </div>
+            </div>
+
+            <div className="p-6 border border-zinc-800 rounded bg-zinc-900/30 space-y-6">
+              <h2 className="text-purple-400 font-bold uppercase tracking-widest text-[10px] flex items-center gap-2">
+                <span className="opacity-50">#</span> 2. Proxy_Halt_Modes
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {[
+                  {
+                    key: 'off',
+                    label: 'Proxy OFF Entirely',
+                    badge: 'DISABLED',
+                    color: 'border-zinc-800 hover:border-zinc-700 bg-zinc-950/40 text-zinc-500',
+                    activeColor: 'border-zinc-600 bg-zinc-850/50 text-zinc-400',
+                    desc: 'Disables the proxy listeners completely. No traffic will be captured.'
+                  },
+                  {
+                    key: 'normal',
+                    label: 'Normal Intercept',
+                    badge: 'DEFAULT',
+                    color: 'border-zinc-800 hover:border-sky-900/40 bg-zinc-950/40 text-zinc-400',
+                    activeColor: 'border-sky-500 bg-sky-500/5 text-sky-300',
+                    desc: 'Forwards requests and responses normally, capturing and recording logs for analysis.'
+                  },
+                  {
+                    key: 'halt_client',
+                    label: 'Halt Client Only',
+                    badge: 'NO CLIENT INBOUND',
+                    color: 'border-zinc-800 hover:border-amber-900/40 bg-zinc-950/40 text-zinc-400',
+                    activeColor: 'border-amber-500 bg-amber-500/5 text-amber-300',
+                    desc: 'Forwards requests to the server to capture and view the response, but blocks forwarding the response back to the client.'
+                  },
+                  {
+                    key: 'halt_all',
+                    label: 'Halt Client & Server',
+                    badge: 'NO OUTBOUND',
+                    color: 'border-zinc-800 hover:border-rose-900/40 bg-zinc-950/40 text-zinc-400',
+                    activeColor: 'border-rose-500 bg-rose-500/5 text-rose-300',
+                    desc: 'Halts all requests immediately. No data is sent to the target server, and the client receives a blocked response.'
+                  }
+                ].map(mode => {
+                  const isActive = (proxyMode || 'normal') === mode.key;
+                  return (
+                    <button
+                      key={mode.key}
+                      onClick={() => updateProxyMode(mode.key as any)}
+                      className={`flex flex-col text-left p-4 border rounded-lg transition-all duration-200 cursor-pointer ${isActive ? mode.activeColor : mode.color}`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-2">
+                        <span className="text-xs font-bold font-mono tracking-tight">{mode.label}</span>
+                        <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${isActive ? 'bg-current/10' : 'bg-zinc-800 text-zinc-500'}`}>{mode.badge}</span>
+                      </div>
+                      <p className="text-[10px] opacity-75 leading-relaxed font-medium mt-1">{mode.desc}</p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </>
@@ -375,6 +428,7 @@ export function OptionsView() {
                 'This will IRREVERSIBLY destroy all history, collections, and variables. The app will restart after purge.',
                 handlePurge
               )}
+              openConfirm={openConfirm}
             />
           </div>
         );

@@ -15,7 +15,7 @@ import { VariableQuickSwitcherModal, EnvironmentQuickSwitcherModal } from '@/com
 
 function TrafficApp() {
   const {
-    traffic, repeaterRequests, simpleMode, prefs, isProxyActive,
+    traffic, repeaterRequests, simpleMode, prefs, proxyMode, updateProxyMode,
     variables, activeEnvId, updateVariable, reorderVariables,
     addVariable, deleteVariable,
     environments, setActiveEnvironment
@@ -155,14 +155,50 @@ function TrafficApp() {
             )}
           </button>
 
-          <div className={`flex items-center gap-3 px-3 py-1.5 border rounded-full group transition-all cursor-default ${isProxyActive ? 'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40' : 'bg-rose-500/5 border-rose-500/20 hover:border-rose-500/40'}`}>
-            <div className="relative flex h-2 w-2">
-              {isProxyActive && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${isProxyActive ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+          <div className="relative flex items-center">
+            <select
+              value={proxyMode}
+              onChange={(e) => updateProxyMode(e.target.value as any)}
+              className={`appearance-none flex items-center gap-3 pl-8 pr-8 py-1.5 border rounded-full text-[10px] font-black uppercase tracking-[0.15em] transition-all cursor-pointer outline-none bg-zinc-950/80 ${
+                proxyMode === 'off' 
+                  ? 'border-rose-500/20 text-rose-500/80 focus:border-rose-500/50' 
+                  : proxyMode === 'normal'
+                  ? 'border-emerald-500/20 text-emerald-500/80 focus:border-emerald-500/50'
+                  : proxyMode === 'halt_client'
+                  ? 'border-amber-500/20 text-amber-500/80 focus:border-amber-500/50'
+                  : 'border-purple-500/20 text-purple-500/80 focus:border-purple-500/50'
+              }`}
+            >
+              <option value="off" className="bg-zinc-950 text-zinc-400">Offline</option>
+              <option value="normal" className="bg-zinc-950 text-zinc-400">Normal</option>
+              <option value="halt_client" className="bg-zinc-950 text-zinc-400">Halt Client</option>
+              <option value="halt_all" className="bg-zinc-950 text-zinc-400">Halt All</option>
+            </select>
+            
+            <div className="absolute left-3 pointer-events-none flex h-2 w-2">
+              {proxyMode !== 'off' && (
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  proxyMode === 'normal' 
+                    ? 'bg-emerald-400' 
+                    : proxyMode === 'halt_client'
+                    ? 'bg-amber-400'
+                    : 'bg-purple-400'
+                }`}></span>
+              )}
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                proxyMode === 'off'
+                  ? 'bg-rose-500'
+                  : proxyMode === 'normal'
+                  ? 'bg-emerald-500'
+                  : proxyMode === 'halt_client'
+                  ? 'bg-amber-500'
+                  : 'bg-purple-500'
+              }`}></span>
             </div>
-            <span className={`text-[10px] font-black uppercase tracking-[0.15em] ${isProxyActive ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>
-              {isProxyActive ? 'Proxy_Live' : 'Proxy_Offline'}
-            </span>
+            
+            <div className="absolute right-3 pointer-events-none text-zinc-500">
+              <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
           </div>
         </div>
       </header>
