@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, Emitter};
 use crate::models::{ProxyConfig, ProxyManager, AppState};
 use serde::{Serialize, Deserialize};
 
@@ -244,10 +244,16 @@ async fn resume_ws_flow(id: String, action: crate::models::WsResumeAction, state
 }
 
 #[tauri::command]
-async fn send_websocket_message(connection_id: String, direction: String, payload: String, state: State<'_, AppState>) -> Result<(), String> {
+async fn send_websocket_message(
+    app_handle: AppHandle,
+    connection_id: String,
+    direction: String,
+    payload: String,
+    state: State<'_, AppState>
+) -> Result<(), String> {
     let active_ws = state.active_websockets.lock().await;
     if let Some(conn) = active_ws.get(&connection_id) {
-        let msg = tokio_tungstenite::tungstenite::Message::Text(payload);
+        let msg = tokio_tungstenite::tungstenite::Message::Text(payload.clone());
         if direction == "to_server" {
             conn.to_server_tx.send(msg).map_err(|e| e.to_string())?;
         } else if direction == "to_client" {
@@ -255,6 +261,37 @@ async fn send_websocket_message(connection_id: String, direction: String, payloa
         } else {
             return Err("Invalid direction".to_string());
         }
+
+        // Log the injected message to the database
+        let message_id = uuid::Uuid::new_v4().to_string();
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+        
+        let db_path = db::get_db_path(&app_handle);
+        let conn_db = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+        conn_db.execute(
+            "INSERT INTO websocket_messages (id, connection_id, direction, msg_type, payload, timestamp, is_intercepted) VALUES (?, ?, ?, ?, ?, ?, 0)",
+            rusqlite::params![
+                message_id,
+                connection_id,
+                direction,
+                "text",
+                payload,
+                now as i64
+            ]
+        ).map_err(|e| e.to_string())?;
+
+        // Emit message to frontend so it shows up in real time
+        let ws_message = crate::models::WsMessage {
+            id: message_id,
+            connection_id: connection_id.clone(),
+            direction: direction.clone(),
+            msg_type: "text".to_string(),
+            payload: payload.clone(),
+            timestamp: now,
+            is_intercepted: false,
+        };
+        let _ = app_handle.emit("ws_message_captured", &ws_message);
+
         Ok(())
     } else {
         Err("Active WebSocket connection not found".to_string())
