@@ -193,6 +193,98 @@ fn interpolate_text(input: &str, vars: &HashMap<String, String>) -> String {
     interpolate_dates(&with_vars)
 }
 
+#[derive(serde::Deserialize)]
+struct MultipartEntry {
+    k: String,
+    v: String,
+    #[serde(rename = "type")]
+    entry_type: String,
+    #[serde(rename = "fileName")]
+    file_name: Option<String>,
+    #[serde(rename = "contentType")]
+    content_type: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct FormEditorData {
+    __form_data: Vec<MultipartEntry>,
+}
+
+pub fn reconstruct_multipart_if_needed(
+    body: &str,
+    headers: &mut Vec<(String, String)>,
+) -> Option<Vec<u8>> {
+    if !body.starts_with('{') || !body.contains("\"__form_data\"") {
+        return None;
+    }
+
+    let form_data: FormEditorData = serde_json::from_str(body).ok()?;
+
+    let mut content_type_index = None;
+    let mut boundary = None;
+
+    for (i, (k, v)) in headers.iter().enumerate() {
+        if k.to_lowercase() == "content-type" {
+            content_type_index = Some(i);
+            if let Some(pos) = v.find("boundary=") {
+                let b = &v[pos + 9..];
+                let b = b.trim_matches('"').trim();
+                if !b.is_empty() {
+                    boundary = Some(b.to_string());
+                }
+            }
+            break;
+        }
+    }
+
+    let boundary_str = match boundary {
+        Some(b) => b,
+        None => {
+            let gen_b = format!("----MitmRustBoundary-{}", uuid::Uuid::new_v4());
+            if let Some(idx) = content_type_index {
+                headers[idx].1 = format!("multipart/form-data; boundary={}", gen_b);
+            } else {
+                headers.push(("Content-Type".to_string(), format!("multipart/form-data; boundary={}", gen_b)));
+            }
+            gen_b
+        }
+    };
+
+    let mut body_bytes = Vec::new();
+    for entry in form_data.__form_data {
+        body_bytes.extend_from_slice(format!("--{}\r\n", boundary_str).as_bytes());
+        if entry.entry_type == "file" {
+            let file_name = entry.file_name.as_deref().unwrap_or("file");
+            let content_type = entry.content_type.as_deref().unwrap_or("application/octet-stream");
+            body_bytes.extend_from_slice(
+                format!(
+                    "Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"\r\nContent-Type: {}\r\n\r\n",
+                    entry.k, file_name, content_type
+                ).as_bytes()
+            );
+            if !entry.v.is_empty() {
+                if let Ok(mut file) = std::fs::File::open(&entry.v) {
+                    let _ = std::io::copy(&mut file, &mut body_bytes);
+                } else {
+                    body_bytes.extend_from_slice(entry.v.as_bytes());
+                }
+            }
+        } else {
+            body_bytes.extend_from_slice(
+                format!(
+                    "Content-Disposition: form-data; name=\"{}\"\r\n\r\n",
+                    entry.k
+                ).as_bytes()
+            );
+            body_bytes.extend_from_slice(entry.v.as_bytes());
+        }
+        body_bytes.extend_from_slice(b"\r\n");
+    }
+    body_bytes.extend_from_slice(format!("--{}--\r\n", boundary_str).as_bytes());
+
+    Some(body_bytes)
+}
+
 #[tauri::command]
 pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Result<proxy::Traffic, String> {
     let db_path = db::get_db_path(&app_handle);
@@ -217,10 +309,15 @@ pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Resu
 
     let method = interpolate_text(&method, &vars);
     let url = interpolate_text(&url, &vars);
-    let headers: Vec<(String, String)> = headers.into_iter()
+    let mut headers: Vec<(String, String)> = headers.into_iter()
         .map(|(k, v)| (interpolate_text(&k, &vars), interpolate_text(&v, &vars)))
         .collect();
     let body = interpolate_text(&body, &vars);
+
+    let mut body_bytes = body.as_bytes().to_vec();
+    if let Some(reconstructed) = reconstruct_multipart_if_needed(&body, &mut headers) {
+        body_bytes = reconstructed;
+    }
 
     let https = hyper_rustls::HttpsConnectorBuilder::new()
         .with_webpki_roots()
@@ -237,7 +334,7 @@ pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Resu
         builder = builder.header(k, v);
     }
 
-    let req = builder.body(Full::new(Bytes::from(body.clone()))).map_err(|e| e.to_string())?;
+    let req = builder.body(Full::new(Bytes::from(body_bytes))).map_err(|e| e.to_string())?;
     
     let start_time = std::time::SystemTime::now();
     let res = client.request(req).await.map_err(|e| e.to_string())?;
