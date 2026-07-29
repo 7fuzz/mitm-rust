@@ -4,7 +4,11 @@ use std::path::PathBuf;
 use rusqlite::Connection;
 
 pub fn get_db_path(app_handle: &AppHandle) -> PathBuf {
-    app_handle.path().app_data_dir().expect("Failed to get app data dir").join("mitm.db")
+    let app_dir = app_handle.path().app_data_dir().expect("Failed to get app data dir");
+    if !app_dir.exists() {
+        let _ = std::fs::create_dir_all(&app_dir);
+    }
+    app_dir.join("mitm.db")
 }
 
 pub fn init_database(app_handle: &AppHandle) -> Result<(), String> {
