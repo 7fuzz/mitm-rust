@@ -79,7 +79,7 @@ export function useKeyboardShortcuts({
       key: [shortcuts?.cycle_prev || '', shortcuts?.cycle_next || ''],
       enabled: !!shortcuts && !isModalOpen && !waitingForSecondKey.current,
       handler: (e) => {
-        const tabs: TabType[] = ['history', 'intercept', 'repeater'];
+        const tabs: TabType[] = ['history', 'websocket', 'intercept', 'repeater'];
         if (!simpleMode) tabs.push('workspace', 'utilities');
         tabs.push('options');
 

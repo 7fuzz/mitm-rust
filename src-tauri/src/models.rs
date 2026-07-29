@@ -72,7 +72,32 @@ pub struct ProxyManager {
     pub config: ProxyConfig,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WsMessage {
+    pub id: String,
+    pub connection_id: String,
+    pub direction: String,
+    pub msg_type: String,
+    pub payload: String,
+    pub timestamp: u64,
+    pub is_intercepted: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WsResumeAction {
+    pub drop: Option<bool>,
+    pub payload: Option<String>,
+}
+
+pub struct ActiveWsConnection {
+    pub to_client_tx: tokio::sync::mpsc::UnboundedSender<tokio_tungstenite::tungstenite::Message>,
+    pub to_server_tx: tokio::sync::mpsc::UnboundedSender<tokio_tungstenite::tungstenite::Message>,
+}
+
 pub struct AppState {
     pub proxy_manager: Arc<Mutex<ProxyManager>>,
     pub intercept_state: Arc<Mutex<proxy::InterceptState>>,
+    pub active_websockets: Arc<Mutex<HashMap<String, ActiveWsConnection>>>,
+    pub pending_ws: Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<WsResumeAction>>>>,
 }

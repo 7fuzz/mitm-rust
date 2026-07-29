@@ -8,12 +8,13 @@ pub mod workspace;
 pub mod state;
 pub mod history;
 pub mod db_viewer;
+pub mod websocket;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, Emitter};
 use crate::models::{ProxyConfig, ProxyManager, AppState};
 use serde::{Serialize, Deserialize};
 
@@ -204,6 +205,100 @@ async fn get_proxy_status(state: State<'_, AppState>) -> Result<ProxyStatusRespo
 }
 
 #[tauri::command]
+async fn get_websocket_messages(app_handle: AppHandle, connection_id: String) -> Result<Vec<crate::models::WsMessage>, String> {
+    let db_path = db::get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn.prepare("SELECT id, connection_id, direction, msg_type, payload, timestamp, is_intercepted FROM websocket_messages WHERE connection_id = ? ORDER BY timestamp ASC").map_err(|e| e.to_string())?;
+    let ws_messages = stmt.query_map([connection_id], |row| {
+        let is_intercepted_val: i32 = row.get(6)?;
+        Ok(crate::models::WsMessage {
+            id: row.get(0)?,
+            connection_id: row.get(1)?,
+            direction: row.get(2)?,
+            msg_type: row.get(3)?,
+            payload: row.get(4)?,
+            timestamp: row.get(5)?,
+            is_intercepted: is_intercepted_val != 0,
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    let mut list = Vec::new();
+    for msg in ws_messages {
+        if let Ok(m) = msg {
+            list.push(m);
+        }
+    }
+    Ok(list)
+}
+
+#[tauri::command]
+async fn resume_ws_flow(id: String, action: crate::models::WsResumeAction, state: State<'_, AppState>) -> Result<(), String> {
+    let mut pending = state.pending_ws.lock().await;
+    if let Some(tx) = pending.remove(&id) {
+        let _ = tx.send(action);
+        Ok(())
+    } else {
+        Err("WebSocket frame flow not found".to_string())
+    }
+}
+
+#[tauri::command]
+async fn send_websocket_message(
+    app_handle: AppHandle,
+    connection_id: String,
+    direction: String,
+    payload: String,
+    state: State<'_, AppState>
+) -> Result<(), String> {
+    let active_ws = state.active_websockets.lock().await;
+    if let Some(conn) = active_ws.get(&connection_id) {
+        let msg = tokio_tungstenite::tungstenite::Message::Text(payload.clone());
+        if direction == "to_server" {
+            conn.to_server_tx.send(msg).map_err(|e| e.to_string())?;
+        } else if direction == "to_client" {
+            conn.to_client_tx.send(msg).map_err(|e| e.to_string())?;
+        } else {
+            return Err("Invalid direction".to_string());
+        }
+
+        // Log the injected message to the database
+        let message_id = uuid::Uuid::new_v4().to_string();
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+        
+        let db_path = db::get_db_path(&app_handle);
+        let conn_db = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+        conn_db.execute(
+            "INSERT INTO websocket_messages (id, connection_id, direction, msg_type, payload, timestamp, is_intercepted) VALUES (?, ?, ?, ?, ?, ?, 0)",
+            rusqlite::params![
+                message_id,
+                connection_id,
+                direction,
+                "text",
+                payload,
+                now as i64
+            ]
+        ).map_err(|e| e.to_string())?;
+
+        // Emit message to frontend so it shows up in real time
+        let ws_message = crate::models::WsMessage {
+            id: message_id,
+            connection_id: connection_id.clone(),
+            direction: direction.clone(),
+            msg_type: "text".to_string(),
+            payload: payload.clone(),
+            timestamp: now,
+            is_intercepted: false,
+        };
+        let _ = app_handle.emit("ws_message_captured", &ws_message);
+
+        Ok(())
+    } else {
+        Err("Active WebSocket connection not found".to_string())
+    }
+}
+
+#[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
@@ -228,9 +323,14 @@ pub fn run() {
         pending: std::collections::HashMap::new(),
     }));
 
+    let active_websockets = Arc::new(Mutex::new(HashMap::new()));
+    let pending_ws = Arc::new(Mutex::new(HashMap::new()));
+
     let state = AppState { 
         proxy_manager: Arc::clone(&proxy_manager),
         intercept_state: Arc::clone(&intercept_state),
+        active_websockets,
+        pending_ws,
     };
 
     tauri::Builder::default()
@@ -285,7 +385,10 @@ pub fn run() {
             db_viewer::get_table_data,
             get_proxy_status,
             set_proxy_mode,
-            update_network_settings
+            update_network_settings,
+            get_websocket_messages,
+            resume_ws_flow,
+            send_websocket_message
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();

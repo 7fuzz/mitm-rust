@@ -5,6 +5,7 @@ import { ThemeProvider, useTheme } from '@/hooks/ui/useTheme';
 import { InterceptView } from '@/components/View/InterceptView';
 import { RepeaterView } from '@/components/View/RepeaterView';
 import { HistoryView } from '@/components/View/HistoryView';
+import { WebSocketView } from '@/components/View/WebSocketView';
 import { OptionsView } from '@/components/View/OptionsView';
 import { UtilitiesView } from '@/components/View/UtilitiesView';
 import { DebugView } from '@/components/View/DebugView';
@@ -22,7 +23,7 @@ function TrafficApp() {
   } = useTraffic();
   const { theme, toggleTheme } = useTheme();
 
-  const [activeTab, setActiveTab] = useState<'history' | 'intercept' | 'repeater' | 'options' | 'utilities' | 'workspace' | 'debug'>('history');
+  const [activeTab, setActiveTab] = useState<'history' | 'websocket' | 'intercept' | 'repeater' | 'options' | 'utilities' | 'workspace' | 'debug'>('history');
   const workspaceRef = useRef<WorkspaceViewHandle>(null);
 
   const [isVarModalOpen, setIsVarModalOpen] = useState(false);
@@ -81,6 +82,13 @@ function TrafficApp() {
             className={`px-6 h-full flex items-center text-[11px] font-bold uppercase tracking-widest border-b-2 transition-all ${activeTab === 'history' ? 'border-emerald-500 text-emerald-400 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/30'}`}
           >
             HTTP_History
+          </button>
+
+          <button
+            onClick={() => setActiveTab('websocket')}
+            className={`px-6 h-full flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest border-b-2 transition-all ${activeTab === 'websocket' ? 'border-cyan-500 text-cyan-400 bg-zinc-900/50' : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/30'}`}
+          >
+            WebSockets
           </button>
 
           <button
@@ -206,6 +214,7 @@ function TrafficApp() {
       {/* Main Content Area */}
       <main className="flex-1 flex overflow-hidden relative">
         {activeTab === 'history' && <HistoryView />}
+        {activeTab === 'websocket' && <WebSocketView />}
         {activeTab === 'intercept' && <InterceptView />}
         {activeTab === 'repeater' && <RepeaterView />}
         {!simpleMode && activeTab === 'workspace' && <WorkspaceView ref={workspaceRef} />}
