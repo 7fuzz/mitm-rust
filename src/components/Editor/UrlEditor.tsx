@@ -78,7 +78,17 @@ export function UrlEditor({ method = 'GET', onMethodChange, url, onChange, urlPa
   if (url !== prevUrl && url !== lastGeneratedUrl.current) {
     setPrevUrl(url);
     setRawUrl(url);
-    paramsInitialized.current = false;
+    if (mode === 'structured') {
+      // Re-parse structured fields when switching requests while in structured mode
+      let savedParams: UrlParam[] | undefined;
+      if (urlParams) {
+        try { savedParams = JSON.parse(urlParams); } catch { /* ignore */ }
+      }
+      parseUrlToStructured(url, savedParams);
+      paramsInitialized.current = true;
+    } else {
+      paramsInitialized.current = false;
+    }
   }
 
   const handleModeSwitch = (newMode: 'raw' | 'structured') => {
