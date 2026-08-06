@@ -69,6 +69,44 @@ export function BodyEditor({ body, headers, onChange, onHeadersChange }: Props) 
     }
   };
 
+  const handleAttachBase64FileToJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64Str = reader.result as string;
+      
+      // If current body is valid JSON object, append property
+      try {
+        const trimmed = body.trim();
+        const parsed = trimmed ? JSON.parse(trimmed) : {};
+        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          const keyName = file.name.replace(/[^a-zA-Z0-9_]/g, '_');
+          parsed[keyName || 'file'] = base64Str;
+          onChange(JSON.stringify(parsed, null, 2));
+          if (!contentType.includes('application/json')) {
+            updateContentType('application/json');
+          }
+          return;
+        }
+      } catch { /* ignore fallback */ }
+
+      // Fallback: Set JSON structure
+      const newJson = {
+        fileName: file.name,
+        contentType: file.type || 'application/octet-stream',
+        data: base64Str
+      };
+      onChange(JSON.stringify(newJson, null, 2));
+      if (!contentType.includes('application/json')) {
+        updateContentType('application/json');
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   const isBodyJson = (() => {
     if (!body.trim()) return true;
     try { JSON.parse(body); return true; } catch { return false; }
@@ -100,6 +138,17 @@ export function BodyEditor({ body, headers, onChange, onHeadersChange }: Props) 
         </div>
 
         <div className="flex items-center gap-2">
+          <label 
+            className="text-[9px] font-black uppercase tracking-widest text-purple-400 hover:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 px-2 py-1 rounded border border-purple-500/30 cursor-pointer transition-all flex items-center gap-1"
+            title="Select a file from disk to encode as Base64 in JSON"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+            <span>+ Attach Base64 File</span>
+            <input type="file" className="hidden" onChange={handleAttachBase64FileToJSON} />
+          </label>
+
           {mode === 'form' && (
             <button 
               onClick={handleConvertToJSON}

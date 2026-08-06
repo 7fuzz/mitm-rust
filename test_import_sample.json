@@ -1,6 +1,6 @@
 {
   "name": "Test Project",
-  "url": "https://api.example.com",
+  "url": "https://{{host}}",
   "header": {
     "Content-Type": "application/json",
     "Accept": "application/json"
@@ -22,12 +22,34 @@
   "all_variables": [
     {
       "environmentId": "env_dev",
+      "name": "host",
+      "activeIndex": 0,
+      "values": [
+        {
+          "name": "Dev Server",
+          "value": "dev-api.example.com"
+        }
+      ]
+    },
+    {
+      "environmentId": "env_dev",
       "name": "token",
       "activeIndex": 0,
       "values": [
         {
           "name": "Default",
           "value": "dev_token_abc123"
+        }
+      ]
+    },
+    {
+      "environmentId": "env_prod",
+      "name": "host",
+      "activeIndex": 0,
+      "values": [
+        {
+          "name": "Production Gateway",
+          "value": "api.example.com"
         }
       ]
     },
@@ -46,7 +68,7 @@
   "test_cases": [
     {
       "name": "Authentication",
-      "url": "https://api.example.com/v1",
+      "url": "https://{{host}}/v1",
       "target": [
         {
           "name": "Login",
@@ -71,7 +93,7 @@
     },
     {
       "name": "Users",
-      "url": "https://api.example.com/v1",
+      "url": "https://{{url}}",
       "target": [
         {
           "name": "Get User",

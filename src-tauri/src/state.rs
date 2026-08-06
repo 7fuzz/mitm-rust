@@ -120,16 +120,46 @@ pub async fn upload_file(app_handle: AppHandle, name: String, content: Vec<u8>) 
 }
 
 #[tauri::command]
+pub async fn upload_file_base64(app_handle: AppHandle, name: String, base64_content: String) -> Result<String, String> {
+    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let uploads_dir = app_data_dir.join("uploads");
+    if !uploads_dir.exists() {
+        std::fs::create_dir_all(&uploads_dir).map_err(|e| e.to_string())?;
+    }
+    
+    let file_id = uuid::Uuid::new_v4().to_string();
+    let extension = std::path::Path::new(&name).extension().and_then(|s| s.to_str()).unwrap_or("bin");
+    let file_name = format!("{}.{}", file_id, extension);
+    let dest_path = uploads_dir.join(&file_name);
+    
+    let raw_b64 = if let Some(pos) = base64_content.find(',') {
+        &base64_content[pos + 1..]
+    } else {
+        &base64_content
+    };
+    
+    let clean_b64: String = raw_b64.chars().filter(|c| !c.is_whitespace()).collect();
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(&clean_b64)
+        .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(&clean_b64))
+        .map_err(|e| format!("Invalid base64 encoding: {}", e))?;
+
+    std::fs::write(&dest_path, bytes).map_err(|e| e.to_string())?;
+    
+    Ok(dest_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub async fn get_repeater_requests(app_handle: AppHandle, group_id: String) -> Result<Vec<RepeaterRequest>, String> {
     let db_path = db::get_db_path(&app_handle);
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     let (query, params): (&str, Vec<rusqlite::types::Value>) = if group_id == "All" {
-        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests ORDER BY order_index", vec![])
+        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests ORDER BY order_index ASC, created_at DESC", vec![])
     } else if group_id == "null" {
-        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id IS NULL ORDER BY order_index", vec![])
+        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id IS NULL ORDER BY order_index ASC, created_at DESC", vec![])
     } else {
-        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id = ? ORDER BY order_index", vec![rusqlite::types::Value::Text(group_id)])
+        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id = ? ORDER BY order_index ASC, created_at DESC", vec![rusqlite::types::Value::Text(group_id)])
     };
 
     let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
@@ -239,11 +269,11 @@ pub async fn sync_data(
 
     // 3. Repeater Requests (filtered by effective_group_id)
     let (request_query, request_params): (&str, Vec<rusqlite::types::Value>) = if effective_group_id == "All" {
-        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests ORDER BY order_index", vec![])
+        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests ORDER BY order_index ASC, created_at DESC", vec![])
     } else if effective_group_id == "null" {
-        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id IS NULL ORDER BY order_index", vec![])
+        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id IS NULL ORDER BY order_index ASC, created_at DESC", vec![])
     } else {
-        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id = ? ORDER BY order_index", vec![rusqlite::types::Value::Text(effective_group_id)])
+        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id = ? ORDER BY order_index ASC, created_at DESC", vec![rusqlite::types::Value::Text(effective_group_id)])
     };
 
     let mut stmt = conn.prepare(request_query).map_err(|e| e.to_string())?;

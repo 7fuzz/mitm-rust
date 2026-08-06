@@ -85,9 +85,24 @@ pub async fn create_repeater_item(app_handle: AppHandle, item: CreateRepeaterIte
         (None, None, None)
     };
 
+    let min_order: i32 = if let Some(ref gid) = item.group_id {
+        conn.query_row(
+            "SELECT COALESCE(MIN(order_index), 0) FROM repeater_requests WHERE group_id = ?",
+            [gid],
+            |row| row.get(0)
+        ).unwrap_or(0)
+    } else {
+        conn.query_row(
+            "SELECT COALESCE(MIN(order_index), 0) FROM repeater_requests WHERE group_id IS NULL",
+            [],
+            |row| row.get(0)
+        ).unwrap_or(0)
+    };
+    let new_order_index = min_order - 1;
+
     conn.execute(
-        "INSERT INTO repeater_requests (id, name, method, url, headers, body, extract, response_status, response_headers, response_body, group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        rusqlite::params![id, item.name, item.method, item.url, headers_json, item.body, extract_json, res_status, res_headers, res_body, item.group_id],
+        "INSERT INTO repeater_requests (id, name, method, url, headers, body, extract, response_status, response_headers, response_body, group_id, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        rusqlite::params![id, item.name, item.method, item.url, headers_json, item.body, extract_json, res_status, res_headers, res_body, item.group_id, new_order_index],
     ).map_err(|e| e.to_string())?;
 
     Ok(id)

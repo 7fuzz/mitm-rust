@@ -6,11 +6,12 @@ interface FormEntry {
   id: string;
   k: string;
   v: string;
-  type: 'text' | 'file';
+  type: 'text' | 'file' | 'base64';
   fileName?: string;
   contentType?: string;
   fileContent?: string; // Store path or reference
 }
+
 export function FormEditor({ initialBody, contentType, onChange }: { initialBody: string; contentType: string; onChange: (v: string) => void }) {
   const [entries, setEntries] = useState<FormEntry[]>([]);
   const lastEmitted = useRef<string | null>(null);
@@ -115,6 +116,22 @@ export function FormEditor({ initialBody, contentType, onChange }: { initialBody
     }
   };
 
+  const handleBase64FileUpload = (id: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      updateEntry(id, {
+        v: result,
+        fileName: file.name,
+        contentType: file.type || 'application/octet-stream'
+      });
+    };
+    reader.onerror = () => {
+      updateEntry(id, { v: 'Error reading file', fileName: file.name });
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="space-y-2">
       {entries.map(e => (
@@ -128,11 +145,14 @@ export function FormEditor({ initialBody, contentType, onChange }: { initialBody
              />
              <Select 
                value={e.type} 
-               onChange={(val) => updateEntry(e.id, { type: val as 'text' | 'file', v: '' })}
+               onChange={(val) => updateEntry(e.id, { type: val as 'text' | 'file' | 'base64', v: '' })}
                disabled={isUrlEncoded}
                options={[
                  { value: 'text', label: 'Text' },
-                 ...(!isUrlEncoded ? [{ value: 'file', label: 'File' }] : [])
+                 ...(!isUrlEncoded ? [
+                   { value: 'file', label: 'File (Path)' },
+                   { value: 'base64', label: 'File (Base64)' }
+                 ] : [])
                ]}
              />
           </div>
@@ -146,6 +166,45 @@ export function FormEditor({ initialBody, contentType, onChange }: { initialBody
                 rows={1}
                 className="resize-none min-h-[34px] break-all" 
               />
+            ) : e.type === 'base64' ? (
+              <div className="flex flex-col gap-2 p-2 bg-zinc-950 border border-zinc-800 rounded min-h-[34px]">
+                <div className="flex items-center justify-between gap-2">
+                   <div className="flex flex-col gap-1 flex-1 min-w-0">
+                      <Input 
+                        value={e.fileName || ''} 
+                        onChange={(ev) => updateEntry(e.id, { fileName: ev.target.value })}
+                        placeholder="File Name (e.g. document.pdf)"
+                        variant="sky"
+                        className="px-2 py-1 text-[9px] bg-zinc-900"
+                      />
+                      <Input 
+                        value={e.contentType || ''} 
+                        onChange={(ev) => updateEntry(e.id, { contentType: ev.target.value })}
+                        placeholder="Content-Type (e.g. application/pdf)"
+                        variant="emerald"
+                        className="px-2 py-1 text-[9px] bg-zinc-900"
+                      />
+                   </div>
+                   {e.v && (
+                     <span className="text-[9px] text-purple-text font-bold uppercase shrink-0">Base64</span>
+                   )}
+                </div>
+                <Textarea 
+                  value={e.v} 
+                  onChange={(ev) => updateEntry(e.id, { v: ev.target.value })} 
+                  placeholder="Base64 content or data:mime;base64,..." 
+                  rows={2}
+                  className="resize-none text-[10px] font-mono break-all bg-zinc-900" 
+                />
+                <input 
+                  type="file" 
+                  onChange={(ev) => {
+                    const file = ev.target.files?.[0];
+                    if (file) handleBase64FileUpload(e.id, file);
+                  }}
+                  className="text-[10px] text-zinc-400 file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-800 file:text-zinc-300 hover:file:bg-zinc-700 cursor-pointer"
+                />
+              </div>
             ) : (
               <div className="flex flex-col gap-2 p-2 bg-zinc-950 border border-zinc-800 rounded min-h-[34px]">
                 <div className="flex items-center justify-between gap-2">

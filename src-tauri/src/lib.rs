@@ -381,6 +381,7 @@ pub fn run() {
             state::purge_all_data,
             state::purge_selective_data,
             state::upload_file,
+            state::upload_file_base64,
             db_viewer::get_database_tables,
             db_viewer::get_table_data,
             get_proxy_status,

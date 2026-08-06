@@ -54,13 +54,15 @@ UI refreshes and shows notification
 - When enabled: Automatically links imported collections to imported environments
 - Allows environment context switching for collections
 
-## Data Format
+### URL Templating Best Practices (`{{host}}` / `{{url}}`)
+
+Using variable placeholders such as `https://{{host}}` or `https://{{url}}` for base URLs is recommended. This allows environment switching to dynamically update target domain names without modifying endpoint paths.
 
 ### Expected JSON Structure
 ```json
 {
   "name": "Project Name",
-  "url": "https://api.example.com",
+  "url": "https://{{host}}",
   "header": {
     "Authorization": "Bearer {{token}}",
     "Accept": "application/json"
@@ -77,6 +79,17 @@ UI refreshes and shows notification
   "all_variables": [
     {
       "environmentId": "env_prod",
+      "name": "host",
+      "activeIndex": 0,
+      "values": [
+        {
+          "name": "Default",
+          "value": "api.example.com"
+        }
+      ]
+    },
+    {
+      "environmentId": "env_prod",
       "name": "token",
       "activeIndex": 0,
       "values": [
@@ -90,7 +103,7 @@ UI refreshes and shows notification
   "test_cases": [
     {
       "name": "Authentication",
-      "url": "https://api.example.com/v1",
+      "url": "https://{{host}}/v1",
       "target": [
         {
           "name": "Login",
