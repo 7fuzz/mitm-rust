@@ -6,7 +6,7 @@ interface ImportModalProps {
   isOpen: boolean;
   projectName: string;
   environments: Array<{ id: string; name: string }>;
-  groups: Array<{ name: string; target: unknown[] }>;
+  groups: Array<{ name: string; description?: string; target: unknown[] }>;
   onClose: () => void;
   onImport: (options: {
     importAllEnv: boolean;
@@ -157,8 +157,15 @@ export function ImportModal({ isOpen, projectName, environments, groups, onClose
                     onChange={() => toggleGroup(group.name)}
                     className="accent-purple-500"
                   />
-                  <div className="flex flex-col truncate">
-                    <span className="text-[10px] font-bold text-zinc-300 uppercase truncate">{group.name}</span>
+                  <div className="flex flex-col truncate flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="text-[10px] font-bold text-zinc-300 uppercase truncate">{group.name}</span>
+                      {group.description && (
+                        <span className="text-[7px] font-mono font-bold bg-purple-500/20 text-purple-300 px-1 py-0.2 rounded border border-purple-500/30 shrink-0" title="Includes Markdown Documentation">
+                          Docs
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[8px] text-zinc-600 font-mono">{group.target.length} Requests</span>
                   </div>
                 </label>

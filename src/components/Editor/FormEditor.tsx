@@ -4,6 +4,7 @@ import { invoke } from '@/lib/utils/tauri';
 
 interface FormEntry {
   id: string;
+  enabled?: boolean;
   k: string;
   v: string;
   type: 'text' | 'file' | 'base64';
@@ -29,13 +30,13 @@ export function FormEditor({ initialBody, contentType, onChange }: { initialBody
     const parsed: FormEntry[] = [];
     if (isUrlEncoded) {
       const params = new URLSearchParams(initialBody);
-      params.forEach((v, k) => parsed.push({ id: crypto.randomUUID(), k, v, type: 'text' }));
+      params.forEach((v, k) => parsed.push({ id: crypto.randomUUID(), enabled: true, k, v, type: 'text' }));
     } else if (contentType.includes('multipart/form-data')) {
       if (initialBody.startsWith('{') && initialBody.endsWith('}')) {
         try {
           const data = JSON.parse(initialBody);
           if (data.__form_data) {
-             setEntries(data.__form_data.map((e: FormEntry) => ({ ...e, id: e.id || crypto.randomUUID() })));
+             setEntries(data.__form_data.map((e: FormEntry) => ({ ...e, id: e.id || crypto.randomUUID(), enabled: e.enabled !== false })));
              return;
           }
         } catch { /* ignore */ }
@@ -55,27 +56,27 @@ export function FormEditor({ initialBody, contentType, onChange }: { initialBody
               const k = nameMatch[1];
               const v = valueMatch.replace(/\r\n$/, '');
               if (filenameMatch) {
-                parsed.push({ id: crypto.randomUUID(), k, v: '[FILE]', type: 'file', fileName: filenameMatch[1] });
+                parsed.push({ id: crypto.randomUUID(), enabled: true, k, v: '[FILE]', type: 'file', fileName: filenameMatch[1] });
               } else {
-                parsed.push({ id: crypto.randomUUID(), k, v, type: 'text' });
+                parsed.push({ id: crypto.randomUUID(), enabled: true, k, v, type: 'text' });
               }
             }
           }
         });
       }
     }
-    setEntries(parsed.length > 0 ? parsed : [{ id: crypto.randomUUID(), k: '', v: '', type: 'text' }]);
+    setEntries(parsed.length > 0 ? parsed : [{ id: crypto.randomUUID(), enabled: true, k: '', v: '', type: 'text' }]);
   }, [initialBody, contentType]);
 
   const updateBody = (newEntries: FormEntry[]) => {
     let newBodyString = "";
     if (contentType.includes('x-www-form-urlencoded')) {
       const params = new URLSearchParams();
-      newEntries.forEach(e => { if (e.k) params.append(e.k, e.v); });
+      newEntries.forEach(e => { if (e.enabled !== false && e.k) params.append(e.k, e.v); });
       newBodyString = params.toString();
     } else {
       newBodyString = JSON.stringify({
-        __form_data: newEntries.map(({ id, fileContent, ...rest }) => rest),
+        __form_data: newEntries.map(({ id, fileContent, ...rest }) => ({ enabled: rest.enabled !== false, ...rest })),
         _hint: "Form Editor modified. (Multipart will be reconstructed on send)"
       });
     }
@@ -90,7 +91,7 @@ export function FormEditor({ initialBody, contentType, onChange }: { initialBody
     updateBody(updated);
   };
 
-  const addRow = () => setEntries([...entries, { id: crypto.randomUUID(), k: '', v: '', type: 'text' }]);
+  const addRow = () => setEntries([...entries, { id: crypto.randomUUID(), enabled: true, k: '', v: '', type: 'text' }]);
   
   const deleteRow = (id: string) => {
     const updated = entries.filter(e => e.id !== id);
@@ -135,7 +136,14 @@ export function FormEditor({ initialBody, contentType, onChange }: { initialBody
   return (
     <div className="space-y-2">
       {entries.map(e => (
-        <div key={e.id} className="flex gap-2 group items-start">
+        <div key={e.id} className={`flex gap-2 group items-start transition-opacity ${e.enabled === false ? 'opacity-40' : ''}`}>
+          <input
+            type="checkbox"
+            checked={e.enabled !== false}
+            onChange={(ev) => updateEntry(e.id, { enabled: ev.target.checked })}
+            className="accent-purple-500 w-3.5 h-3.5 rounded cursor-pointer mt-2.5 shrink-0"
+            title="Enable / Disable Parameter"
+          />
           <div className="flex flex-col gap-1 w-1/3">
              <Input 
                value={e.k} 

@@ -155,11 +155,11 @@ pub async fn get_repeater_requests(app_handle: AppHandle, group_id: String) -> R
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     let (query, params): (&str, Vec<rusqlite::types::Value>) = if group_id == "All" {
-        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests ORDER BY order_index ASC, created_at DESC", vec![])
+        ("SELECT r.id, r.name, r.group_id, r.method, r.url, r.headers, r.body, r.extract, r.response_status, r.response_headers, r.response_body, r.hit_count, r.description, rb.body_mode, rb.body_json, rb.body_urlencoded, rb.body_multipart, r.response_duration, r.url_params FROM repeater_requests r LEFT JOIN request_bodies rb ON r.id = rb.request_id ORDER BY r.order_index ASC, r.created_at DESC", vec![])
     } else if group_id == "null" {
-        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id IS NULL ORDER BY order_index ASC, created_at DESC", vec![])
+        ("SELECT r.id, r.name, r.group_id, r.method, r.url, r.headers, r.body, r.extract, r.response_status, r.response_headers, r.response_body, r.hit_count, r.description, rb.body_mode, rb.body_json, rb.body_urlencoded, rb.body_multipart, r.response_duration, r.url_params FROM repeater_requests r LEFT JOIN request_bodies rb ON r.id = rb.request_id WHERE r.group_id IS NULL ORDER BY r.order_index ASC, r.created_at DESC", vec![])
     } else {
-        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id = ? ORDER BY order_index ASC, created_at DESC", vec![rusqlite::types::Value::Text(group_id)])
+        ("SELECT r.id, r.name, r.group_id, r.method, r.url, r.headers, r.body, r.extract, r.response_status, r.response_headers, r.response_body, r.hit_count, r.description, rb.body_mode, rb.body_json, rb.body_urlencoded, rb.body_multipart, r.response_duration, r.url_params FROM repeater_requests r LEFT JOIN request_bodies rb ON r.id = rb.request_id WHERE r.group_id = ? ORDER BY r.order_index ASC, r.created_at DESC", vec![rusqlite::types::Value::Text(group_id)])
     };
 
     let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
@@ -182,7 +182,7 @@ pub async fn get_repeater_requests(app_handle: AppHandle, group_id: String) -> R
                  phase: "response".to_string(),
                  is_intercepted: false,
                  intercepted_at: None,
-                 duration_ms: None,
+                 duration_ms: row.get::<_, Option<u64>>(17).ok().flatten(),
              })
         } else { None };
 
@@ -197,6 +197,12 @@ pub async fn get_repeater_requests(app_handle: AppHandle, group_id: String) -> R
             extract,
             response,
             hit_count: row.get(11)?,
+            description: row.get(12).ok(),
+            body_mode: row.get(13).ok(),
+            body_json: row.get(14).ok(),
+            body_urlencoded: row.get(15).ok(),
+            body_multipart: row.get(16).ok(),
+            url_params: row.get(18).ok(),
         })
     }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
 
@@ -236,13 +242,13 @@ pub async fn sync_data(
     let fetch_unassigned = unassigned_only.unwrap_or(false);
 
     let mut stmt = if fetch_unassigned {
-        conn.prepare("SELECT id, name, order_index, extract FROM repeater_groups WHERE id NOT IN (SELECT group_id FROM environment_groups) ORDER BY order_index")
+        conn.prepare("SELECT id, name, order_index, extract, description FROM repeater_groups WHERE id NOT IN (SELECT group_id FROM environment_groups) ORDER BY order_index")
             .map_err(|e| e.to_string())?
     } else if active_env_id.is_some() && !fetch_all {
-        conn.prepare("SELECT id, name, order_index, extract FROM repeater_groups WHERE id IN (SELECT group_id FROM environment_groups WHERE environment_id = ?) ORDER BY order_index")
+        conn.prepare("SELECT id, name, order_index, extract, description FROM repeater_groups WHERE id IN (SELECT group_id FROM environment_groups WHERE environment_id = ?) ORDER BY order_index")
             .map_err(|e| e.to_string())?
     } else {
-        conn.prepare("SELECT id, name, order_index, extract FROM repeater_groups ORDER BY order_index").map_err(|e| e.to_string())?
+        conn.prepare("SELECT id, name, order_index, extract, description FROM repeater_groups ORDER BY order_index").map_err(|e| e.to_string())?
     };
 
     let repeater_groups = if active_env_id.is_some() && !fetch_all && !fetch_unassigned {
@@ -250,13 +256,13 @@ pub async fn sync_data(
         stmt.query_map([env_id], |row| {
             let extract_str: Option<String> = row.get(3)?;
             let extract = extract_str.and_then(|s| serde_json::from_str(&s).ok());
-            Ok(RepeaterGroup { id: row.get(0)?, name: row.get(1)?, order_index: row.get(2)?, extract })
+            Ok(RepeaterGroup { id: row.get(0)?, name: row.get(1)?, order_index: row.get(2)?, extract, description: row.get(4).ok() })
         }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect()
     } else {
         stmt.query_map([], |row| {
             let extract_str: Option<String> = row.get(3)?;
             let extract = extract_str.and_then(|s| serde_json::from_str(&s).ok());
-            Ok(RepeaterGroup { id: row.get(0)?, name: row.get(1)?, order_index: row.get(2)?, extract })
+            Ok(RepeaterGroup { id: row.get(0)?, name: row.get(1)?, order_index: row.get(2)?, extract, description: row.get(4).ok() })
         }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect()
     };
 
@@ -269,11 +275,11 @@ pub async fn sync_data(
 
     // 3. Repeater Requests (filtered by effective_group_id)
     let (request_query, request_params): (&str, Vec<rusqlite::types::Value>) = if effective_group_id == "All" {
-        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests ORDER BY order_index ASC, created_at DESC", vec![])
+        ("SELECT r.id, r.name, r.group_id, r.method, r.url, r.headers, r.body, r.extract, r.response_status, r.response_headers, r.response_body, r.hit_count, r.description, rb.body_mode, rb.body_json, rb.body_urlencoded, rb.body_multipart, r.response_duration, r.url_params FROM repeater_requests r LEFT JOIN request_bodies rb ON r.id = rb.request_id ORDER BY r.order_index ASC, r.created_at DESC", vec![])
     } else if effective_group_id == "null" {
-        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id IS NULL ORDER BY order_index ASC, created_at DESC", vec![])
+        ("SELECT r.id, r.name, r.group_id, r.method, r.url, r.headers, r.body, r.extract, r.response_status, r.response_headers, r.response_body, r.hit_count, r.description, rb.body_mode, rb.body_json, rb.body_urlencoded, rb.body_multipart, r.response_duration, r.url_params FROM repeater_requests r LEFT JOIN request_bodies rb ON r.id = rb.request_id WHERE r.group_id IS NULL ORDER BY r.order_index ASC, r.created_at DESC", vec![])
     } else {
-        ("SELECT id, name, group_id, method, url, headers, body, extract, response_status, response_headers, response_body, hit_count FROM repeater_requests WHERE group_id = ? ORDER BY order_index ASC, created_at DESC", vec![rusqlite::types::Value::Text(effective_group_id)])
+        ("SELECT r.id, r.name, r.group_id, r.method, r.url, r.headers, r.body, r.extract, r.response_status, r.response_headers, r.response_body, r.hit_count, r.description, rb.body_mode, rb.body_json, rb.body_urlencoded, rb.body_multipart, r.response_duration, r.url_params FROM repeater_requests r LEFT JOIN request_bodies rb ON r.id = rb.request_id WHERE r.group_id = ? ORDER BY r.order_index ASC, r.created_at DESC", vec![rusqlite::types::Value::Text(effective_group_id)])
     };
 
     let mut stmt = conn.prepare(request_query).map_err(|e| e.to_string())?;
@@ -296,7 +302,7 @@ pub async fn sync_data(
                  phase: "response".to_string(),
                  is_intercepted: false,
                  intercepted_at: None,
-                 duration_ms: None,
+                 duration_ms: row.get::<_, Option<u64>>(17).ok().flatten(),
              })
         } else { None };
 
@@ -311,6 +317,12 @@ pub async fn sync_data(
             extract,
             response,
             hit_count: row.get(11)?,
+            description: row.get(12).ok(),
+            body_mode: row.get(13).ok(),
+            body_json: row.get(14).ok(),
+            body_urlencoded: row.get(15).ok(),
+            body_multipart: row.get(16).ok(),
+            url_params: row.get(18).ok(),
         })
     }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
 

@@ -203,11 +203,42 @@ struct MultipartEntry {
     file_name: Option<String>,
     #[serde(rename = "contentType")]
     content_type: Option<String>,
+    enabled: Option<bool>,
 }
 
 #[derive(serde::Deserialize)]
 struct FormEditorData {
     __form_data: Vec<MultipartEntry>,
+}
+
+fn parse_base64_data(v: &str) -> Option<(Option<String>, Vec<u8>)> {
+    let trimmed = v.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let (mime, raw_b64) = if let Some(stripped) = trimmed.strip_prefix("data:") {
+        if let Some(comma_pos) = stripped.find(',') {
+            let meta = &stripped[..comma_pos];
+            let payload = &stripped[comma_pos + 1..];
+            let mime = meta.split(';').next().filter(|m| !m.is_empty()).map(|s| s.to_string());
+            (mime, payload.trim())
+        } else {
+            (None, trimmed)
+        }
+    } else {
+        (None, trimmed)
+    };
+
+    let clean_b64: String = raw_b64.chars().filter(|c| !c.is_whitespace()).collect();
+    use base64::Engine;
+    match base64::engine::general_purpose::STANDARD.decode(&clean_b64) {
+        Ok(bytes) => Some((mime, bytes)),
+        Err(_) => match base64::engine::general_purpose::URL_SAFE.decode(&clean_b64) {
+            Ok(bytes) => Some((mime, bytes)),
+            Err(_) => None,
+        },
+    }
 }
 
 pub fn reconstruct_multipart_if_needed(
@@ -252,23 +283,54 @@ pub fn reconstruct_multipart_if_needed(
 
     let mut body_bytes = Vec::new();
     for entry in form_data.__form_data {
+        if entry.enabled == Some(false) {
+            continue; // Skip disabled parameters
+        }
+
         body_bytes.extend_from_slice(format!("--{}\r\n", boundary_str).as_bytes());
-        if entry.entry_type == "file" {
+        let entry_type_lower = entry.entry_type.to_lowercase();
+        
+        let is_base64_type = entry_type_lower == "base64" 
+            || entry_type_lower == "file_base64" 
+            || entry_type_lower == "base64_file";
+
+        if entry_type_lower == "file" || is_base64_type {
             let file_name = entry.file_name.as_deref().unwrap_or("file");
-            let content_type = entry.content_type.as_deref().unwrap_or("application/octet-stream");
+            let mut content_type = entry.content_type.as_deref().unwrap_or("application/octet-stream").to_string();
+            
+            let file_bytes = if is_base64_type {
+                if let Some((extracted_mime, decoded_bytes)) = parse_base64_data(&entry.v) {
+                    if entry.content_type.as_deref().unwrap_or("").is_empty() {
+                        if let Some(mime) = extracted_mime {
+                            content_type = mime;
+                        }
+                    }
+                    decoded_bytes
+                } else {
+                    entry.v.as_bytes().to_vec()
+                }
+            } else if let Ok(mut file) = std::fs::File::open(&entry.v) {
+                let mut buf = Vec::new();
+                let _ = std::io::copy(&mut file, &mut buf);
+                buf
+            } else if let Some((extracted_mime, decoded_bytes)) = parse_base64_data(&entry.v) {
+                if entry.content_type.as_deref().unwrap_or("").is_empty() {
+                    if let Some(mime) = extracted_mime {
+                        content_type = mime;
+                    }
+                }
+                decoded_bytes
+            } else {
+                entry.v.as_bytes().to_vec()
+            };
+
             body_bytes.extend_from_slice(
                 format!(
                     "Content-Disposition: form-data; name=\"{}\"; filename=\"{}\"\r\nContent-Type: {}\r\n\r\n",
                     entry.k, file_name, content_type
                 ).as_bytes()
             );
-            if !entry.v.is_empty() {
-                if let Ok(mut file) = std::fs::File::open(&entry.v) {
-                    let _ = std::io::copy(&mut file, &mut body_bytes);
-                } else {
-                    body_bytes.extend_from_slice(entry.v.as_bytes());
-                }
-            }
+            body_bytes.extend_from_slice(&file_bytes);
         } else {
             body_bytes.extend_from_slice(
                 format!(
@@ -299,7 +361,21 @@ pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Resu
     let vars = build_variable_map(&conn, active_env_id.as_deref())?;
 
     let (method, url, headers, body) = {
-        let mut stmt = conn.prepare("SELECT method, url, headers, body FROM repeater_requests WHERE id = ?").map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare(
+            "SELECT r.method, r.url, r.headers, 
+                    COALESCE(
+                        CASE rb.body_mode 
+                            WHEN 'json' THEN rb.body_json 
+                            WHEN 'urlencoded' THEN rb.body_urlencoded 
+                            WHEN 'multipart' THEN rb.body_multipart 
+                            ELSE rb.body_raw 
+                        END, 
+                        r.body
+                    ) as active_body
+             FROM repeater_requests r 
+             LEFT JOIN request_bodies rb ON r.id = rb.request_id 
+             WHERE r.id = ?"
+        ).map_err(|e| e.to_string())?;
         stmt.query_row([id.clone()], |row| {
             let headers_str: String = row.get(2)?;
             let headers: Vec<(String, String)> = serde_json::from_str(&headers_str).unwrap_or_default();
@@ -380,8 +456,8 @@ pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Resu
     {
         let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
         conn.execute(
-            "UPDATE repeater_requests SET response_status = ?, response_headers = ?, response_body = ?, hit_count = hit_count + 1 WHERE id = ?",
-            rusqlite::params![status, res_headers_json, res_body_str, id],
+            "UPDATE repeater_requests SET response_status = ?, response_headers = ?, response_body = ?, response_duration = ?, hit_count = hit_count + 1 WHERE id = ?",
+            rusqlite::params![status, res_headers_json, res_body_str, duration, id],
         ).map_err(|e| e.to_string())?;
 
         let history_id = uuid::Uuid::new_v4().to_string();

@@ -371,8 +371,13 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
             return (
               <div 
                 key={v.id} 
-                className={`p-3 rounded flex flex-col gap-2 border transition-all ${isSelected ? 'bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/5' : 'bg-transparent border-transparent hover:bg-zinc-900/50'}`}
+                className={`p-3 rounded flex flex-col gap-2 border transition-all cursor-pointer select-none ${isSelected ? 'bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/5' : 'bg-transparent border-transparent hover:bg-zinc-900/50'}`}
                 onClick={() => !inlineEdit && setSelectedIndex(idx)}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedIndex(idx);
+                  setInlineEdit({ type: 'value', id: v.id, value: v.values[v.activeIndex]?.value || '' });
+                }}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex flex-col">
@@ -389,7 +394,17 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
                           />
                        </div>
                     ) : (
-                      <span className={`text-xs font-bold ${isSelected ? 'text-amber-400' : 'text-zinc-200'}`}>{v.name}</span>
+                      <span 
+                        className={`text-xs font-bold ${isSelected ? 'text-amber-400' : 'text-zinc-200'} hover:text-amber-300 transition-colors`}
+                        title="Double-click to rename variable"
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedIndex(idx);
+                          setInlineEdit({ type: 'rename-var', id: v.id, value: v.name });
+                        }}
+                      >
+                        {v.name}
+                      </span>
                     )}
                     
                     <div className="flex items-center gap-2 mt-1">
@@ -404,7 +419,16 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
                            />
                         </div>
                       ) : (
-                        <span className="text-[10px] text-zinc-500 font-mono">
+                        <span 
+                          className="text-[10px] text-zinc-500 font-mono hover:text-zinc-300 transition-colors"
+                          title="Double-click to rename variant"
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            if (v.values[v.activeIndex]?.name === '(auto)') return;
+                            setSelectedIndex(idx);
+                            setInlineEdit({ type: 'rename-variant', id: v.id, value: v.values[v.activeIndex]?.name || '' });
+                          }}
+                        >
                           Variant: <span className="text-purple-400 font-bold">{v.values[v.activeIndex]?.name}</span>
                         </span>
                       )}
@@ -435,7 +459,15 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
                         />
                       </div>
                     ) : (
-                      <div className="text-[10px] font-mono text-emerald-text truncate w-full text-right bg-zinc-950/50 px-2 py-1 rounded border border-zinc-800/50">
+                      <div 
+                        className="text-[10px] font-mono text-emerald-text truncate w-full text-right bg-zinc-950/50 px-2 py-1 rounded border border-zinc-800/50 hover:border-emerald-500/50 cursor-text transition-colors"
+                        title="Double-click to edit value"
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedIndex(idx);
+                          setInlineEdit({ type: 'value', id: v.id, value: v.values[v.activeIndex]?.value || '' });
+                        }}
+                      >
                         {v.values[v.activeIndex]?.value || <span className="opacity-30 italic">empty</span>}
                       </div>
                     )}
@@ -462,7 +494,7 @@ export function VariableQuickSwitcherModal({ isOpen, onClose, variables, activeE
             <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">^F</kbd> Focus Filter</div>
           </div>
           <div className="space-y-2">
-            <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">ENTER</kbd> {inlineEdit ? 'Save' : 'Edit Value'}</div>
+            <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">ENTER / 2x Click</kbd> {inlineEdit ? 'Save' : 'Edit Value'}</div>
             <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">^N</kbd> New Variant <span className="text-[7px] opacity-40 ml-auto">^⇧N for New Var</span></div>
             <div className="flex items-center gap-2"><kbd className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-300">^R</kbd> Rename Variant <span className="text-[7px] opacity-40 ml-auto">^⇧R for Ren Var</span></div>
           </div>

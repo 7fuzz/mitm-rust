@@ -54,6 +54,7 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const handleImportFileLoaded = (data: {
+    name?: string;
     all_environments?: Array<{ id: string; name: string }>;
     all_variables?: Array<any>;
     placeholders?: Record<string, any>;
@@ -70,12 +71,15 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
         let values: any[] = [];
         if (Array.isArray(value)) {
           values = value.map((val, idx) => ({
-            name: `Value ${idx}`,
+            name: idx === 0 ? '(auto)' : `Value ${idx}`,
             value: String(val)
           }));
+          if (!values.some(v => v.name === '(auto)')) {
+            values.unshift({ name: '(auto)', value: String(value[0] || '') });
+          }
         } else {
           values = [{
-            name: 'Default',
+            name: '(auto)',
             value: String(value)
           }];
         }
@@ -88,6 +92,22 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
       }
       data.all_variables = all_variables;
     }
+
+    // Ensure all variables in data.all_variables ALWAYS have an (auto) variant
+    if (data.all_variables && Array.isArray(data.all_variables)) {
+      data.all_variables.forEach((varObj: any) => {
+        if (!Array.isArray(varObj.values) || varObj.values.length === 0) {
+          varObj.values = [{ name: '(auto)', value: '' }];
+        } else {
+          const hasAuto = varObj.values.some((val: any) => val && val.name === '(auto)');
+          if (!hasAuto) {
+            const firstVal = varObj.values[0]?.value || '';
+            varObj.values.unshift({ name: '(auto)', value: String(firstVal) });
+          }
+        }
+      });
+    }
+
     setImportData(data);
     setIsImportModalOpen(true);
   };
@@ -206,13 +226,21 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
             header: Object.keys(localHeaders).length > 0 ? localHeaders : undefined,
             params: Object.keys(params).length > 0 ? params : undefined,
             body: req.method !== 'GET' ? parsedBody : undefined,
-            extract: req.extract || {}
+            body_mode: req.bodyMode || undefined,
+            body_json: req.bodyJson || undefined,
+            body_urlencoded: req.bodyUrlencoded || undefined,
+            body_multipart: req.bodyMultipart || undefined,
+            extract: req.extract || {},
+            description: req.description || undefined
           };
         });
+
+        const groupObj = repeaterGroups.find(g => g.id === gid);
 
         return {
           name: groupName,
           url: mostCommonBase,
+          description: groupObj?.description || undefined,
           target: targets
         };
       }).filter((tc): tc is NonNullable<typeof tc> => tc !== null);

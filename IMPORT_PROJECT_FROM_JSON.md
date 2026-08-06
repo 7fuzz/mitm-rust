@@ -110,16 +110,18 @@ pub struct ImportRepeaterData {
 }
 ```
 
-#### 3. `test_cases` Item (Repeater Group with `https://{{host}}`)
+#### 3. `test_cases` Item (Repeater Group with `https://{{host}}` and Markdown `description`)
 ```json
 {
   "name": "Authentication API",
   "url": "https://{{host}}/v1",
+  "description": "# Authentication API Collection\n\nThis collection contains all endpoints related to user authentication, token extraction, and session management.\n\n> [!NOTE]\n> OAuth 2.0 access tokens extracted here are stored in the active environment variable `{{token}}`.",
   "target": [
     {
       "name": "Login Request",
       "method": "POST",
       "endpoint": "/auth/login",
+      "description": "### User Login Endpoint\n\nAuthenticate credentials and extract the Bearer token.\n\n#### Parameters\n| Field | Type | Description |\n| :--- | :--- | :--- |\n| `username` | String | User email or username |\n| `password` | String | Account password |\n\n> [!TIP]\n> Successful response (200 OK) automatically extracts `data.access_token` into `{{token}}`.",
       "params": {
         "grant_type": "password"
       },
@@ -129,17 +131,49 @@ pub struct ImportRepeaterData {
       },
       "body": "{\"username\":\"admin\",\"password\":\"secret\"}",
       "extract": {
-        "token": "$.data.access_token"
+        "token": "data.access_token"
       }
     }
   ]
 }
 ```
 
-#### 4. Multipart Form Data with Base64 Files in JSON Body
+##### Markdown `description` Format Rules:
+- Both **Collections** (`test_cases` items) and **Individual Requests** (`target` items) support an optional `description` string.
+- The `description` field accepts full **GitHub Flavored Markdown (GFM)**:
+  - Headers (`#`, `##`, `###`)
+  - Code Blocks (` ```json ... ``` `)
+  - Alert Callouts (`> [!NOTE]`, `> [!TIP]`, `> [!WARNING]`, `> [!IMPORTANT]`)
+  - Tables (`| col | col |`)
+  - Lists (`- item`, `1. item`)
+  - Inline Code (`` `variable` ``) and Bold/Italic formatting.
+- When imported, `description` strings are automatically stored into SQLite (`repeater_groups.description` and `repeater_requests.description`) and rendered natively in the UI using `react-markdown` and `remark-gfm`.
+
+#### 4. Base64 File Payloads (`application/json` & `multipart/form-data`)
+
+MITM Rust supports embedding binary files directly within Repeater request bodies as Base64 strings.
+
+##### A. `application/json` Base64 File Embedding
+Files can be attached directly into JSON request payloads as Base64 Data URIs (`data:<mime>;base64,<payload>`). The UI JSON tree editor includes a `FILE` type option that converts local disk files to Base64 strings automatically.
+
 ```json
 {
-  "name": "Upload Document",
+  "name": "JSON Base64 File Upload",
+  "method": "POST",
+  "endpoint": "/v1/documents/upload",
+  "header": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"documentName\":\"invoice.pdf\",\"fileData\":\"data:application/pdf;base64,JVBERi0xLjQK...\"}"
+}
+```
+
+##### B. `multipart/form-data` Base64 Form Uploads
+For multipart form requests, Base64 files use the `__form_data` array structure with `"type": "base64"`. The Rust execution engine ([`repeater_execute.rs`]()) decodes the Base64 payload and constructs valid multipart HTTP boundaries automatically upon sending.
+
+```json
+{
+  "name": "Multipart Base64 Form Upload",
   "method": "POST",
   "endpoint": "/files/upload",
   "header": {
@@ -294,7 +328,7 @@ Below is a production-grade sample project JSON file demonstrating best practice
           },
           "body": "",
           "extract": {
-            "userId": "$.user.id"
+            "userId": "user.id"
           }
         }
       ]
@@ -313,7 +347,7 @@ Below is a production-grade sample project JSON file demonstrating best practice
           },
           "body": "{\"amount\": 99.99, \"currency\": \"USD\"}",
           "extract": {
-            "transactionId": "$.data.txn_id"
+            "transactionId": "data.txn_id"
           }
         }
       ]
@@ -324,16 +358,36 @@ Below is a production-grade sample project JSON file demonstrating best practice
 
 ---
 
-## Database Table Mappings
+## Multi-Variant Body Storage & Format Modes (`request_bodies` Table)
 
-| Entity | DB Table | Key Columns |
-| :--- | :--- | :--- |
-| Environment | `environments` | `id`, `name`, `is_active` |
-| Variable | `variables` | `id`, `environment_id`, `name`, `active_index` |
-| Variable Value | `variable_values` | `id`, `variable_id`, `name`, `value` |
-| Repeater Group | `repeater_groups` | `id`, `name`, `order_index`, `extract` |
-| Repeater Request | `repeater_requests` | `id`, `name`, `group_id`, `method`, `url`, `headers`, `body`, `extract`, `order_index` |
-| Group Environment Link | `environment_groups` | `group_id`, `environment_id` |
+Starting with Database Migration Version 8, request bodies are stored in a dedicated, non-destructive **`request_bodies`** table. This ensures that switching between `raw`, `json`, `x-www-form-urlencoded`, and `form-data` modes in the editor does not overwrite or destroy data in other formats.
+
+| Entity | DB Table | Key Columns | Description |
+| :--- | :--- | :--- | :--- |
+| Environment | `environments` | `id`, `name`, `is_active` | Saved environment definitions |
+| Variable | `variables` | `id`, `environment_id`, `name`, `active_index` | Global variable definitions |
+| Variable Value | `variable_values` | `id`, `variable_id`, `name`, `value` | Variant values per variable |
+| Repeater Group | `repeater_groups` | `id`, `name`, `order_index`, `extract`, `description` | Endpoint collection containers |
+| Repeater Request | `repeater_requests` | `id`, `name`, `group_id`, `method`, `url`, `headers`, `body`, `extract`, `description` | Endpoint request definitions |
+| Multi-Variant Bodies | `request_bodies` | `request_id`, `body_mode`, `body_raw`, `body_json`, `body_urlencoded`, `body_multipart` | Dedicated format variant buffers per request |
+| Group Environment Link | `environment_groups` | `group_id`, `environment_id` | Collection-to-environment links |
+
+---
+
+### Request Target Body JSON Fields (Optional Specification)
+
+| Field | Type | Description | Example |
+| :--- | :--- | :--- | :--- |
+| `body` | String | Main / Raw request body content | `"{\"key\": \"value\"}"` or `"k1=v1&k2=v2"` |
+| `body_mode` | String | Active body mode: `"raw"`, `"json"`, `"urlencoded"`, or `"multipart"` | `"urlencoded"` |
+| `body_json` | String | Dedicated JSON body representation | `"{\"amount\": 100}"` |
+| `body_urlencoded` | String | Dedicated URL-encoded body string | `"grant_type=client_credentials&client_id={{client_id}}"` |
+| `body_multipart` | String | Dedicated Multipart form data JSON structure with parameter toggles | `"{\"__form_data\": [{\"enabled\": true, \"k\": \"file\", \"v\": \"data:...\", \"type\": \"base64\"}]}"` |
+
+#### Parameter ON / OFF Toggle (`enabled: boolean`)
+In `multipart` and `urlencoded` parameter entries, each item includes an optional `"enabled": true | false` property:
+- **`"enabled": true`**: Parameter is active and included when executing HTTP requests.
+- **`"enabled": false`**: Parameter is disabled and skipped during request execution, but remains persisted in the editor table UI for quick testing.
 
 ---
 

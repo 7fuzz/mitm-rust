@@ -10,6 +10,7 @@ pub struct RepeaterGroup {
     pub name: String,
     pub order_index: i32,
     pub extract: Option<serde_json::Value>,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -25,6 +26,12 @@ pub struct RepeaterRequest {
     pub extract: Option<serde_json::Value>,
     pub response: Option<proxy::Traffic>,
     pub hit_count: i32,
+    pub description: Option<String>,
+    pub body_mode: Option<String>,
+    pub body_json: Option<String>,
+    pub body_urlencoded: Option<String>,
+    pub body_multipart: Option<String>,
+    pub url_params: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -38,6 +45,12 @@ pub struct CreateRepeaterItem {
     pub extract: Option<serde_json::Value>,
     pub group_id: Option<String>,
     pub response: Option<RepeaterResponse>,
+    pub description: Option<String>,
+    pub body_mode: Option<String>,
+    pub body_json: Option<String>,
+    pub body_urlencoded: Option<String>,
+    pub body_multipart: Option<String>,
+    pub url_params: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -50,6 +63,12 @@ pub struct UpdateRepeaterItem {
     pub body: String,
     pub extract: Option<serde_json::Value>,
     pub group_id: Option<String>,
+    pub description: Option<String>,
+    pub body_mode: Option<String>,
+    pub body_json: Option<String>,
+    pub body_urlencoded: Option<String>,
+    pub body_multipart: Option<String>,
+    pub url_params: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -101,8 +120,14 @@ pub async fn create_repeater_item(app_handle: AppHandle, item: CreateRepeaterIte
     let new_order_index = min_order - 1;
 
     conn.execute(
-        "INSERT INTO repeater_requests (id, name, method, url, headers, body, extract, response_status, response_headers, response_body, group_id, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        rusqlite::params![id, item.name, item.method, item.url, headers_json, item.body, extract_json, res_status, res_headers, res_body, item.group_id, new_order_index],
+        "INSERT INTO repeater_requests (id, name, method, url, headers, body, extract, response_status, response_headers, response_body, group_id, order_index, description, url_params) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        rusqlite::params![id, item.name, item.method, item.url, headers_json, item.body, extract_json, res_status, res_headers, res_body, item.group_id, new_order_index, item.description, item.url_params],
+    ).map_err(|e| e.to_string())?;
+
+    let mode = item.body_mode.as_deref().unwrap_or("raw");
+    conn.execute(
+        "INSERT OR REPLACE INTO request_bodies (request_id, body_mode, body_raw, body_json, body_urlencoded, body_multipart) VALUES (?, ?, ?, ?, ?, ?)",
+        rusqlite::params![id, mode, item.body, item.body_json, item.body_urlencoded, item.body_multipart],
     ).map_err(|e| e.to_string())?;
 
     Ok(id)
@@ -117,10 +142,24 @@ pub async fn update_repeater_request(app_handle: AppHandle, id: String, updates:
     let extract_json: Option<String> = updates.extract.as_ref().and_then(|v| serde_json::to_string(v).ok());
     
     conn.execute(
-        "UPDATE repeater_requests SET name = ?, method = ?, url = ?, headers = ?, body = ?, extract = ?, group_id = ? WHERE id = ?",
-        rusqlite::params![updates.name, updates.method, updates.url, headers_json, updates.body, extract_json, updates.group_id, id],
+        "UPDATE repeater_requests SET name = ?, method = ?, url = ?, headers = ?, body = ?, extract = ?, group_id = ?, description = ?, url_params = ? WHERE id = ?",
+        rusqlite::params![updates.name, updates.method, updates.url, headers_json, updates.body, extract_json, updates.group_id, updates.description, updates.url_params, id],
     ).map_err(|e| e.to_string())?;
 
+    let mode = updates.body_mode.as_deref().unwrap_or("raw");
+    conn.execute(
+        "INSERT OR REPLACE INTO request_bodies (request_id, body_mode, body_raw, body_json, body_urlencoded, body_multipart) VALUES (?, ?, ?, ?, ?, ?)",
+        rusqlite::params![id, mode, updates.body, updates.body_json, updates.body_urlencoded, updates.body_multipart],
+    ).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_repeater_group_description(app_handle: AppHandle, id: String, description: Option<String>) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("UPDATE repeater_groups SET description = ? WHERE id = ?", rusqlite::params![description, id]).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -146,6 +185,20 @@ pub async fn delete_repeater_group(app_handle: AppHandle, id: String) -> Result<
     let db_path = get_db_path(&app_handle);
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM repeater_groups WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn bulk_delete_repeater_groups(app_handle: AppHandle, ids: Vec<String>) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let mut conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    for id in ids {
+        tx.execute("DELETE FROM repeater_groups WHERE id = ?", [&id]).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM repeater_requests WHERE group_id = ?", [&id]).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM environment_groups WHERE group_id = ?", [&id]).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -347,7 +400,6 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
                     if var_env_id == env_id.as_str() {
                         let var_name = var_obj.get("name").and_then(|v| v.as_str()).unwrap_or("unnamed").to_string();
                         let active_index = var_obj.get("activeIndex").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-                        let values = var_obj.get("values").and_then(|v| v.as_array()).ok_or("Invalid values array")?;
 
                         let new_var_id = Uuid::new_v4().to_string();
                         conn.execute(
@@ -355,19 +407,38 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
                             rusqlite::params![new_var_id, new_env_id, var_name, active_index],
                         ).map_err(|e| e.to_string())?;
 
-                        for (val_idx, value_obj) in values.iter().enumerate() {
-                            if let Some(v_obj) = value_obj.as_object() {
-                                let value_name = v_obj.get("name").and_then(|v| v.as_str()).unwrap_or(&format!("Value {}", val_idx)).to_string();
-                                let value_str = v_obj.get("value").and_then(|v| v.as_str()).unwrap_or("");
-                                
-                                let val_id = Uuid::new_v4().to_string();
-                                conn.execute(
-                                    "INSERT INTO variable_values (id, variable_id, name, value) VALUES (?, ?, ?, ?)",
-                                    rusqlite::params![val_id, new_var_id, value_name, value_str],
-                                ).map_err(|e| e.to_string())?;
-                                
-                                imported_vars += 1;
+                        let values_opt = var_obj.get("values").and_then(|v| v.as_array());
+                        let mut has_auto_variant = false;
+
+                        if let Some(values) = values_opt {
+                            for (_val_idx, value_obj) in values.iter().enumerate() {
+                                if let Some(v_obj) = value_obj.as_object() {
+                                    let value_name = v_obj.get("name").and_then(|v| v.as_str()).unwrap_or("(auto)").to_string();
+                                    if value_name == "(auto)" {
+                                        has_auto_variant = true;
+                                    }
+                                    let value_str = v_obj.get("value").and_then(|v| v.as_str()).unwrap_or("");
+                                    
+                                    let val_id = Uuid::new_v4().to_string();
+                                    conn.execute(
+                                        "INSERT INTO variable_values (id, variable_id, name, value) VALUES (?, ?, ?, ?)",
+                                        rusqlite::params![val_id, new_var_id, value_name, value_str],
+                                    ).map_err(|e| e.to_string())?;
+                                    
+                                    imported_vars += 1;
+                                }
                             }
+                        }
+
+                        // ALWAYS ensure there is an (auto) variant created for this variable
+                        if !has_auto_variant {
+                            let val_id = Uuid::new_v4().to_string();
+                            let default_val = var_obj.get("value").and_then(|v| v.as_str()).unwrap_or("");
+                            conn.execute(
+                                "INSERT INTO variable_values (id, variable_id, name, value) VALUES (?, ?, ?, ?)",
+                                rusqlite::params![val_id, new_var_id, "(auto)", default_val],
+                            ).map_err(|e| e.to_string())?;
+                            imported_vars += 1;
                         }
                     }
                 }
@@ -410,9 +481,10 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
             let global_url = data.url.as_deref().unwrap_or("");
             let group_url = tc_obj.get("url").and_then(|v| v.as_str()).unwrap_or(global_url);
 
+            let group_desc = tc_obj.get("description").and_then(|v| v.as_str()).map(|s| s.to_string());
             conn.execute(
-                "INSERT INTO repeater_groups (id, name, order_index) VALUES (?, ?, ?)",
-                rusqlite::params![new_group_id, group_name, group_idx],
+                "INSERT INTO repeater_groups (id, name, order_index, description) VALUES (?, ?, ?, ?)",
+                rusqlite::params![new_group_id, group_name, group_idx, group_desc],
             ).map_err(|e| e.to_string())?;
 
             imported_groups += 1;
@@ -482,13 +554,14 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
                         _ => String::new(),
                     };
                     let extract = target_obj.get("extract").and_then(|v| serde_json::to_string(v).ok()).unwrap_or_else(|| "{}".to_string());
+                    let req_desc = target_obj.get("description").and_then(|v| v.as_str()).map(|s| s.to_string());
 
                     let headers_json = serde_json::to_string(&headers).unwrap_or_default();
                     let req_id = Uuid::new_v4().to_string();
 
                     conn.execute(
-                        "INSERT INTO repeater_requests (id, name, group_id, method, url, headers, body, extract, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        rusqlite::params![req_id, req_name, new_group_id, method, full_url, headers_json, body, extract, req_idx],
+                        "INSERT INTO repeater_requests (id, name, group_id, method, url, headers, body, extract, order_index, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        rusqlite::params![req_id, req_name, new_group_id, method, full_url, headers_json, body, extract, req_idx, req_desc],
                     ).map_err(|e| e.to_string())?;
 
                     imported_requests += 1;

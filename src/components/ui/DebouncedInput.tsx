@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, KeyboardEvent } from 'react';
 
 interface DebouncedInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   value: string;
@@ -7,6 +7,7 @@ interface DebouncedInputProps extends Omit<React.InputHTMLAttributes<HTMLInputEl
   showIcon?: boolean;
   onTypingChange?: (isTyping: boolean) => void;
   inputClassName?: string;
+  enableUndo?: boolean;
 }
 
 export const DebouncedInput = React.forwardRef<HTMLInputElement, DebouncedInputProps>(({
@@ -17,11 +18,17 @@ export const DebouncedInput = React.forwardRef<HTMLInputElement, DebouncedInputP
   onTypingChange,
   className,
   inputClassName = '',
+  enableUndo = true,
+  onKeyDown,
   ...props
 }, ref) => {
   const [value, setValue] = useState(initialValue);
   const [isTyping, setIsTyping] = useState(false);
   const isFirstRender = useRef(true);
+
+  const historyRef = useRef<string[]>([initialValue || '']);
+  const pointerRef = useRef<number>(0);
+  const undoDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync with external value changes
   useEffect(() => {
@@ -50,6 +57,71 @@ export const DebouncedInput = React.forwardRef<HTMLInputElement, DebouncedInputP
     return () => clearTimeout(timeout);
   }, [value, debounce, onChange, onTypingChange, initialValue]);
 
+  const handleKeyDownInternal = (e: KeyboardEvent<HTMLInputElement>) => {
+    onKeyDown?.(e);
+
+    if (!enableUndo || e.defaultPrevented) return;
+
+    const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const isCmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+    if (!isCmdOrCtrl) return;
+
+    const key = e.key.toLowerCase();
+    if (key === 'z') {
+      const history = historyRef.current;
+      if (e.shiftKey) {
+        // Redo
+        if (pointerRef.current < history.length - 1) {
+          e.preventDefault();
+          pointerRef.current += 1;
+          const nextVal = history[pointerRef.current];
+          setValue(nextVal);
+          onChange(nextVal);
+        }
+      } else {
+        // Undo
+        if (pointerRef.current > 0) {
+          e.preventDefault();
+          pointerRef.current -= 1;
+          const prevVal = history[pointerRef.current];
+          setValue(prevVal);
+          onChange(prevVal);
+        }
+      }
+    } else if (key === 'y' && !isMac) {
+      // Redo
+      const history = historyRef.current;
+      if (pointerRef.current < history.length - 1) {
+        e.preventDefault();
+        pointerRef.current += 1;
+        const nextVal = history[pointerRef.current];
+        setValue(nextVal);
+        onChange(nextVal);
+      }
+    }
+  };
+
+  const handleChangeInternal = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setValue(val);
+
+    if (enableUndo) {
+      if (undoDebounceRef.current) clearTimeout(undoDebounceRef.current);
+      undoDebounceRef.current = setTimeout(() => {
+        const history = historyRef.current;
+        const pointer = pointerRef.current;
+        if (history[pointer] !== val) {
+          const newHist = history.slice(0, pointer + 1);
+          newHist.push(val);
+          if (newHist.length > 100) newHist.shift();
+          historyRef.current = newHist;
+          pointerRef.current = newHist.length - 1;
+        }
+      }, 200);
+    }
+  };
+
   const handleClear = () => {
     setValue("");
     onChange("");
@@ -71,7 +143,8 @@ export const DebouncedInput = React.forwardRef<HTMLInputElement, DebouncedInputP
         {...props}
         ref={ref}
         value={value}
-        onChange={e => setValue(e.target.value)}
+        onKeyDown={handleKeyDownInternal}
+        onChange={handleChangeInternal}
         className={`w-full bg-transparent outline-none text-[10px] font-mono text-foreground px-2 py-1 placeholder:text-zinc-600 ${inputClassName}`}
       />
       {value && (

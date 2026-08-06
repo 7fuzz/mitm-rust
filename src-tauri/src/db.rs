@@ -132,6 +132,38 @@ fn apply_migrations(conn: &mut Connection) -> rusqlite::Result<()> {
             is_intercepted INTEGER DEFAULT 0,
             FOREIGN KEY(connection_id) REFERENCES history(id) ON DELETE CASCADE
         );",
+        // Version 7: Markdown Documentation for Requests & Groups
+        "ALTER TABLE repeater_requests ADD COLUMN description TEXT;
+        ALTER TABLE repeater_groups ADD COLUMN description TEXT;",
+        // Version 8: Multi-variant request bodies (raw, json, urlencoded, multipart)
+        "CREATE TABLE IF NOT EXISTS request_bodies (
+            request_id TEXT PRIMARY KEY,
+            body_mode TEXT DEFAULT 'raw',
+            body_raw TEXT,
+            body_json TEXT,
+            body_urlencoded TEXT,
+            body_multipart TEXT,
+            updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY(request_id) REFERENCES repeater_requests(id) ON DELETE CASCADE
+        );
+        INSERT OR IGNORE INTO request_bodies (request_id, body_mode, body_raw, body_json, body_urlencoded, body_multipart)
+        SELECT 
+            id,
+            CASE 
+                WHEN body LIKE '{%' OR body LIKE '[%' THEN 'json'
+                WHEN body LIKE '%=%' AND body NOT LIKE '{%' THEN 'urlencoded'
+                WHEN body LIKE '%__form_data%' THEN 'multipart'
+                ELSE 'raw'
+            END as body_mode,
+            body as body_raw,
+            CASE WHEN body LIKE '{%' OR body LIKE '[%' THEN body ELSE NULL END as body_json,
+            CASE WHEN body LIKE '%=%' AND body NOT LIKE '{%' THEN body ELSE NULL END as body_urlencoded,
+            CASE WHEN body LIKE '%__form_data%' THEN body ELSE NULL END as body_multipart
+        FROM repeater_requests;",
+        // Version 9: Persist response duration (latency ms) on repeater requests
+        "ALTER TABLE repeater_requests ADD COLUMN response_duration INTEGER;",
+        // Version 10: URL params with enable/disable state persistence
+        "ALTER TABLE repeater_requests ADD COLUMN url_params TEXT;",
     ];
 
     let target_version = migrations.len() as i32;

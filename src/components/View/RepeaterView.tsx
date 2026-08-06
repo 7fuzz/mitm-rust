@@ -8,8 +8,9 @@ import HttpResponseViewer from '../ui/HttpResponseViewer';
 import { WorkspaceLayout } from '../Layout/WorkspaceLayout';
 import { useTraffic, RepeaterRequest } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
-import { ExtractionModal, RepeaterHistoryModal } from '../Modals';
-import { Button, Select, useDialog } from '../ui';
+import { ExtractionModal, RepeaterHistoryModal, CollectionDocModal } from '../Modals';
+import { Button, Select, useDialog, Textarea } from '../ui';
+import { MarkdownViewer } from '../ui/MarkdownViewer';
 import { invoke } from '@/lib/utils/tauri';
 
 export function RepeaterView() {
@@ -24,7 +25,8 @@ export function RepeaterView() {
     repeaterSelectedId: selectedId, setRepeaterSelectedId: setSelectedId,
     _setRawRepeater,
     simpleMode,
-    updateGroupExtractions
+    updateGroupExtractions,
+    refreshRepeater
   } = useTraffic();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -35,11 +37,19 @@ export function RepeaterView() {
   const [editUrl, setEditUrl] = useState('');
   const [editHeaders, setEditHeaders] = useState<[string, string][]>([]);
   const [editBody, setEditBody] = useState('');
+  const [editBodyMode, setEditBodyMode] = useState<'raw' | 'json' | 'urlencoded' | 'multipart'>('raw');
+  const [editBodyJson, setEditBodyJson] = useState('');
+  const [editBodyUrlencoded, setEditBodyUrlencoded] = useState('');
+  const [editBodyMultipart, setEditBodyMultipart] = useState('');
+  const [editUrlParams, setEditUrlParams] = useState('');
   const [editExtract, setEditExtract] = useState<Record<string, string>>({});
+  const [editDescription, setEditDescription] = useState('');
+  const [docViewMode, setDocViewMode] = useState<'preview' | 'edit'>('preview');
 
   const [extractionModalOpen, setExtractionModalOpen] = useState(false);
   const [groupExtractionModalOpen, setGroupExtractionModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [groupDocModalOpen, setGroupDocModalOpen] = useState(false);
 
   // Debounce for name updates
   const nameDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -50,8 +60,18 @@ export function RepeaterView() {
     }, 300);
   }, [updateRequest]);
 
+  // Debounce for description updates
+  const descDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const debouncedUpdateDescription = useCallback((id: string, description: string) => {
+    if (descDebounceRef.current) clearTimeout(descDebounceRef.current);
+    descDebounceRef.current = setTimeout(() => {
+      updateRequest(id, { description });
+    }, 300);
+  }, [updateRequest]);
+
   const currentReq = repeaterRequests.find(r => r.id === selectedId) || repeaterRequests[0] || null;
-  const activeGroup = repeaterGroups.find(g => g.id === currentReq?.groupId);
+  const activeGroupObj = repeaterGroups.find(g => g.id === (currentReq?.groupId || activeGroupId));
+  const activeGroup = activeGroupObj;
 
   useEffect(() => {
     if (!repeaterRequests.length) {
@@ -80,7 +100,14 @@ export function RepeaterView() {
       setEditUrl(currentReq.url);
       setEditHeaders(currentReq.headers || []);
       setEditBody(currentReq.body || '');
+      setEditBodyMode(currentReq.bodyMode || 'raw');
+      setEditBodyJson(currentReq.bodyJson || '');
+      setEditBodyUrlencoded(currentReq.bodyUrlencoded || '');
+      setEditBodyMultipart(currentReq.bodyMultipart || '');
+      setEditUrlParams(currentReq.urlParams || '');
       setEditExtract(currentReq.extract || {});
+      setEditDescription(currentReq.description || '');
+      setDocViewMode('preview');
     }
   }, [currentReq?.id]);
 
@@ -99,7 +126,8 @@ export function RepeaterView() {
       response_body: '',
       is_intercepted: false,
       group: groupName || 'Default',
-      hit_count: req.hitCount
+      hit_count: req.hitCount,
+      duration_ms: req.response?.time
     };
   });
 
@@ -126,21 +154,55 @@ export function RepeaterView() {
         url: editUrl,
         headers: editHeaders,
         body: editBody,
+        bodyMode: editBodyMode,
+        bodyJson: editBodyJson,
+        bodyUrlencoded: editBodyUrlencoded,
+        bodyMultipart: editBodyMultipart,
+        urlParams: editUrlParams,
+        name: editName,
+        extract: editExtract,
+        groupId: editGroupId,
+        description: editDescription
       };
-      await updateRequest(currentReq.id, updatedReq);
 
-      // 2. Execute
-      const response = await invoke<Traffic>('execute_repeater_request', { id: currentReq.id });
+      await updateRequest(currentReq.id, {
+        method: editMethod,
+        url: editUrl,
+        headers: editHeaders,
+        body: editBody,
+        bodyMode: editBodyMode,
+        bodyJson: editBodyJson,
+        bodyUrlencoded: editBodyUrlencoded,
+        bodyMultipart: editBodyMultipart,
+        urlParams: editUrlParams,
+        name: editName,
+        extract: editExtract,
+        groupId: editGroupId,
+        description: editDescription
+      });
 
-      // 3. Update local state with response
+      // 2. Map variables for interpolation
+      const currentEnvVars = variables.filter(v => v.environmentId === activeEnvId);
+      const varMap: Record<string, string> = {};
+      currentEnvVars.forEach(v => {
+        const val = v.values[v.activeIndex]?.value ?? v.values[0]?.value ?? '';
+        varMap[v.name] = val;
+      });
+
+      // 3. Execute via Rust backend
+      const response = await invoke<Traffic>('execute_repeater_request', {
+        id: currentReq.id
+      });
+
       const updatedWithRes: RepeaterRequest = {
         ...updatedReq,
-        hitCount: (updatedReq.hitCount || 0) + 1,
         response: {
           status: response.status_code,
           headers: response.response_headers,
-          body: response.response_body
-        }
+          body: response.response_body,
+          time: response.duration_ms || undefined
+        },
+        hitCount: (currentReq.hitCount || 0) + 1
       };
 
       _setRawRepeater((prev: RepeaterRequest[]) => prev.map((r: RepeaterRequest) => r.id === currentReq.id ? updatedWithRes : r));
@@ -152,8 +214,10 @@ export function RepeaterView() {
       if (mergedExtract && Object.keys(mergedExtract).length > 0) {
         try {
           const respJson = JSON.parse(response.response_body);
-          Object.entries(mergedExtract).forEach(([varName, path]) => {
-            const value = path.split('.').reduce((obj, key) => (obj as any)?.[key], respJson);
+          Object.entries(mergedExtract).forEach(([varName, rawPath]) => {
+            const cleanPath = typeof rawPath === 'string' ? rawPath.replace(/^\$\.?/, '') : '';
+            if (!cleanPath) return;
+            const value = cleanPath.split('.').reduce((obj, key) => (obj as any)?.[key], respJson);
             if (value !== undefined) {
               updateVariableAutoValue(varName, String(value));
             }
@@ -171,111 +235,37 @@ export function RepeaterView() {
     }
   };
 
-  useEffect(() => {
-    const handler = () => {
-      if (currentReq && !isLoading) {
-        handleSend();
-      }
-    };
-    window.addEventListener('shortcut-execute-request', handler);
-    return () => window.removeEventListener('shortcut-execute-request', handler);
-  }, [currentReq, isLoading, handleSend]);
-
   const getPreviewRequestText = () => {
-    const varDict: Record<string, string> = {};
-    variables.filter(v => v.environmentId === activeEnvId).forEach(v => {
-      if (v.name.trim()) {
-        const activeVal = v.values[v.activeIndex] || v.values[0];
-        varDict[v.name.trim()] = activeVal ? activeVal.value : '';
-      }
+    if (!currentReq) return '';
+    const currentEnvVars = variables.filter(v => v.environmentId === activeEnvId);
+    const varMap: Record<string, string> = {};
+    currentEnvVars.forEach(v => {
+      const val = v.values[v.activeIndex]?.value ?? v.values[0]?.value ?? '';
+      varMap[v.name] = val;
     });
 
-    const interpolate = (text: string) => {
-      if (!text) return '';
-      let result = text.replace(/\{\{([^}]+)\}\}/g, (match, key) => varDict[key.trim()] ?? match);
-      result = result.replace(/%7B%7B(.*?)%7D%7D/gi, (match, key) => varDict[decodeURIComponent(key).trim()] ?? match);
-      return result;
-    };
+    let interpolatedUrl = editUrl;
+    let interpolatedBody = editBody;
 
-    const reqUrl = interpolate(editUrl);
-    let path = reqUrl;
-    let host = '';
-    try {
-      const parsed = new URL(reqUrl);
-      path = parsed.pathname + parsed.search + parsed.hash;
-      host = parsed.host;
-    } catch { /* Ignore */ }
-
-    let headerStr = `${editMethod} ${path} HTTP/1.1\n`;
-    let hasHost = false;
-
-    editHeaders.forEach(([k, v]: [string, string]) => {
-      if (k.toLowerCase() === 'host') hasHost = true;
-      headerStr += `${interpolate(k)}: ${interpolate(v)}\n`;
+    Object.entries(varMap).forEach(([k, v]) => {
+      const regex = new RegExp(`\\{\\{${k}\\}\\}`, 'g');
+      interpolatedUrl = interpolatedUrl.replace(regex, v);
+      interpolatedBody = interpolatedBody.replace(regex, v);
     });
 
-    if (host && !hasHost) headerStr += `Host: ${host}\n`;
+    const headersText = editHeaders.map(([k, v]) => {
+      let finalV = v;
+      Object.entries(varMap).forEach(([vk, vv]) => {
+        finalV = finalV.replace(new RegExp(`\\{\\{${vk}\\}\\}`, 'g'), vv);
+      });
+      return `${k}: ${finalV}`;
+    }).join('\n');
 
-    let finalBody = editBody;
-    if (editBody.startsWith('{') && editBody.includes('"__form_data"')) {
-      try {
-        const parsed = JSON.parse(editBody);
-        if (parsed.__form_data) {
-          finalBody = (parsed.__form_data as Array<{ k: string, v: string, type?: string, fileName?: string }>).map((e) => `${interpolate(e.k)}: ${e.type === 'file' ? `[FILE: ${e.fileName}]` : interpolate(e.v)}`).join('\n');
-        }
-      } catch { /* fallback to raw */ }
-    } else {
-      finalBody = interpolate(editBody);
-    }
-
-    return `${headerStr}\n${finalBody}`;
+    return `${editMethod} ${interpolatedUrl} HTTP/1.1\n${headersText}\n\n${interpolatedBody}`;
   };
-
-  const getRawResponseText = () => {
-    if (!currentReq?.response) return '';
-    const firstLine = `HTTP/1.1 ${currentReq.response.status}`;
-    const headerText = (currentReq.response.headers || []).map(([k, v]) => `${k}: ${v}`).join('\n');
-    return `${firstLine}\n${headerText}\n\n${currentReq.response.body}`;
-  };
-
-  const activeGroupObj = repeaterGroups.find(g => g.id === activeGroupId);
 
   return (
     <>
-      <ExtractionModal
-        isOpen={extractionModalOpen}
-        onClose={() => setExtractionModalOpen(false)}
-        onSave={(rules) => {
-          setEditExtract(rules);
-          updateRequest(currentReq.id, { extract: rules });
-        }}
-        initialRules={editExtract}
-        availableVariables={variables.filter(v => v.environmentId === activeEnvId)}
-      />
-      <ExtractionModal
-        isOpen={groupExtractionModalOpen}
-        onClose={() => setGroupExtractionModalOpen(false)}
-        onSave={(rules) => {
-          if (activeGroupId && activeGroupId !== 'All' && activeGroupId !== 'null') {
-            updateGroupExtractions(activeGroupId, rules);
-          } else if (currentReq?.groupId) {
-            updateGroupExtractions(currentReq.groupId, rules);
-          }
-        }}
-        initialRules={
-          activeGroupId && activeGroupId !== 'All' && activeGroupId !== 'null'
-            ? (activeGroupObj?.extract || {})
-            : (activeGroup?.extract || {})
-        }
-        availableVariables={variables.filter(v => v.environmentId === activeEnvId)}
-      />
-      <RepeaterHistoryModal
-        isOpen={historyModalOpen}
-        onClose={() => setHistoryModalOpen(false)}
-        repeaterId={currentReq?.id || ''}
-        repeaterName={currentReq?.name || ''}
-      />
-
       <WorkspaceLayout
         uiLayout={uiLayout}
         onUpdateLayout={updateUILayout}
@@ -309,6 +299,14 @@ export function RepeaterView() {
             />
 
             <div className="flex items-center gap-1 border-l border-zinc-800 pl-2 ml-1">
+              <button
+                onClick={() => setGroupDocModalOpen(true)}
+                disabled={activeGroupId === 'All' || activeGroupId === 'null'}
+                className="p-1 text-zinc-500 hover:text-purple-400 disabled:opacity-20 disabled:hover:text-zinc-500 transition-colors flex items-center gap-1"
+                title="Collection Documentation & Notes (Markdown)"
+              >
+                <span className="text-[10px] font-bold">📝 Docs</span>
+              </button>
               <button
                 onClick={async () => {
                   if (activeGroupObj) {
@@ -427,6 +425,8 @@ export function RepeaterView() {
                       </div>
                     )}
                   </div>
+
+                  {/* Request & Collection Extractions */}
                   {!simpleMode && (
                     <div className="space-y-3">
                       <div>
@@ -451,12 +451,68 @@ export function RepeaterView() {
                       )}
                     </div>
                   )}
+
+                  {/* Markdown Documentation & Testing Notes Section */}
+                  <div className="space-y-2 pt-3 border-t border-zinc-800/60">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[9px] text-purple-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                        <span>📝 API Documentation & Testing Notes (Markdown)</span>
+                      </label>
+                      <div className="flex bg-zinc-950 p-0.5 rounded border border-zinc-800">
+                        <button
+                          onClick={() => setDocViewMode('preview')}
+                          className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded transition-all ${
+                            docViewMode === 'preview' ? 'bg-purple-500/20 text-purple-300' : 'text-zinc-500 hover:text-zinc-300'
+                          }`}
+                        >
+                          Preview
+                        </button>
+                        <button
+                          onClick={() => setDocViewMode('edit')}
+                          className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded transition-all ${
+                            docViewMode === 'edit' ? 'bg-purple-500/20 text-purple-300' : 'text-zinc-500 hover:text-zinc-300'
+                          }`}
+                        >
+                          Edit Markdown
+                        </button>
+                      </div>
+                    </div>
+
+                    {docViewMode === 'edit' ? (
+                      <Textarea
+                        value={editDescription}
+                        onChange={(e) => {
+                          setEditDescription(e.target.value);
+                          debouncedUpdateDescription(currentReq.id, e.target.value);
+                        }}
+                        placeholder="# Request Notes & Test Scenario&#10;&#10;Write Markdown documentation, sample payload examples, parameters, or test instructions here..."
+                        className="w-full h-36 font-mono text-[11px] bg-zinc-950/80 border border-zinc-800 p-3 leading-relaxed text-zinc-300"
+                      />
+                    ) : (
+                      <div className="p-3 bg-zinc-950/50 rounded border border-zinc-800/80">
+                        <MarkdownViewer content={editDescription} />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
               <div className="space-y-3">
                 <h3 className="text-purple-text font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Request_Line</h3>
-                <UrlEditor method={editMethod} onMethodChange={setEditMethod} url={editUrl} onChange={setEditUrl} />
+                <UrlEditor 
+                  method={editMethod} 
+                  onMethodChange={setEditMethod} 
+                  url={editUrl} 
+                  onChange={(newUrl) => {
+                    setEditUrl(newUrl);
+                    updateRequest(currentReq.id, { url: newUrl });
+                  }} 
+                  urlParams={editUrlParams}
+                  onUrlParamsChange={(paramsJson) => {
+                    setEditUrlParams(paramsJson);
+                    updateRequest(currentReq.id, { urlParams: paramsJson });
+                  }}
+                />
               </div>
 
               <div className={`grid ${splitMode === 'horizontal' ? 'grid-cols-2 gap-8' : 'grid-cols-1 gap-10'}`}>
@@ -480,8 +536,31 @@ export function RepeaterView() {
                         <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-87.5">
                           <BodyEditor
                             body={editBody}
+                            bodyMode={editBodyMode}
+                            bodyJson={editBodyJson}
+                            bodyUrlencoded={editBodyUrlencoded}
+                            bodyMultipart={editBodyMultipart}
                             headers={editHeaders}
-                            onChange={setEditBody}
+                            onChange={(newBody) => {
+                              setEditBody(newBody);
+                              updateRequest(currentReq.id, { body: newBody });
+                            }}
+                            onModeChange={(m) => {
+                              setEditBodyMode(m);
+                              updateRequest(currentReq.id, { bodyMode: m });
+                            }}
+                            onBodyJsonChange={(val) => {
+                              setEditBodyJson(val);
+                              updateRequest(currentReq.id, { bodyJson: val });
+                            }}
+                            onBodyUrlencodedChange={(val) => {
+                              setEditBodyUrlencoded(val);
+                              updateRequest(currentReq.id, { bodyUrlencoded: val });
+                            }}
+                            onBodyMultipartChange={(val) => {
+                              setEditBodyMultipart(val);
+                              updateRequest(currentReq.id, { bodyMultipart: val });
+                            }}
                             onHeadersChange={(newHeaders) => {
                               setEditHeaders(newHeaders);
                               updateRequest(currentReq.id, { headers: newHeaders });
@@ -496,26 +575,87 @@ export function RepeaterView() {
                 </div>
 
                 <div className="flex flex-col space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-amber-text font-bold uppercase text-[10px] tracking-widest flex items-center gap-2"><span className="opacity-50">#</span> Response_Received</h3>
+                  <h3 className="text-purple-text font-bold uppercase text-[10px] tracking-widest flex items-center gap-2">
+                    <span className="opacity-50">#</span> Inbound_Response
                     {currentReq.response && (
-                      <div className={`px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-widest ${currentReq.response.status >= 400 ? 'bg-rose-highlight-bg border border-rose-highlight-border text-rose-text' : currentReq.response.status >= 300 ? 'bg-amber-highlight-bg border border-amber-highlight-border text-amber-text' : 'bg-emerald-highlight-bg border border-emerald-highlight-border text-emerald-text'}`}>Status: {currentReq.response.status}</div>
+                      <span className="flex items-center gap-2 ml-auto font-mono">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          currentReq.response.status >= 200 && currentReq.response.status < 300 ? 'bg-emerald-500/20 text-emerald-400' :
+                          currentReq.response.status >= 300 && currentReq.response.status < 400 ? 'bg-sky-500/20 text-sky-400' :
+                          currentReq.response.status >= 400 && currentReq.response.status < 500 ? 'bg-amber-500/20 text-amber-400' :
+                          'bg-red-500/20 text-red-400'
+                        }`}>{currentReq.response.status}</span>
+                        {currentReq.response.time !== undefined && currentReq.response.time > 0 && (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            currentReq.response.time < 300 ? 'bg-emerald-500/20 text-emerald-400' :
+                            currentReq.response.time < 1000 ? 'bg-amber-500/20 text-amber-400' :
+                            'bg-red-500/20 text-red-400'
+                          }`}>{currentReq.response.time}ms</span>
+                        )}
+                      </span>
                     )}
-                  </div>
-                  <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-100">
-                    {currentReq.response ? <HttpResponseViewer text={getRawResponseText()} /> : <div className="flex items-center justify-center h-full text-zinc-600 text-[10px] uppercase tracking-widest border border-zinc-800 border-dashed rounded">Hit Execute to get a response...</div>}
+                  </h3>
+                  <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-150 flex flex-col shadow-inner shadow-app-shadow/50">
+                    <HttpResponseViewer text={currentReq.response ? `HTTP/1.1 ${currentReq.response.status}\n${(currentReq.response.headers || []).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\n${currentReq.response.body || ''}` : ''} />
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center opacity-50 relative z-10 min-h-[60vh]">
-              <div className="text-[60px] font-black tracking-tighter text-zinc-700 mb-6">REPEATER_IDLE</div>
-              <Button variant="purple" size="lg" onClick={handleAdd}>+ Create New Specification</Button>
+            <div className="flex flex-col items-center justify-center h-full text-zinc-600 space-y-4">
+              <span className="text-xs uppercase font-bold tracking-widest">No request selected</span>
+              <Button variant="purple" size="sm" onClick={handleAdd}>+ Create Request</Button>
             </div>
           )
         )}
       />
+
+      {currentReq && (
+        <ExtractionModal
+          isOpen={extractionModalOpen}
+          onClose={() => setExtractionModalOpen(false)}
+          onSave={(rules) => {
+            setEditExtract(rules);
+            updateRequest(currentReq.id, { extract: rules });
+          }}
+          initialRules={editExtract}
+          availableVariables={variables}
+        />
+      )}
+
+      {activeGroup && (
+        <ExtractionModal
+          isOpen={groupExtractionModalOpen}
+          onClose={() => setGroupExtractionModalOpen(false)}
+          onSave={(rules) => {
+            updateGroupExtractions(activeGroup.id, rules);
+          }}
+          initialRules={(activeGroup.extract as Record<string, string>) || {}}
+          availableVariables={variables}
+        />
+      )}
+
+      {currentReq && (
+        <RepeaterHistoryModal
+          isOpen={historyModalOpen}
+          onClose={() => setHistoryModalOpen(false)}
+          repeaterId={currentReq.id}
+          repeaterName={currentReq.name}
+        />
+      )}
+
+      {activeGroupObj && (
+        <CollectionDocModal
+          isOpen={groupDocModalOpen}
+          groupName={activeGroupObj.name}
+          initialDescription={activeGroupObj.description}
+          onClose={() => setGroupDocModalOpen(false)}
+          onSave={async (desc) => {
+            await invoke('update_repeater_group_description', { id: activeGroupObj.id, description: desc });
+            await refreshRepeater();
+          }}
+        />
+      )}
     </>
   );
 }

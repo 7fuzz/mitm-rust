@@ -1,34 +1,49 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { JsonEditor } from './JsonEditor';
 import { FormEditor } from './FormEditor';
 import { formToJson, jsonToUrlEncoded, jsonToMultipartStructured } from '@/lib/utils/converter';
 import { Textarea, useDialog } from '../ui';
 
+export type BodyMode = 'raw' | 'json' | 'urlencoded' | 'multipart';
+
 interface Props {
   body: string;
+  bodyMode?: BodyMode;
+  bodyJson?: string;
+  bodyUrlencoded?: string;
+  bodyMultipart?: string;
   headers: [string, string][];
   onChange: (newBody: string) => void;
+  onModeChange?: (mode: BodyMode) => void;
+  onBodyJsonChange?: (val: string) => void;
+  onBodyUrlencodedChange?: (val: string) => void;
+  onBodyMultipartChange?: (val: string) => void;
   onHeadersChange?: (newHeaders: [string, string][]) => void;
 }
 
-export function BodyEditor({ body, headers, onChange, onHeadersChange }: Props) {
+export function BodyEditor({
+  body,
+  bodyMode = 'raw',
+  bodyJson = '',
+  bodyUrlencoded = '',
+  bodyMultipart = '',
+  headers,
+  onChange,
+  onModeChange,
+  onBodyJsonChange,
+  onBodyUrlencodedChange,
+  onBodyMultipartChange,
+  onHeadersChange,
+}: Props) {
   const { alert } = useDialog();
   const contentTypeEntry = headers.find(([k]) => k.toLowerCase() === 'content-type');
   const contentType = contentTypeEntry ? contentTypeEntry[1].toLowerCase() : '';
 
-  const [mode, setMode] = useState<'raw' | 'json' | 'form'>(() => {
-    if (contentType.includes('application/json')) return 'json';
-    if (contentType.includes('form-urlencoded') || contentType.includes('multipart/form-data')) return 'form';
-    return 'raw';
-  });
-  const [prevContentType, setPrevContentType] = useState(contentType);
+  const [mode, setMode] = useState<BodyMode>(bodyMode);
 
-  if (contentType !== prevContentType) {
-    setPrevContentType(contentType);
-    if (contentType.includes('application/json')) setMode('json');
-    else if (contentType.includes('form-urlencoded') || contentType.includes('multipart/form-data')) setMode('form');
-    else setMode('raw');
-  }
+  useEffect(() => {
+    setMode(bodyMode || 'raw');
+  }, [bodyMode]);
 
   const updateContentType = (newType: string) => {
     if (!onHeadersChange) return;
@@ -47,133 +62,149 @@ export function BodyEditor({ body, headers, onChange, onHeadersChange }: Props) 
     onHeadersChange(newHeaders);
   };
 
+  const handleSwitchMode = (targetMode: BodyMode) => {
+    setMode(targetMode);
+    onModeChange?.(targetMode);
+
+    if (targetMode === 'raw') {
+      onChange(body);
+    } else if (targetMode === 'json') {
+      updateContentType('application/json');
+      const nextJson = bodyJson || (body.startsWith('{') || body.startsWith('[') ? body : '{\n  \n}');
+      onBodyJsonChange?.(nextJson);
+      onChange(nextJson);
+    } else if (targetMode === 'urlencoded') {
+      updateContentType('application/x-www-form-urlencoded');
+      const nextUrl = bodyUrlencoded || (contentType.includes('x-www-form-urlencoded') ? body : '');
+      onBodyUrlencodedChange?.(nextUrl);
+      onChange(nextUrl);
+    } else if (targetMode === 'multipart') {
+      updateContentType('multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW');
+      const nextMulti = bodyMultipart || (contentType.includes('multipart') || body.includes('__form_data') ? body : '');
+      onBodyMultipartChange?.(nextMulti);
+      onChange(nextMulti);
+    }
+  };
+
+  const handleCopyToRaw = () => {
+    onModeChange?.('raw');
+    setMode('raw');
+    onChange(body);
+  };
+
   const handleConvertToJSON = async () => {
     const converted = formToJson(body, contentType);
     if (converted) {
+      onBodyJsonChange?.(converted);
       onChange(converted);
       updateContentType('application/json');
+      onModeChange?.('json');
       setMode('json');
     } else {
-      await alert("Conversion Failed", "Could not convert to JSON. Make sure no files are attached.");
+      await alert("Conversion Failed", "Could not convert current body to valid JSON.");
     }
   };
 
   const handleConvertToForm = async (type: 'urlencoded' | 'multipart') => {
     const converted = type === 'urlencoded' ? jsonToUrlEncoded(body) : jsonToMultipartStructured(body);
     if (converted) {
+      if (type === 'urlencoded') {
+        onBodyUrlencodedChange?.(converted);
+        updateContentType('application/x-www-form-urlencoded');
+        onModeChange?.('urlencoded');
+        setMode('urlencoded');
+      } else {
+        onBodyMultipartChange?.(converted);
+        updateContentType('multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW');
+        onModeChange?.('multipart');
+        setMode('multipart');
+      }
       onChange(converted);
-      updateContentType(type === 'urlencoded' ? 'application/x-www-form-urlencoded' : 'multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW');
-      setMode('form');
     } else {
-      await alert("Conversion Failed", "Could not convert to Form Data. Ensure body is valid JSON.");
+      await alert("Conversion Failed", "Could not convert to Form Data. Ensure body is valid JSON or parameter list.");
     }
   };
-
-  const handleAttachBase64FileToJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64Str = reader.result as string;
-      
-      // If current body is valid JSON object, append property
-      try {
-        const trimmed = body.trim();
-        const parsed = trimmed ? JSON.parse(trimmed) : {};
-        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-          const keyName = file.name.replace(/[^a-zA-Z0-9_]/g, '_');
-          parsed[keyName || 'file'] = base64Str;
-          onChange(JSON.stringify(parsed, null, 2));
-          if (!contentType.includes('application/json')) {
-            updateContentType('application/json');
-          }
-          return;
-        }
-      } catch { /* ignore fallback */ }
-
-      // Fallback: Set JSON structure
-      const newJson = {
-        fileName: file.name,
-        contentType: file.type || 'application/octet-stream',
-        data: base64Str
-      };
-      onChange(JSON.stringify(newJson, null, 2));
-      if (!contentType.includes('application/json')) {
-        updateContentType('application/json');
-      }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  };
-
-  const isBodyJson = (() => {
-    if (!body.trim()) return true;
-    try { JSON.parse(body); return true; } catch { return false; }
-  })();
-
-  const isBodyForm = body.includes('__form_data') || contentType.includes('form-urlencoded') || contentType.includes('multipart/form-data') || (!body.trim());
 
   return (
     <div className="flex flex-col h-full bg-zinc-900/50 border border-zinc-800 rounded resize-y overflow-hidden min-h-37.5">
 
-      <div className="bg-zinc-800/50 px-3 py-1.5 flex justify-between items-center border-b border-zinc-800 shrink-0">
+      <div className="bg-zinc-800/50 px-3 py-1.5 flex justify-between items-center border-b border-zinc-800 shrink-0 flex-wrap gap-2">
         <div className="flex items-center gap-3">
-          <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Body Format:</span>
+          <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Body Mode:</span>
           <div className="flex bg-zinc-950 p-0.5 rounded items-center">
-            <button onClick={() => setMode('raw')} className={`px-3 py-1 text-[10px] font-bold uppercase rounded transition-all duration-200 ${mode === 'raw' ? 'bg-zinc-700 text-zinc-50 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <button
+              onClick={() => handleSwitchMode('raw')}
+              className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded transition-all duration-200 ${
+                mode === 'raw' ? 'bg-zinc-700 text-zinc-50 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
               raw
             </button>
-            {(isBodyJson || mode === 'json') && (
-              <button onClick={() => setMode('json')} className={`px-3 py-1 text-[10px] font-bold uppercase rounded transition-all duration-200 ${mode === 'json' ? 'bg-zinc-700 text-zinc-50 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
-                json
-              </button>
-            )}
-            {(isBodyForm || mode === 'form') && (
-              <button onClick={() => setMode('form')} className={`px-3 py-1 text-[10px] font-bold uppercase rounded transition-all duration-200 ${mode === 'form' ? 'bg-zinc-700 text-zinc-50 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
-                form
-              </button>
-            )}
+            <button
+              onClick={() => handleSwitchMode('json')}
+              className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded transition-all duration-200 ${
+                mode === 'json' ? 'bg-zinc-700 text-zinc-50 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              json
+            </button>
+            <button
+              onClick={() => handleSwitchMode('urlencoded')}
+              className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded transition-all duration-200 ${
+                mode === 'urlencoded' ? 'bg-zinc-700 text-zinc-50 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              x-www-form-urlencoded
+            </button>
+            <button
+              onClick={() => handleSwitchMode('multipart')}
+              className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded transition-all duration-200 ${
+                mode === 'multipart' ? 'bg-zinc-700 text-zinc-50 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              form-data
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <label 
-            className="text-[9px] font-black uppercase tracking-widest text-purple-400 hover:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 px-2 py-1 rounded border border-purple-500/30 cursor-pointer transition-all flex items-center gap-1"
-            title="Select a file from disk to encode as Base64 in JSON"
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-            </svg>
-            <span>+ Attach Base64 File</span>
-            <input type="file" className="hidden" onChange={handleAttachBase64FileToJSON} />
-          </label>
-
-          {mode === 'form' && (
-            <button 
-              onClick={handleConvertToJSON}
-              className="text-[9px] font-black uppercase tracking-widest text-emerald-text hover:text-emerald-text bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20 transition-all"
+        {/* Copy / Transform Actions */}
+        <div className="flex items-center gap-1.5">
+          {mode !== 'raw' && (
+            <button
+              onClick={handleCopyToRaw}
+              className="text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-zinc-200 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 transition-all"
+              title="Copy active formatted body into raw text"
             >
-              Convert to JSON
+              📋 Copy to Raw
             </button>
           )}
-          {mode === 'json' && (
-            <div className="flex gap-1">
-              <button 
-                onClick={() => handleConvertToForm('urlencoded')}
-                className="text-[9px] font-black uppercase tracking-widest text-amber-500 hover:text-amber-400 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 transition-all"
-              >
-                to URL-Encoded
-              </button>
-              <button 
-                onClick={() => handleConvertToForm('multipart')}
-                className="text-[9px] font-black uppercase tracking-widest text-rose-500 hover:text-rose-400 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20 transition-all"
-              >
-                to Multipart
-              </button>
-            </div>
+          {mode !== 'json' && (
+            <button
+              onClick={handleConvertToJSON}
+              className="text-[9px] font-black uppercase tracking-widest text-emerald-text hover:text-emerald-300 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20 transition-all"
+              title="Transform current body into JSON"
+            >
+              ⚡ to JSON
+            </button>
           )}
-          {contentType && <span className="text-[9px] text-emerald-text/70 font-mono italic truncate max-w-40 hidden sm:inline">Detected: {contentType.split(';')[0]}</span>}
+          {mode !== 'urlencoded' && (
+            <button
+              onClick={() => handleConvertToForm('urlencoded')}
+              className="text-[9px] font-black uppercase tracking-widest text-amber-500 hover:text-amber-400 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 transition-all"
+              title="Transform current body into URL-encoded parameters"
+            >
+              ⚡ to URL-Encoded
+            </button>
+          )}
+          {mode !== 'multipart' && (
+            <button
+              onClick={() => handleConvertToForm('multipart')}
+              className="text-[9px] font-black uppercase tracking-widest text-purple-400 hover:text-purple-300 bg-purple-500/10 px-2 py-1 rounded border border-purple-500/20 transition-all"
+              title="Transform current body into Multipart Form Data"
+            >
+              ⚡ to Multipart
+            </button>
+          )}
         </div>
       </div>
 
@@ -181,13 +212,42 @@ export function BodyEditor({ body, headers, onChange, onHeadersChange }: Props) 
         {mode === 'raw' && (
           <Textarea
             value={body}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => {
+              onChange(e.target.value);
+            }}
             spellCheck={false}
             className="w-full h-full min-h-25 leading-relaxed bg-transparent border-transparent focus:border-transparent"
           />
         )}
-        {mode === 'json' && <JsonEditor initialBody={body} onChange={onChange} />}
-        {mode === 'form' && <FormEditor initialBody={body} contentType={contentType} onChange={onChange} />}
+        {mode === 'json' && (
+          <JsonEditor
+            initialBody={bodyJson || body}
+            onChange={(newVal) => {
+              onBodyJsonChange?.(newVal);
+              onChange(newVal);
+            }}
+          />
+        )}
+        {mode === 'urlencoded' && (
+          <FormEditor
+            initialBody={bodyUrlencoded || body}
+            contentType="application/x-www-form-urlencoded"
+            onChange={(newVal) => {
+              onBodyUrlencodedChange?.(newVal);
+              onChange(newVal);
+            }}
+          />
+        )}
+        {mode === 'multipart' && (
+          <FormEditor
+            initialBody={bodyMultipart || body}
+            contentType="multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW"
+            onChange={(newVal) => {
+              onBodyMultipartChange?.(newVal);
+              onChange(newVal);
+            }}
+          />
+        )}
       </div>
     </div>
   );

@@ -8,4 +8,5 @@ export { VariableEditorModal } from './VariableEditorModal';
 export { EnvironmentEditorModal } from './EnvironmentEditorModal';
 export { ImportModal } from './ImportModal';
 export { CollectionAssignmentModal } from './CollectionAssignmentModal';
+export { CollectionDocModal } from './CollectionDocModal';
 export * from './QuickSwitcherModals';

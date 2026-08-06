@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { ChevronDown } from 'lucide-react';
@@ -26,13 +26,31 @@ interface SelectProps {
 
 export function Select({ value, onChange, options, className, placeholder, disabled }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; isDropUp: boolean } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find(opt => !opt.isHeader && !opt.isDivider && opt.value === value);
 
+  const updateCoords = useCallback(() => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const isDropUp = spaceBelow < 220 && rect.top > 220;
+      setCoords({
+        top: isDropUp ? rect.top - 4 : rect.bottom + 4,
+        left: rect.left,
+        width: Math.max(rect.width, 200),
+        isDropUp
+      });
+    }
+  }, []);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const isInsideContainer = containerRef.current && containerRef.current.contains(event.target as Node);
+      const isInsideMenu = menuRef.current && menuRef.current.contains(event.target as Node);
+      if (!isInsideContainer && !isInsideMenu) {
         setIsOpen(false);
       }
     };
@@ -40,11 +58,28 @@ export function Select({ value, onChange, options, className, placeholder, disab
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (isOpen) {
+      updateCoords();
+      window.addEventListener('scroll', updateCoords, true);
+      window.addEventListener('resize', updateCoords);
+      return () => {
+        window.removeEventListener('scroll', updateCoords, true);
+        window.removeEventListener('resize', updateCoords);
+      };
+    }
+  }, [isOpen, updateCoords]);
+
   return (
     <div className={cn("relative inline-block w-full", className, disabled && "opacity-50 pointer-events-none")} ref={containerRef}>
       <button
         type="button"
-        onClick={() => !disabled && setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!disabled) {
+            updateCoords();
+            setIsOpen(!isOpen);
+          }
+        }}
         disabled={disabled}
         className={cn(
           "flex items-center justify-between w-full px-3 py-1.5",
@@ -61,9 +96,20 @@ export function Select({ value, onChange, options, className, placeholder, disab
         <ChevronDown className={cn("ml-2 h-3 w-3 text-zinc-600 transition-transform shrink-0", isOpen && "rotate-180")} />
       </button>
 
-      {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-zinc-950 border border-zinc-800 rounded shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100 min-w-[200px]">
-          <div className="max-h-80 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 p-1">
+      {isOpen && coords && (
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.isDropUp ? 'auto' : `${coords.top}px`,
+            bottom: coords.isDropUp ? `${window.innerHeight - coords.top}px` : 'auto',
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            zIndex: 99999
+          }}
+          className="bg-zinc-950 border border-zinc-800 rounded shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+        >
+          <div className="max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 p-1">
             {options.map((option, idx) => {
               if (option.isDivider) {
                 return <div key={`divider-${idx}`} className="h-px bg-zinc-800 my-1 mx-2" />;

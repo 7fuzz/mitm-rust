@@ -16,6 +16,7 @@ export interface RepeaterGroup {
   name: string;
   orderIndex: number;
   extract?: Record<string, string>;
+  description?: string;
 }
 
 export interface RepeaterRequest {
@@ -26,9 +27,15 @@ export interface RepeaterRequest {
   url: string;
   headers: [string, string][];
   body: string;
+  bodyMode?: 'raw' | 'json' | 'urlencoded' | 'multipart';
+  bodyJson?: string;
+  bodyUrlencoded?: string;
+  bodyMultipart?: string;
+  urlParams?: string;
   timestamp: number;
   extract?: Record<string, string>;
   hitCount?: number;
+  description?: string;
   response?: {
     status: number;
     headers: [string, string][];

@@ -10,26 +10,37 @@ export function useRepeater(activeEnvId?: string) {
   // Internal bootstrapper
   const initActiveGroup = useCallback((groupId: string) => setActiveGroupId(groupId), []);
 
+  const mapBackendResponse = useCallback((requests: any[]): RepeaterRequest[] => {
+    return requests.map(r => ({
+      ...r,
+      response: r.response ? {
+        status: r.response.status_code ?? r.response.status ?? 0,
+        headers: r.response.response_headers ?? r.response.headers ?? [],
+        body: r.response.response_body ?? r.response.body ?? '',
+        time: r.response.duration_ms ?? r.response.time,
+      } : undefined,
+    }));
+  }, []);
+
   const fetchGroupRequests = useCallback(async (groupId: string) => {
     try {
-      const requests = await invoke<RepeaterRequest[]>('get_repeater_requests', { groupId });
-      setRepeaterRequests(requests);
+      const requests = await invoke<any[]>('get_repeater_requests', { groupId });
+      setRepeaterRequests(mapBackendResponse(requests));
     } catch (error) {
       console.error('Failed to fetch group requests:', error);
     }
-  }, []);
+  }, [mapBackendResponse]);
 
   const refreshRepeater = useCallback(async () => {
     try {
       const data = await invoke<SyncData>('sync_data');
       setRepeaterGroups(data.repeaterGroups);
-      // Backend already filtered repeaterRequests in sync_data based on saved activeGroupId
-      setRepeaterRequests(data.repeaterRequests);
+      setRepeaterRequests(mapBackendResponse(data.repeaterRequests as any[]));
       if (data.activeGroupId) {
         setActiveGroupId(data.activeGroupId);
       }
     } catch (error) { console.error('Failed to refresh repeater data:', error); }
-  }, []);
+  }, [mapBackendResponse]);
 
   const switchGroup = useCallback(async (groupId: string) => {
     setActiveGroupId(groupId);
@@ -208,6 +219,17 @@ export function useRepeater(activeEnvId?: string) {
     } catch (e) { console.error(e); }
   }, [activeGroupId, switchGroup]);
 
+  const bulkDeleteGroups = useCallback(async (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    setRepeaterGroups(prev => prev.filter(g => !ids.includes(g.id)));
+    setRepeaterRequests(prev => prev.filter(r => !r.groupId || !ids.includes(r.groupId)));
+    try {
+      await invoke('bulk_delete_repeater_groups', { ids });
+      if (activeGroupId && ids.includes(activeGroupId)) switchGroup('null');
+      await refreshRepeater();
+    } catch (e) { console.error(e); }
+  }, [activeGroupId, switchGroup, refreshRepeater]);
+
   const cloneGroup = useCallback(async (id: string, newName: string) => {
     try {
       const newGroupId = await createGroup(newName);
@@ -292,12 +314,12 @@ export function useRepeater(activeEnvId?: string) {
     repeaterRequests, repeaterGroups, activeGroupId, switchGroup,
     _setRawRepeater: setRepeaterRequests, _setRawGroups: setRepeaterGroups, initActiveGroup,
     refreshRepeater, addEmptyRequest, duplicateRequest, deleteRequest, updateRequest, importPostman,
-    importProject, finalizeImport, createGroup, renameGroup, deleteGroup, cloneGroup, reorderRequests, reorderGroups,
+    importProject, finalizeImport, createGroup, renameGroup, deleteGroup, bulkDeleteGroups, cloneGroup, reorderRequests, reorderGroups,
     manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions
   }), [
     repeaterRequests, repeaterGroups, activeGroupId, switchGroup, initActiveGroup,
     refreshRepeater, addEmptyRequest, duplicateRequest, deleteRequest, updateRequest, importPostman,
-    importProject, finalizeImport, createGroup, renameGroup, deleteGroup, cloneGroup, reorderRequests, reorderGroups,
+    importProject, finalizeImport, createGroup, renameGroup, deleteGroup, bulkDeleteGroups, cloneGroup, reorderRequests, reorderGroups,
     manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions
   ]);
 }
@@ -310,7 +332,7 @@ function convertPostmanToMitmFormat(collection: any): any {
   const all_variables: any[] = [];
 
   // Parse collection variables
-  if (Array.isArray(collection.variable)) {
+  if (Array.isArray(collection.variable) && collection.variable.length > 0) {
     const envId = "postman-env";
     all_environments.push({ id: envId, name: `${projectName} (Collection Variables)` });
 
@@ -323,7 +345,7 @@ function convertPostmanToMitmFormat(collection: any): any {
           activeIndex: 0,
           values: [
             {
-              name: "default",
+              name: "(auto)",
               value: v.value || ""
             }
           ]

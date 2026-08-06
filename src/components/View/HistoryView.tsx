@@ -105,12 +105,34 @@ export function HistoryView() {
         ? { url: req.url, headers: req.request_headers || [], body: req.request_body || '' }
         : applyAllReplacements({ url: req.url, headers: req.request_headers || [], body: req.request_body || '' });
 
+      // Auto-detect body format from Content-Type header
+      const contentType = (transformedHeaders || []).find(([k]) => k.toLowerCase() === 'content-type')?.[1]?.toLowerCase() || '';
+      let bodyMode: 'raw' | 'json' | 'urlencoded' | 'multipart' = 'raw';
+      let bodyJson: string | undefined;
+      let bodyUrlencoded: string | undefined;
+      let bodyMultipart: string | undefined;
+
+      if (contentType.includes('application/json') || (transformedBody && (transformedBody.trimStart().startsWith('{') || transformedBody.trimStart().startsWith('[')))) {
+        bodyMode = 'json';
+        bodyJson = transformedBody;
+      } else if (contentType.includes('x-www-form-urlencoded')) {
+        bodyMode = 'urlencoded';
+        bodyUrlencoded = transformedBody;
+      } else if (contentType.includes('multipart/form-data')) {
+        bodyMode = 'multipart';
+        bodyMultipart = transformedBody;
+      }
+
       const itemPayload = {
         name: `${req.method} ${path}`,
         method: req.method,
         url: transformedUrl,
         headers: transformedHeaders,
         body: transformedBody,
+        bodyMode,
+        bodyJson,
+        bodyUrlencoded,
+        bodyMultipart,
         response: req.status_code !== 0 ? {
           status_code: req.status_code,
           response_headers: req.response_headers || [],

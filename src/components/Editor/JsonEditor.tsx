@@ -46,6 +46,9 @@ interface JsonNodeProps {
 const JsonNode = ({ label, value, onChange, onDelete, onKeyChange }: JsonNodeProps) => {
   const isArray = Array.isArray(value);
   const isObject = value !== null && typeof value === 'object' && !isArray;
+  const [isFileType, setIsFileType] = useState(() => {
+    return typeof value === 'string' && (value.startsWith('data:') || value.startsWith('[FILE]'));
+  });
 
   if (isObject || isArray) {
     const keys = Object.keys(value as object);
@@ -125,13 +128,20 @@ const JsonNode = ({ label, value, onChange, onDelete, onKeyChange }: JsonNodePro
     );
   }
 
-  const valueType = value === null ? 'null' : typeof value;
+  const rawType = value === null ? 'null' : typeof value;
+  const valueType = isFileType ? 'file' : rawType;
 
   const handleTypeSwitch = (newType: string) => {
-    if (newType === 'string') onChange(String(value ?? ''));
-    else if (newType === 'number') onChange(Number(value) || 0);
-    else if (newType === 'boolean') onChange(Boolean(value));
-    else if (newType === 'null') onChange(null);
+    if (newType === 'file') {
+      setIsFileType(true);
+      if (typeof value !== 'string') onChange('');
+    } else {
+      setIsFileType(false);
+      if (newType === 'string') onChange(String(value ?? ''));
+      else if (newType === 'number') onChange(Number(value) || 0);
+      else if (newType === 'boolean') onChange(Boolean(value));
+      else if (newType === 'null') onChange(null);
+    }
   };
 
   const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -162,6 +172,7 @@ const JsonNode = ({ label, value, onChange, onDelete, onKeyChange }: JsonNodePro
           { value: "string", label: "STR" },
           { value: "number", label: "NUM" },
           { value: "boolean", label: "BOOL" },
+          { value: "file", label: "FILE" },
           { value: "null", label: "NULL" }
         ]}
         className="w-20"
@@ -181,6 +192,19 @@ const JsonNode = ({ label, value, onChange, onDelete, onKeyChange }: JsonNodePro
         <div className="flex-1 bg-zinc-950/30 border border-transparent p-1.5 rounded text-zinc-600 text-[11px] font-mono italic">
           null
         </div>
+      ) : valueType === 'file' ? (
+        <div className="flex-1 flex items-center gap-2 bg-zinc-950/50 border border-zinc-800/50 hover:border-zinc-700 focus-within:border-sky-500 rounded p-1 transition-colors overflow-hidden min-w-0">
+          <input
+            type="file"
+            onChange={handleFileAttach}
+            className="text-[10px] text-zinc-400 file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[9px] file:font-semibold file:bg-zinc-800 file:text-zinc-300 hover:file:bg-zinc-700 cursor-pointer flex-1 min-w-0"
+          />
+          {typeof value === 'string' && value.startsWith('data:') && (
+            <span className="text-[9px] text-purple-400 font-mono truncate max-w-28 shrink-0 bg-purple-500/10 px-1.5 py-0.5 rounded border border-purple-500/20" title={value}>
+              Base64 ({Math.round((value.length * 0.75) / 1024)} KB)
+            </span>
+          )}
+        </div>
       ) : (
         <div className="flex-1 flex items-center bg-zinc-950/50 border border-zinc-800/50 hover:border-zinc-700 focus-within:border-sky-500 rounded transition-colors overflow-hidden">
           {valueType === 'string' && <span className="text-zinc-600 pl-2">&quot;</span>}
@@ -192,18 +216,6 @@ const JsonNode = ({ label, value, onChange, onDelete, onKeyChange }: JsonNodePro
           />
           {valueType === 'string' && <span className="text-zinc-600 pr-2">&quot;</span>}
         </div>
-      )}
-
-      {valueType === 'string' && (
-        <label 
-          className="p-1.5 text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 rounded cursor-pointer transition-all shrink-0" 
-          title="Attach file as Base64 Data URI"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-          </svg>
-          <input type="file" className="hidden" onChange={handleFileAttach} />
-        </label>
       )}
 
       {onDelete && (
