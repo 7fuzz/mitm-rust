@@ -1,6 +1,6 @@
 # Import Project from JSON Specification
 
-This document provides a technical specification and operational guide for the **Import Project from JSON** functionality in MITM Rust. The backend logic is implemented in [`src-tauri/src/repeater.rs`]().
+This document provides a technical specification and operational guide for the **Import Project from JSON** functionality in MITM Rust. The backend logic is implemented in `src-tauri/src/repeater.rs`.
 
 ---
 
@@ -38,7 +38,7 @@ To ensure clean separation between request definitions and environment configura
 
 ## Rust Struct & Data Contracts
 
-The Rust backend in [`src-tauri/src/repeater.rs`]() defines the payload contract using `serde::Deserialize`:
+The Rust backend in `src-tauri/src/repeater.rs` defines the payload contract using `serde::Deserialize`:
 
 ```rust
 #[derive(Debug, Deserialize, Serialize)]
@@ -169,7 +169,7 @@ Files can be attached directly into JSON request payloads as Base64 Data URIs (`
 ```
 
 ##### B. `multipart/form-data` Base64 Form Uploads
-For multipart form requests, Base64 files use the `__form_data` array structure with `"type": "base64"`. The Rust execution engine ([`repeater_execute.rs`]()) decodes the Base64 payload and constructs valid multipart HTTP boundaries automatically upon sending.
+For multipart form requests, Base64 files use the `__form_data` array structure with `"type": "base64"`. The Rust execution engine (`src-tauri/src/repeater_execute.rs`) decodes the Base64 payload and constructs valid multipart HTTP boundaries automatically upon sending.
 
 ```json
 {
@@ -223,7 +223,7 @@ For multipart form requests, Base64 files use the `__form_data` array structure 
 
 ## Returned Response Contract
 
-On success, [`import_repeater_data`]() returns:
+On success, `import_repeater_data` returns:
 
 ```json
 {
@@ -389,6 +389,3 @@ Starting with Database Migration Version 8, request bodies are stored in a dedic
 In `url_params`, `multipart`, and `urlencoded` parameter entries, each item includes an optional `"enabled": true | false` property:
 - **`"enabled": true`**: Parameter is active and included when reconstructing URLs or executing HTTP requests.
 - **`"enabled": false`**: Parameter is disabled and excluded from the request URL/payload, but remains persisted in the editor table UI for quick testing.
-
----
-
