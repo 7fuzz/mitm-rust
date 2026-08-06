@@ -230,6 +230,7 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
             body_json: req.bodyJson || undefined,
             body_urlencoded: req.bodyUrlencoded || undefined,
             body_multipart: req.bodyMultipart || undefined,
+            url_params: req.urlParams || undefined,
             extract: req.extract || {},
             description: req.description || undefined
           };

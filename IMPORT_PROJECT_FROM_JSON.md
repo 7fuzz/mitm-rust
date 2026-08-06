@@ -368,13 +368,13 @@ Starting with Database Migration Version 8, request bodies are stored in a dedic
 | Variable | `variables` | `id`, `environment_id`, `name`, `active_index` | Global variable definitions |
 | Variable Value | `variable_values` | `id`, `variable_id`, `name`, `value` | Variant values per variable |
 | Repeater Group | `repeater_groups` | `id`, `name`, `order_index`, `extract`, `description` | Endpoint collection containers |
-| Repeater Request | `repeater_requests` | `id`, `name`, `group_id`, `method`, `url`, `headers`, `body`, `extract`, `description` | Endpoint request definitions |
+| Repeater Request | `repeater_requests` | `id`, `name`, `group_id`, `method`, `url`, `headers`, `body`, `extract`, `description`, `response_duration`, `url_params` | Endpoint request definitions with persisted URL parameter toggles & latency |
 | Multi-Variant Bodies | `request_bodies` | `request_id`, `body_mode`, `body_raw`, `body_json`, `body_urlencoded`, `body_multipart` | Dedicated format variant buffers per request |
 | Group Environment Link | `environment_groups` | `group_id`, `environment_id` | Collection-to-environment links |
 
 ---
 
-### Request Target Body JSON Fields (Optional Specification)
+### Request Target Body & URL Parameter JSON Fields (Optional Specification)
 
 | Field | Type | Description | Example |
 | :--- | :--- | :--- | :--- |
@@ -383,11 +383,12 @@ Starting with Database Migration Version 8, request bodies are stored in a dedic
 | `body_json` | String | Dedicated JSON body representation | `"{\"amount\": 100}"` |
 | `body_urlencoded` | String | Dedicated URL-encoded body string | `"grant_type=client_credentials&client_id={{client_id}}"` |
 | `body_multipart` | String | Dedicated Multipart form data JSON structure with parameter toggles | `"{\"__form_data\": [{\"enabled\": true, \"k\": \"file\", \"v\": \"data:...\", \"type\": \"base64\"}]}"` |
+| `url_params` | String | JSON string of URL query parameter entries with enable/disable toggles | `"[{\"id\":\"123\",\"k\":\"page\",\"v\":\"1\",\"enabled\":true},{\"id\":\"456\",\"k\":\"filter\",\"v\":\"abc\",\"enabled\":false}]"` |
 
 #### Parameter ON / OFF Toggle (`enabled: boolean`)
-In `multipart` and `urlencoded` parameter entries, each item includes an optional `"enabled": true | false` property:
-- **`"enabled": true`**: Parameter is active and included when executing HTTP requests.
-- **`"enabled": false`**: Parameter is disabled and skipped during request execution, but remains persisted in the editor table UI for quick testing.
+In `url_params`, `multipart`, and `urlencoded` parameter entries, each item includes an optional `"enabled": true | false` property:
+- **`"enabled": true`**: Parameter is active and included when reconstructing URLs or executing HTTP requests.
+- **`"enabled": false`**: Parameter is disabled and excluded from the request URL/payload, but remains persisted in the editor table UI for quick testing.
 
 ---
 
