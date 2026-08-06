@@ -555,13 +555,35 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
                     };
                     let extract = target_obj.get("extract").and_then(|v| serde_json::to_string(v).ok()).unwrap_or_else(|| "{}".to_string());
                     let req_desc = target_obj.get("description").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    let url_params = target_obj.get("url_params").and_then(|v| if v.is_string() { v.as_str().map(|s| s.to_string()) } else { serde_json::to_string(v).ok() });
+
+                    let body_mode = target_obj.get("body_mode").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| {
+                        if body.trim().starts_with('{') || body.trim().starts_with('[') {
+                            "json".to_string()
+                        } else if body.contains('=') && !body.trim().starts_with('{') {
+                            "urlencoded".to_string()
+                        } else if body.contains("__form_data") {
+                            "multipart".to_string()
+                        } else {
+                            "raw".to_string()
+                        }
+                    });
+
+                    let body_json = target_obj.get("body_json").and_then(|v| if v.is_string() { v.as_str().map(|s| s.to_string()) } else { serde_json::to_string(v).ok() }).or_else(|| if body_mode == "json" && !body.is_empty() { Some(body.clone()) } else { None });
+                    let body_urlencoded = target_obj.get("body_urlencoded").and_then(|v| v.as_str().map(|s| s.to_string())).or_else(|| if body_mode == "urlencoded" && !body.is_empty() { Some(body.clone()) } else { None });
+                    let body_multipart = target_obj.get("body_multipart").and_then(|v| if v.is_string() { v.as_str().map(|s| s.to_string()) } else { serde_json::to_string(v).ok() }).or_else(|| if body_mode == "multipart" && !body.is_empty() { Some(body.clone()) } else { None });
 
                     let headers_json = serde_json::to_string(&headers).unwrap_or_default();
                     let req_id = Uuid::new_v4().to_string();
 
                     conn.execute(
-                        "INSERT INTO repeater_requests (id, name, group_id, method, url, headers, body, extract, order_index, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        rusqlite::params![req_id, req_name, new_group_id, method, full_url, headers_json, body, extract, req_idx, req_desc],
+                        "INSERT INTO repeater_requests (id, name, group_id, method, url, headers, body, extract, order_index, description, url_params) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        rusqlite::params![req_id, req_name, new_group_id, method, full_url, headers_json, body, extract, req_idx, req_desc, url_params],
+                    ).map_err(|e| e.to_string())?;
+
+                    conn.execute(
+                        "INSERT OR REPLACE INTO request_bodies (request_id, body_mode, body_raw, body_json, body_urlencoded, body_multipart) VALUES (?, ?, ?, ?, ?, ?)",
+                        rusqlite::params![req_id, body_mode, body, body_json, body_urlencoded, body_multipart],
                     ).map_err(|e| e.to_string())?;
 
                     imported_requests += 1;
