@@ -395,3 +395,69 @@ Starting with Database Migration Version 8, request bodies are stored in a dedic
 2. **JSON Object Property Keys (`body_json` / `body`)**:
    - Object keys prefixed with `__disabled_` (e.g. `"__disabled_filter": "xxx"`) are rendered in the visual JSON tree editor as disabled properties (`[ ]` unchecked with strike-through styling).
    - Upon HTTP request execution, the backend automatically strips all `__disabled_` keys recursively so the server receives clean, valid JSON.
+
+---
+
+### Comprehensive Body Variant & Parameter Examples
+
+#### 1. JSON Body with Disabled Property Keys (`body_mode: "json"`)
+In `body_json` or `body`, prefixing any object property key with `__disabled_` renders it as an unchecked `[ ]` property in the UI tree editor, and automatically strips it upon sending:
+
+```json
+{
+  "name": "Create Order with Disabled Filter",
+  "method": "POST",
+  "endpoint": "/api/v1/orders",
+  "body_mode": "json",
+  "body_json": "{\n  \"customer_id\": \"cust_123\",\n  \"amount\": 250.00,\n  \"__disabled_discount_code\": \"SUMMER50\",\n  \"items\": [\"item_a\", \"item_b\"]\n}",
+  "header": {
+    "Content-Type": "application/json"
+  }
+}
+```
+
+#### 2. Structured URL Parameters with Active & Disabled Toggles (`url_params`)
+The `url_params` field stores the array of structured URL query parameters, preserving disabled parameters for quick testing without deleting them:
+
+```json
+{
+  "name": "Search Products",
+  "method": "GET",
+  "endpoint": "/api/v1/products",
+  "url_params": "[\n  {\"id\": \"p1\", \"k\": \"page\", \"v\": \"1\", \"enabled\": true},\n  {\"id\": \"p2\", \"k\": \"limit\", \"v\": \"20\", \"enabled\": true},\n  {\"id\": \"p3\", \"k\": \"category\", \"v\": \"electronics\", \"enabled\": false}\n]",
+  "body_mode": "raw"
+}
+```
+*Resulting executed URL:* `/api/v1/products?page=1&limit=20` (`category` is disabled and omitted).
+
+#### 3. URL-Encoded Form Data (`body_mode: "urlencoded"`)
+URL-encoded forms support dedicated `body_urlencoded` representation with parameter ON/OFF toggling:
+
+```json
+{
+  "name": "OAuth 2.0 Client Credentials Token",
+  "method": "POST",
+  "endpoint": "/oauth/token",
+  "body_mode": "urlencoded",
+  "body_urlencoded": "grant_type=client_credentials&client_id={{client_id}}&client_secret={{client_secret}}",
+  "header": {
+    "Content-Type": "application/x-www-form-urlencoded"
+  }
+}
+```
+
+#### 4. Multipart Form Data with File & Disabled Controls (`body_mode: "multipart"`)
+Multipart form payloads store `__form_data` arrays supporting text parameters, Base64 files, and `enabled: false` toggles:
+
+```json
+{
+  "name": "Upload User Profile Avatar",
+  "method": "POST",
+  "endpoint": "/api/v1/profile/avatar",
+  "body_mode": "multipart",
+  "body_multipart": "{\n  \"__form_data\": [\n    {\n      \"enabled\": true,\n      \"k\": \"avatar\",\n      \"v\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...\",\n      \"type\": \"base64\",\n      \"fileName\": \"profile.png\",\n      \"contentType\": \"image/png\"\n    },\n    {\n      \"enabled\": true,\n      \"k\": \"userId\",\n      \"v\": \"user_999\",\n      \"type\": \"text\"\n    },\n    {\n      \"enabled\": false,\n      \"k\": \"debug_mode\",\n      \"v\": \"true\",\n      \"type\": \"text\"\n    }\n  ]\n}",
+  "header": {
+    "Content-Type": "multipart/form-data"
+  }
+}
+```
