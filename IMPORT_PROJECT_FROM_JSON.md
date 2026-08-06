@@ -385,7 +385,13 @@ Starting with Database Migration Version 8, request bodies are stored in a dedic
 | `body_multipart` | String | Dedicated Multipart form data JSON structure with parameter toggles | `"{\"__form_data\": [{\"enabled\": true, \"k\": \"file\", \"v\": \"data:...\", \"type\": \"base64\"}]}"` |
 | `url_params` | String | JSON string of URL query parameter entries with enable/disable toggles | `"[{\"id\":\"123\",\"k\":\"page\",\"v\":\"1\",\"enabled\":true},{\"id\":\"456\",\"k\":\"filter\",\"v\":\"abc\",\"enabled\":false}]"` |
 
-#### Parameter ON / OFF Toggle (`enabled: boolean`)
-In `url_params`, `multipart`, and `urlencoded` parameter entries, each item includes an optional `"enabled": true | false` property:
-- **`"enabled": true`**: Parameter is active and included when reconstructing URLs or executing HTTP requests.
-- **`"enabled": false`**: Parameter is disabled and excluded from the request URL/payload, but remains persisted in the editor table UI for quick testing.
+#### Parameter & JSON Key ON / OFF Toggles
+
+1. **URL Parameters (`url_params`), Multipart & URL-Encoded Form Data**:
+   Each entry includes an optional `"enabled": true | false` property:
+   - **`"enabled": true`**: Parameter is active and included when reconstructing URLs or executing HTTP requests.
+   - **`"enabled": false`**: Parameter is disabled and excluded from the request URL/payload, but remains persisted in the editor table UI for quick testing.
+
+2. **JSON Object Property Keys (`body_json` / `body`)**:
+   - Object keys prefixed with `__disabled_` (e.g. `"__disabled_filter": "xxx"`) are rendered in the visual JSON tree editor as disabled properties (`[ ]` unchecked with strike-through styling).
+   - Upon HTTP request execution, the backend automatically strips all `__disabled_` keys recursively so the server receives clean, valid JSON.
