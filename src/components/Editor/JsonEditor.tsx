@@ -2,32 +2,54 @@ import { useState, useMemo, useCallback } from 'react';
 import { Select } from '../ui';
 
 // --- Sub-component: Handles typing without losing focus ---
-const EditableKey = ({ initialKey, onCommit }: { initialKey: string, onCommit: (oldK: string, newK: string) => void }) => {
-  const [localKey, setLocalKey] = useState(initialKey);
+const EditableKey = ({ 
+  initialKey, 
+  onCommit,
+  onToggleDisabled
+}: { 
+  initialKey: string; 
+  onCommit: (oldK: string, newK: string) => void;
+  onToggleDisabled?: () => void;
+}) => {
+  const isDisabled = initialKey.startsWith('__disabled_');
+  const cleanKey = isDisabled ? initialKey.slice(11) : initialKey;
+
+  const [localKey, setLocalKey] = useState(cleanKey);
   const [prevInitialKey, setPrevInitialKey] = useState(initialKey);
 
   if (initialKey !== prevInitialKey) {
     setPrevInitialKey(initialKey);
-    setLocalKey(initialKey);
+    setLocalKey(cleanKey);
   }
 
   const handleBlur = () => {
     const trimmed = localKey.trim();
-    if (trimmed !== initialKey && trimmed !== '') {
-      onCommit(initialKey, trimmed);
+    if (trimmed !== cleanKey && trimmed !== '') {
+      const finalKey = isDisabled ? `__disabled_${trimmed}` : trimmed;
+      onCommit(initialKey, finalKey);
     } else {
-      setLocalKey(initialKey);
+      setLocalKey(cleanKey);
     }
   };
 
   return (
-    <div className="w-1/3 flex items-center shrink-0 group/key">
+    <div className={`w-1/3 flex items-center shrink-0 group/key transition-opacity duration-150 ${isDisabled ? 'opacity-40' : ''}`}>
+      {onToggleDisabled && (
+        <label className="flex items-center mr-1.5 cursor-pointer shrink-0" title={isDisabled ? 'Enable property' : 'Disable property'}>
+          <input
+            type="checkbox"
+            checked={!isDisabled}
+            onChange={onToggleDisabled}
+            className="w-3 h-3 rounded border-zinc-600 bg-zinc-800 text-sky-500 focus:ring-sky-500/30 focus:ring-offset-0 cursor-pointer accent-sky-500"
+          />
+        </label>
+      )}
       <span className="text-zinc-600 font-mono text-[11px] mr-1">&quot;</span>
       <input
         value={localKey}
         onChange={(e) => setLocalKey(e.target.value)}
         onBlur={handleBlur}
-        className="flex-1 bg-transparent border-b border-transparent hover:border-zinc-700 focus:border-sky-500 text-sky-text text-[11px] font-mono outline-none min-w-0 transition-colors"
+        className={`flex-1 bg-transparent border-b border-transparent hover:border-zinc-700 focus:border-sky-500 text-sky-text text-[11px] font-mono outline-none min-w-0 transition-colors ${isDisabled ? 'line-through text-zinc-500' : ''}`}
       />
       <span className="text-zinc-600 font-mono text-[11px] ml-1">&quot;:</span>
     </div>
@@ -41,9 +63,10 @@ interface JsonNodeProps {
   onChange: (newVal: unknown) => void;
   onDelete?: () => void;
   onKeyChange?: (oldKey: string, newKey: string) => void;
+  onToggleDisabled?: () => void;
 }
 
-const JsonNode = ({ label, value, onChange, onDelete, onKeyChange }: JsonNodeProps) => {
+const JsonNode = ({ label, value, onChange, onDelete, onKeyChange, onToggleDisabled }: JsonNodeProps) => {
   const isArray = Array.isArray(value);
   const isObject = value !== null && typeof value === 'object' && !isArray;
   const [isFileType, setIsFileType] = useState(() => {
@@ -83,6 +106,12 @@ const JsonNode = ({ label, value, onChange, onDelete, onKeyChange }: JsonNodePro
       onChange(newObj);
     };
 
+    const handleToggleChildDisabled = (key: string) => {
+      const isCurrentlyDisabled = key.startsWith('__disabled_');
+      const targetKey = isCurrentlyDisabled ? key.slice(11) : `__disabled_${key}`;
+      handleChildKeyChange(key, targetKey);
+    };
+
     const handleAdd = () => {
       if (isArray) {
         onChange([...(value as unknown[]), ""]);
@@ -92,12 +121,18 @@ const JsonNode = ({ label, value, onChange, onDelete, onKeyChange }: JsonNodePro
       }
     };
 
+    const isNodeDisabled = label ? label.startsWith('__disabled_') : false;
+
     return (
-      <div className="ml-4 pl-3 border-l border-zinc-800/80 space-y-2 mt-2">
+      <div className={`ml-4 pl-3 border-l border-zinc-800/80 space-y-2 mt-2 transition-opacity duration-150 ${isNodeDisabled ? 'opacity-40' : ''}`}>
         <div className="flex justify-between items-center group/node">
           <div className="flex items-center flex-1">
             {label !== null && onKeyChange && (
-              <EditableKey initialKey={label} onCommit={onKeyChange || (() => {})} />
+              <EditableKey 
+                initialKey={label} 
+                onCommit={onKeyChange || (() => {})} 
+                onToggleDisabled={onToggleDisabled}
+              />
             )}
             <span className="text-[10px] text-zinc-500 font-bold uppercase ml-2">
               {isArray ? `Array [${keys.length}]` : `Object {${keys.length}}`}
@@ -118,6 +153,7 @@ const JsonNode = ({ label, value, onChange, onDelete, onKeyChange }: JsonNodePro
               onChange={(newVal: unknown) => handleChildChange(k, newVal)}
               onDelete={() => handleChildDelete(k)}
               onKeyChange={isArray ? undefined : handleChildKeyChange}
+              onToggleDisabled={isArray ? undefined : () => handleToggleChildDisabled(k)}
             />
           </div>
         ))}
@@ -157,10 +193,16 @@ const JsonNode = ({ label, value, onChange, onDelete, onKeyChange }: JsonNodePro
     e.target.value = '';
   };
 
+  const isLeafDisabled = label ? label.startsWith('__disabled_') : false;
+
   return (
-    <div className="flex gap-2 items-center group/leaf">
+    <div className={`flex gap-2 items-center group/leaf transition-opacity duration-150 ${isLeafDisabled ? 'opacity-40' : ''}`}>
       {label !== null ? (
-        <EditableKey initialKey={label} onCommit={onKeyChange || (() => {})} />
+        <EditableKey 
+          initialKey={label} 
+          onCommit={onKeyChange || (() => {})} 
+          onToggleDisabled={onToggleDisabled}
+        />
       ) : (
         <div className="w-4 shrink-0 text-zinc-600 text-[10px] flex justify-end pr-2">-</div>
       )}

@@ -347,6 +347,29 @@ pub fn reconstruct_multipart_if_needed(
     Some(body_bytes)
 }
 
+fn strip_disabled_json_keys(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            let keys_to_remove: Vec<String> = map.keys()
+                .filter(|k| k.starts_with("__disabled_"))
+                .cloned()
+                .collect();
+            for k in keys_to_remove {
+                map.remove(&k);
+            }
+            for v in map.values_mut() {
+                strip_disabled_json_keys(v);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                strip_disabled_json_keys(v);
+            }
+        }
+        _ => {}
+    }
+}
+
 #[tauri::command]
 pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Result<proxy::Traffic, String> {
     let db_path = db::get_db_path(&app_handle);
@@ -388,7 +411,11 @@ pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Resu
     let mut headers: Vec<(String, String)> = headers.into_iter()
         .map(|(k, v)| (interpolate_text(&k, &vars), interpolate_text(&v, &vars)))
         .collect();
-    let body = interpolate_text(&body, &vars);
+    let mut body = interpolate_text(&body, &vars);
+    if let Ok(mut json_val) = serde_json::from_str::<serde_json::Value>(&body) {
+        strip_disabled_json_keys(&mut json_val);
+        body = serde_json::to_string(&json_val).unwrap_or(body);
+    }
 
     let mut body_bytes = body.as_bytes().to_vec();
     if let Some(reconstructed) = reconstruct_multipart_if_needed(&body, &mut headers) {
