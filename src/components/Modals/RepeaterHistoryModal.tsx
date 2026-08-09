@@ -18,7 +18,8 @@ interface ParsedHistoryItem {
   method: string;
   url: string;
   request: { headers: string; body: string };
-  response: { status: number; headers: string; body: string };
+  response: { status: number; headers: string; body: string; duration_ms?: number };
+  duration_ms?: number;
   timestamp: number;
 }
 
@@ -41,10 +42,10 @@ export function RepeaterHistoryModal({ isOpen, onClose, repeaterId, repeaterName
       const data = await invoke<HistoryItem[]>('get_repeater_history', { repeaterId });
       const parsed = data.map(h => {
         let req = { headers: '[]', body: '' };
-        let res = { status: 0, headers: '[]', body: '' };
+        let res: { status: number; headers: string; body: string; duration_ms?: number } = { status: 0, headers: '[]', body: '' };
         try { req = JSON.parse(h.request); } catch { /* ignore */ }
         try { res = JSON.parse(h.response); } catch { /* ignore */ }
-        return { ...h, request: req, response: res };
+        return { ...h, request: req, response: res, duration_ms: res.duration_ms };
       });
       setHistory(parsed);
       if (parsed.length > 0) setSelectedItem(parsed[0]);
@@ -149,6 +150,7 @@ export function RepeaterHistoryModal({ isOpen, onClose, repeaterId, repeaterName
                 status={item.response.status}
                 title={item.url}
                 timestamp={item.timestamp * 1000}
+                duration_ms={item.duration_ms ?? item.response.duration_ms}
                 isActive={selectedItem?.id === item.id}
                 activeColor="purple"
                 onClick={() => setSelectedItem(item)}

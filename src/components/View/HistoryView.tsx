@@ -365,7 +365,10 @@ export function HistoryView() {
                   </h3>
                   <div className="flex-1 bg-zinc-900/20 border border-zinc-800/50 rounded overflow-hidden min-h-100">
                     {selectedReq.status_code === 0 ? (
-                      <div className="h-full flex items-center justify-center text-zinc-600 text-[10px] uppercase tracking-widest">Awaiting Response...</div>
+                      <div className="h-full flex flex-col items-center justify-center text-amber-400/80 text-[10px] font-mono uppercase tracking-widest gap-3 py-16">
+                        <div className="w-5 h-5 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin"></div>
+                        <span className="animate-pulse">Awaiting Response...</span>
+                      </div>
                     ) : (
                       <HttpResponseViewer text={buildRawResponseMessage(selectedReq)} />
                     )}

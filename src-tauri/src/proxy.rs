@@ -716,6 +716,25 @@ async fn handle_http(
     }
     
     let new_req = new_req.body(Full::new(request_body_bytes.clone())).unwrap();
+
+    let initial_traffic = Traffic {
+        id: traffic_id.clone(),
+        method: method.to_string(),
+        url: url.clone(),
+        host: host.clone(),
+        status_code: 0,
+        request_headers: request_headers.clone(),
+        response_headers: Vec::new(),
+        request_body: req_body_for_ui.clone(),
+        response_body: String::new(),
+        phase: "request".to_string(),
+        is_intercepted: false,
+        intercepted_at: None,
+        duration_ms: None,
+    };
+    if filter_config.should_process(&url, &method.to_string(), 0) {
+        let _ = state.app_handle.emit("traffic_captured", &initial_traffic);
+    }
     
     let start_time = SystemTime::now();
     match client.request(new_req).await {
@@ -855,9 +874,29 @@ async fn handle_http(
         }
         Err(e) => {
             eprintln!("Outbound request error: {}", e);
+            let duration = start_time.elapsed().map(|d| d.as_millis() as u64).unwrap_or(0);
+            let err_msg = format!("Proxy error: {}", e);
+            let traffic = Traffic {
+                id: traffic_id,
+                method: method.to_string(),
+                url: url.clone(),
+                host,
+                status_code: 502,
+                request_headers,
+                response_headers: vec![("Content-Type".to_string(), "text/plain".to_string())],
+                request_body: req_body_for_ui,
+                response_body: err_msg.clone(),
+                phase: "response".to_string(),
+                is_intercepted: false,
+                intercepted_at: None,
+                duration_ms: Some(duration),
+            };
+            if filter_config.should_process(&url, &method.to_string(), 502) {
+                let _ = state.app_handle.emit("traffic_captured", &traffic);
+            }
             Ok(Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
-                .body(Full::new(Bytes::from(format!("Proxy error: {}", e))))
+                .body(Full::new(Bytes::from(err_msg)))
                 .unwrap())
         }
     }

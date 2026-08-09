@@ -493,7 +493,7 @@ pub async fn execute_repeater_request(app_handle: AppHandle, id: String) -> Resu
             rusqlite::params![
                 history_id, id, method, url,
                 serde_json::json!({ "headers": req_headers_json, "body": body }).to_string(),
-                serde_json::json!({ "status": status, "headers": res_headers_json, "body": res_body_str }).to_string(),
+                serde_json::json!({ "status": status, "headers": res_headers_json, "body": res_body_str, "duration_ms": duration }).to_string(),
                 std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
             ],
         );
