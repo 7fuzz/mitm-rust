@@ -21,18 +21,19 @@ flowchart TD
 
 ---
 
-## Best Practices: URL & Host Variable Templating (`{{host}}` / `{{url}}`)
+## Best Practices: Full Base URL Variable Templating (`{{url}}` / `{{host}}`)
 
-To ensure clean separation between request definitions and environment configurations, **always use variable placeholders like `https://{{host}}` or `https://{{url}}`** for your base URLs instead of hardcoding absolute domains.
+To ensure clean separation between request definitions and environment configurations, **always store full URLs including the protocol (e.g. `https://api.example.com` or `http://localhost:8080`)** in environment variable values instead of omitting the protocol (e.g. just `example.com`), since testing often occurs across both secure production endpoints (`https://`) and local development servers (`http://localhost`).
 
-### Benefits of `https://{{host}}` or `https://{{url}}` Templating:
-1. **Dynamic Environment Switching**: Seamlessly toggle between *Development*, *Staging*, and *Production* environments. The `{{host}}` or `{{url}}` placeholder dynamically resolves to the domain configured in the active environment.
-2. **Clean Request Specifications**: Endpoint definitions remain clean and relative (e.g. `/v1/auth/login`), while protocols and server addresses are centrally managed via environment variables.
+### Benefits of Full Base URL (`https://...` or `http://...`) Templating:
+1. **HTTP vs HTTPS Protocol Flexibility**: Seamlessly test on local HTTP servers (e.g. `http://localhost:8080` or `http://127.0.0.1:3000`) without breaking requests that assume `https://`.
+2. **Dynamic Environment Switching**: Toggle between *Development*, *Staging*, *Production*, and *Localhost* environments without changing request definitions. The `{{url}}` or `{{host}}` placeholder dynamically resolves to the complete protocol, host, and port configured in the active environment.
+3. **Clean Request Specifications**: Endpoint definitions remain clean and relative (e.g. `{{host}}/v1/auth/login`), while protocols, domains, and ports are centrally managed in environment variables.
 
 ### Pattern Examples:
-- **Full Base URL Variable**: `"url": "https://{{url}}"` (where `url` = `api.example.com` or `dev-api.example.com`)
-- **Protocol + Host Variable**: `"url": "https://{{host}}/v1"` (where `host` = `api.example.com`)
-- **Complete Endpoint with Variables**: `"url": "https://{{host}}", "endpoint": "/api/v1/users/{{userId}}"`
+- **Full Base URL Variable (Recommended)**: `"url": "{{url}}"` (where `url` = `https://api.example.com`, `https://dev-api.example.com`, or `http://localhost:8080`)
+- **Host + Base Path Variable**: `"url": "{{host}}/v1"` (where `host` = `https://api.example.com` or `http://localhost:3000`)
+- **Complete Endpoint with Variables**: `"url": "{{host}}/api/v1/users/{{userId}}"`
 
 ---
 
@@ -100,21 +101,21 @@ pub struct ImportRepeaterData {
   "values": [
     {
       "name": "Dev Server",
-      "value": "dev-api.example.com"
+      "value": "https://dev-api.example.com"
     },
     {
       "name": "Localhost",
-      "value": "localhost:8080"
+      "value": "http://localhost:8080"
     }
   ]
 }
 ```
 
-#### 3. `test_cases` Item (Repeater Group with `https://{{host}}` and Markdown `description`)
+#### 3. `test_cases` Item (Repeater Group with `{{host}}` and Markdown `description`)
 ```json
 {
   "name": "Authentication API",
-  "url": "https://{{host}}/v1",
+  "url": "{{host}}/v1",
   "description": "# Authentication API Collection\n\nThis collection contains all endpoints related to user authentication, token extraction, and session management.\n\n> [!NOTE]\n> OAuth 2.0 access tokens extracted here are stored in the active environment variable `{{token}}`.",
   "target": [
     {
@@ -269,11 +270,11 @@ Below is a production-grade sample project JSON file demonstrating best practice
       "values": [
         {
           "name": "Dev Server",
-          "value": "dev.api.store.com"
+          "value": "https://dev.api.store.com"
         },
         {
           "name": "Localhost",
-          "value": "localhost:3000"
+          "value": "http://localhost:3000"
         }
       ]
     },
@@ -295,7 +296,7 @@ Below is a production-grade sample project JSON file demonstrating best practice
       "values": [
         {
           "name": "Production Gateway",
-          "value": "api.store.com"
+          "value": "https://api.store.com"
         }
       ]
     },
