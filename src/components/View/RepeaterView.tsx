@@ -8,7 +8,7 @@ import HttpResponseViewer from '../ui/HttpResponseViewer';
 import { WorkspaceLayout } from '../Layout/WorkspaceLayout';
 import { useTraffic, RepeaterRequest } from '@/hooks/traffic';
 import { useNotification } from '../ui/NotificationProvider';
-import { ExtractionModal, RepeaterHistoryModal, CollectionDocModal } from '../Modals';
+import { ExtractionModal, RepeaterHistoryModal, CollectionDocModal, CurlImportModal } from '../Modals';
 import { Button, Select, useDialog, Textarea } from '../ui';
 import { MarkdownViewer } from '../ui/MarkdownViewer';
 import { invoke } from '@/lib/utils/tauri';
@@ -50,6 +50,7 @@ export function RepeaterView() {
   const [groupExtractionModalOpen, setGroupExtractionModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [groupDocModalOpen, setGroupDocModalOpen] = useState(false);
+  const [curlModalOpen, setCurlModalOpen] = useState(false);
   const [showNewMenu, setShowNewMenu] = useState(false);
   const newMenuRef = useRef<HTMLDivElement>(null);
 
@@ -150,21 +151,16 @@ export function RepeaterView() {
     if (newId) setSelectedId(newId);
   };
 
-  const handlePasteFromCurl = async () => {
-    try {
-      const clipText = await navigator.clipboard.readText();
-      if (!clipText || !clipText.trim().toLowerCase().startsWith('curl')) {
-        notify.error('Clipboard does not contain a cURL command');
-        return;
-      }
-      const targetGroup = (activeGroupId !== 'All' && activeGroupId !== 'null') ? activeGroupId : null;
-      const newId = await createFromCurl(clipText, targetGroup, notify);
-      if (newId) {
-        setSelectedId(newId);
-        notify.success('Request created from cURL');
-      }
-    } catch (err) {
-      notify.error('Failed to read clipboard: ' + err);
+  const handleImportCurl = async (curlText: string) => {
+    if (!curlText || !curlText.trim().toLowerCase().includes('curl')) {
+      notify.error('Please enter a valid cURL command');
+      return;
+    }
+    const targetGroup = (activeGroupId !== 'All' && activeGroupId !== 'null') ? activeGroupId : null;
+    const newId = await createFromCurl(curlText, targetGroup, notify);
+    if (newId) {
+      setSelectedId(newId);
+      notify.success('Request created from cURL');
     }
   };
 
@@ -434,10 +430,10 @@ export function RepeaterView() {
                       <span className="text-emerald-400">◇</span> Empty Request
                     </button>
                     <button
-                      onClick={() => { setShowNewMenu(false); handlePasteFromCurl(); }}
+                      onClick={() => { setShowNewMenu(false); setCurlModalOpen(true); }}
                       className="w-full text-left px-3 py-1.5 hover:bg-zinc-800 text-zinc-300 flex items-center gap-2"
                     >
-                      <span className="text-amber-400">⌘</span> Paste from cURL
+                      <span className="text-amber-400">⌘</span> Import from cURL...
                     </button>
                   </div>
                 )}
@@ -742,6 +738,12 @@ export function RepeaterView() {
           }}
         />
       )}
+
+      <CurlImportModal
+        isOpen={curlModalOpen}
+        onClose={() => setCurlModalOpen(false)}
+        onSubmit={handleImportCurl}
+      />
     </>
   );
 }

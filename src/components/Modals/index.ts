@@ -9,4 +9,5 @@ export { EnvironmentEditorModal } from './EnvironmentEditorModal';
 export { ImportModal } from './ImportModal';
 export { CollectionAssignmentModal } from './CollectionAssignmentModal';
 export { CollectionDocModal } from './CollectionDocModal';
+export { CurlImportModal } from './CurlImportModal';
 export * from './QuickSwitcherModals';
