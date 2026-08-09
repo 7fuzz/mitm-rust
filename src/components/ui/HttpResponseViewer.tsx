@@ -58,7 +58,16 @@ const parseHttpMessage = (text: string) => {
   }
 
   const lines = headersStr.split(/\r?\n/).filter(line => line.trim());
-  const firstLine = lines.length > 0 && lines[0].indexOf(':') === -1 ? lines.shift() : "";
+  const isFirstHttpLine = (line: string) => {
+    if (!line) return false;
+    if (/^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|CONNECT|TRACE)\s+/i.test(line)) return true;
+    if (/^HTTP\/\d\.\d\s+/i.test(line)) return true;
+    const colonIdx = line.indexOf(':');
+    if (colonIdx === -1) return true;
+    if (line.slice(0, colonIdx).includes(' ')) return true;
+    return false;
+  };
+  const firstLine = lines.length > 0 && isFirstHttpLine(lines[0]) ? lines.shift() : "";
 
   const headerList = lines.map(line => {
     const idx = line.indexOf(':');
