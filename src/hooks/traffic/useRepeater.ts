@@ -73,13 +73,84 @@ export function useRepeater(activeEnvId?: string) {
           headers: currentReq.headers || [],
           body: currentReq.body || '',
           response: currentReq.response,
-          group_id: currentReq.groupId
+          group_id: currentReq.groupId,
+          description: currentReq.description || null,
+          extract: currentReq.extract || null,
+          body_mode: currentReq.bodyMode || null,
+          body_json: currentReq.bodyJson || null,
+          body_urlencoded: currentReq.bodyUrlencoded || null,
+          body_multipart: currentReq.bodyMultipart || null,
+          url_params: currentReq.urlParams || null,
         } 
       });
       if (id) { await fetchGroupRequests(activeGroupId); return id; }
     } catch (error) { 
       console.error('Error duplicating request:', error);
       notify?.error?.('Error duplicating request: ' + error);
+    }
+    return null;
+  }, [activeGroupId, fetchGroupRequests]);
+
+  const createFromCurl = useCallback(async (curlCommand: string, targetGroup: string | null = null, notify?: any) => {
+    try {
+      const trimmed = curlCommand.trim().replace(/\\\n/g, ' ').replace(/\\\r\n/g, ' ');
+      // Extract URL
+      const urlMatch = trimmed.match(/curl\s+(?:.*?\s+)?['"]?(https?:\/\/[^\s'"]+)['"]?/) || trimmed.match(/['"]?(https?:\/\/[^\s'"]+)['"]?/);
+      const url = urlMatch ? urlMatch[1] : '';
+      // Extract method
+      const methodMatch = trimmed.match(/-X\s+['"]?(\w+)['"]?/);
+      let method = methodMatch ? methodMatch[1].toUpperCase() : 'GET';
+      // Extract headers
+      const headers: [string, string][] = [];
+      const headerRegex = /-H\s+['"]([^'"]+)['"]/gi;
+      let hMatch;
+      while ((hMatch = headerRegex.exec(trimmed)) !== null) {
+        const colonIdx = hMatch[1].indexOf(':');
+        if (colonIdx > 0) {
+          headers.push([hMatch[1].slice(0, colonIdx).trim(), hMatch[1].slice(colonIdx + 1).trim()]);
+        }
+      }
+      // Extract body
+      let body = '';
+      const bodyMatch = trimmed.match(/(?:-d|--data|--data-raw|--data-binary|--data-urlencode)\s+['"]([\s\S]*?)['"]/) || trimmed.match(/(?:-d|--data|--data-raw|--data-binary|--data-urlencode)\s+(\S+)/);
+      if (bodyMatch) {
+        body = bodyMatch[1];
+        if (method === 'GET') method = 'POST';
+      }
+      // Detect body mode
+      let bodyMode = 'raw';
+      if (body) {
+        try { JSON.parse(body); bodyMode = 'json'; } catch {
+          if (body.includes('=') && !body.startsWith('{')) bodyMode = 'urlencoded';
+        }
+      }
+      // Build request name from URL
+      let name = 'Imported cURL';
+      try {
+        const parsed = new URL(url);
+        name = parsed.pathname.split('/').filter(Boolean).pop() || parsed.hostname;
+      } catch { /* ignore */ }
+
+      const id = await invoke<string>('create_repeater_item', {
+        item: {
+          name,
+          method,
+          url,
+          headers,
+          body,
+          response: null,
+          group_id: targetGroup,
+          body_mode: bodyMode,
+          body_json: bodyMode === 'json' ? body : null,
+          body_urlencoded: bodyMode === 'urlencoded' ? body : null,
+          body_multipart: null,
+          url_params: null,
+        }
+      });
+      if (id) { await fetchGroupRequests(activeGroupId); return id; }
+    } catch (error) {
+      console.error('Error creating from cURL:', error);
+      notify?.error?.('Failed to parse cURL: ' + error);
     }
     return null;
   }, [activeGroupId, fetchGroupRequests]);
@@ -313,12 +384,12 @@ export function useRepeater(activeEnvId?: string) {
   return useMemo(() => ({
     repeaterRequests, repeaterGroups, activeGroupId, switchGroup,
     _setRawRepeater: setRepeaterRequests, _setRawGroups: setRepeaterGroups, initActiveGroup,
-    refreshRepeater, addEmptyRequest, duplicateRequest, deleteRequest, updateRequest, importPostman,
+    refreshRepeater, addEmptyRequest, duplicateRequest, createFromCurl, deleteRequest, updateRequest, importPostman,
     importProject, finalizeImport, createGroup, renameGroup, deleteGroup, bulkDeleteGroups, cloneGroup, reorderRequests, reorderGroups,
     manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions
   }), [
     repeaterRequests, repeaterGroups, activeGroupId, switchGroup, initActiveGroup,
-    refreshRepeater, addEmptyRequest, duplicateRequest, deleteRequest, updateRequest, importPostman,
+    refreshRepeater, addEmptyRequest, duplicateRequest, createFromCurl, deleteRequest, updateRequest, importPostman,
     importProject, finalizeImport, createGroup, renameGroup, deleteGroup, bulkDeleteGroups, cloneGroup, reorderRequests, reorderGroups,
     manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions
   ]);

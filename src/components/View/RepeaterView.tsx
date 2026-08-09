@@ -18,7 +18,7 @@ export function RepeaterView() {
   const { confirm, prompt } = useDialog();
   const {
     repeaterRequests, repeaterGroups, activeGroupId, switchGroup,
-    addEmptyRequest, duplicateRequest, updateRequest, deleteRequest,
+    addEmptyRequest, duplicateRequest, createFromCurl, updateRequest, deleteRequest,
     createGroup, renameGroup, deleteGroup, reorderRequests,
     variables, activeEnvId, updateVariableAutoValue,
     uiLayout, updateUILayout,
@@ -50,6 +50,8 @@ export function RepeaterView() {
   const [groupExtractionModalOpen, setGroupExtractionModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [groupDocModalOpen, setGroupDocModalOpen] = useState(false);
+  const [showNewMenu, setShowNewMenu] = useState(false);
+  const newMenuRef = useRef<HTMLDivElement>(null);
 
   // Debounce for name updates
   const nameDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -59,6 +61,17 @@ export function RepeaterView() {
       updateRequest(id, { name });
     }, 300);
   }, [updateRequest]);
+
+  // Close new menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (newMenuRef.current && !newMenuRef.current.contains(e.target as Node)) {
+        setShowNewMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // Debounce for description updates
   const descDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -135,6 +148,60 @@ export function RepeaterView() {
     const targetGroup = (activeGroupId !== 'All' && activeGroupId !== 'null') ? activeGroupId : null;
     const newId = await addEmptyRequest(targetGroup, notify);
     if (newId) setSelectedId(newId);
+  };
+
+  const handlePasteFromCurl = async () => {
+    try {
+      const clipText = await navigator.clipboard.readText();
+      if (!clipText || !clipText.trim().toLowerCase().startsWith('curl')) {
+        notify.error('Clipboard does not contain a cURL command');
+        return;
+      }
+      const targetGroup = (activeGroupId !== 'All' && activeGroupId !== 'null') ? activeGroupId : null;
+      const newId = await createFromCurl(clipText, targetGroup, notify);
+      if (newId) {
+        setSelectedId(newId);
+        notify.success('Request created from cURL');
+      }
+    } catch (err) {
+      notify.error('Failed to read clipboard: ' + err);
+    }
+  };
+
+  const getCurlCommand = () => {
+    if (!currentReq) return '';
+    const currentEnvVars = variables.filter(v => v.environmentId === activeEnvId);
+    const varMap: Record<string, string> = {};
+    currentEnvVars.forEach(v => {
+      const val = v.values[v.activeIndex]?.value ?? v.values[0]?.value ?? '';
+      varMap[v.name] = val;
+    });
+
+    const interpolate = (s: string) => {
+      let result = s;
+      Object.entries(varMap).forEach(([k, v]) => {
+        result = result.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v);
+      });
+      return result;
+    };
+
+    const url = interpolate(editUrl);
+    const method = editMethod;
+    const headerFlags = editHeaders.map(([k, v]) => `-H '${interpolate(k)}: ${interpolate(v)}'`).join(' ');
+    const body = interpolate(editBody);
+    
+    let cmd = `curl -X ${method} '${url}'`;
+    if (headerFlags) cmd += ` ${headerFlags}`;
+    if (body && method !== 'GET' && method !== 'HEAD') cmd += ` -d '${body.replace(/'/g, "'\\'")}'`;
+    return cmd;
+  };
+
+  const handleCopyAsCurl = async () => {
+    const cmd = getCurlCommand();
+    if (cmd) {
+      await navigator.clipboard.writeText(cmd);
+      notify.success('Copied as cURL');
+    }
   };
 
   const handleDuplicate = async () => {
@@ -356,8 +423,27 @@ export function RepeaterView() {
             <Button variant="destructive" size="sm" onClick={() => currentReq && updateRequest(currentReq.id, { response: undefined })} disabled={!currentReq?.response} className="mr-2">Clear</Button>
 
             <div className="flex items-center gap-px">
-              <Button variant="secondary" size="sm" onClick={handleAdd} className="rounded-r-none border-r-0 text-emerald-text" title="New Request">+ New</Button>
-              <Button variant="secondary" size="sm" onClick={handleDuplicate} disabled={!currentReq} className="rounded-l-none" title="Duplicate Request">Copy</Button>
+              <div className="relative" ref={newMenuRef}>
+                <Button variant="secondary" size="sm" onClick={() => setShowNewMenu(!showNewMenu)} className="rounded-r-none border-r-0 text-emerald-text" title="New Request">+ New ▾</Button>
+                {showNewMenu && (
+                  <div className="absolute top-full left-0 mt-1 bg-zinc-900 border border-zinc-700 rounded shadow-xl z-50 min-w-44 py-1 text-[11px]">
+                    <button
+                      onClick={() => { setShowNewMenu(false); handleAdd(); }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-zinc-800 text-zinc-300 flex items-center gap-2"
+                    >
+                      <span className="text-emerald-400">◇</span> Empty Request
+                    </button>
+                    <button
+                      onClick={() => { setShowNewMenu(false); handlePasteFromCurl(); }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-zinc-800 text-zinc-300 flex items-center gap-2"
+                    >
+                      <span className="text-amber-400">⌘</span> Paste from cURL
+                    </button>
+                  </div>
+                )}
+              </div>
+              <Button variant="secondary" size="sm" onClick={handleDuplicate} disabled={!currentReq} className="rounded-none border-r-0" title="Duplicate Request">Clone</Button>
+              <Button variant="secondary" size="sm" onClick={handleCopyAsCurl} disabled={!currentReq} className="rounded-l-none" title="Copy as cURL">cURL</Button>
             </div>
 
             <Button variant="purple" size="sm" onClick={handleSend} disabled={isLoading || !currentReq} className="ml-2 min-w-24">
