@@ -21,19 +21,27 @@ flowchart TD
 
 ---
 
-## Best Practices: Full Base URL Variable Templating (`{{url}}` / `{{host}}`)
+## Best Practices: URL & Host Variable Templating (`{{url}}` / `{{host}}`)
 
-To ensure clean separation between request definitions and environment configurations, **always store full URLs including the protocol (e.g. `https://api.example.com` or `http://localhost:8080`)** in environment variable values instead of omitting the protocol (e.g. just `example.com`), since testing often occurs across both secure production endpoints (`https://`) and local development servers (`http://localhost`).
+To ensure clean separation between request definitions and environment configurations, you can use either or both of the following flexible strategies depending on your testing needs:
 
-### Benefits of Full Base URL (`https://...` or `http://...`) Templating:
-1. **HTTP vs HTTPS Protocol Flexibility**: Seamlessly test on local HTTP servers (e.g. `http://localhost:8080` or `http://127.0.0.1:3000`) without breaking requests that assume `https://`.
-2. **Dynamic Environment Switching**: Toggle between *Development*, *Staging*, *Production*, and *Localhost* environments without changing request definitions. The `{{url}}` or `{{host}}` placeholder dynamically resolves to the complete protocol, host, and port configured in the active environment.
-3. **Clean Request Specifications**: Endpoint definitions remain clean and relative (e.g. `{{host}}/v1/auth/login`), while protocols, domains, and ports are centrally managed in environment variables.
+### Strategy 1: Full Base URL (`{{url}}`)
+Store the complete URL including protocol directly in the `url` environment variable:
+- **Variable `url`**: `https://api.example.com` or `http://localhost:8080`
+- **Request Format**: `"url": "{{url}}"` or `"url": "{{url}}/v1"`
 
-### Pattern Examples:
-- **Full Base URL Variable (Recommended)**: `"url": "{{url}}"` (where `url` = `https://api.example.com`, `https://dev-api.example.com`, or `http://localhost:8080`)
-- **Host + Base Path Variable**: `"url": "{{host}}/v1"` (where `host` = `https://api.example.com` or `http://localhost:3000`)
-- **Complete Endpoint with Variables**: `"url": "{{host}}/api/v1/users/{{userId}}"`
+### Strategy 2: Host (Domain / IP:Port) Composition (`http://{{host}}`)
+Store the domain, IP, or `host:port` in `host` (e.g. `example.com` or `localhost:8080`), and compose the protocol explicitly in the request or variable definition:
+- **Variable `host`**: `api.example.com` or `localhost:8080`
+- **Request Format**: `"url": "http://{{host}}"` or `"url": "https://{{host}}"`
+
+### Strategy 3: Dynamic Dual / Composed Variables
+You can also define `url` dynamically as `http://{{host}}` or `https://{{host}}` in variable configurations so that requests referencing either `{{url}}` or `{{host}}` resolve seamlessly!
+
+### Pattern Comparison:
+- **Full URL Variable**: `"url": "{{url}}"` (where `url` = `https://api.example.com` or `http://localhost:8080`)
+- **Explicit Protocol + Host**: `"url": "http://{{host}}"` (where `host` = `localhost:8080`)
+- **Composed Protocol + Host**: `"url": "{{protocol}}://{{host}}/v1"` (where `protocol` = `http` and `host` = `localhost:8080`)
 
 ---
 
