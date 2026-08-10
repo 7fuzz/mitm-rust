@@ -43,7 +43,7 @@ fn apply_migrations(conn: &mut Connection) -> rusqlite::Result<()> {
         // Version 2: Repeater Groups & Requests
         "CREATE TABLE IF NOT EXISTS repeater_groups (
             id TEXT PRIMARY KEY,
-            name TEXT UNIQUE,
+            name TEXT,
             order_index INTEGER DEFAULT 0,
             timestamp INTEGER
         );
@@ -164,6 +164,21 @@ fn apply_migrations(conn: &mut Connection) -> rusqlite::Result<()> {
         "ALTER TABLE repeater_requests ADD COLUMN response_duration INTEGER;",
         // Version 10: URL params with enable/disable state persistence
         "ALTER TABLE repeater_requests ADD COLUMN url_params TEXT;",
+        // Version 11: Remove UNIQUE constraint on repeater_groups.name
+        "PRAGMA foreign_keys = OFF;
+        CREATE TABLE IF NOT EXISTS repeater_groups_dg_tmp (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            order_index INTEGER DEFAULT 0,
+            timestamp INTEGER,
+            extract TEXT,
+            description TEXT
+        );
+        INSERT INTO repeater_groups_dg_tmp (id, name, order_index, timestamp, extract, description)
+        SELECT id, name, order_index, timestamp, extract, description FROM repeater_groups;
+        DROP TABLE repeater_groups;
+        ALTER TABLE repeater_groups_dg_tmp RENAME TO repeater_groups;
+        PRAGMA foreign_keys = ON;",
     ];
 
     let target_version = migrations.len() as i32;
