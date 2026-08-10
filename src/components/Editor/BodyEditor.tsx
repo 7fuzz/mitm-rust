@@ -70,7 +70,8 @@ export function BodyEditor({
       onChange(body);
     } else if (targetMode === 'json') {
       updateContentType('application/json');
-      const nextJson = bodyJson || (body.startsWith('{') || body.startsWith('[') ? body : '{\n  \n}');
+      const converted = formToJson(body, contentType);
+      const nextJson = converted || bodyJson || '{\n  \n}';
       onBodyJsonChange?.(nextJson);
       onChange(nextJson);
     } else if (targetMode === 'urlencoded') {
