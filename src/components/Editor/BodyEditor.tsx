@@ -65,60 +65,47 @@ export function BodyEditor({
   const handleSwitchMode = (targetMode: BodyMode) => {
     setMode(targetMode);
     onModeChange?.(targetMode);
-
-    if (targetMode === 'raw') {
-      onChange(body);
-    } else if (targetMode === 'json') {
-      updateContentType('application/json');
-      const converted = formToJson(body, contentType);
-      const nextJson = converted || bodyJson || '{\n  \n}';
-      onBodyJsonChange?.(nextJson);
-      onChange(nextJson);
-    } else if (targetMode === 'urlencoded') {
-      updateContentType('application/x-www-form-urlencoded');
-      const nextUrl = bodyUrlencoded || (contentType.includes('x-www-form-urlencoded') ? body : '');
-      onBodyUrlencodedChange?.(nextUrl);
-      onChange(nextUrl);
-    } else if (targetMode === 'multipart') {
-      updateContentType('multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW');
-      const nextMulti = bodyMultipart || (contentType.includes('multipart') || body.includes('__form_data') ? body : '');
-      onBodyMultipartChange?.(nextMulti);
-      onChange(nextMulti);
-    }
   };
 
   const handleCopyToRaw = () => {
-    onModeChange?.('raw');
+    let activeText = body;
+    if (mode === 'json') activeText = bodyJson || body;
+    else if (mode === 'urlencoded') activeText = bodyUrlencoded || body;
+    else if (mode === 'multipart') activeText = bodyMultipart || body;
+
+    onChange(activeText);
     setMode('raw');
-    onChange(body);
+    onModeChange?.('raw');
   };
 
   const handleConvertToJSON = async () => {
-    const converted = formToJson(body, contentType);
+    const activeText = mode === 'urlencoded' ? (bodyUrlencoded || body) : mode === 'multipart' ? (bodyMultipart || body) : body;
+    const converted = formToJson(activeText, contentType);
     if (converted) {
       onBodyJsonChange?.(converted);
       onChange(converted);
       updateContentType('application/json');
-      onModeChange?.('json');
       setMode('json');
+      onModeChange?.('json');
     } else {
       await alert("Conversion Failed", "Could not convert current body to valid JSON.");
     }
   };
 
   const handleConvertToForm = async (type: 'urlencoded' | 'multipart') => {
-    const converted = type === 'urlencoded' ? jsonToUrlEncoded(body) : jsonToMultipartStructured(body);
+    const activeText = mode === 'json' ? (bodyJson || body) : body;
+    const converted = type === 'urlencoded' ? jsonToUrlEncoded(activeText) : jsonToMultipartStructured(activeText);
     if (converted) {
       if (type === 'urlencoded') {
         onBodyUrlencodedChange?.(converted);
         updateContentType('application/x-www-form-urlencoded');
-        onModeChange?.('urlencoded');
         setMode('urlencoded');
+        onModeChange?.('urlencoded');
       } else {
         onBodyMultipartChange?.(converted);
         updateContentType('multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW');
-        onModeChange?.('multipart');
         setMode('multipart');
+        onModeChange?.('multipart');
       }
       onChange(converted);
     } else {
