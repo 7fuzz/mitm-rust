@@ -58,6 +58,20 @@ pub async fn create_environment(app_handle: AppHandle, id: String, name: String)
     Ok(())
 }
 
+fn delete_group_and_descendants_tx(tx: &rusqlite::Transaction, group_id: &str) -> Result<(), String> {
+    let mut stmt = tx.prepare("SELECT id FROM repeater_groups WHERE parent_id = ?").map_err(|e| e.to_string())?;
+    let child_ids: Vec<String> = stmt.query_map([group_id], |row| row.get(0)).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+    drop(stmt);
+    for cid in &child_ids {
+        delete_group_and_descendants_tx(tx, cid)?;
+    }
+    tx.execute("DELETE FROM request_bodies WHERE request_id IN (SELECT id FROM repeater_requests WHERE group_id = ?)", [group_id]).ok();
+    tx.execute("DELETE FROM repeater_requests WHERE group_id = ?", [group_id]).map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM environment_groups WHERE group_id = ?", [group_id]).map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM repeater_groups WHERE id = ?", [group_id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn delete_environment(
     app_handle: AppHandle,
@@ -77,9 +91,7 @@ pub async fn delete_environment(
         drop(stmt);
 
         for g_id in group_ids {
-            tx.execute("DELETE FROM repeater_requests WHERE group_id = ?", [&g_id]).map_err(|e| e.to_string())?;
-            tx.execute("DELETE FROM repeater_groups WHERE id = ?", [&g_id]).map_err(|e| e.to_string())?;
-            tx.execute("DELETE FROM environment_groups WHERE group_id = ?", [&g_id]).map_err(|e| e.to_string())?;
+            delete_group_and_descendants_tx(&tx, &g_id)?;
         }
     }
 
