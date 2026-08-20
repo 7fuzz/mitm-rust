@@ -215,7 +215,7 @@ export function useRepeater(activeEnvId?: string) {
     input.click();
   }, []);
 
-  const finalizeImport = useCallback(async (data: Record<string, any>, options: Record<string, any>, notify: any) => {
+  const finalizeImport = useCallback(async (data: Record<string, any>, options: Record<string, any>, notify: any, syncAllFn?: (silent?: boolean) => Promise<void>) => {
     try {
       // Transform the data for the import command
       const importPayload = {
@@ -247,7 +247,11 @@ export function useRepeater(activeEnvId?: string) {
           : '✓ Import completed';
         
         notify?.success?.(message);
-        await refreshRepeater();
+        if (syncAllFn) {
+          await syncAllFn(true);
+        } else {
+          await refreshRepeater();
+        }
       } else {
         notify?.error?.(`Import failed: ${result.error || 'Unknown error'}`);
       }
