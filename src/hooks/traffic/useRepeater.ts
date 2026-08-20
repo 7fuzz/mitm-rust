@@ -257,10 +257,10 @@ export function useRepeater(activeEnvId?: string) {
     }
   }, [refreshRepeater]);
 
-  const createGroup = useCallback(async (name: string) => {
+  const createGroup = useCallback(async (name: string, parentId?: string | null) => {
     if (!name.trim()) return null;
     try {
-      const id = await invoke<string>('create_repeater_group', { name });
+      const id = await invoke<string>('create_repeater_group', { name, parentId: parentId || null });
       await refreshRepeater();
       return id;
     } catch (e) { console.error(e); return null; }

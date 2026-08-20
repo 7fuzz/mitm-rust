@@ -13,6 +13,7 @@ export interface GlobalVariable {
 
 export interface RepeaterGroup {
   id: string;
+  parentId?: string | null;
   name: string;
   orderIndex: number;
   extract?: Record<string, string>;
@@ -68,6 +69,7 @@ export interface SyncData {
   toolkitJson: string;
   historyLimits: any;
   activeGroupId?: string | null;
+  activeEnvId?: string | null;
   filterConfig: { rules: Array<{ id: string, is_active: boolean, field: string, rule_type: string, mode: 'whitelist' | 'blacklist', pattern: string }> };
 }
 
@@ -98,4 +100,4 @@ export interface KeyboardShortcuts {
   cycle_next: string;
 }
 
-export type TabType = 'history' | 'websocket' | 'intercept' | 'repeater' | 'options' | 'utilities' | 'workspace' | 'debug';
+export type TabType = 'history' | 'intercept' | 'repeater' | 'websocket' | 'webhook' | 'options' | 'utilities' | 'workspace' | 'debug';
