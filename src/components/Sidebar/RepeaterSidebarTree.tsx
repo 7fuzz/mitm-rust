@@ -16,6 +16,7 @@ interface RepeaterSidebarTreeProps {
   onOpenExtractionModal: (group: RepeaterGroup) => void;
   openPrompt: (title: string, initialValue: string, action: (val: string) => void) => void;
   onClearUncategorized?: () => void;
+  onClearGroupRequests?: (group: RepeaterGroup) => void;
   openConfirm?: (title: string, message: string, action: () => void) => void;
 }
 
@@ -169,6 +170,7 @@ export function RepeaterSidebarTree({
   onOpenExtractionModal,
   openPrompt,
   onClearUncategorized,
+  onClearGroupRequests,
   openConfirm,
 }: RepeaterSidebarTreeProps) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -471,6 +473,27 @@ export function RepeaterSidebarTree({
                 className="w-full text-left px-3 py-1.5 hover:bg-purple-500/20 hover:text-purple-300 flex items-center gap-2"
               >
                 <span>✏️</span> Rename Folder
+              </button>
+              <div className="my-1 border-t border-zinc-800/80" />
+              <button
+                onClick={() => {
+                  const g = contextMenu.targetFolder!;
+                  setContextMenu(null);
+                  if (openConfirm) {
+                    openConfirm(
+                      'Clear Folder Requests',
+                      `Are you sure you want to clear all requests inside "${g.name}" and its subfolders?`,
+                      () => {
+                        onClearGroupRequests?.(g);
+                      }
+                    );
+                  } else {
+                    onClearGroupRequests?.(g);
+                  }
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-amber-500/20 text-amber-400 flex items-center gap-2"
+              >
+                <span>🧹</span> Clear Requests in Folder
               </button>
               <div className="my-1 border-t border-zinc-800/80" />
               <button

@@ -42,6 +42,7 @@ export function RepeaterView() {
     updateGroupExtractions,
     refreshRepeater,
     clearUncategorizedRequests,
+    clearGroupRequests,
   } = useTraffic();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -306,6 +307,7 @@ export function RepeaterView() {
               if (val) action(val);
             }}
             onClearUncategorized={clearUncategorizedRequests}
+            onClearGroupRequests={(g) => clearGroupRequests(g.id)}
             openConfirm={async (title, message, action) => {
               if (await confirm(title, message, true)) {
                 action();
