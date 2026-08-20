@@ -31,85 +31,8 @@ interface RepeaterToolbarProps {
   onExecute: () => void;
 }
 
-export function RepeaterToolbarLeft({
-  simpleMode,
-  activeGroupId,
-  repeaterGroups,
-  onOpenDocModal,
-  onRenameGroup,
-  onOpenExtractionModal,
-  onDeleteGroup,
-}: Pick<
-  RepeaterToolbarProps,
-  | 'simpleMode'
-  | 'activeGroupId'
-  | 'repeaterGroups'
-  | 'onOpenDocModal'
-  | 'onRenameGroup'
-  | 'onOpenExtractionModal'
-  | 'onDeleteGroup'
->) {
-  if (simpleMode) return null;
-
-  const isSystemGroup = !activeGroupId || activeGroupId === 'All' || activeGroupId === 'null';
-  const currentGroup = repeaterGroups.find((g) => g.id === activeGroupId);
-  const groupLabel = isSystemGroup ? 'Uncategorized' : currentGroup?.name || 'Collection';
-
-  return (
-    <div className="flex items-center gap-2 bg-zinc-950 p-1 rounded-full border border-zinc-800 px-3 shadow-inner shadow-app-shadow/50">
-      <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest hidden sm:inline-block">
-        Location:
-      </span>
-      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 border border-zinc-800 rounded-md text-xs font-bold text-purple-300">
-        <span>📁</span>
-        <span className="truncate max-w-48">{groupLabel}</span>
-      </div>
-
-      <div className="flex items-center gap-1 border-l border-zinc-800 pl-2 ml-1">
-        <button
-          onClick={onOpenDocModal}
-          disabled={isSystemGroup}
-          className="px-2 py-1 text-[10px] font-bold text-zinc-400 hover:text-purple-400 disabled:opacity-20 disabled:hover:text-zinc-500 transition-colors flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded hover:border-purple-500/40"
-          title="Collection Documentation & Notes (Markdown)"
-        >
-          <span>📝 Docs</span>
-        </button>
-
-        <button
-          onClick={onOpenExtractionModal}
-          disabled={isSystemGroup}
-          className="px-2 py-1 text-[10px] font-bold text-zinc-400 hover:text-amber-400 disabled:opacity-20 disabled:hover:text-zinc-500 transition-colors flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded hover:border-amber-500/40"
-          title="Collection Auto Extraction Rules (Extract response values into variables)"
-        >
-          <span>⚡ Auto Extract</span>
-        </button>
-
-        <button
-          onClick={onRenameGroup}
-          disabled={isSystemGroup}
-          className="p-1 text-zinc-500 hover:text-purple-400 disabled:opacity-20 disabled:hover:text-zinc-500 transition-colors"
-          title="Rename Collection"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 20h9"></path>
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-          </svg>
-        </button>
-
-        <button
-          onClick={onDeleteGroup}
-          disabled={isSystemGroup}
-          className="p-1 text-zinc-500 hover:text-rose-500 disabled:opacity-20 disabled:hover:text-zinc-500 transition-colors"
-          title="Delete Collection"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
+export function RepeaterToolbarLeft() {
+  return null;
 }
 
 export function RepeaterToolbarRight({

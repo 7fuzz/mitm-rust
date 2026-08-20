@@ -39,7 +39,6 @@ export function RepeaterView() {
     repeaterSelectedId: selectedId,
     setRepeaterSelectedId: setSelectedId,
     _setRawRepeater,
-    simpleMode,
     updateGroupExtractions,
     refreshRepeater,
   } = useTraffic();
@@ -290,28 +289,7 @@ export function RepeaterView() {
             }}
           />
         )}
-        toolbarLeft={
-          <RepeaterToolbarLeft
-            simpleMode={simpleMode}
-            activeGroupId={activeGroupId}
-            repeaterGroups={repeaterGroups}
-            onOpenDocModal={() => setGroupDocModalOpen(true)}
-            onRenameGroup={async () => {
-              if (activeGroupObj) {
-                const newName = await prompt('Rename Collection', 'Enter new collection name:', activeGroupObj.name);
-                if (newName) renameGroup(activeGroupObj.id, newName);
-              }
-            }}
-            onOpenExtractionModal={() => setGroupExtractionModalOpen(true)}
-            onDeleteGroup={async () => {
-              if (activeGroupObj) {
-                if (await confirm('Delete Collection', `Are you sure you want to delete "${activeGroupObj.name}"? ALL requests inside this collection will be permanently destroyed.`, true)) {
-                  deleteGroup(activeGroupObj.id);
-                }
-              }
-            }}
-          />
-        }
+        toolbarLeft={<RepeaterToolbarLeft />}
         toolbarRight={
           <RepeaterToolbarRight
             hasCurrentReq={!!currentReq}
