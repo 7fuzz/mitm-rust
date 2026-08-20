@@ -178,6 +178,7 @@ fn delete_group_and_descendants(conn: &rusqlite::Connection, group_id: &str) -> 
     for cid in &child_ids {
         delete_group_and_descendants(conn, cid)?;
     }
+    conn.execute("DELETE FROM request_bodies WHERE request_id IN (SELECT id FROM repeater_requests WHERE group_id = ?)", [group_id]).ok();
     conn.execute("DELETE FROM repeater_requests WHERE group_id = ?", [group_id]).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM environment_groups WHERE group_id = ?", [group_id]).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM repeater_groups WHERE id = ?", [group_id]).map_err(|e| e.to_string())?;
