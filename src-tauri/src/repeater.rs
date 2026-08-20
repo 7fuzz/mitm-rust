@@ -213,6 +213,15 @@ pub async fn bulk_delete_repeater_groups(app_handle: AppHandle, ids: Vec<String>
 }
 
 #[tauri::command]
+pub async fn clear_uncategorized_requests(app_handle: AppHandle) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM request_bodies WHERE request_id IN (SELECT id FROM repeater_requests WHERE group_id IS NULL)", []).ok();
+    conn.execute("DELETE FROM repeater_requests WHERE group_id IS NULL", []).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn reorder_repeater_requests(app_handle: AppHandle, ids: Vec<String>) -> Result<(), String> {
     let db_path = get_db_path(&app_handle);
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
