@@ -259,8 +259,10 @@ export function RepeaterSidebarTree({
     );
   }, [repeaterRequests, searchTerm]);
 
+  const [uncategorizedExpanded, setUncategorizedExpanded] = useState(true);
+
   return (
-    <div className="flex flex-col h-full bg-zinc-950 border-r border-zinc-800/80 text-zinc-300">
+    <div className="flex flex-col h-full bg-zinc-950 border-r border-zinc-800/80 text-zinc-300 select-none">
       {/* Sidebar Header */}
       <div className="p-3 border-b border-zinc-800/80 space-y-2 shrink-0">
         <div className="flex items-center justify-between">
@@ -328,6 +330,87 @@ export function RepeaterSidebarTree({
         ) : (
           /* Normal Tree View Mode */
           <>
+            {/* Top-level Uncategorized Folder Node */}
+            <div className="select-none">
+              <div
+                className="group/folder flex items-center justify-between py-1.5 px-2 hover:bg-zinc-900/80 rounded cursor-pointer transition-colors text-zinc-300"
+                onClick={() => setUncategorizedExpanded(!uncategorizedExpanded)}
+              >
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <span className="text-[10px] text-zinc-500 w-4 h-4 flex items-center justify-center shrink-0">
+                    {uncategorizedExpanded ? '▼' : '▶'}
+                  </span>
+                  <span className="text-amber-400 shrink-0 text-xs">📦</span>
+                  <span className="text-xs font-bold truncate text-zinc-300">Uncategorized</span>
+                  <span className="text-[9px] text-zinc-500 font-mono shrink-0 bg-zinc-950 px-1 py-0.5 rounded border border-zinc-800">
+                    {uncategorizedRequests.length}
+                  </span>
+                </div>
+
+                <div
+                  className="flex items-center gap-1 opacity-0 group-hover/folder:opacity-100 transition-opacity"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={() => onCreateRequest(null)}
+                    className="px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 rounded border border-emerald-500/30"
+                    title="Add Uncategorized Request"
+                  >
+                    + Req
+                  </button>
+                </div>
+              </div>
+
+              {/* Uncategorized Requests nested inside folder */}
+              {uncategorizedExpanded && (
+                <div className="space-y-0.5">
+                  {uncategorizedRequests.length === 0 ? (
+                    <div className="text-[10px] text-zinc-600 pl-8 py-1 italic">No uncategorized requests</div>
+                  ) : (
+                    uncategorizedRequests.map((req) => {
+                      const isActive = activeId === req.id;
+                      return (
+                        <div
+                          key={req.id}
+                          style={{ paddingLeft: '28px' }}
+                          onClick={() => onSelectRequest(req.id)}
+                          className={`group/req flex items-center justify-between py-1.5 pr-2 rounded cursor-pointer transition-all border-l-2 ${
+                            isActive
+                              ? 'bg-purple-500/10 border-l-purple-500 text-purple-300'
+                              : 'bg-transparent border-l-transparent hover:bg-zinc-900/60 hover:border-l-zinc-700 text-zinc-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span
+                              className={`text-[9px] font-black uppercase tracking-wider px-1 py-0.5 rounded border shrink-0 ${getMethodColor(
+                                req.method
+                              )}`}
+                            >
+                              {req.method}
+                            </span>
+                            <span className="text-xs truncate font-medium">{req.name}</span>
+                          </div>
+                          <div
+                            className="flex items-center gap-1 opacity-0 group-hover/req:opacity-100 transition-opacity"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => onDeleteRequest(req.id)}
+                              className="p-1 text-zinc-500 hover:text-rose-400"
+                              title="Delete Request"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Root Collections / Folders */}
             {rootGroups.map((group) => (
               <FolderTreeNode
                 key={group.id}
@@ -349,59 +432,6 @@ export function RepeaterSidebarTree({
                 openPrompt={openPrompt}
               />
             ))}
-
-            {/* Uncategorized Requests */}
-            {uncategorizedRequests.length > 0 && (
-              <div className="mt-4 pt-2 border-t border-zinc-900">
-                <div className="text-[9px] font-black uppercase tracking-wider text-zinc-500 px-2 py-1 flex items-center justify-between">
-                  <span>Default (Uncategorized)</span>
-                  <button
-                    onClick={() => onCreateRequest(null)}
-                    className="text-emerald-400 hover:text-emerald-300 text-[10px]"
-                    title="Add Uncategorized Request"
-                  >
-                    + New
-                  </button>
-                </div>
-                {uncategorizedRequests.map((req) => {
-                  const isActive = activeId === req.id;
-                  return (
-                    <div
-                      key={req.id}
-                      onClick={() => onSelectRequest(req.id)}
-                      className={`group/req flex items-center justify-between py-1.5 px-3 rounded cursor-pointer transition-all border-l-2 ${
-                        isActive
-                          ? 'bg-purple-500/10 border-l-purple-500 text-purple-300'
-                          : 'bg-transparent border-l-transparent hover:bg-zinc-900/60 hover:border-l-zinc-700 text-zinc-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span
-                          className={`text-[9px] font-black uppercase tracking-wider px-1 py-0.5 rounded border shrink-0 ${getMethodColor(
-                            req.method
-                          )}`}
-                        >
-                          {req.method}
-                        </span>
-                        <span className="text-xs truncate font-medium">{req.name}</span>
-                      </div>
-                      <div
-                        className="flex items-center gap-1 opacity-0 group-hover/req:opacity-100 transition-opacity"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          onClick={() => onDeleteRequest(req.id)}
-                          className="p-1 text-zinc-500 hover:text-rose-400"
-                          title="Delete Request"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </>
         )}
       </div>
