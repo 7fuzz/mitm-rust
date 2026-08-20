@@ -384,17 +384,24 @@ export function useRepeater(activeEnvId?: string) {
     }
   }, [activeEnvId, refreshRepeater]);
 
+  const clearUncategorizedRequests = useCallback(async () => {
+    try {
+      await invoke('clear_uncategorized_requests');
+      await refreshRepeater();
+    } catch (e) { console.error('Failed to clear uncategorized requests:', e); }
+  }, [refreshRepeater]);
+
   return useMemo(() => ({
     repeaterRequests, repeaterGroups, activeGroupId, switchGroup,
     _setRawRepeater: setRepeaterRequests, _setRawGroups: setRepeaterGroups, initActiveGroup,
     refreshRepeater, addEmptyRequest, duplicateRequest, createFromCurl, deleteRequest, updateRequest, importPostman,
     importProject, finalizeImport, createGroup, renameGroup, deleteGroup, bulkDeleteGroups, cloneGroup, reorderRequests, reorderGroups,
-    manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions
+    manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions, clearUncategorizedRequests
   }), [
     repeaterRequests, repeaterGroups, activeGroupId, switchGroup, initActiveGroup,
     refreshRepeater, addEmptyRequest, duplicateRequest, createFromCurl, deleteRequest, updateRequest, importPostman,
     importProject, finalizeImport, createGroup, renameGroup, deleteGroup, bulkDeleteGroups, cloneGroup, reorderRequests, reorderGroups,
-    manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions
+    manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions, clearUncategorizedRequests
   ]);
 }
 
