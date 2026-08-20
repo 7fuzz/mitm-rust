@@ -15,6 +15,8 @@ interface RepeaterSidebarTreeProps {
   onOpenDocModal: (group: RepeaterGroup) => void;
   onOpenExtractionModal: (group: RepeaterGroup) => void;
   openPrompt: (title: string, initialValue: string, action: (val: string) => void) => void;
+  onClearUncategorized?: () => void;
+  openConfirm?: (title: string, message: string, action: () => void) => void;
 }
 
 const getMethodColor = (m: string) => {
@@ -166,6 +168,8 @@ export function RepeaterSidebarTree({
   onOpenDocModal,
   onOpenExtractionModal,
   openPrompt,
+  onClearUncategorized,
+  openConfirm,
 }: RepeaterSidebarTreeProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>(() => {
@@ -524,6 +528,26 @@ export function RepeaterSidebarTree({
                 className="w-full text-left px-3 py-1.5 hover:bg-purple-500/20 hover:text-purple-300 flex items-center gap-2"
               >
                 <span>➕</span> Add Request
+              </button>
+              <div className="my-1 border-t border-zinc-800/80" />
+              <button
+                onClick={() => {
+                  setContextMenu(null);
+                  if (openConfirm) {
+                    openConfirm(
+                      'Clear Uncategorized Requests',
+                      'Are you sure you want to delete all uncategorized requests? This action cannot be undone.',
+                      () => {
+                        onClearUncategorized?.();
+                      }
+                    );
+                  } else {
+                    onClearUncategorized?.();
+                  }
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-rose-500/20 text-rose-400 flex items-center gap-2"
+              >
+                <span>🗑️</span> Clear Uncategorized
               </button>
             </>
           )}

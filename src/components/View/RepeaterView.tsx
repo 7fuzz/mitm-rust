@@ -41,6 +41,7 @@ export function RepeaterView() {
     _setRawRepeater,
     updateGroupExtractions,
     refreshRepeater,
+    clearUncategorizedRequests,
   } = useTraffic();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -303,6 +304,12 @@ export function RepeaterView() {
             openPrompt={async (title, initialValue, action) => {
               const val = await prompt(title, 'Enter name:', initialValue);
               if (val) action(val);
+            }}
+            onClearUncategorized={clearUncategorizedRequests}
+            openConfirm={async (title, message, action) => {
+              if (await confirm(title, message, true)) {
+                action();
+              }
             }}
           />
         )}
