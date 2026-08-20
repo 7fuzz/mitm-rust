@@ -59,10 +59,35 @@ pub async fn create_environment(app_handle: AppHandle, id: String, name: String)
 }
 
 #[tauri::command]
-pub async fn delete_environment(app_handle: AppHandle, id: String) -> Result<(), String> {
+pub async fn delete_environment(
+    app_handle: AppHandle,
+    id: String,
+    delete_linked_collections: Option<bool>
+) -> Result<(), String> {
     let db_path = db::get_db_path(&app_handle);
-    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM environments WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    let mut conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    if delete_linked_collections.unwrap_or(false) {
+        let mut stmt = tx.prepare("SELECT group_id FROM environment_groups WHERE environment_id = ?").map_err(|e| e.to_string())?;
+        let group_ids: Vec<String> = stmt.query_map([&id], |row| row.get(0))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        drop(stmt);
+
+        for g_id in group_ids {
+            tx.execute("DELETE FROM repeater_requests WHERE group_id = ?", [&g_id]).map_err(|e| e.to_string())?;
+            tx.execute("DELETE FROM repeater_groups WHERE id = ?", [&g_id]).map_err(|e| e.to_string())?;
+            tx.execute("DELETE FROM environment_groups WHERE group_id = ?", [&g_id]).map_err(|e| e.to_string())?;
+        }
+    }
+
+    tx.execute("DELETE FROM environment_groups WHERE environment_id = ?", [&id]).map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM variables WHERE environment_id = ?", [&id]).map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM environments WHERE id = ?", [&id]).map_err(|e| e.to_string())?;
+
+    tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -71,7 +96,8 @@ pub async fn set_active_environment(app_handle: AppHandle, id: String) -> Result
     let db_path = db::get_db_path(&app_handle);
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute("UPDATE environments SET is_active = 0", []).map_err(|e| e.to_string())?;
-    conn.execute("UPDATE environments SET is_active = 1 WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    conn.execute("UPDATE environments SET is_active = 1 WHERE id = ?", [id.clone()]).map_err(|e| e.to_string())?;
+    conn.execute("INSERT OR REPLACE INTO app_state (key, value) VALUES ('active_env_id', ?)", [id]).map_err(|e| e.to_string())?;
     Ok(())
 }
 

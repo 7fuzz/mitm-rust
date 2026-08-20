@@ -17,18 +17,30 @@ use zstd;
 
 fn build_variable_map(conn: &rusqlite::Connection, active_env_id: Option<&str>) -> Result<HashMap<String, String>, String> {
     let mut vars = HashMap::new();
-    let env_id = match active_env_id {
-        Some(id) => id,
-        None => return Ok(vars),
+
+    let variable_rows = if let Some(env_id) = active_env_id {
+        let mut stmt = conn.prepare("SELECT id, name, active_index FROM variables WHERE environment_id = ?").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([env_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i32>(2)?))
+        }).map_err(|e| e.to_string())?;
+        let mut list = Vec::new();
+        for r in rows.flatten() {
+            list.push(r);
+        }
+        list
+    } else {
+        let mut stmt = conn.prepare("SELECT id, name, active_index FROM variables").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i32>(2)?))
+        }).map_err(|e| e.to_string())?;
+        let mut list = Vec::new();
+        for r in rows.flatten() {
+            list.push(r);
+        }
+        list
     };
 
-    let mut stmt = conn.prepare("SELECT id, name, active_index FROM variables WHERE environment_id = ?").map_err(|e| e.to_string())?;
-    let variable_rows = stmt.query_map([env_id], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i32>(2)?))
-    }).map_err(|e| e.to_string())?;
-
-    for var_res in variable_rows {
-        let (var_id, name, active_index) = var_res.map_err(|e| e.to_string())?;
+    for (var_id, name, active_index) in variable_rows {
         let selected_value = get_selected_variable_value(conn, &var_id, active_index)?;
         vars.insert(name, selected_value);
     }
