@@ -119,29 +119,35 @@ pub struct ImportRepeaterData {
 }
 ```
 
-#### 3. `test_cases` Item (Repeater Group with `{{host}}` and Markdown `description`)
+#### 3. `test_cases` Item (Repeater Group & Multi-Level Nested `folders`)
 ```json
 {
   "name": "Authentication API",
   "url": "{{host}}/v1",
-  "description": "# Authentication API Collection\n\nThis collection contains all endpoints related to user authentication, token extraction, and session management.\n\n> [!NOTE]\n> OAuth 2.0 access tokens extracted here are stored in the active environment variable `{{token}}`.",
+  "description": "# Authentication API Collection\n\nThis collection contains user authentication endpoints and nested subfolders.",
   "target": [
     {
-      "name": "Login Request",
+      "name": "Root Login Request",
       "method": "POST",
       "endpoint": "/auth/login",
-      "description": "### User Login Endpoint\n\nAuthenticate credentials and extract the Bearer token.\n\n#### Parameters\n| Field | Type | Description |\n| :--- | :--- | :--- |\n| `username` | String | User email or username |\n| `password` | String | Account password |\n\n> [!TIP]\n> Successful response (200 OK) automatically extracts `data.access_token` into `{{token}}`.",
-      "params": {
-        "grant_type": "password"
-      },
       "header": {
-        "Content-Type": "application/json",
-        "Authorization": null
+        "Content-Type": "application/json"
       },
-      "body": "{\"username\":\"admin\",\"password\":\"secret\"}",
-      "extract": {
-        "token": "data.access_token"
-      }
+      "body": "{\"username\":\"admin\",\"password\":\"secret\"}"
+    }
+  ],
+  "folders": [
+    {
+      "name": "OAuth 2.0 Subfolder",
+      "description": "Subfolder for OAuth 2.0 flows",
+      "target": [
+        {
+          "name": "Get Bearer Token",
+          "method": "POST",
+          "endpoint": "/oauth/token"
+        }
+      ],
+      "folders": []
     }
   ]
 }
