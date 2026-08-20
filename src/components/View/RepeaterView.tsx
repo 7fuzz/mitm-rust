@@ -224,8 +224,25 @@ export function RepeaterView() {
         prev.map((r: RepeaterRequest) => (r.id === currentReq.id ? updatedWithRes : r))
       );
 
-      const collectionExtract = activeGroup?.extract || {};
-      const mergedExtract = { ...collectionExtract, ...editExtract };
+      // Merge extraction rules hierarchically: Root Collection -> Subfolder -> Direct Folder -> Request
+      let folderChainExtract: Record<string, string> = {};
+      if (currentReq.groupId) {
+        const folderChain: Record<string, string>[] = [];
+        let currentGroupId: string | null | undefined = currentReq.groupId;
+        while (currentGroupId) {
+          const g = repeaterGroups.find((grp) => grp.id === currentGroupId);
+          if (!g) break;
+          if (g.extract) {
+            folderChain.unshift(g.extract as Record<string, string>);
+          }
+          currentGroupId = g.parentId;
+        }
+        for (const ext of folderChain) {
+          folderChainExtract = { ...folderChainExtract, ...ext };
+        }
+      }
+
+      const mergedExtract = { ...folderChainExtract, ...editExtract };
 
       if (mergedExtract && Object.keys(mergedExtract).length > 0) {
         try {
