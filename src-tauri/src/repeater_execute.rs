@@ -66,24 +66,44 @@ fn get_selected_variable_value(conn: &rusqlite::Connection, variable_id: &str, a
 }
 
 fn interpolate_variables(input: &str, vars: &HashMap<String, String>) -> String {
-    let mut output = String::new();
-    let mut remainder = input;
+    let mut current = input.to_string();
+    let max_depth = 10;
 
-    while let Some(start) = remainder.find("{{") {
-        output.push_str(&remainder[..start]);
-        let after_start = &remainder[start + 2..];
-        if let Some(end_rel) = after_start.find("}}") {
-            let key = &after_start[..end_rel];
-            let replacement = vars.get(key).cloned().unwrap_or_else(|| format!("{{{{{}}}}}", key));
-            output.push_str(&replacement);
-            remainder = &after_start[end_rel + 2..];
-        } else {
+    for _ in 0..max_depth {
+        if !current.contains("{{") {
+            break;
+        }
+
+        let mut replaced = false;
+        let mut output = String::new();
+        let mut remainder = current.as_str();
+
+        while let Some(start) = remainder.find("{{") {
+            output.push_str(&remainder[..start]);
+            let after_start = &remainder[start + 2..];
+            if let Some(end_rel) = after_start.find("}}") {
+                let key = &after_start[..end_rel];
+                if let Some(replacement) = vars.get(key) {
+                    output.push_str(replacement);
+                    replaced = true;
+                } else {
+                    output.push_str(&format!("{{{{{}}}}}", key));
+                }
+                remainder = &after_start[end_rel + 2..];
+            } else {
+                break;
+            }
+        }
+
+        output.push_str(remainder);
+        current = output;
+
+        if !replaced {
             break;
         }
     }
 
-    output.push_str(remainder);
-    output
+    current
 }
 
 fn interpolate_dates(input: &str) -> String {
