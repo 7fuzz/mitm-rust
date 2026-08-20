@@ -26,6 +26,7 @@ function SortableGroupItem({
   onAssign, 
   onClone,
   onEditDocs,
+  onClearRequests,
 }: { 
   group: RepeaterGroup; 
   isActive: boolean; 
@@ -38,6 +39,7 @@ function SortableGroupItem({
   onAssign: (group: RepeaterGroup) => void; 
   onClone: (group: RepeaterGroup) => void; 
   onEditDocs: (group: RepeaterGroup) => void;
+  onClearRequests: (group: RepeaterGroup) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: group.id });
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 50 : undefined, opacity: isDragging ? 0.5 : 1 };
@@ -94,6 +96,13 @@ function SortableGroupItem({
           <span>📝 Docs</span>
         </button>
         <button 
+          onClick={(e) => { e.stopPropagation(); onClearRequests(group); }} 
+          className="px-2 py-1 text-[8px] font-black uppercase tracking-widest border border-amber-500/30 text-amber-400 bg-amber-500/10 rounded hover:border-amber-500 hover:text-amber-300 transition-all flex items-center gap-1"
+          title="Clear all requests inside this collection and subfolders without deleting folders"
+        >
+          <span>🧹 Clear Requests</span>
+        </button>
+        <button 
           onClick={(e) => { e.stopPropagation(); onAssign(group); }} 
           className="px-2 py-1 text-[8px] font-black uppercase tracking-widest border border-zinc-700 rounded hover:border-sky-500 hover:text-sky-400 transition-all"
         >
@@ -113,7 +122,7 @@ function SortableGroupItem({
 }
 
 export function CollectionsSection({ selectedGroupId, setSelectedGroupId, openPrompt, openConfirm }: CollectionsSectionProps) {
-  const { repeaterGroups, createGroup, renameGroup, deleteGroup, bulkDeleteGroups, cloneGroup, reorderGroups, refreshRepeater } = useTraffic();
+  const { repeaterGroups, createGroup, renameGroup, deleteGroup, bulkDeleteGroups, cloneGroup, reorderGroups, refreshRepeater, clearGroupRequests } = useTraffic();
   const [localGroups, setLocalGroups] = useState<RepeaterGroup[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [envFilter, setEnvFilter] = useState<'current' | 'all' | 'unassigned'>('all');
@@ -261,6 +270,7 @@ export function CollectionsSection({ selectedGroupId, setSelectedGroupId, openPr
                     onAssign={(g: RepeaterGroup) => setAssignModal({ isOpen: true, groupId: g.id, groupName: g.name })}
                     onClone={(g: RepeaterGroup) => openPrompt('Clone Collection', `${g.name} (Copy)`, (val) => cloneGroup(g.id, val))}
                     onEditDocs={(g: RepeaterGroup) => setDocModal({ isOpen: true, group: g })}
+                    onClearRequests={(g: RepeaterGroup) => openConfirm('Clear Collection Requests', `Are you sure you want to remove all requests inside "${g.name}" and its subfolders? Collection structure and environments will remain unchanged.`, () => clearGroupRequests(g.id))}
                   />
                 ))}
               </SortableContext>
