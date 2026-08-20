@@ -275,21 +275,11 @@ pub async fn sync_data(
     // 2.5. Determine active group
     let active_group_id: Option<String> = conn.query_row("SELECT value FROM app_state WHERE key = 'active_group_id'", [], |row| row.get(0))
         .optional()
-        .unwrap_or(None);
-
-    let effective_group_id = active_group_id.clone().unwrap_or_else(|| "null".to_string());
-
-    // 3. Repeater Requests (filtered by effective_group_id)
-    let (request_query, request_params): (&str, Vec<rusqlite::types::Value>) = if effective_group_id == "All" {
-        ("SELECT r.id, r.name, r.group_id, r.method, r.url, r.headers, r.body, r.extract, r.response_status, r.response_headers, r.response_body, r.hit_count, r.description, rb.body_mode, rb.body_json, rb.body_urlencoded, rb.body_multipart, r.response_duration, r.url_params FROM repeater_requests r LEFT JOIN request_bodies rb ON r.id = rb.request_id ORDER BY r.order_index ASC, r.created_at DESC", vec![])
-    } else if effective_group_id == "null" {
-        ("SELECT r.id, r.name, r.group_id, r.method, r.url, r.headers, r.body, r.extract, r.response_status, r.response_headers, r.response_body, r.hit_count, r.description, rb.body_mode, rb.body_json, rb.body_urlencoded, rb.body_multipart, r.response_duration, r.url_params FROM repeater_requests r LEFT JOIN request_bodies rb ON r.id = rb.request_id WHERE r.group_id IS NULL ORDER BY r.order_index ASC, r.created_at DESC", vec![])
-    } else {
-        ("SELECT r.id, r.name, r.group_id, r.method, r.url, r.headers, r.body, r.extract, r.response_status, r.response_headers, r.response_body, r.hit_count, r.description, rb.body_mode, rb.body_json, rb.body_urlencoded, rb.body_multipart, r.response_duration, r.url_params FROM repeater_requests r LEFT JOIN request_bodies rb ON r.id = rb.request_id WHERE r.group_id = ? ORDER BY r.order_index ASC, r.created_at DESC", vec![rusqlite::types::Value::Text(effective_group_id)])
-    };
+    // 3. Repeater Requests (all requests for sidebar tree view)
+    let request_query = "SELECT r.id, r.name, r.group_id, r.method, r.url, r.headers, r.body, r.extract, r.response_status, r.response_headers, r.response_body, r.hit_count, r.description, rb.body_mode, rb.body_json, rb.body_urlencoded, rb.body_multipart, r.response_duration, r.url_params FROM repeater_requests r LEFT JOIN request_bodies rb ON r.id = rb.request_id ORDER BY r.order_index ASC, r.created_at DESC";
 
     let mut stmt = conn.prepare(request_query).map_err(|e| e.to_string())?;
-    let repeater_requests = stmt.query_map(rusqlite::params_from_iter(request_params), |row| {
+    let repeater_requests = stmt.query_map([], |row| {
         let headers: Vec<(String, String)> = serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or_default();
         let extract: Option<serde_json::Value> = row.get::<_, Option<String>>(7)?.and_then(|s| serde_json::from_str(&s).ok());
         let res_status: Option<u16> = row.get(8).ok();
