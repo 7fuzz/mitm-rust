@@ -22,7 +22,7 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
     variables, activeEnvId,
     environments,
     repeaterGroups, repeaterRequests,
-    importPostman, importProject, finalizeImport,
+    importPostman, importProject, finalizeImport, syncAll,
   } = useTraffic();
 
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('env');
@@ -334,8 +334,8 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
           environments={importData.all_environments || []}
           groups={importData.test_cases || []}
           onClose={() => setIsImportModalOpen(false)}
-          onImport={(options) => {
-            finalizeImport(importData, options, notify);
+          onImport={async (options) => {
+            await finalizeImport(importData, options, notify, syncAll);
             setIsImportModalOpen(false);
           }}
         />
