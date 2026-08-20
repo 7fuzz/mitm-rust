@@ -232,37 +232,43 @@ pub async fn sync_data(
     }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
 
     // 2. Determine active environment
-    let active_env_id: Option<String> = conn.prepare("SELECT id FROM environments WHERE is_active = 1 LIMIT 1")
+    let mut active_env_id: Option<String> = conn.prepare("SELECT id FROM environments WHERE is_active = 1 LIMIT 1")
         .map_err(|e| e.to_string())?
         .query_row([], |row| row.get(0))
         .optional()
         .map_err(|e| e.to_string())?;
 
+    if active_env_id.is_none() {
+        active_env_id = conn.query_row("SELECT value FROM app_state WHERE key = 'active_env_id'", [], |row| row.get(0))
+            .optional()
+            .unwrap_or(None);
+    }
+
     let fetch_all = all_groups.unwrap_or(false);
     let fetch_unassigned = unassigned_only.unwrap_or(false);
 
     let mut stmt = if fetch_unassigned {
-        conn.prepare("SELECT id, name, order_index, extract, description FROM repeater_groups WHERE id NOT IN (SELECT group_id FROM environment_groups) ORDER BY order_index")
+        conn.prepare("SELECT id, parent_id, name, order_index, extract, description FROM repeater_groups WHERE id NOT IN (SELECT group_id FROM environment_groups) ORDER BY order_index")
             .map_err(|e| e.to_string())?
     } else if active_env_id.is_some() && !fetch_all {
-        conn.prepare("SELECT id, name, order_index, extract, description FROM repeater_groups WHERE id IN (SELECT group_id FROM environment_groups WHERE environment_id = ?) ORDER BY order_index")
+        conn.prepare("SELECT id, parent_id, name, order_index, extract, description FROM repeater_groups WHERE id IN (SELECT group_id FROM environment_groups WHERE environment_id = ?) ORDER BY order_index")
             .map_err(|e| e.to_string())?
     } else {
-        conn.prepare("SELECT id, name, order_index, extract, description FROM repeater_groups ORDER BY order_index").map_err(|e| e.to_string())?
+        conn.prepare("SELECT id, parent_id, name, order_index, extract, description FROM repeater_groups ORDER BY order_index").map_err(|e| e.to_string())?
     };
 
     let repeater_groups = if active_env_id.is_some() && !fetch_all && !fetch_unassigned {
         let env_id = active_env_id.as_ref().unwrap();
         stmt.query_map([env_id], |row| {
-            let extract_str: Option<String> = row.get(3)?;
+            let extract_str: Option<String> = row.get(4)?;
             let extract = extract_str.and_then(|s| serde_json::from_str(&s).ok());
-            Ok(RepeaterGroup { id: row.get(0)?, name: row.get(1)?, order_index: row.get(2)?, extract, description: row.get(4).ok() })
+            Ok(RepeaterGroup { id: row.get(0)?, parent_id: row.get(1).ok(), name: row.get(2)?, order_index: row.get(3)?, extract, description: row.get(5).ok() })
         }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect()
     } else {
         stmt.query_map([], |row| {
-            let extract_str: Option<String> = row.get(3)?;
+            let extract_str: Option<String> = row.get(4)?;
             let extract = extract_str.and_then(|s| serde_json::from_str(&s).ok());
-            Ok(RepeaterGroup { id: row.get(0)?, name: row.get(1)?, order_index: row.get(2)?, extract, description: row.get(4).ok() })
+            Ok(RepeaterGroup { id: row.get(0)?, parent_id: row.get(1).ok(), name: row.get(2)?, order_index: row.get(3)?, extract, description: row.get(5).ok() })
         }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect()
     };
 
@@ -328,9 +334,15 @@ pub async fn sync_data(
 
     // 4. Environments
     let mut stmt = conn.prepare("SELECT id, name, is_active FROM environments").map_err(|e| e.to_string())?;
-    let environments = stmt.query_map([], |row| {
+    let mut environments: Vec<Environment> = stmt.query_map([], |row| {
         Ok(Environment { id: row.get(0)?, name: row.get(1)?, is_active: row.get::<_, i32>(2)? != 0 })
     }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+
+    if let Some(ref target_id) = active_env_id {
+        for env in environments.iter_mut() {
+            env.is_active = env.id == *target_id;
+        }
+    }
 
     // 5. Variables
     let mut stmt = conn.prepare("SELECT id, environment_id, name, active_index, order_index FROM variables ORDER BY order_index").map_err(|e| e.to_string())?;
@@ -382,5 +394,5 @@ pub async fn sync_data(
         if let Ok(v) = serde_json::from_str(&config_str) { filter_config = v; }
     }
 
-    Ok(SyncData { history, repeater_groups, repeater_requests, environments, variables, replacements, prefs, ui_layout, toolkit_json, history_limits, active_group_id, filter_config })
+    Ok(SyncData { history, repeater_groups, repeater_requests, environments, variables, replacements, prefs, ui_layout, toolkit_json, history_limits, active_group_id, active_env_id, filter_config })
 }
