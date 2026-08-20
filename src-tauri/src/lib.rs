@@ -9,6 +9,7 @@ pub mod state;
 pub mod history;
 pub mod db_viewer;
 pub mod websocket;
+pub mod webhook;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -299,6 +300,95 @@ async fn send_websocket_message(
 }
 
 #[tauri::command]
+async fn get_webhook_endpoints(app_handle: AppHandle) -> Result<Vec<models::WebhookEndpoint>, String> {
+    webhook::get_endpoints_db(&app_handle)
+}
+
+#[tauri::command]
+async fn create_webhook_endpoint(app_handle: AppHandle, endpoint: models::WebhookEndpoint) -> Result<models::WebhookEndpoint, String> {
+    webhook::create_endpoint_db(&app_handle, endpoint)
+}
+
+#[tauri::command]
+async fn update_webhook_endpoint(app_handle: AppHandle, endpoint: models::WebhookEndpoint) -> Result<(), String> {
+    webhook::update_endpoint_db(&app_handle, endpoint)
+}
+
+#[tauri::command]
+async fn delete_webhook_endpoint(app_handle: AppHandle, id: String) -> Result<(), String> {
+    webhook::delete_endpoint_db(&app_handle, id)
+}
+
+#[tauri::command]
+async fn get_webhook_deliveries(app_handle: AppHandle, limit: Option<i32>) -> Result<Vec<models::WebhookDelivery>, String> {
+    webhook::get_deliveries_db(&app_handle, limit.unwrap_or(100))
+}
+
+#[tauri::command]
+async fn clear_webhook_deliveries(app_handle: AppHandle) -> Result<(), String> {
+    webhook::clear_deliveries_db(&app_handle)
+}
+
+#[tauri::command]
+async fn delete_webhook_delivery(app_handle: AppHandle, id: String) -> Result<(), String> {
+    webhook::delete_delivery_db(&app_handle, id)
+}
+
+#[tauri::command]
+async fn forward_webhook_delivery(app_handle: AppHandle, delivery_id: String, target_url: String) -> Result<models::WebhookForwardResult, String> {
+    webhook::forward_delivery_http(&app_handle, delivery_id, target_url).await
+}
+
+#[tauri::command]
+async fn trigger_webhook_request(req: models::WebhookTriggerRequest) -> Result<models::WebhookForwardResult, String> {
+    webhook::trigger_webhook_request(req).await
+}
+
+#[tauri::command]
+async fn get_webhook_listener_status(state: State<'_, AppState>) -> Result<models::WebhookListenerConfig, String> {
+    let manager = state.webhook_manager.lock().await;
+    Ok(manager.config.clone())
+}
+
+#[tauri::command]
+async fn start_webhook_listener(app_handle: AppHandle, state: State<'_, AppState>, port: u16) -> Result<(), String> {
+    let mut manager = state.webhook_manager.lock().await;
+    if let Some(tx) = manager.active_listener.take() {
+        let _ = tx.send(());
+    }
+    let tx = webhook::start_webhook_server(app_handle, port).await?;
+    manager.active_listener = Some(tx);
+    manager.config.port = port;
+    manager.config.is_running = true;
+    Ok(())
+}
+
+#[tauri::command]
+async fn stop_webhook_listener(state: State<'_, AppState>) -> Result<(), String> {
+    let mut manager = state.webhook_manager.lock().await;
+    if let Some(tx) = manager.active_listener.take() {
+        let _ = tx.send(());
+    }
+    manager.config.is_running = false;
+    Ok(())
+}
+
+#[derive(Serialize)]
+pub struct SignatureResult {
+    pub header_name: String,
+    pub header_value: String,
+}
+
+#[tauri::command]
+fn calculate_webhook_signature(secret: String, body: String, provider: String) -> SignatureResult {
+    let (name, val) = webhook::calculate_hmac_signature(&secret, &body, &provider);
+    SignatureResult {
+        header_name: name,
+        header_value: val,
+    }
+}
+
+#[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
@@ -326,11 +416,20 @@ pub fn run() {
     let active_websockets = Arc::new(Mutex::new(HashMap::new()));
     let pending_ws = Arc::new(Mutex::new(HashMap::new()));
 
+    let webhook_manager = Arc::new(Mutex::new(models::WebhookManager {
+        active_listener: None,
+        config: models::WebhookListenerConfig {
+            port: 9000,
+            is_running: false,
+        },
+    }));
+
     let state = AppState { 
         proxy_manager: Arc::clone(&proxy_manager),
         intercept_state: Arc::clone(&intercept_state),
         active_websockets,
         pending_ws,
+        webhook_manager: Arc::clone(&webhook_manager),
     };
 
     tauri::Builder::default()
@@ -391,13 +490,58 @@ pub fn run() {
             update_network_settings,
             get_websocket_messages,
             resume_ws_flow,
-            send_websocket_message
+            send_websocket_message,
+            get_webhook_endpoints,
+            create_webhook_endpoint,
+            update_webhook_endpoint,
+            delete_webhook_endpoint,
+            get_webhook_deliveries,
+            clear_webhook_deliveries,
+            delete_webhook_delivery,
+            forward_webhook_delivery,
+            trigger_webhook_request,
+            get_webhook_listener_status,
+            start_webhook_listener,
+            stop_webhook_listener,
+            calculate_webhook_signature
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
             
             if let Err(e) = db::init_database(&app_handle) {
                 eprintln!("Failed to initialize database: {}", e);
+            }
+
+            // Automatically start Webhook listener on saved port (from prefs), default 9000
+            let app_handle_for_wh = app_handle.clone();
+            let state_wh = app_handle.state::<AppState>();
+            let wh_mgr = Arc::clone(&state_wh.webhook_manager);
+            {
+                let db_path_wh = app_handle.path().app_data_dir()
+                    .expect("Failed to get app data dir")
+                    .join("mitm.db");
+                let wh_port: u16 = rusqlite::Connection::open(&db_path_wh)
+                    .ok()
+                    .and_then(|conn| {
+                        conn.query_row::<String, _, _>(
+                            "SELECT value FROM app_state WHERE key = 'prefs'",
+                            [],
+                            |row| row.get(0),
+                        ).ok()
+                    })
+                    .and_then(|prefs_str| serde_json::from_str::<serde_json::Value>(&prefs_str).ok())
+                    .and_then(|v| v.get("webhookPort").and_then(|p| p.as_u64()))
+                    .map(|p| p as u16)
+                    .unwrap_or(9000);
+
+                tauri::async_runtime::spawn(async move {
+                    if let Ok(tx) = webhook::start_webhook_server(app_handle_for_wh, wh_port).await {
+                        let mut mgr = wh_mgr.lock().await;
+                        mgr.active_listener = Some(tx);
+                        mgr.config.port = wh_port;
+                        mgr.config.is_running = true;
+                    }
+                });
             }
 
             let state = app.state::<AppState>();
