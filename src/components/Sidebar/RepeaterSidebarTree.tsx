@@ -58,7 +58,7 @@ function FolderTreeNode({
   onContextMenuFolder,
   onContextMenuRequest,
 }: TreeNodeProps) {
-  const isExpanded = expandedMap[group.id] ?? true;
+  const isExpanded = expandedMap[group.id] ?? false;
 
   const childGroups = useMemo(
     () => repeaterGroups.filter((g) => g.parentId === group.id),
@@ -151,6 +151,8 @@ function FolderTreeNode({
   );
 }
 
+const STORAGE_KEY = 'repeater_sidebar_tree_expanded_map';
+
 export function RepeaterSidebarTree({
   repeaterGroups,
   repeaterRequests,
@@ -166,11 +168,25 @@ export function RepeaterSidebarTree({
   openPrompt,
 }: RepeaterSidebarTreeProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
-  const [uncategorizedExpanded, setUncategorizedExpanded] = useState(true);
+  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(expandedMap));
+    } catch (e) {
+      console.error('Failed to save tree expansion state:', e);
+    }
+  }, [expandedMap]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -315,12 +331,12 @@ export function RepeaterSidebarTree({
             <div className="select-none">
               <div
                 className="group/folder flex items-center justify-between py-1.5 px-2 hover:bg-zinc-900/80 rounded cursor-pointer transition-colors text-zinc-300"
-                onClick={() => setUncategorizedExpanded(!uncategorizedExpanded)}
+                onClick={() => toggleExpand('uncategorized')}
                 onContextMenu={handleContextMenuUncategorized}
               >
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
                   <span className="text-[10px] text-zinc-500 w-4 h-4 flex items-center justify-center shrink-0">
-                    {uncategorizedExpanded ? '▼' : '▶'}
+                    {expandedMap['uncategorized'] ? '▼' : '▶'}
                   </span>
                   <span className="text-amber-400 shrink-0 text-xs">📦</span>
                   <span className="text-xs font-bold truncate text-zinc-300">(Uncategorized)</span>
@@ -331,7 +347,7 @@ export function RepeaterSidebarTree({
               </div>
 
               {/* Uncategorized Requests nested inside folder */}
-              {uncategorizedExpanded && (
+              {expandedMap['uncategorized'] && (
                 <div className="space-y-0.5">
                   {uncategorizedRequests.length === 0 ? (
                     <div className="text-[10px] text-zinc-600 pl-8 py-1 italic">No uncategorized requests</div>

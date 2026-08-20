@@ -275,6 +275,8 @@ pub async fn sync_data(
     // 2.5. Determine active group
     let active_group_id: Option<String> = conn.query_row("SELECT value FROM app_state WHERE key = 'active_group_id'", [], |row| row.get(0))
         .optional()
+        .unwrap_or(None);
+
     // 3. Repeater Requests (all requests for sidebar tree view)
     let request_query = "SELECT r.id, r.name, r.group_id, r.method, r.url, r.headers, r.body, r.extract, r.response_status, r.response_headers, r.response_body, r.hit_count, r.description, rb.body_mode, rb.body_json, rb.body_urlencoded, rb.body_multipart, r.response_duration, r.url_params FROM repeater_requests r LEFT JOIN request_bodies rb ON r.id = rb.request_id ORDER BY r.order_index ASC, r.created_at DESC";
 
