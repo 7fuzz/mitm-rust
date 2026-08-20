@@ -212,6 +212,31 @@ pub async fn bulk_delete_repeater_groups(app_handle: AppHandle, ids: Vec<String>
     Ok(())
 }
 
+fn get_group_and_descendant_ids(conn: &rusqlite::Connection, group_id: &str) -> Vec<String> {
+    let mut ids = vec![group_id.to_string()];
+    if let Ok(mut stmt) = conn.prepare("SELECT id FROM repeater_groups WHERE parent_id = ?") {
+        if let Ok(rows) = stmt.query_map([group_id], |row| row.get(0)) {
+            let child_ids: Vec<String> = rows.filter_map(|r| r.ok()).collect();
+            for cid in child_ids {
+                ids.extend(get_group_and_descendant_ids(conn, &cid));
+            }
+        }
+    }
+    ids
+}
+
+#[tauri::command]
+pub async fn clear_group_requests(app_handle: AppHandle, group_id: String) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    let target_gids = get_group_and_descendant_ids(&conn, &group_id);
+    for gid in target_gids {
+        conn.execute("DELETE FROM request_bodies WHERE request_id IN (SELECT id FROM repeater_requests WHERE group_id = ?)", [&gid]).ok();
+        conn.execute("DELETE FROM repeater_requests WHERE group_id = ?", [&gid]).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn clear_uncategorized_requests(app_handle: AppHandle) -> Result<(), String> {
     let db_path = get_db_path(&app_handle);

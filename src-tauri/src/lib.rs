@@ -467,6 +467,7 @@ pub fn run() {
             repeater::clear_repeater_history,
             repeater::delete_repeater_history_item,
             repeater::clear_uncategorized_requests,
+            repeater::clear_group_requests,
             repeater::import_repeater_data,
             workspace::create_variable,
             workspace::update_variable,
