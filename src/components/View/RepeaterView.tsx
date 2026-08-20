@@ -248,17 +248,62 @@ export function RepeaterView() {
 
       if (mergedExtract && Object.keys(mergedExtract).length > 0) {
         try {
-          const respJson = JSON.parse(response.response_body);
+          let respJson: any = null;
+          try {
+            respJson = JSON.parse(response.response_body);
+          } catch {
+            respJson = null;
+          }
+
           Object.entries(mergedExtract).forEach(([varName, rawPath]) => {
-            const cleanPath = typeof rawPath === 'string' ? rawPath.replace(/^\$\.?/, '') : '';
-            if (!cleanPath) return;
-            const value = cleanPath.split('.').reduce((obj, key) => (obj as any)?.[key], respJson);
-            if (value !== undefined) {
-              updateVariableAutoValue(varName, String(value));
+            if (typeof rawPath !== 'string' || !rawPath.trim()) return;
+            let p = rawPath.trim();
+
+            // 1. Header Extraction: e.g. "header:X-Auth-Token" or "header:Authorization"
+            if (p.toLowerCase().startsWith('header:')) {
+              const headerName = p.substring(7).trim().toLowerCase();
+              if (response.response_headers) {
+                const foundHeader = Object.entries(response.response_headers).find(
+                  ([hk]) => hk.toLowerCase() === headerName
+                );
+                if (foundHeader && foundHeader[1] !== undefined) {
+                  updateVariableAutoValue(varName, String(foundHeader[1]));
+                }
+              }
+              return;
+            }
+
+            // 2. JSON / Body Extraction
+            if (respJson) {
+              if (p.toLowerCase().startsWith('json:')) {
+                p = p.substring(5).trim();
+              } else if (p.toLowerCase().startsWith('body:')) {
+                p = p.substring(5).trim();
+              }
+
+              p = p.replace(/^\$\.?/, '');
+              if (!p) return;
+
+              // Convert array index notation data[0].id -> data.0.id
+              p = p.replace(/\[(\d+)\]/g, '.$1');
+
+              const keys = p.split('.').filter(Boolean);
+              let val = respJson;
+              for (const k of keys) {
+                if (val === null || val === undefined) {
+                  val = undefined;
+                  break;
+                }
+                val = val[k];
+              }
+
+              if (val !== undefined && val !== null) {
+                updateVariableAutoValue(varName, typeof val === 'object' ? JSON.stringify(val) : String(val));
+              }
             }
           });
-        } catch {
-          console.error('Failed to parse response for extraction');
+        } catch (e) {
+          console.error('Failed to parse response for extraction:', e);
         }
       }
 
