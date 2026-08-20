@@ -24,14 +24,39 @@ export function interpolateVariables(
       });
   }
 
-  let result = text;
-  Object.entries(varMap).forEach(([k, v]) => {
-    if (!k) return;
-    result = result.replaceAll(`{{${k}}}`, v);
-    result = result.replaceAll(`%7B%7B${k}%7D%7D`, encodeURIComponent(v));
-  });
+  let current = text;
+  const maxDepth = 10;
+  let depth = 0;
 
-  return result;
+  while (depth < maxDepth) {
+    let replaced = false;
+
+    if (!current.includes('{{') && !current.includes('%7B%7B')) {
+      break;
+    }
+
+    Object.entries(varMap).forEach(([k, v]) => {
+      if (!k) return;
+      const placeholder = `{{${k}}}`;
+      const encodedPlaceholder = `%7B%7B${k}%7D%7D`;
+
+      if (current.includes(placeholder)) {
+        current = current.replaceAll(placeholder, v);
+        replaced = true;
+      }
+      if (current.includes(encodedPlaceholder)) {
+        current = current.replaceAll(encodedPlaceholder, encodeURIComponent(v));
+        replaced = true;
+      }
+    });
+
+    if (!replaced) {
+      break;
+    }
+    depth++;
+  }
+
+  return current;
 }
 
 export function buildCurlCommand(
