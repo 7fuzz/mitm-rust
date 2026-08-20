@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { RepeaterGroup, RepeaterRequest } from '@/hooks/traffic';
 import { DebouncedInput } from '../ui/DebouncedInput';
 
@@ -25,6 +25,14 @@ const getMethodColor = (m: string) => {
   return 'text-purple-400 bg-purple-500/10 border-purple-500/30';
 };
 
+interface ContextMenuState {
+  x: number;
+  y: number;
+  type: 'folder' | 'request' | 'uncategorized';
+  targetFolder?: RepeaterGroup;
+  targetRequest?: RepeaterRequest;
+}
+
 interface TreeNodeProps {
   group: RepeaterGroup;
   level: number;
@@ -34,14 +42,8 @@ interface TreeNodeProps {
   expandedMap: Record<string, boolean>;
   toggleExpand: (id: string) => void;
   onSelectRequest: (id: string) => void;
-  onDeleteRequest: (id: string) => void;
-  onCreateRequest: (groupId: string | null) => void;
-  onCreateGroup: (name: string, parentId?: string | null) => void;
-  onRenameGroup: (group: RepeaterGroup) => void;
-  onDeleteGroup: (group: RepeaterGroup) => void;
-  onOpenDocModal: (group: RepeaterGroup) => void;
-  onOpenExtractionModal: (group: RepeaterGroup) => void;
-  openPrompt: (title: string, initialValue: string, action: (val: string) => void) => void;
+  onContextMenuFolder: (e: React.MouseEvent, group: RepeaterGroup) => void;
+  onContextMenuRequest: (e: React.MouseEvent, request: RepeaterRequest) => void;
 }
 
 function FolderTreeNode({
@@ -53,14 +55,8 @@ function FolderTreeNode({
   expandedMap,
   toggleExpand,
   onSelectRequest,
-  onDeleteRequest,
-  onCreateRequest,
-  onCreateGroup,
-  onRenameGroup,
-  onDeleteGroup,
-  onOpenDocModal,
-  onOpenExtractionModal,
-  openPrompt,
+  onContextMenuFolder,
+  onContextMenuRequest,
 }: TreeNodeProps) {
   const isExpanded = expandedMap[group.id] ?? true;
 
@@ -82,6 +78,7 @@ function FolderTreeNode({
         style={{ paddingLeft: `${level * 12 + 8}px` }}
         className="group/folder flex items-center justify-between py-1.5 pr-2 hover:bg-zinc-900/80 rounded cursor-pointer transition-colors text-zinc-300"
         onClick={() => toggleExpand(group.id)}
+        onContextMenu={(e) => onContextMenuFolder(e, group)}
       >
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <span className="text-[10px] text-zinc-500 w-4 h-4 flex items-center justify-center shrink-0">
@@ -97,57 +94,6 @@ function FolderTreeNode({
               Docs
             </span>
           )}
-        </div>
-
-        {/* Action Buttons on Hover */}
-        <div
-          className="flex items-center gap-1 opacity-0 group-hover/folder:opacity-100 transition-opacity"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => onCreateRequest(group.id)}
-            className="px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 rounded border border-emerald-500/30"
-            title="Add Request inside this folder"
-          >
-            + Req
-          </button>
-          <button
-            onClick={() =>
-              openPrompt('New Subfolder Name', '', (val) => onCreateGroup(val, group.id))
-            }
-            className="px-1.5 py-0.5 text-[9px] font-bold text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 rounded border border-purple-500/30"
-            title="Add Subfolder inside this folder"
-          >
-            + Folder
-          </button>
-          <button
-            onClick={() => onOpenDocModal(group)}
-            className="p-1 text-zinc-400 hover:text-purple-400"
-            title="Documentation (Markdown)"
-          >
-            📝
-          </button>
-          <button
-            onClick={() => onOpenExtractionModal(group)}
-            className="p-1 text-zinc-400 hover:text-amber-400"
-            title="Auto Extract Rules"
-          >
-            ⚡
-          </button>
-          <button
-            onClick={() => onRenameGroup(group)}
-            className="p-1 text-zinc-400 hover:text-purple-400"
-            title="Rename Folder"
-          >
-            ✏️
-          </button>
-          <button
-            onClick={() => onDeleteGroup(group)}
-            className="p-1 text-zinc-400 hover:text-rose-500"
-            title="Delete Folder"
-          >
-            🗑️
-          </button>
         </div>
       </div>
 
@@ -166,14 +112,8 @@ function FolderTreeNode({
               expandedMap={expandedMap}
               toggleExpand={toggleExpand}
               onSelectRequest={onSelectRequest}
-              onDeleteRequest={onDeleteRequest}
-              onCreateRequest={onCreateRequest}
-              onCreateGroup={onCreateGroup}
-              onRenameGroup={onRenameGroup}
-              onDeleteGroup={onDeleteGroup}
-              onOpenDocModal={onOpenDocModal}
-              onOpenExtractionModal={onOpenExtractionModal}
-              openPrompt={openPrompt}
+              onContextMenuFolder={onContextMenuFolder}
+              onContextMenuRequest={onContextMenuRequest}
             />
           ))}
 
@@ -185,9 +125,10 @@ function FolderTreeNode({
                 key={req.id}
                 style={{ paddingLeft: `${(level + 1) * 12 + 16}px` }}
                 onClick={() => onSelectRequest(req.id)}
+                onContextMenu={(e) => onContextMenuRequest(e, req)}
                 className={`group/req flex items-center justify-between py-1.5 pr-2 rounded cursor-pointer transition-all border-l-2 ${
                   isActive
-                    ? 'bg-purple-500/10 border-l-purple-500 text-purple-300'
+                    ? 'bg-purple-500/10 border-l-purple-500 text-purple-300 font-semibold'
                     : 'bg-transparent border-l-transparent hover:bg-zinc-900/60 hover:border-l-zinc-700 text-zinc-300'
                 }`}
               >
@@ -199,19 +140,7 @@ function FolderTreeNode({
                   >
                     {req.method}
                   </span>
-                  <span className="text-xs truncate font-medium">{req.name}</span>
-                </div>
-                <div
-                  className="flex items-center gap-1 opacity-0 group-hover/req:opacity-100 transition-opacity"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    onClick={() => onDeleteRequest(req.id)}
-                    className="p-1 text-zinc-500 hover:text-rose-400"
-                    title="Delete Request"
-                  >
-                    🗑️
-                  </button>
+                  <span className="text-xs truncate">{req.name}</span>
                 </div>
               </div>
             );
@@ -238,6 +167,27 @@ export function RepeaterSidebarTree({
 }: RepeaterSidebarTreeProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
+  const [uncategorizedExpanded, setUncategorizedExpanded] = useState(true);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    window.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const toggleExpand = (id: string) => {
     setExpandedMap((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -259,10 +209,40 @@ export function RepeaterSidebarTree({
     );
   }, [repeaterRequests, searchTerm]);
 
-  const [uncategorizedExpanded, setUncategorizedExpanded] = useState(true);
+  const handleContextMenuFolder = (e: React.MouseEvent, group: RepeaterGroup) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: 'folder',
+      targetFolder: group,
+    });
+  };
+
+  const handleContextMenuRequest = (e: React.MouseEvent, request: RepeaterRequest) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: 'request',
+      targetRequest: request,
+    });
+  };
+
+  const handleContextMenuUncategorized = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: 'uncategorized',
+    });
+  };
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 border-r border-zinc-800/80 text-zinc-300 select-none">
+    <div className="flex flex-col h-full bg-zinc-950 border-r border-zinc-800/80 text-zinc-300 select-none relative">
       {/* Sidebar Header */}
       <div className="p-3 border-b border-zinc-800/80 space-y-2 shrink-0">
         <div className="flex items-center justify-between">
@@ -304,9 +284,10 @@ export function RepeaterSidebarTree({
                 <div
                   key={req.id}
                   onClick={() => onSelectRequest(req.id)}
+                  onContextMenu={(e) => handleContextMenuRequest(e, req)}
                   className={`flex items-center justify-between p-2 rounded cursor-pointer transition-all border-l-2 ${
                     activeId === req.id
-                      ? 'bg-purple-500/10 border-l-purple-500 text-purple-300'
+                      ? 'bg-purple-500/10 border-l-purple-500 text-purple-300 font-semibold'
                       : 'bg-zinc-900/40 border-l-transparent hover:bg-zinc-900 text-zinc-300'
                   }`}
                 >
@@ -330,34 +311,22 @@ export function RepeaterSidebarTree({
         ) : (
           /* Normal Tree View Mode */
           <>
-            {/* Top-level Uncategorized Folder Node */}
+            {/* Top-level (Uncategorized) Folder Node */}
             <div className="select-none">
               <div
                 className="group/folder flex items-center justify-between py-1.5 px-2 hover:bg-zinc-900/80 rounded cursor-pointer transition-colors text-zinc-300"
                 onClick={() => setUncategorizedExpanded(!uncategorizedExpanded)}
+                onContextMenu={handleContextMenuUncategorized}
               >
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
                   <span className="text-[10px] text-zinc-500 w-4 h-4 flex items-center justify-center shrink-0">
                     {uncategorizedExpanded ? '▼' : '▶'}
                   </span>
                   <span className="text-amber-400 shrink-0 text-xs">📦</span>
-                  <span className="text-xs font-bold truncate text-zinc-300">Uncategorized</span>
+                  <span className="text-xs font-bold truncate text-zinc-300">(Uncategorized)</span>
                   <span className="text-[9px] text-zinc-500 font-mono shrink-0 bg-zinc-950 px-1 py-0.5 rounded border border-zinc-800">
                     {uncategorizedRequests.length}
                   </span>
-                </div>
-
-                <div
-                  className="flex items-center gap-1 opacity-0 group-hover/folder:opacity-100 transition-opacity"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    onClick={() => onCreateRequest(null)}
-                    className="px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 rounded border border-emerald-500/30"
-                    title="Add Uncategorized Request"
-                  >
-                    + Req
-                  </button>
                 </div>
               </div>
 
@@ -374,9 +343,10 @@ export function RepeaterSidebarTree({
                           key={req.id}
                           style={{ paddingLeft: '28px' }}
                           onClick={() => onSelectRequest(req.id)}
+                          onContextMenu={(e) => handleContextMenuRequest(e, req)}
                           className={`group/req flex items-center justify-between py-1.5 pr-2 rounded cursor-pointer transition-all border-l-2 ${
                             isActive
-                              ? 'bg-purple-500/10 border-l-purple-500 text-purple-300'
+                              ? 'bg-purple-500/10 border-l-purple-500 text-purple-300 font-semibold'
                               : 'bg-transparent border-l-transparent hover:bg-zinc-900/60 hover:border-l-zinc-700 text-zinc-300'
                           }`}
                         >
@@ -389,18 +359,6 @@ export function RepeaterSidebarTree({
                               {req.method}
                             </span>
                             <span className="text-xs truncate font-medium">{req.name}</span>
-                          </div>
-                          <div
-                            className="flex items-center gap-1 opacity-0 group-hover/req:opacity-100 transition-opacity"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <button
-                              onClick={() => onDeleteRequest(req.id)}
-                              className="p-1 text-zinc-500 hover:text-rose-400"
-                              title="Delete Request"
-                            >
-                              🗑️
-                            </button>
                           </div>
                         </div>
                       );
@@ -422,19 +380,139 @@ export function RepeaterSidebarTree({
                 expandedMap={expandedMap}
                 toggleExpand={toggleExpand}
                 onSelectRequest={onSelectRequest}
-                onDeleteRequest={onDeleteRequest}
-                onCreateRequest={onCreateRequest}
-                onCreateGroup={onCreateGroup}
-                onRenameGroup={onRenameGroup}
-                onDeleteGroup={onDeleteGroup}
-                onOpenDocModal={onOpenDocModal}
-                onOpenExtractionModal={onOpenExtractionModal}
-                openPrompt={openPrompt}
+                onContextMenuFolder={handleContextMenuFolder}
+                onContextMenuRequest={handleContextMenuRequest}
               />
             ))}
           </>
         )}
       </div>
+
+      {/* Floating Right-Click Context Menu */}
+      {contextMenu && (
+        <div
+          ref={menuRef}
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className="fixed z-50 bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl py-1 w-52 text-xs text-zinc-300 font-medium animate-in fade-in zoom-in-95 duration-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contextMenu.type === 'folder' && contextMenu.targetFolder && (
+            <>
+              <div className="px-3 py-1.5 font-bold text-zinc-400 text-[10px] uppercase border-b border-zinc-800/80 truncate">
+                📁 {contextMenu.targetFolder.name}
+              </div>
+              <button
+                onClick={() => {
+                  const targetId = contextMenu.targetFolder!.id;
+                  setContextMenu(null);
+                  onCreateRequest(targetId);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-purple-500/20 hover:text-purple-300 flex items-center gap-2"
+              >
+                <span>➕</span> Add Request
+              </button>
+              <button
+                onClick={() => {
+                  const targetId = contextMenu.targetFolder!.id;
+                  setContextMenu(null);
+                  openPrompt('New Subfolder Name', '', (val) => onCreateGroup(val, targetId));
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-purple-500/20 hover:text-purple-300 flex items-center gap-2"
+              >
+                <span>📁</span> Add Subfolder
+              </button>
+              <div className="my-1 border-t border-zinc-800/80" />
+              <button
+                onClick={() => {
+                  const g = contextMenu.targetFolder!;
+                  setContextMenu(null);
+                  onOpenDocModal(g);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-purple-500/20 hover:text-purple-300 flex items-center gap-2"
+              >
+                <span>📝</span> Markdown Docs
+              </button>
+              <button
+                onClick={() => {
+                  const g = contextMenu.targetFolder!;
+                  setContextMenu(null);
+                  onOpenExtractionModal(g);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-purple-500/20 hover:text-purple-300 flex items-center gap-2"
+              >
+                <span>⚡</span> Auto Extract Rules
+              </button>
+              <button
+                onClick={() => {
+                  const g = contextMenu.targetFolder!;
+                  setContextMenu(null);
+                  onRenameGroup(g);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-purple-500/20 hover:text-purple-300 flex items-center gap-2"
+              >
+                <span>✏️</span> Rename Folder
+              </button>
+              <div className="my-1 border-t border-zinc-800/80" />
+              <button
+                onClick={() => {
+                  const g = contextMenu.targetFolder!;
+                  setContextMenu(null);
+                  onDeleteGroup(g);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-rose-500/20 text-rose-400 flex items-center gap-2"
+              >
+                <span>🗑️</span> Delete Folder
+              </button>
+            </>
+          )}
+
+          {contextMenu.type === 'request' && contextMenu.targetRequest && (
+            <>
+              <div className="px-3 py-1.5 font-bold text-zinc-400 text-[10px] uppercase border-b border-zinc-800/80 truncate">
+                {contextMenu.targetRequest.method} - {contextMenu.targetRequest.name}
+              </div>
+              <button
+                onClick={() => {
+                  const reqId = contextMenu.targetRequest!.id;
+                  setContextMenu(null);
+                  onSelectRequest(reqId);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-purple-500/20 hover:text-purple-300 flex items-center gap-2"
+              >
+                <span>⚡</span> Select & Edit
+              </button>
+              <div className="my-1 border-t border-zinc-800/80" />
+              <button
+                onClick={() => {
+                  const reqId = contextMenu.targetRequest!.id;
+                  setContextMenu(null);
+                  onDeleteRequest(reqId);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-rose-500/20 text-rose-400 flex items-center gap-2"
+              >
+                <span>🗑️</span> Delete Request
+              </button>
+            </>
+          )}
+
+          {contextMenu.type === 'uncategorized' && (
+            <>
+              <div className="px-3 py-1.5 font-bold text-zinc-400 text-[10px] uppercase border-b border-zinc-800/80 truncate">
+                📦 (Uncategorized)
+              </div>
+              <button
+                onClick={() => {
+                  setContextMenu(null);
+                  onCreateRequest(null);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-purple-500/20 hover:text-purple-300 flex items-center gap-2"
+              >
+                <span>➕</span> Add Request
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
