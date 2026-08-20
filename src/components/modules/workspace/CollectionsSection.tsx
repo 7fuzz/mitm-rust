@@ -20,6 +20,7 @@ function SortableGroupItem({
   isSelected,
   onSelect, 
   onToggleSelect,
+  onAddSubfolder,
   onRename, 
   onDelete, 
   onAssign, 
@@ -31,6 +32,7 @@ function SortableGroupItem({
   isSelected: boolean;
   onSelect: (id: string) => void; 
   onToggleSelect: (id: string) => void;
+  onAddSubfolder: (group: RepeaterGroup) => void;
   onRename: (group: RepeaterGroup) => void; 
   onDelete: (group: RepeaterGroup) => void; 
   onAssign: (group: RepeaterGroup) => void; 
@@ -77,6 +79,13 @@ function SortableGroupItem({
         </div>
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button 
+          onClick={(e) => { e.stopPropagation(); onAddSubfolder(group); }} 
+          className="px-2 py-1 text-[8px] font-black uppercase tracking-widest border border-purple-500/30 text-purple-400 bg-purple-500/10 rounded hover:border-purple-500 hover:text-purple-300 transition-all flex items-center gap-1"
+          title="Add Subfolder inside this collection"
+        >
+          <span>+ Subfolder</span>
+        </button>
         <button 
           onClick={(e) => { e.stopPropagation(); onEditDocs(group); }} 
           className="px-2 py-1 text-[8px] font-black uppercase tracking-widest border border-purple-500/30 text-purple-400 bg-purple-500/10 rounded hover:border-purple-500 hover:text-purple-300 transition-all flex items-center gap-1"
@@ -246,6 +255,7 @@ export function CollectionsSection({ selectedGroupId, setSelectedGroupId, openPr
                     isSelected={selectedGroupIds.includes(group.id)}
                     onSelect={setSelectedGroupId}
                     onToggleSelect={toggleSelectGroup}
+                    onAddSubfolder={(g: RepeaterGroup) => openPrompt('New Subfolder Name', '', (val) => createGroup(val, g.id))}
                     onRename={(g: RepeaterGroup) => openPrompt('Rename Collection', g.name, (val) => renameGroup(g.id, val))}
                     onDelete={(g: RepeaterGroup) => openConfirm('Delete Collection', `Permanently destroy "${g.name}" and all requests inside?`, () => deleteGroup(g.id))}
                     onAssign={(g: RepeaterGroup) => setAssignModal({ isOpen: true, groupId: g.id, groupName: g.name })}
