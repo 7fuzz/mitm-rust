@@ -286,13 +286,12 @@ export function useRepeater(activeEnvId?: string) {
   }, []);
 
   const deleteGroup = useCallback(async (id: string) => {
-    setRepeaterGroups(prev => prev.filter(g => g.id !== id));
-    setRepeaterRequests(prev => prev.filter(r => r.groupId !== id));
     try {
       await invoke('delete_repeater_group', { id });
       if (activeGroupId === id) switchGroup('null');
+      await refreshRepeater();
     } catch (e) { console.error(e); }
-  }, [activeGroupId, switchGroup]);
+  }, [activeGroupId, switchGroup, refreshRepeater]);
 
   const bulkDeleteGroups = useCallback(async (ids: string[]) => {
     if (!ids || ids.length === 0) return;
