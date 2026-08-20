@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
+import { detectBase64, saveBase64ToFile } from "@/lib/utils/base64Helper";
+import { Base64PreviewModal } from "../Modals/Base64PreviewModal";
 
 interface JsonViewerProps {
   label?: string;
@@ -61,6 +63,123 @@ const formatSize = (str: string): string => {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
+
+// --- Leaf Node Component for Base64 detection & Actions ---
+function Base64Actions({ value, label }: { value: string; label?: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [showInline, setShowInline] = useState(false);
+  const info = useMemo(() => detectBase64(value), [value]);
+
+  if (!info) return null;
+
+  const dataUri = `data:${info.mimeType};base64,${info.cleanB64}`;
+
+  const handleSave = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const name = label ? `${label}.${info.extension}` : `file.${info.extension}`;
+    await saveBase64ToFile(info.cleanB64, name, info.mimeType);
+  };
+
+  const isMedia = info.previewType === 'image' || info.previewType === 'audio' || info.previewType === 'video' || info.previewType === 'pdf';
+
+  return (
+    <div className="inline-flex flex-col gap-1 align-middle">
+      <span className="inline-flex items-center gap-1 ml-2 select-none shrink-0">
+        <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+          ⚡ Base64 ({info.extension.toUpperCase()})
+        </span>
+
+        {isMedia && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowInline(!showInline);
+            }}
+            className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 border ${
+              showInline
+                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white'
+            }`}
+            title="Toggle Inline Live Preview"
+          >
+            <span>{showInline ? '▼ Hide Live' : '▶ Live Preview'}</span>
+          </button>
+        )}
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsOpen(true);
+          }}
+          className="text-[10px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/30 hover:bg-sky-500/20 px-1.5 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1"
+          title="Open Full Preview Modal"
+        >
+          <span>👁️ Open</span>
+        </button>
+
+        <button
+          onClick={handleSave}
+          className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 px-1.5 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1"
+          title="Save Decoded Base64 as File"
+        >
+          <span>💾 Save</span>
+        </button>
+      </span>
+
+      {/* INLINE LIVE PREVIEW */}
+      {showInline && isMedia && (
+        <div className="my-1.5 ml-2 p-2 bg-zinc-950 border border-zinc-800 rounded-lg shadow-inner flex flex-col gap-2 max-w-md animate-in fade-in duration-150">
+          <div className="flex items-center justify-between text-[9px] font-mono text-zinc-500 border-b border-zinc-900 pb-1">
+            <span className="font-bold text-zinc-400">Live Preview ({info.mimeType})</span>
+            <button
+              onClick={() => setIsOpen(true)}
+              className="text-sky-400 hover:underline cursor-pointer"
+            >
+              Full Screen ↗
+            </button>
+          </div>
+
+          {info.previewType === 'image' && (
+            <img
+              src={dataUri}
+              alt="Live Base64 Preview"
+              className="max-h-48 max-w-full object-contain rounded border border-zinc-800 bg-zinc-900/50 p-1 cursor-pointer hover:opacity-90 transition-opacity"
+              onClick={() => setIsOpen(true)}
+              title="Click for full view"
+            />
+          )}
+
+          {info.previewType === 'audio' && (
+            <audio controls src={dataUri} className="w-full h-8" />
+          )}
+
+          {info.previewType === 'video' && (
+            <video controls src={dataUri} className="max-h-48 max-w-full rounded border border-zinc-800" />
+          )}
+
+          {info.previewType === 'pdf' && (
+            <div className="flex items-center gap-3 p-2 bg-zinc-900/50 rounded border border-zinc-800">
+              <span className="text-rose-400 font-bold text-xs">📄 PDF Document</span>
+              <button
+                onClick={() => setIsOpen(true)}
+                className="px-2.5 py-1 text-[10px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/30 rounded hover:bg-sky-500/20"
+              >
+                Open PDF Viewer
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <Base64PreviewModal
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        data={value}
+        fieldName={label || 'json_field'}
+      />
+    </div>
+  );
+}
 
 export default function JsonViewer({
   label, value, isLast = true, path,
@@ -216,6 +335,9 @@ export default function JsonViewer({
                 </>
               )}
             </button>
+          )}
+          {isString && !isRedacted && (
+            <Base64Actions value={value as string} label={label} />
           )}
           {!isLast && <span className="text-zinc-500">,</span>}
         </div>

@@ -31,48 +31,126 @@ export function UrlEditor({ method = 'GET', onMethodChange, url, onChange, urlPa
   const paramsInitialized = useRef(false);
 
   const parseUrlToStructured = useCallback((targetUrl: string, savedParams?: UrlParam[]) => {
-    try {
-      const parsed = new URL(targetUrl);
-      setDomain(parsed.origin);
+    const parseUrlString = (urlStr: string) => {
+      // Try standard URL parsing first if no template brackets exist in domain
+      if (!urlStr.includes('{{')) {
+        try {
+          const parsed = new URL(urlStr);
+          const pSegments = parsed.pathname.split('/').filter(p => p !== '');
+          const qParams: { k: string; v: string }[] = [];
+          parsed.searchParams.forEach((v, k) => qParams.push({ k, v }));
+          return {
+            domain: parsed.origin,
+            paths: pSegments,
+            queryParams: qParams,
+            fragment: parsed.hash.replace('#', '')
+          };
+        } catch {
+          // Fall through to template-aware manual parsing
+        }
+      }
 
-      const pathSegments = parsed.pathname
-        .split('/')
-        .filter(p => p !== '')
-        .map(v => ({ id: crypto.randomUUID(), v }));
-      setPaths(pathSegments);
+      // Template-aware manual parsing for URLs with {{var}} placeholders
+      let working = urlStr;
+      let fragment = '';
+      const queryParams: { k: string; v: string }[] = [];
 
-      if (savedParams && savedParams.length > 0) {
-        // Use saved params (includes disabled ones), but merge any new params from URL
-        const urlSearchParams: { k: string; v: string }[] = [];
-        parsed.searchParams.forEach((v, k) => urlSearchParams.push({ k, v }));
+      // 1. Extract Hash (#)
+      const hashIdx = working.indexOf('#');
+      if (hashIdx !== -1) {
+        fragment = working.substring(hashIdx + 1);
+        working = working.substring(0, hashIdx);
+      }
 
-        // Start with saved params, then add any URL params that don't exist in saved
-        const merged = [...savedParams];
-        urlSearchParams.forEach(up => {
-          const exists = merged.some(sp => sp.k === up.k && sp.v === up.v && sp.enabled);
-          if (!exists) {
-            // Check if there's a disabled param with same key - don't duplicate
-            const disabledMatch = merged.find(sp => sp.k === up.k && !sp.enabled);
-            if (!disabledMatch) {
-              merged.push({ id: crypto.randomUUID(), k: up.k, v: up.v, enabled: true });
+      // 2. Extract Query String (?)
+      const queryIdx = working.indexOf('?');
+      if (queryIdx !== -1) {
+        const qStr = working.substring(queryIdx + 1);
+        working = working.substring(0, queryIdx);
+        if (qStr) {
+          qStr.split('&').forEach(part => {
+            if (!part) return;
+            const eqIdx = part.indexOf('=');
+            if (eqIdx !== -1) {
+              const k = part.substring(0, eqIdx);
+              const v = part.substring(eqIdx + 1);
+              queryParams.push({ k, v });
+            } else {
+              queryParams.push({ k: part, v: '' });
             }
+          });
+        }
+      }
+
+      // 3. Separate Base Domain & Path Segments
+      let domain = '';
+      let pathStr = working;
+
+      const schemeMatch = working.match(/^([a-zA-Z0-9+.-]+|\{\{[^}]+\}\}):\/\//);
+      if (schemeMatch) {
+        const scheme = schemeMatch[0];
+        const rest = working.substring(scheme.length);
+        const slashIdx = rest.indexOf('/');
+        if (slashIdx !== -1) {
+          domain = scheme + rest.substring(0, slashIdx);
+          pathStr = rest.substring(slashIdx);
+        } else {
+          domain = scheme + rest;
+          pathStr = '';
+        }
+      } else if (working.startsWith('{{')) {
+        const slashIdx = working.indexOf('/');
+        if (slashIdx !== -1) {
+          domain = working.substring(0, slashIdx);
+          pathStr = working.substring(slashIdx);
+        } else {
+          domain = working;
+          pathStr = '';
+        }
+      } else {
+        if (working.startsWith('/')) {
+          domain = '';
+          pathStr = working;
+        } else {
+          const slashIdx = working.indexOf('/');
+          if (slashIdx !== -1) {
+            domain = working.substring(0, slashIdx);
+            pathStr = working.substring(slashIdx);
+          } else {
+            domain = working;
+            pathStr = '';
           }
-        });
-        setParams(merged);
-      } else {
-        const p: UrlParam[] = [];
-        parsed.searchParams.forEach((v, k) => p.push({ id: crypto.randomUUID(), k, v, enabled: true }));
-        setParams(p);
+        }
       }
-      setFragment(parsed.hash.replace('#', ''));
-    } catch (_err) {
-      if (savedParams && savedParams.length > 0) {
-        setParams(savedParams);
-      } else {
-        setParams([]);
-      }
-      setDomain(targetUrl); setPaths([]); setFragment('');
+
+      const paths = pathStr.split('/').filter(p => p !== '');
+      return { domain, paths, queryParams, fragment };
+    };
+
+    const parsed = parseUrlString(targetUrl);
+    setDomain(parsed.domain);
+
+    const pathSegments = parsed.paths.map(v => ({ id: crypto.randomUUID(), v }));
+    setPaths(pathSegments);
+
+    if (savedParams && savedParams.length > 0) {
+      // Use saved params (includes disabled ones), but merge any new params from URL
+      const merged = [...savedParams];
+      parsed.queryParams.forEach(up => {
+        const exists = merged.some(sp => sp.k === up.k && sp.v === up.v && sp.enabled);
+        if (!exists) {
+          const disabledMatch = merged.find(sp => sp.k === up.k && !sp.enabled);
+          if (!disabledMatch) {
+            merged.push({ id: crypto.randomUUID(), k: up.k, v: up.v, enabled: true });
+          }
+        }
+      });
+      setParams(merged);
+    } else {
+      const p: UrlParam[] = parsed.queryParams.map(up => ({ id: crypto.randomUUID(), k: up.k, v: up.v, enabled: true }));
+      setParams(p);
     }
+    setFragment(parsed.fragment);
   }, []);
 
   if (url !== prevUrl && url !== lastGeneratedUrl.current) {

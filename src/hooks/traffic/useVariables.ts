@@ -130,13 +130,16 @@ export function useVariables(prefs?: { autoSave: boolean }) {
     setEnvironments(prev => prev.map(e => e.id === id ? { ...e, name } : e));
   }, []);
 
-  const deleteEnvironment = useCallback(async (id: string) => {
+  const deleteEnvironment = useCallback(async (id: string, deleteLinkedCollections?: boolean, refreshRepeater?: () => Promise<void>) => {
     if (id === 'default-env-id') return;
     setEnvironments(prev => prev.filter(e => e.id !== id));
     setVariables(prev => prev.filter(v => v.environmentId !== id)); // Local cascade
     try {
-      await invoke('delete_environment', { id });
-      if (activeEnvId === id) setActiveEnvironment('default-env-id');
+      await invoke('delete_environment', { id, deleteLinkedCollections: !!deleteLinkedCollections });
+      const data = await invoke<SyncData>('sync_data');
+      setVariables(data.variables);
+      if (activeEnvId === id) await setActiveEnvironment('default-env-id');
+      if (refreshRepeater) await refreshRepeater();
     } catch (e) { console.error(e); }
   }, [activeEnvId, setActiveEnvironment]);
 

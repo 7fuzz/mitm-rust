@@ -10,6 +10,7 @@ import { useNotification } from '../ui/NotificationProvider';
 import { Button, useDialog } from '../ui';
 import { invoke } from '@/lib/utils/tauri';
 import { TrafficFilterModal } from '../Modals/TrafficFilterModal';
+import { buildCurlCommand } from '@/lib/utils/interpolation';
 
 // === NEW: HTTP Formatters for the Viewer ===
 const buildRawRequestMessage = (req: Traffic) => {
@@ -39,7 +40,8 @@ export function HistoryView() {
     uiLayout, updateUILayout,
     refreshRepeater, setRepeaterSelectedId,
     applyAllReplacements,
-    simpleMode, prefs
+    simpleMode, prefs,
+    variables, activeEnvId
   } = useTraffic();
 
   const { notify } = useNotification();
@@ -154,8 +156,16 @@ export function HistoryView() {
 
   const copyAsCurl = () => {
     if (!selectedReq) return;
-    const curl = `curl -X ${selectedReq.method} '${selectedReq.url}' ${(selectedReq.request_headers || []).map(([k, v]) => `-H '${k}: ${v}'`).join(' ')}`;
+    const curl = buildCurlCommand(
+      selectedReq.method,
+      selectedReq.url,
+      selectedReq.request_headers || [],
+      selectedReq.request_body || '',
+      variables,
+      activeEnvId
+    );
     navigator.clipboard.writeText(curl);
+    notify.success('cURL command copied to clipboard');
   };
 
   useHotkeys([

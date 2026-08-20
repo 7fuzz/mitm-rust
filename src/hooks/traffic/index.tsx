@@ -55,7 +55,8 @@ function useTrafficState() {
       trafficData.setTraffic(data.history || []);
       repeater._setRawGroups(data.repeaterGroups || []);
       repeater._setRawRepeater(data.repeaterRequests || []);
-      variables.loadVariables(data.variables || [], data.environments || [], data.environments?.find(e => e.is_active)?.id || data.environments?.[0]?.id || 'default-env-id');
+      const resolvedActiveEnvId = data.activeEnvId || data.environments?.find(e => e.is_active)?.id || data.environments?.[0]?.id || 'default-env-id';
+      variables.loadVariables(data.variables || [], data.environments || [], resolvedActiveEnvId);
       
       if (data.prefs) config.initConfig.setPrefs(data.prefs);
       if (data.uiLayout) config.initConfig.setUiLayout(data.uiLayout as any);
