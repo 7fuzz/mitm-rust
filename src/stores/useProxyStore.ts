@@ -5,12 +5,48 @@ import {
   updateInterceptConfig,
   updateFilterConfig,
   resumeFlow,
-  clearHttpHistory,
   isTauriAvailable,
 } from '../services/tauri/ipc';
-import { subscribeTrafficCaptured, getHistoryLogs } from '../services/tauri/bridge';
+import { subscribeTrafficCaptured, getHistoryLogs, clearHistoryLogs } from '../services/tauri/bridge';
 
+const mapHeaders = (headers: any): { key: string; value: string }[] => {
+  if (!headers) return [];
+  if (Array.isArray(headers)) {
+    return headers.map((h: any) => {
+      if (Array.isArray(h) && h.length >= 2) {
+        return { key: String(h[0]), value: String(h[1]) };
+      }
+      if (typeof h === 'object' && h !== null && 'key' in h) {
+        return { key: String(h.key), value: String(h.value) };
+      }
+      return { key: String(h), value: '' };
+    });
+  }
+  return [];
+};
 
+export const mapHistoryEntryToTrafficItem = (item: any): TrafficItem => {
+  const reqHeaders = mapHeaders(item.requestHeaders || item.request_headers);
+  const resHeaders = mapHeaders(item.responseHeaders || item.response_headers);
+
+  return {
+    id: String(item.id),
+    method: item.method || 'GET',
+    host: item.host || '',
+    path: item.path || item.url || '/',
+    url: item.url || '',
+    statusCode: item.statusCode ?? item.status_code ?? 200,
+    contentType: item.contentType || item.content_type || 'text/plain',
+    size: item.responseSize ?? item.size ?? 0,
+    durationMs: item.durationMs ?? item.duration_ms ?? 0,
+    timestamp: item.createdAt ? Date.parse(item.createdAt) : item.timestamp || Date.now(),
+    requestHeaders: reqHeaders,
+    responseHeaders: resHeaders,
+    requestBody: item.requestBody ?? item.request_body ?? '',
+    responseBody: item.responseBody ?? item.response_body ?? '',
+    isIntercepted: item.isIntercepted || item.is_intercepted || false,
+  };
+};
 
 const SAMPLE_TRAFFIC: TrafficItem[] = [
   {
@@ -54,94 +90,6 @@ const SAMPLE_TRAFFIC: TrafficItem[] = [
       },
     }, null, 2),
     ip: '140.82.121.4',
-  },
-  {
-    id: 'req-102',
-    method: 'GET',
-    host: 'auth.internal.dev',
-    path: '/api/v1/user/session',
-    url: 'https://auth.internal.dev/api/v1/user/session',
-    statusCode: 401,
-    contentType: 'application/json',
-    size: 320,
-    durationMs: 32,
-    timestamp: Date.now() - 18000,
-    requestHeaders: [
-      { key: 'Host', value: 'auth.internal.dev' },
-      { key: 'Accept', value: 'application/json' },
-      { key: 'Cookie', value: 'session_id=expired_token_993' },
-    ],
-    requestBody: '',
-    responseHeaders: [
-      { key: 'HTTP/1.1', value: '401 Unauthorized' },
-      { key: 'Content-Type', value: 'application/json' },
-      { key: 'WWW-Authenticate', value: 'Bearer error="invalid_token"' },
-    ],
-    responseBody: JSON.stringify({ error: 'unauthorized', message: 'JWT signature expired at 2026-08-25T08:00:00Z' }, null, 2),
-    ip: '10.0.1.42',
-  },
-  {
-    id: 'req-103',
-    method: 'PUT',
-    host: 'payment.stripe.internal',
-    path: '/v1/charges/ch_3M492049281',
-    url: 'https://payment.stripe.internal/v1/charges/ch_3M492049281',
-    statusCode: 200,
-    contentType: 'application/json',
-    size: 2048,
-    durationMs: 142,
-    timestamp: Date.now() - 25000,
-    requestHeaders: [
-      { key: 'Host', value: 'payment.stripe.internal' },
-      { key: 'Authorization', value: 'Bearer sk_test_51Mz029481029' },
-      { key: 'Content-Type', value: 'application/x-www-form-urlencoded' },
-    ],
-    requestBody: 'amount=25000&currency=usd&metadata%5Border_id%5D=9482',
-    responseHeaders: [
-      { key: 'HTTP/1.1', value: '200 OK' },
-      { key: 'Content-Type', value: 'application/json' },
-      { key: 'Stripe-Version', value: '2024-06-20' },
-    ],
-    responseBody: JSON.stringify({
-      id: 'ch_3M492049281',
-      object: 'charge',
-      amount: 25000,
-      currency: 'usd',
-      paid: true,
-      status: 'succeeded',
-    }, null, 2),
-    ip: '34.210.12.9',
-  },
-  {
-    id: 'req-104',
-    method: 'DELETE',
-    host: 'api.kubernetes.local',
-    path: '/api/v1/namespaces/staging/pods/web-frontend-847291',
-    url: 'https://api.kubernetes.local/api/v1/namespaces/staging/pods/web-frontend-847291',
-    statusCode: 500,
-    contentType: 'application/json',
-    size: 412,
-    durationMs: 290,
-    timestamp: Date.now() - 40000,
-    requestHeaders: [
-      { key: 'Host', value: 'api.kubernetes.local' },
-      { key: 'Authorization', value: 'Bearer kube_token_sec_49182' },
-    ],
-    requestBody: '',
-    responseHeaders: [
-      { key: 'HTTP/1.1', value: '500 Internal Server Error' },
-      { key: 'Content-Type', value: 'application/json' },
-    ],
-    responseBody: JSON.stringify({
-      kind: 'Status',
-      apiVersion: 'v1',
-      metadata: {},
-      status: 'Failure',
-      message: 'etcd server leader changed during deletion transaction',
-      reason: 'InternalError',
-      code: 500,
-    }, null, 2),
-    ip: '172.16.0.1',
   },
 ];
 
@@ -211,49 +159,14 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
     { id: 'rule-1', target: 'domain', pattern: '*.stripe.internal', action: 'intercept', enabled: true },
     { id: 'rule-2', target: 'path', pattern: '/api/v1/auth/*', action: 'intercept', enabled: true },
   ],
-  pendingQueue: [
-    {
-      id: 'flow-pending-1',
-      timestamp: Date.now(),
-      method: 'POST',
-      url: 'https://payment.stripe.internal/v1/refunds',
-      direction: 'request',
-      headers: [
-        { key: 'Host', value: 'payment.stripe.internal' },
-        { key: 'Authorization', value: 'Bearer sk_test_99218274198' },
-        { key: 'Content-Type', value: 'application/json' },
-      ],
-      body: JSON.stringify({ charge_id: 'ch_3M492049281', amount: 5000, reason: 'requested_by_customer' }, null, 2),
-      originalItem: {
-        host: 'payment.stripe.internal',
-        path: '/v1/refunds',
-      },
-    },
-  ],
+  pendingQueue: [],
 
   initStore: async () => {
     if (isTauriAvailable()) {
       try {
-        const historyLogs = await getHistoryLogs();
+        const historyLogs = await getHistoryLogs(1, 1000);
         if (historyLogs && historyLogs.length > 0) {
-          const mapped: TrafficItem[] = historyLogs.map((item) => ({
-            id: String(item.id),
-            method: item.method,
-            host: item.host,
-            path: item.url,
-            url: item.url,
-            statusCode: item.statusCode,
-            contentType: 'application/json',
-            size: 0,
-            durationMs: item.durationMs || 0,
-            timestamp: Date.parse(item.createdAt) || Date.now(),
-            requestHeaders: [],
-            responseHeaders: [],
-            requestBody: '',
-            responseBody: '',
-            phase: 'response',
-            isIntercepted: false,
-          }));
+          const mapped = historyLogs.map(mapHistoryEntryToTrafficItem);
           set({ traffic: mapped, selectedTrafficId: mapped[0]?.id || null });
         }
       } catch (e) {
@@ -261,14 +174,14 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
       }
     }
 
-
     // Subscribe to live captured traffic from Rust backend
     subscribeTrafficCaptured((event: any) => {
-      if (event?.entry) {
-        get().addTrafficItem(event.entry);
+      const raw = event?.entry || event;
+      if (raw && raw.id) {
+        const mappedItem = mapHistoryEntryToTrafficItem(raw);
+        get().addTrafficItem(mappedItem);
       }
     });
-
   },
 
   setProxyMode: async (mode) => {
@@ -295,7 +208,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
 
   clearTraffic: async () => {
     try {
-      await clearHttpHistory();
+      await clearHistoryLogs();
     } catch (e) {
       console.warn('Failed to clear backend history via IPC');
     }
@@ -368,32 +281,32 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   forwardPendingFlow: async (id, modifiedBody, modifiedHeaders) => {
     try {
       await resumeFlow(id, { action: 'forward', modifiedBody, modifiedHeaders });
-    } catch (e) {
-      console.warn('Flow resumed via mock/local action');
+      set((state) => ({
+        pendingQueue: state.pendingQueue.filter((p) => p.id !== id),
+      }));
+    } catch (err) {
+      console.error('Failed to forward pending flow:', err);
     }
-    set((state) => ({
-      pendingQueue: state.pendingQueue.filter((f) => f.id !== id),
-    }));
   },
 
   dropPendingFlow: async (id) => {
     try {
       await resumeFlow(id, { action: 'drop' });
-    } catch (e) {
-      console.warn('Flow dropped via mock/local action');
+      set((state) => ({
+        pendingQueue: state.pendingQueue.filter((p) => p.id !== id),
+      }));
+    } catch (err) {
+      console.error('Failed to drop pending flow:', err);
     }
-    set((state) => ({
-      pendingQueue: state.pendingQueue.filter((f) => f.id !== id),
-    }));
   },
 
   forwardAllPending: async () => {
-    const flows = get().pendingQueue;
-    for (const flow of flows) {
+    const pending = get().pendingQueue;
+    for (const flow of pending) {
       try {
         await resumeFlow(flow.id, { action: 'forward' });
-      } catch (e) {
-        // ignore
+      } catch (err) {
+        console.error('Failed to forward pending flow:', flow.id, err);
       }
     }
     set({ pendingQueue: [] });
