@@ -10,6 +10,9 @@ export const HistoryViewer: React.FC = () => {
     methodFilter,
     selectedLogUuid,
     selectedLogDetail,
+    limiterEnabled,
+    maxRows,
+    settingsModalOpen,
     isLoading,
     fetchLogs,
     setSearchTerm,
@@ -17,16 +20,33 @@ export const HistoryViewer: React.FC = () => {
     selectLog,
     clearLogs,
     fetchProxyStatus,
+    fetchHistorySettings,
+    setHistoryLimiter,
+    setSettingsModalOpen,
     initSubscription,
   } = useHistoryStore();
 
   const [activeDetailTab, setActiveDetailTab] = useState<"request" | "response">("request");
+  const [tempLimiterEnabled, setTempLimiterEnabled] = useState(limiterEnabled);
+  const [tempMaxRows, setTempMaxRows] = useState(maxRows);
 
   useEffect(() => {
     fetchProxyStatus();
+    fetchHistorySettings();
     fetchLogs();
     initSubscription();
   }, []);
+
+  useEffect(() => {
+    setTempLimiterEnabled(limiterEnabled);
+    setTempMaxRows(maxRows);
+  }, [limiterEnabled, maxRows]);
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await setHistoryLimiter(tempLimiterEnabled, tempMaxRows);
+    setSettingsModalOpen(false);
+  };
 
   const formatBytes = (bytes: number) => {
     if (!bytes || bytes === 0) return "0 B";
@@ -79,6 +99,20 @@ export const HistoryViewer: React.FC = () => {
 
           {/* Proxy Power Control Button with Overlay */}
           <ProxyPowerButton />
+
+          {/* History Rotation Limiter Badge & Button */}
+          <button
+            onClick={() => setSettingsModalOpen(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all border ${
+              limiterEnabled
+                ? "bg-indigo-500/10 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/20"
+                : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700"
+            }`}
+            title="Configure History Log Rotation Limiter"
+          >
+            <MingCuteIcon name="storage_line" size={13} className={limiterEnabled ? "text-indigo-400" : "text-zinc-500"} />
+            <span>Limit: {limiterEnabled ? `${maxRows} max` : "Disabled"}</span>
+          </button>
         </div>
 
         {/* Filter Controls & Search */}
@@ -324,6 +358,104 @@ export const HistoryViewer: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* History Log Rotation Limiter Settings Modal */}
+      {settingsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={handleSaveSettings} className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full p-5 shadow-2xl flex flex-col space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <MingCuteIcon name="storage_line" size={18} className="text-indigo-400" />
+                <h2 className="text-sm font-bold text-zinc-100">History Log Rotation Settings</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSettingsModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                <MingCuteIcon name="close_line" size={18} />
+              </button>
+            </div>
+
+            {/* Toggle Enable Limiter */}
+            <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-lg border border-zinc-800">
+              <div>
+                <div className="text-xs font-semibold text-zinc-200">Automatic Rotation Limiter</div>
+                <div className="text-[11px] text-zinc-400 mt-0.5">
+                  Enforces maximum row count in SQLite database.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTempLimiterEnabled(!tempLimiterEnabled)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                  tempLimiterEnabled ? "bg-indigo-500" : "bg-zinc-700"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    tempLimiterEnabled ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Max Records Input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-zinc-300 flex items-center justify-between">
+                <span>Maximum Stored Records</span>
+                <span className="text-[11px] text-indigo-400 font-mono">{tempMaxRows} rows</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={50}
+                  max={50000}
+                  step={50}
+                  disabled={!tempLimiterEnabled}
+                  value={tempMaxRows}
+                  onChange={(e) => setTempMaxRows(Math.max(1, parseInt(e.target.value) || 500))}
+                  className="flex-1 bg-zinc-950 border border-zinc-800 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-xs text-zinc-200 outline-none font-mono disabled:opacity-40"
+                />
+                <select
+                  disabled={!tempLimiterEnabled}
+                  value={[100, 250, 500, 1000, 2500, 5000].includes(tempMaxRows) ? tempMaxRows : "custom"}
+                  onChange={(e) => {
+                    if (e.target.value !== "custom") {
+                      setTempMaxRows(parseInt(e.target.value));
+                    }
+                  }}
+                  className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 outline-none cursor-pointer disabled:opacity-40"
+                >
+                  <option value={100}>100 rows</option>
+                  <option value={250}>250 rows</option>
+                  <option value={500}>500 rows (Default)</option>
+                  <option value={1000}>1,000 rows</option>
+                  <option value={2500}>2,500 rows</option>
+                  <option value={5000}>5,000 rows</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setSettingsModalOpen(false)}
+                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-lg transition-colors shadow-sm"
+              >
+                Save Settings
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 };
