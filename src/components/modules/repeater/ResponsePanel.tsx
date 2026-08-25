@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { RepeaterHistoryItem, RepeaterExecutionResult } from '../../../services/tauri/bridge';
 import { StatusBadge } from '../../common/StatusBadge';
 import { CodeEditor } from '../../common/CodeEditor';
@@ -13,7 +13,19 @@ interface ResponsePanelProps {
 export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
   const [activeTab, setActiveTab] = useState<'body' | 'headers'>('body');
   const [bodyFormat, setBodyFormat] = useState<'pretty' | 'raw' | 'hex' | 'html'>('pretty');
-  const [copied, setCopied] = useState(false);
+  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+  const [copyNotification, setCopyNotification] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setCopyMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   if (!response) {
     return (
@@ -37,11 +49,35 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const showNotification = (msg: string) => {
+    setCopyNotification(msg);
+    setCopyMenuOpen(false);
+    setTimeout(() => setCopyNotification(null), 1800);
+  };
+
   const handleCopyBody = () => {
     if (!responseBody) return;
     navigator.clipboard.writeText(responseBody);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    showNotification('Copied Body!');
+  };
+
+  const handleCopyHeaders = () => {
+    const statusLine = `HTTP/1.1 ${response.statusCode} ${statusText}`.trim();
+    const rawHeaders = (responseHeaders || [])
+      .map((h) => `${h.key}: ${h.value}`)
+      .join('\n');
+    navigator.clipboard.writeText(`${statusLine}\n${rawHeaders}`);
+    showNotification('Copied Headers!');
+  };
+
+  const handleCopyAll = () => {
+    const statusLine = `HTTP/1.1 ${response.statusCode} ${statusText}`.trim();
+    const rawHeaders = (responseHeaders || [])
+      .map((h) => `${h.key}: ${h.value}`)
+      .join('\n');
+    const fullRes = `${statusLine}\n${rawHeaders}${responseBody ? `\n\n${responseBody}` : ''}`;
+    navigator.clipboard.writeText(fullRes);
+    showNotification('Copied Full Response!');
   };
 
   const renderBodyContent = () => {
@@ -59,7 +95,6 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
         const prettyJson = JSON.stringify(parsed, null, 2);
         return <CodeEditor value={prettyJson} language="json" readOnly />;
       } catch (e) {
-        // Fallback for HTML/Plaintext if JSON parsing fails
         if (responseBody.trim().startsWith('<')) {
           return <CodeEditor value={responseBody} language="html" readOnly />;
         }
@@ -118,9 +153,10 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
         </div>
       </div>
 
-      {/* Format Selector Bar for Body View */}
-      {activeTab === 'body' && (
-        <div className="px-3 py-1.5 bg-surface/80 border-b border-border/80 flex items-center justify-between shrink-0 font-mono text-[11px]">
+      {/* Format Selector Bar & Copy Response Dropdown */}
+      <div className="px-3 py-1.5 bg-surface/80 border-b border-border/80 flex items-center justify-between shrink-0 font-mono text-[11px]">
+        {/* Format selectors (active in Body tab) */}
+        {activeTab === 'body' ? (
           <div className="flex items-center gap-1 bg-background/60 p-0.5 rounded border border-border/60">
             {(['pretty', 'raw', 'hex', 'html'] as const).map((fmt) => (
               <button
@@ -136,18 +172,50 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
               </button>
             ))}
           </div>
+        ) : (
+          <div className="text-muted-foreground text-[11px]">Response Headers</div>
+        )}
 
+        {/* Copy Response Actions Dropdown */}
+        <div className="relative" ref={menuRef}>
           <button
-            onClick={handleCopyBody}
-            disabled={!responseBody}
-            className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-40"
-            title="Copy Response Body"
+            onClick={() => setCopyMenuOpen(!copyMenuOpen)}
+            className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs font-medium"
+            title="Copy Response Options"
           >
-            <MingCuteIcon name={copied ? 'check_line' : 'copy_line'} size={13} className={copied ? 'text-emerald-400' : ''} />
-            <span>{copied ? 'Copied!' : 'Copy'}</span>
+            <MingCuteIcon name={copyNotification ? 'check_line' : 'copy_line'} size={13} className={copyNotification ? 'text-emerald-400' : ''} />
+            <span>{copyNotification || 'Copy Response'}</span>
+            <MingCuteIcon name="down_line" size={12} className="opacity-60" />
           </button>
+
+          {copyMenuOpen && (
+            <div className="absolute right-0 mt-1 w-44 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
+              <button
+                onClick={handleCopyBody}
+                disabled={!responseBody}
+                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-40"
+              >
+                <MingCuteIcon name="file_text_line" size={14} className="text-primary" />
+                <span>Copy Body</span>
+              </button>
+              <button
+                onClick={handleCopyHeaders}
+                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <MingCuteIcon name="list_check_line" size={14} className="text-emerald-400" />
+                <span>Copy Headers</span>
+              </button>
+              <button
+                onClick={handleCopyAll}
+                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
+              >
+                <MingCuteIcon name="copy_line" size={14} className="text-amber-400" />
+                <span>Copy All (Full Res)</span>
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Response Panel Main Content */}
       <div className="flex-1 p-2 overflow-hidden">

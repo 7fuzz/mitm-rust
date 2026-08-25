@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { RepeaterTab } from '../../../services/tauri/bridge';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
@@ -23,8 +23,63 @@ const METHOD_OPTIONS = [
 export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
   const { updateTab, executeActiveRequest, isExecuting, toggleHistoryDrawer } = useRepeaterStore();
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auto-extract'>('body');
+  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+  const [copyNotification, setCopyNotification] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const executing = isExecuting[request.id] || false;
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setCopyMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const showNotification = (msg: string) => {
+    setCopyNotification(msg);
+    setCopyMenuOpen(false);
+    setTimeout(() => setCopyNotification(null), 1800);
+  };
+
+  const handleCopyBody = () => {
+    const body = request.bodyContent || '';
+    navigator.clipboard.writeText(body);
+    showNotification('Copied Body!');
+  };
+
+  const handleCopyHeaders = () => {
+    const rawHeaders = (request.headers || [])
+      .filter((h) => h.enabled && h.key.trim())
+      .map((h) => `${h.key}: ${h.value}`)
+      .join('\n');
+    navigator.clipboard.writeText(rawHeaders);
+    showNotification('Copied Headers!');
+  };
+
+  const handleCopyAll = () => {
+    const rawHeaders = (request.headers || [])
+      .filter((h) => h.enabled && h.key.trim())
+      .map((h) => `${h.key}: ${h.value}`)
+      .join('\n');
+    const fullReq = `${request.method} ${request.url}\n${rawHeaders}${request.bodyContent ? `\n\n${request.bodyContent}` : ''}`;
+    navigator.clipboard.writeText(fullReq);
+    showNotification('Copied Full Request!');
+  };
+
+  const handleCopyCurl = () => {
+    const headersStr = (request.headers || [])
+      .filter((h) => h.enabled && h.key.trim())
+      .map((h) => `-H '${h.key}: ${h.value}'`)
+      .join(' ');
+    const bodyStr = request.bodyContent ? `-d '${request.bodyContent.replace(/'/g, "'\\''")}'` : '';
+    const curlCmd = `curl -X ${request.method} '${request.url}' ${headersStr} ${bodyStr}`.trim();
+    navigator.clipboard.writeText(curlCmd);
+    showNotification('Copied as cURL!');
+  };
 
   const handleMethodChange = (method: string) => {
     updateTab({ ...request, method });
@@ -89,7 +144,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         </button>
       </div>
 
-      {/* Request Config Tabs */}
+      {/* Request Config Tabs & Copy Dropdown */}
       <div className="bg-header border-b border-border px-3 py-1 flex items-center justify-between shrink-0 select-none">
         <div className="flex items-center gap-2">
           {(['params', 'headers', 'body', 'auto-extract'] as const).map((tab) => (
@@ -105,6 +160,52 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
               {tab === 'auto-extract' ? 'Auto-Extract' : tab}
             </button>
           ))}
+        </div>
+
+        {/* Copy Request Actions Dropdown */}
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setCopyMenuOpen(!copyMenuOpen)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-background hover:bg-neutral-subtle border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs font-medium"
+            title="Copy Request Options"
+          >
+            <MingCuteIcon name={copyNotification ? 'check_line' : 'copy_line'} size={13} className={copyNotification ? 'text-emerald-400' : ''} />
+            <span>{copyNotification || 'Copy Request'}</span>
+            <MingCuteIcon name="down_line" size={12} className="opacity-60" />
+          </button>
+
+          {copyMenuOpen && (
+            <div className="absolute right-0 mt-1 w-44 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
+              <button
+                onClick={handleCopyBody}
+                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <MingCuteIcon name="file_text_line" size={14} className="text-primary" />
+                <span>Copy Body</span>
+              </button>
+              <button
+                onClick={handleCopyHeaders}
+                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <MingCuteIcon name="list_check_line" size={14} className="text-emerald-400" />
+                <span>Copy Headers</span>
+              </button>
+              <button
+                onClick={handleCopyAll}
+                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
+              >
+                <MingCuteIcon name="copy_line" size={14} className="text-amber-400" />
+                <span>Copy All (Full Req)</span>
+              </button>
+              <button
+                onClick={handleCopyCurl}
+                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <MingCuteIcon name="code_line" size={14} className="text-blue-400" />
+                <span>Copy as cURL</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -123,36 +224,32 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
           <KeyValueEditor
             items={request.headers || []}
             onChange={(headers) => updateTab({ ...request, headers })}
-            keyPlaceholder="Header Name"
-            valuePlaceholder="Header Value"
+            keyPlaceholder="Header Name (e.g. Authorization)"
+            valuePlaceholder="Header Value (e.g. Bearer token)"
           />
         )}
 
         {activeTab === 'body' && (
-          <div className="h-full flex flex-col gap-2">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-muted-foreground">Body Type:</span>
-              {(['none', 'json', 'raw'] as const).map((bType) => (
-                <label key={bType} className="flex items-center gap-1 cursor-pointer">
-                  <input
-                    type="radio"
-                    name={`bodyType-${request.id}`}
-                    checked={request.bodyType === bType}
-                    onChange={() => updateTab({ ...request, bodyType: bType })}
-                    className="text-primary"
-                  />
-                  <span className="capitalize font-mono">{bType}</span>
-                </label>
-              ))}
+          <div className="h-full flex flex-col overflow-hidden">
+            <div className="flex items-center gap-2 mb-2">
+              <Select
+                value={request.bodyType}
+                onChange={(e) => updateTab({ ...request, bodyType: e.target.value })}
+                options={[
+                  { value: 'none', label: 'None' },
+                  { value: 'json', label: 'JSON' },
+                  { value: 'raw', label: 'Raw Text' },
+                  { value: 'form', label: 'Form Data' },
+                ]}
+                sizeVariant="xs"
+              />
             </div>
-
             {request.bodyType !== 'none' && (
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-hidden border border-border rounded">
                 <CodeEditor
                   value={request.bodyContent || ''}
                   onChange={(bodyContent) => updateTab({ ...request, bodyContent })}
                   language={request.bodyType === 'json' ? 'json' : 'plaintext'}
-                  readOnly={false}
                 />
               </div>
             )}
@@ -160,31 +257,8 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         )}
 
         {activeTab === 'auto-extract' && (
-          <div className="space-y-3">
-            <span className="font-semibold text-foreground block">Variable Auto-Extraction Rules</span>
-            <p className="text-muted-foreground text-xs">
-              Configure JSONPath or Regex extractions to automatically populate variables upon response.
-            </p>
-            <div className="border border-border rounded overflow-hidden">
-              <table className="w-full text-left font-mono text-xs">
-                <thead className="bg-header border-b border-border text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-1.5">Type</th>
-                    <th className="px-3 py-1.5">Expression</th>
-                    <th className="px-3 py-1.5">Target Variable</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border bg-surface">
-                  {(request.extractRules || []).map((rule, idx) => (
-                    <tr key={rule.id || idx}>
-                      <td className="px-3 py-1.5 uppercase font-bold text-primary">{rule.type}</td>
-                      <td className="px-3 py-1.5">{rule.expression}</td>
-                      <td className="px-3 py-1.5 text-emerald-500 font-bold">{`{{${rule.targetVariable}}}`}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="text-muted-foreground p-4 text-center italic text-xs">
+            Auto-Extraction Rules for dynamic variables will appear here.
           </div>
         )}
       </div>
