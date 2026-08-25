@@ -52,13 +52,14 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   loadingDetail: false,
   autoScroll: true,
   proxyConfig: {
-    proxyEnabled: false,
+    proxyEnabled: true,
     interceptEnabled: false,
     interceptMode: "both",
-    proxyMode: "off",
+    proxyMode: "on",
     port: 8080,
     host: "127.0.0.1",
   },
+
   isLoading: false,
   unsubFn: null,
 
