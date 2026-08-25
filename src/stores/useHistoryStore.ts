@@ -6,7 +6,7 @@ import {
   getHistoryLogs,
   getHistoryDetail,
   clearHistoryLogs,
-  getProxyStatus,
+  getProxyState,
   toggleProxy,
   subscribeTrafficCaptured,
 } from "../services/tauri/bridge";
@@ -51,7 +51,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   selectedLogDetail: null,
   loadingDetail: false,
   autoScroll: true,
-  proxyConfig: { port: 8080, host: "127.0.0.1", isRunning: false },
+  proxyConfig: { proxyEnabled: false, interceptEnabled: false, interceptMode: "both", port: 8080, host: "127.0.0.1" },
   isLoading: false,
   unsubFn: null,
 
@@ -114,7 +114,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   fetchProxyStatus: async () => {
     try {
-      const config = await getProxyStatus();
+      const config = await getProxyState();
       set({ proxyConfig: config });
     } catch (e) {
       console.error("Failed to fetch proxy status:", e);
@@ -123,7 +123,8 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   toggleProxyServer: async () => {
     try {
-      const config = await toggleProxy();
+      const current = get().proxyConfig.proxyEnabled;
+      const config = await toggleProxy(!current);
       set({ proxyConfig: config });
     } catch (e) {
       console.error("Failed to toggle proxy:", e);

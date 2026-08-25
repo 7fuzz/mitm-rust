@@ -1,5 +1,6 @@
 pub mod mitm;
 pub mod intercept;
+pub mod rules;
 
 use std::net::SocketAddr;
 use std::sync::Arc;

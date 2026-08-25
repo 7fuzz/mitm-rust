@@ -4,7 +4,6 @@ pub mod db;
 pub mod proxy;
 pub mod state;
 
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tauri::Manager;
 use state::{AppState, HistoryEntry};
@@ -39,10 +38,20 @@ pub fn run() {
             commands::history_cmd::get_history_logs,
             commands::history_cmd::get_history_detail,
             commands::history_cmd::clear_history_logs,
+            commands::proxy_cmd::get_proxy_state,
+            commands::proxy_cmd::toggle_proxy,
             commands::proxy_cmd::start_proxy,
             commands::proxy_cmd::stop_proxy,
-            commands::proxy_cmd::toggle_proxy,
+            commands::proxy_cmd::toggle_proxy_legacy,
             commands::proxy_cmd::get_proxy_status,
+            commands::intercept_cmd::toggle_interceptor,
+            commands::intercept_cmd::update_intercept_rules,
+            commands::intercept_cmd::get_intercept_rules,
+            commands::intercept_cmd::forward_intercepted_flow,
+            commands::intercept_cmd::drop_intercepted_flow,
+            commands::intercept_cmd::forward_all_intercepted_flows,
+            commands::intercept_cmd::drop_all_intercepted_flows,
+            commands::intercept_cmd::get_pending_flows,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

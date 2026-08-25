@@ -83,16 +83,17 @@ export const HistoryViewer: React.FC = () => {
           <button
             onClick={toggleProxyServer}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all shadow-sm ${
-              proxyConfig.isRunning
+              proxyConfig.proxyEnabled
                 ? "bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/30 shadow-rose-950/20"
                 : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 shadow-emerald-950/20"
             }`}
           >
-            {proxyConfig.isRunning ? (
+            {proxyConfig.proxyEnabled ? (
               <>
                 <Pause className="w-3.5 h-3.5 fill-current" /> Stop Proxy ({proxyConfig.port})
               </>
             ) : (
+
               <>
                 <Play className="w-3.5 h-3.5 fill-current" /> Start Proxy ({proxyConfig.port})
               </>

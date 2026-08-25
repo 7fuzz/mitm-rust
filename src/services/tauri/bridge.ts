@@ -27,9 +27,33 @@ export interface TrafficCapturedEvent {
 }
 
 export interface ProxyConfig {
+  proxyEnabled: boolean;
+  interceptEnabled: boolean;
+  interceptMode: "request" | "response" | "both";
   port: number;
   host: string;
-  isRunning: boolean;
+}
+
+
+export interface InterceptRule {
+  id: string;
+  isEnabled: boolean;
+  targetPhase: "request" | "response" | "both";
+  matchField: "url" | "host" | "path" | "method" | "header";
+  operator: "contains" | "equals" | "regex";
+  matchValue: string;
+  orderIndex: number;
+  createdAtMs: number;
+}
+
+export interface PendingFlowPayload {
+  flowId: string;
+  phase: "request" | "response";
+  method: string;
+  url: string;
+  headers: [string, string][];
+  body: number[];
+  bodyText: string;
 }
 
 export const getHistoryLogs = async (
@@ -56,26 +80,71 @@ export const clearHistoryLogs = async (): Promise<void> => {
   return await invoke<void>("clear_history_logs");
 };
 
-export const startProxy = async (port?: number, host?: string): Promise<ProxyConfig> => {
-  return await invoke<ProxyConfig>("start_proxy", { port: port || null, host: host || null });
+export const getProxyState = async (): Promise<ProxyConfig> => {
+  return await invoke<ProxyConfig>("get_proxy_state");
 };
 
-export const stopProxy = async (): Promise<ProxyConfig> => {
-  return await invoke<ProxyConfig>("stop_proxy");
+export const toggleProxy = async (enabled: boolean): Promise<ProxyConfig> => {
+  return await invoke<ProxyConfig>("toggle_proxy", { enabled });
 };
 
-export const toggleProxy = async (): Promise<ProxyConfig> => {
-  return await invoke<ProxyConfig>("toggle_proxy");
+export const toggleInterceptor = async (
+  enabled: boolean,
+  mode: "request" | "response" | "both"
+): Promise<ProxyConfig> => {
+  return await invoke<ProxyConfig>("toggle_interceptor", { enabled, mode });
 };
 
-export const getProxyStatus = async (): Promise<ProxyConfig> => {
-  return await invoke<ProxyConfig>("get_proxy_status");
+export const getInterceptRules = async (): Promise<InterceptRule[]> => {
+  return await invoke<InterceptRule[]>("get_intercept_rules");
+};
+
+export const updateInterceptRules = async (
+  rules: InterceptRule[]
+): Promise<InterceptRule[]> => {
+  return await invoke<InterceptRule[]>("update_intercept_rules", { rules });
+};
+
+export const forwardInterceptedFlow = async (
+  flowId: string,
+  modifiedHeadersJson?: string,
+  modifiedBody?: number[]
+): Promise<void> => {
+  return await invoke<void>("forward_intercepted_flow", {
+    flowId,
+    modifiedHeadersJson: modifiedHeadersJson || null,
+    modifiedBody: modifiedBody || null,
+  });
+};
+
+export const dropInterceptedFlow = async (flowId: string): Promise<void> => {
+  return await invoke<void>("drop_intercepted_flow", { flowId });
+};
+
+export const forwardAllInterceptedFlows = async (): Promise<void> => {
+  return await invoke<void>("forward_all_intercepted_flows");
+};
+
+export const dropAllInterceptedFlows = async (): Promise<void> => {
+  return await invoke<void>("drop_all_intercepted_flows");
+};
+
+export const getPendingFlows = async (): Promise<PendingFlowPayload[]> => {
+  return await invoke<PendingFlowPayload[]>("get_pending_flows");
 };
 
 export const subscribeTrafficCaptured = async (
   callback: (event: TrafficCapturedEvent) => void
 ): Promise<UnlistenFn> => {
   return await listen<TrafficCapturedEvent>("traffic_captured", (e) => {
+    callback(e.payload);
+  });
+};
+
+export const subscribeInterceptTriggered = async (
+  callback: (flow: PendingFlowPayload) => void
+): Promise<UnlistenFn> => {
+  return await listen<PendingFlowPayload>("intercept_triggered", (e) => {
     callback(e.payload);
   });
 };
