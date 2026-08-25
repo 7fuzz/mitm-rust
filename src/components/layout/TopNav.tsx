@@ -3,7 +3,7 @@ import { useSettingsStore } from '../../stores/useSettingsStore';
 import { useHistoryStore } from '../../stores/useHistoryStore';
 import { useInterceptStore } from '../../stores/useInterceptStore';
 import { MingCuteIcon, MingCuteIconName } from '../common/MingCuteIcon';
-import { Power } from 'lucide-react';
+import { ProxyPowerButton } from '../common/ProxyPowerButton';
 import type { NavModule } from '../../types';
 
 interface NavTabItem {
@@ -26,9 +26,8 @@ const NAV_TABS: NavTabItem[] = [
 ];
 
 export const TopNav: React.FC = () => {
-
   const { activeModule, setActiveModule, theme, toggleTheme } = useSettingsStore();
-  const { proxyConfig, fetchProxyStatus, toggleProxyServer } = useHistoryStore();
+  const { fetchProxyStatus } = useHistoryStore();
   const { pendingFlows } = useInterceptStore();
   const navRef = useRef<HTMLDivElement>(null);
 
@@ -41,8 +40,6 @@ export const TopNav: React.FC = () => {
       navRef.current.scrollLeft += e.deltaY || e.deltaX;
     }
   };
-
-  const isProxyActive = proxyConfig.proxyEnabled;
 
   return (
     <header className="h-10 bg-header border-b border-border flex items-center justify-between px-2 shrink-0 select-none text-xs overflow-hidden">
@@ -81,29 +78,10 @@ export const TopNav: React.FC = () => {
         })}
       </div>
 
-      {/* Right Controls: Master Power Switch (Red/Green) & Theme Toggle */}
+      {/* Right Controls: Master Power Switch & Theme Toggle */}
       <div className="flex items-center gap-2 shrink-0 pl-2">
-        {/* Power Switch Button with Red/Green LED Indicator */}
-        <button
-          onClick={toggleProxyServer}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide transition-all border shadow-xs ${
-            isProxyActive
-              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-              : 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20'
-          }`}
-          title={`Click to ${isProxyActive ? 'STOP' : 'START'} Proxy Server`}
-        >
-          {/* LED Dot Indicator */}
-          <span
-            className={`w-2 h-2 rounded-full transition-all ${
-              isProxyActive
-                ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse'
-                : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
-            }`}
-          />
-          <Power className={`w-3.5 h-3.5 ${isProxyActive ? 'text-emerald-400' : 'text-rose-400'}`} />
-          <span>{isProxyActive ? `Proxy ON (${proxyConfig.port})` : 'Proxy OFF'}</span>
-        </button>
+        {/* Proxy Power Button with Mode Selection Popover Overlay */}
+        <ProxyPowerButton />
 
         {/* Theme Switch */}
         <button
