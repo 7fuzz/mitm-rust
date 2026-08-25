@@ -156,7 +156,7 @@ export const SettingsView: React.FC = () => {
                 <button
                   onClick={() => setLayoutMode('vertical')}
                   className={`px-2 py-0.5 rounded text-xs ${
-                    layoutMode === 'vertical' ? 'bg-primary text-white font-bold' : 'bg-neutral-subtle text-muted-foreground'
+                    layoutMode === 'vertical' ? 'bg-primary text-primary-foreground font-bold' : 'bg-neutral-subtle text-muted-foreground'
                   }`}
                 >
                   Vertical
@@ -164,7 +164,7 @@ export const SettingsView: React.FC = () => {
                 <button
                   onClick={() => setLayoutMode('horizontal')}
                   className={`px-2 py-0.5 rounded text-xs ${
-                    layoutMode === 'horizontal' ? 'bg-primary text-white font-bold' : 'bg-neutral-subtle text-muted-foreground'
+                    layoutMode === 'horizontal' ? 'bg-primary text-primary-foreground font-bold' : 'bg-neutral-subtle text-muted-foreground'
                   }`}
                 >
                   Horizontal
@@ -180,7 +180,7 @@ export const SettingsView: React.FC = () => {
                     key={s}
                     onClick={() => setFontSize(s)}
                     className={`px-2 py-0.5 rounded text-xs uppercase ${
-                      fontSize === s ? 'bg-primary text-white font-bold' : 'bg-neutral-subtle text-muted-foreground'
+                      fontSize === s ? 'bg-primary text-primary-foreground font-bold' : 'bg-neutral-subtle text-muted-foreground'
                     }`}
                   >
                     {s}

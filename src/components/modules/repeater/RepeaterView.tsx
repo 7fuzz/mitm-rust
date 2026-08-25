@@ -131,7 +131,7 @@ export const RepeaterView: React.FC = () => {
               onClick={() => setViewMode('sidebar')}
               className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
                 viewMode === 'sidebar'
-                  ? 'bg-primary text-white font-semibold shadow-xs'
+                  ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
               }`}
               title="Sidebar List View Mode"
@@ -144,7 +144,7 @@ export const RepeaterView: React.FC = () => {
               onClick={() => setViewMode('tabs')}
               className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
                 viewMode === 'tabs'
-                  ? 'bg-primary text-white font-semibold shadow-xs'
+                  ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
               }`}
               title="Top TabBar Mode"

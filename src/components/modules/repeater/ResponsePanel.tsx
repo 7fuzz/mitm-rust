@@ -134,7 +134,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
             onClick={() => setActiveTab('body')}
             className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors cursor-pointer ${
               activeTab === 'body'
-                ? 'bg-primary text-white font-semibold shadow-xs'
+                ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
                 : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
             }`}
           >
@@ -144,7 +144,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
             onClick={() => setActiveTab('headers')}
             className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors cursor-pointer ${
               activeTab === 'headers'
-                ? 'bg-primary text-white font-semibold shadow-xs'
+                ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
                 : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
             }`}
           >

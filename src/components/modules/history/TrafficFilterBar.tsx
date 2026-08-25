@@ -193,7 +193,7 @@ export const TrafficFilterBar: React.FC = () => {
                         onClick={() => setLocalMaxRows(preset)}
                         className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer ${
                           localMaxRows === preset
-                            ? 'bg-primary text-white font-bold'
+                            ? 'bg-primary text-primary-foreground font-bold'
                             : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                         }`}
                       >
