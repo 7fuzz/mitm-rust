@@ -15,48 +15,33 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
     activeTabId,
     setActiveTab,
     createNewRequest,
-    updateTab,
     deleteTab,
   } = useRepeaterStore();
 
   const [search, setSearch] = useState('');
-  const [editingTabId, setEditingTabId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState('');
-
-  const filteredTabs = tabs.filter((t) => {
-    if (!search.trim()) return true;
-    const term = search.toLowerCase();
-    return t.name.toLowerCase().includes(term) || t.url.toLowerCase().includes(term) || t.method.toLowerCase().includes(term);
-  });
 
   const parseUrlParts = (rawUrl: string) => {
-    if (!rawUrl.trim()) return { host: 'httpbin.org', path: '/get' };
+    if (!rawUrl || !rawUrl.trim()) return { host: 'https://localhost', path: '/' };
     try {
       const urlWithScheme = !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')
-        ? `http://${rawUrl}`
+        ? `https://${rawUrl}`
         : rawUrl;
       const parsed = new URL(urlWithScheme);
       return {
         host: `${parsed.protocol}//${parsed.host}`,
-        path: parsed.pathname + parsed.search,
+        path: (parsed.pathname || '/') + parsed.search,
       };
     } catch {
-      return { host: '', path: rawUrl };
+      return { host: rawUrl, path: '/' };
     }
   };
 
-  const handleStartRename = (id: string, name: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingTabId(id);
-    setEditingName(name);
-  };
-
-  const handleSaveRename = (tab: any) => {
-    if (editingName.trim() && editingName !== tab.name) {
-      updateTab({ ...tab, name: editingName.trim() });
-    }
-    setEditingTabId(null);
-  };
+  const filteredTabs = tabs.filter((t) => {
+    if (!search.trim()) return true;
+    const term = search.toLowerCase();
+    const { host, path } = parseUrlParts(t.url);
+    return host.toLowerCase().includes(term) || path.toLowerCase().includes(term) || t.method.toLowerCase().includes(term);
+  });
 
   return (
     <div
@@ -107,7 +92,6 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
         ) : (
           filteredTabs.map((tab) => {
             const isActive = tab.id === activeTabId;
-            const isEditing = editingTabId === tab.id;
             const { host, path } = parseUrlParts(tab.url);
             const hits = tab.executionCount || 0;
 
@@ -115,39 +99,24 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
               <div
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`group p-2.5 rounded-lg border text-xs cursor-pointer transition-all flex flex-col gap-1.5 ${
+                className={`group p-2.5 rounded-lg border text-xs cursor-pointer transition-all flex flex-col gap-1 ${
                   isActive
                     ? 'bg-background border-primary/60 shadow-xs ring-1 ring-primary/30'
-                    : 'bg-background/60 border-border/70 hover:border-border hover:bg-background/90'
+                    : 'bg-surface hover:bg-neutral-subtle border-border text-foreground'
                 }`}
               >
-                {/* Card Title Header */}
+                {/* Main Title Line: [Method Badge] https://hostname */}
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0 font-mono">
                     <MethodBadge method={tab.method} />
-
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        autoFocus
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        onBlur={() => handleSaveRename(tab)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveRename(tab);
-                          if (e.key === 'Escape') setEditingTabId(null);
-                        }}
-                        className="bg-background border border-primary rounded px-1.5 py-0.5 text-xs text-foreground font-sans w-full focus:outline-none"
-                      />
-                    ) : (
-                      <span
-                        onDoubleClick={(e) => handleStartRename(tab.id, tab.name, e)}
-                        className={`truncate font-medium ${isActive ? 'text-foreground font-semibold' : 'text-zinc-300'}`}
-                        title="Double-click to rename"
-                      >
-                        {tab.name || 'Untitled Request'}
-                      </span>
-                    )}
+                    <span
+                      className={`truncate text-xs font-semibold ${
+                        isActive ? 'text-primary' : 'text-foreground'
+                      }`}
+                      title={tab.url}
+                    >
+                      {host}
+                    </span>
                   </div>
 
                   {/* Actions: Delete */}
@@ -156,23 +125,22 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
                       e.stopPropagation();
                       deleteTab(tab.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-500 p-1 rounded transition-opacity"
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-500 p-1 rounded transition-opacity cursor-pointer"
                     title="Delete Request"
                   >
                     <MingCuteIcon name="close_line" size={13} />
                   </button>
                 </div>
 
-                {/* Split Host & Path */}
-                <div className="font-mono text-[11px] truncate flex items-center gap-1 leading-tight">
-                  <span className="text-muted-foreground/80 shrink-0">{host}</span>
-                  <span className="text-foreground font-medium truncate">{path || '/'}</span>
+                {/* Subtitle: Path / Directory */}
+                <div className="font-mono text-[11px] truncate text-muted-foreground leading-tight pl-0.5">
+                  {path || '/'}
                 </div>
 
                 {/* Stats Bar: Hits Count & Last Response Code / Latency */}
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/50 font-mono">
-                  <span className="flex items-center gap-1 text-zinc-400">
-                    <MingCuteIcon name="flash_line" size={11} className="text-amber-400" />
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1.5 mt-0.5 border-t border-border/50 font-mono">
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <MingCuteIcon name="flash_line" size={11} className="text-amber-500" />
                     <span>{hits} {hits === 1 ? 'hit' : 'hits'}</span>
                   </span>
 
@@ -184,7 +152,7 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
                       )}
                     </div>
                   ) : (
-                    <span className="text-zinc-500 italic text-[10px]">Unsent</span>
+                    <span className="text-muted-foreground/60 italic text-[10px]">Unsent</span>
                   )}
                 </div>
               </div>

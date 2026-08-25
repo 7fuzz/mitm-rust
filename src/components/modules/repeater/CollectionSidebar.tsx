@@ -113,12 +113,12 @@ export const CollectionSidebar: React.FC = () => {
                 {groupRequests.map((req: RepeaterTab) => (
                   <div
                     key={req.id}
-                    onClick={() => openTab(req)}
+                    onClick={() => openTab(req.id)}
                     className="flex items-center justify-between group/req px-2 py-1 rounded hover:bg-neutral-subtle/80 cursor-pointer font-mono text-xs transition-colors"
                   >
                     <div className="flex items-center gap-2 truncate">
                       <MethodBadge method={req.method} />
-                      <span className="text-foreground truncate font-sans text-xs">{req.name}</span>
+                      <span className="text-foreground truncate font-sans text-xs">{req.url}</span>
                     </div>
                     <button
                       onClick={(e) => {
@@ -146,12 +146,12 @@ export const CollectionSidebar: React.FC = () => {
               {tabs.map((req: RepeaterTab) => (
                 <div
                   key={req.id}
-                  onClick={() => openTab(req)}
+                  onClick={() => openTab(req.id)}
                   className="flex items-center justify-between group/req px-2 py-1 rounded hover:bg-neutral-subtle/80 cursor-pointer font-mono text-xs transition-colors"
                 >
                   <div className="flex items-center gap-2 truncate">
                     <MethodBadge method={req.method} />
-                    <span className="text-foreground truncate font-sans text-xs">{req.name}</span>
+                    <span className="text-foreground truncate font-sans text-xs">{req.url}</span>
                   </div>
                   <button
                     onClick={(e) => {

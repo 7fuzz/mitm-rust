@@ -59,7 +59,7 @@ export const CollectionsView: React.FC = () => {
                 }`}
               >
                 <MethodBadge method={req.method} />
-                <span className="truncate font-sans text-xs">{req.name}</span>
+                <span className="truncate font-sans text-xs">{req.url}</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

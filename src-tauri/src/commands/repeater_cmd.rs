@@ -20,7 +20,7 @@ pub async fn get_repeater_tabs(
 #[tauri::command]
 pub async fn create_repeater_tab(
     state: State<'_, AppState>,
-    name: Option<String>,
+    _name: Option<String>,
     _from_history_id: Option<String>,
 ) -> Result<RepeaterTab, String> {
     let now_ms = SystemTime::now()
@@ -29,11 +29,9 @@ pub async fn create_repeater_tab(
         .unwrap_or(0);
 
     let tab_id = Uuid::new_v4().to_string();
-    let tab_name = name.unwrap_or_else(|| "Untitled Request".to_string());
 
     let tab = RepeaterTab {
         id: tab_id,
-        name: tab_name,
         method: "GET".to_string(),
         url: "https://httpbin.org/get".to_string(),
         headers: vec![HeaderItem {

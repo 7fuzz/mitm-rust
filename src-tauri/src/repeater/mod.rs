@@ -36,7 +36,6 @@ pub struct ExtractRuleItem {
 #[serde(rename_all = "camelCase")]
 pub struct RepeaterTab {
     pub id: String,
-    pub name: String,
     pub method: String,
     pub url: String,
     pub headers: Vec<HeaderItem>,
@@ -86,7 +85,7 @@ pub fn get_repeater_tabs_db(db_path: &PathBuf) -> Result<Vec<RepeaterTab>, Strin
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let query = "
         SELECT 
-            r.id, r.name, r.method, r.url, r.headers_json, r.params_json, 
+            r.id, r.method, r.url, r.headers_json, r.params_json, 
             r.body_type, r.body_content, r.extract_rules_json, r.order_index, 
             r.created_at_ms, r.updated_at_ms,
             COUNT(h.id) as execution_count,
@@ -102,31 +101,30 @@ pub fn get_repeater_tabs_db(db_path: &PathBuf) -> Result<Vec<RepeaterTab>, Strin
 
     let tabs = stmt
         .query_map([], |row| {
-            let headers_json: String = row.get(4)?;
-            let params_json: String = row.get(5)?;
-            let extract_rules_json: String = row.get(8)?;
+            let headers_json: String = row.get(3)?;
+            let params_json: String = row.get(4)?;
+            let extract_rules_json: String = row.get(7)?;
 
             let headers: Vec<HeaderItem> = serde_json::from_str(&headers_json).unwrap_or_default();
             let params: Vec<ParamItem> = serde_json::from_str(&params_json).unwrap_or_default();
             let extract_rules: Vec<ExtractRuleItem> = serde_json::from_str(&extract_rules_json).unwrap_or_default();
 
-            let count: i64 = row.get(12)?;
-            let last_status: Option<u16> = row.get(13)?;
-            let last_duration: Option<u64> = row.get(14)?;
+            let count: i64 = row.get(11)?;
+            let last_status: Option<u16> = row.get(12)?;
+            let last_duration: Option<u64> = row.get(13)?;
 
             Ok(RepeaterTab {
                 id: row.get(0)?,
-                name: row.get(1)?,
-                method: row.get(2)?,
-                url: row.get(3)?,
+                method: row.get(1)?,
+                url: row.get(2)?,
                 headers,
                 params,
-                body_type: row.get(6)?,
-                body_content: row.get(7)?,
+                body_type: row.get(5)?,
+                body_content: row.get(6)?,
                 extract_rules,
-                order_index: row.get(9)?,
-                created_at_ms: row.get(10)?,
-                updated_at_ms: row.get(11)?,
+                order_index: row.get(8)?,
+                created_at_ms: row.get(9)?,
+                updated_at_ms: row.get(10)?,
                 execution_count: count as u32,
                 last_status_code: last_status,
                 last_duration_ms: last_duration,
@@ -146,11 +144,10 @@ pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<()
     let extract_rules_json = serde_json::to_string(&tab.extract_rules).unwrap_or_else(|_| "[]".to_string());
 
     conn.execute(
-        "INSERT OR REPLACE INTO repeaters (id, name, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, order_index, created_at_ms, updated_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO repeaters (id, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, order_index, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
             tab.id,
-            tab.name,
             tab.method,
             tab.url,
             headers_json,
@@ -181,7 +178,7 @@ pub fn get_repeater_tab_by_id(db_path: &PathBuf, id: &str) -> Result<RepeaterTab
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let query = "
         SELECT 
-            r.id, r.name, r.method, r.url, r.headers_json, r.params_json, 
+            r.id, r.method, r.url, r.headers_json, r.params_json, 
             r.body_type, r.body_content, r.extract_rules_json, r.order_index, 
             r.created_at_ms, r.updated_at_ms,
             COUNT(h.id) as execution_count,
@@ -193,50 +190,50 @@ pub fn get_repeater_tab_by_id(db_path: &PathBuf, id: &str) -> Result<RepeaterTab
         GROUP BY r.id
     ";
 
-    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
-
-    let tab = stmt.query_row(params![id], |row| {
-        let headers_json: String = row.get(4)?;
-        let params_json: String = row.get(5)?;
-        let extract_rules_json: String = row.get(8)?;
+    conn.query_row(query, params![id], |row| {
+        let headers_json: String = row.get(3)?;
+        let params_json: String = row.get(4)?;
+        let extract_rules_json: String = row.get(7)?;
 
         let headers: Vec<HeaderItem> = serde_json::from_str(&headers_json).unwrap_or_default();
         let params: Vec<ParamItem> = serde_json::from_str(&params_json).unwrap_or_default();
         let extract_rules: Vec<ExtractRuleItem> = serde_json::from_str(&extract_rules_json).unwrap_or_default();
 
-        let count: i64 = row.get(12)?;
-        let last_status: Option<u16> = row.get(13)?;
-        let last_duration: Option<u64> = row.get(14)?;
+        let count: i64 = row.get(11)?;
+        let last_status: Option<u16> = row.get(12)?;
+        let last_duration: Option<u64> = row.get(13)?;
 
         Ok(RepeaterTab {
             id: row.get(0)?,
-            name: row.get(1)?,
-            method: row.get(2)?,
-            url: row.get(3)?,
+            method: row.get(1)?,
+            url: row.get(2)?,
             headers,
             params,
-            body_type: row.get(6)?,
-            body_content: row.get(7)?,
+            body_type: row.get(5)?,
+            body_content: row.get(6)?,
             extract_rules,
-            order_index: row.get(9)?,
-            created_at_ms: row.get(10)?,
-            updated_at_ms: row.get(11)?,
+            order_index: row.get(8)?,
+            created_at_ms: row.get(9)?,
+            updated_at_ms: row.get(10)?,
             execution_count: count as u32,
             last_status_code: last_status,
             last_duration_ms: last_duration,
         })
-    }).map_err(|e| e.to_string())?;
-
-    Ok(tab)
+    }).map_err(|e| e.to_string())
 }
 
-pub fn insert_repeater_history_db(db_path: &PathBuf, history: &RepeaterHistoryItem) -> Result<i64, String> {
+pub fn insert_repeater_history_db(
+    db_path: &PathBuf,
+    history: &RepeaterHistoryItem,
+) -> Result<i64, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+
     let req_headers_json = serde_json::to_string(&history.request_headers).unwrap_or_else(|_| "[]".to_string());
     let res_headers_json = serde_json::to_string(&history.response_headers).unwrap_or_else(|_| "[]".to_string());
 
     conn.execute(
-        "INSERT INTO repeater_histories (repeater_id, method, url, request_headers_json, request_body, status_code, response_headers_json, response_body, duration_ms, executed_at_ms)
+        "INSERT INTO repeater_histories 
+            (repeater_id, method, url, request_headers_json, request_body, status_code, response_headers_json, response_body, duration_ms, executed_at_ms)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
             history.repeater_id,
@@ -264,11 +261,17 @@ pub fn get_repeater_history_db(
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let offset = (page.saturating_sub(1)) * limit;
 
-    let mut stmt = conn
-        .prepare("SELECT id, repeater_id, method, url, request_headers_json, request_body, status_code, response_headers_json, response_body, duration_ms, executed_at_ms FROM repeater_histories WHERE repeater_id = ? ORDER BY executed_at_ms DESC, id DESC LIMIT ? OFFSET ?")
-        .map_err(|e| e.to_string())?;
+    let query = "
+        SELECT id, repeater_id, method, url, request_headers_json, request_body, status_code, response_headers_json, response_body, duration_ms, executed_at_ms
+        FROM repeater_histories
+        WHERE repeater_id = ?
+        ORDER BY executed_at_ms DESC, id DESC
+        LIMIT ? OFFSET ?
+    ";
 
-    let histories = stmt
+    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+
+    let history = stmt
         .query_map(params![repeater_id, limit, offset], |row| {
             let req_headers_json: String = row.get(4)?;
             let res_headers_json: String = row.get(7)?;
@@ -294,5 +297,5 @@ pub fn get_repeater_history_db(
         .filter_map(|r| r.ok())
         .collect();
 
-    Ok(histories)
+    Ok(history)
 }

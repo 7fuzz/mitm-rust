@@ -1,12 +1,5 @@
 import { create } from 'zustand';
 import type { TrafficItem } from '../types';
-import type {
-  RepeaterTab,
-  RepeaterHistoryItem,
-  RepeaterExecutionResult,
-  HeaderItem,
-  ParamItem,
-} from '../services/tauri/bridge';
 import {
   getRepeaterTabs,
   createRepeaterTab,
@@ -15,103 +8,80 @@ import {
   executeRepeaterRequest,
   getRepeaterHistory,
   insertRepeaterHistory,
+  RepeaterTab,
+  HeaderItem,
+  ParamItem,
+  RepeaterExecutionResult,
+  RepeaterHistoryItem,
 } from '../services/tauri/bridge';
 import { isTauriAvailable } from '../services/tauri/ipc';
 
 interface RepeaterState {
   tabs: RepeaterTab[];
   activeTabId: string | null;
-  viewMode: 'sidebar' | 'tabs';
+  isExecuting: Record<string, boolean>;
   executionHistory: Record<string, RepeaterHistoryItem[]>;
   lastExecutionResult: Record<string, RepeaterExecutionResult | null>;
-  isExecuting: Record<string, boolean>;
   isHistoryDrawerOpen: boolean;
-  isCurlModalOpen: boolean;
+  viewMode: 'sidebar' | 'tabs';
 
-  // Compatibility aliases for legacy components
-  requests: RepeaterTab[];
+  // Compatibility properties for legacy components
   groups: any[];
+  requests: RepeaterTab[];
   openTabIds: string[];
-  lastExecutionResponse: Record<string, RepeaterExecutionResult | null>;
+  lastExecutionResponse: Record<string, any>;
+  isCurlModalOpen: boolean;
 
   // Actions
   initStore: () => Promise<void>;
-  setViewMode: (mode: 'sidebar' | 'tabs') => void;
   setActiveTab: (id: string | null) => void;
-  createNewRequest: (name?: string) => Promise<void>;
-  sendToRepeater: (item: TrafficItem) => Promise<void>;
+  createNewRequest: () => Promise<void>;
   updateTab: (tab: RepeaterTab) => Promise<void>;
   deleteTab: (id: string) => Promise<void>;
-  openTab: (tab: RepeaterTab) => void;
-  closeTab: (id: string) => void;
-
-  // Execution
-  executeActiveRequest: (id: string) => Promise<void>;
-  fetchHistory: (id?: string) => Promise<void>;
-  toggleHistoryDrawer: () => void;
-
-  // Modals & Tools
+  sendToRepeater: (item: TrafficItem) => Promise<void>;
+  executeActiveRequest: (tabId?: string) => Promise<void>;
+  fetchHistory: (tabId: string) => Promise<void>;
+  toggleHistoryDrawer: (open?: boolean) => void;
   setHistoryDrawerOpen: (open?: boolean) => void;
-  setCurlModalOpen: (open?: boolean) => void;
-  importCurlCommand: (curlStr: string) => void;
+  setViewMode: (mode: 'sidebar' | 'tabs') => void;
 
-  // Legacy Action Aliases
-  createGroup: (name?: string) => Promise<void>;
-  deleteGroup: (id?: string) => Promise<void>;
-  updateRequest: (tab: RepeaterTab) => Promise<void>;
-  deleteRequest: (id: string) => Promise<void>;
-  getTabExecutionResult: (id: string) => RepeaterExecutionResult | null;
+  // Compatibility methods for legacy components
+  closeTab: (id: string) => void;
+  openTab: (id: string) => void;
+  createGroup: (name: string) => void;
+  deleteGroup: (id: string) => void;
+  setCurlModalOpen: (open: boolean) => void;
+  importCurlCommand: (curl: string) => void;
 }
 
 export const useRepeaterStore = create<RepeaterState>((set, get) => ({
   tabs: [],
   activeTabId: null,
-  viewMode: 'sidebar',
+  isExecuting: {},
   executionHistory: {},
   lastExecutionResult: {},
-  isExecuting: {},
   isHistoryDrawerOpen: false,
-  isCurlModalOpen: false,
+  viewMode: 'sidebar',
 
-  // Legacy compatibility getters
-  get requests() {
-    return get().tabs;
-  },
+  // Compatibility state defaults
   groups: [],
-  get openTabIds() {
-    return get().tabs.map((t) => t.id);
-  },
-  get lastExecutionResponse() {
-    return get().lastExecutionResult;
-  },
-
-  getTabExecutionResult: (id: string) => {
-    return get().lastExecutionResult[id] || null;
-  },
-
-  setViewMode: (mode) => set({ viewMode: mode }),
+  requests: [],
+  openTabIds: [],
+  lastExecutionResponse: {},
+  isCurlModalOpen: false,
 
   initStore: async () => {
     if (isTauriAvailable()) {
       try {
-        const tabs = await getRepeaterTabs();
-        if (tabs && tabs.length > 0) {
-          set({
-            tabs,
-            activeTabId: get().activeTabId || tabs[0].id,
-          });
-          // Auto-fetch histories for all loaded tabs
-          for (const tab of tabs) {
-            get().fetchHistory(tab.id);
-          }
-        } else {
-          set({
-            tabs: [],
-            activeTabId: null,
-          });
+        const fetchedTabs = await getRepeaterTabs();
+        set({ tabs: fetchedTabs, requests: fetchedTabs });
+        if (fetchedTabs.length > 0 && !get().activeTabId) {
+          const firstId = fetchedTabs[0].id;
+          set({ activeTabId: firstId });
+          get().fetchHistory(firstId);
         }
       } catch (err) {
-        console.warn('Failed to load repeater tabs from backend IPC:', err);
+        console.error('Failed to load repeater tabs:', err);
       }
     }
   },
@@ -123,20 +93,19 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     }
   },
 
-  createNewRequest: async (name) => {
-    const tabName = name || 'Untitled Request';
+  createNewRequest: async () => {
     try {
       if (isTauriAvailable()) {
-        const created = await createRepeaterTab(tabName);
+        const created = await createRepeaterTab();
         set((state) => ({
           tabs: [created, ...state.tabs.filter((t) => t.id !== created.id)],
+          requests: [created, ...state.tabs.filter((t) => t.id !== created.id)],
           activeTabId: created.id,
         }));
         get().fetchHistory(created.id);
       } else {
         const newTab: RepeaterTab = {
           id: 'tab-' + Date.now(),
-          name: tabName,
           method: 'GET',
           url: 'https://httpbin.org/get',
           headers: [{ id: 'h-' + Date.now(), key: 'User-Agent', value: 'MITM-Developer-Studio', enabled: true }],
@@ -151,6 +120,7 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
         };
         set((state) => ({
           tabs: [newTab, ...state.tabs],
+          requests: [newTab, ...state.tabs],
           activeTabId: newTab.id,
         }));
       }
@@ -190,17 +160,15 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
       bodyType = (bodyContent.trim().startsWith('{') || bodyContent.trim().startsWith('[')) ? 'json' : 'raw';
     }
 
-    const tabName = `${item.method} ${item.path || '/'}`;
     const nowMs = Date.now();
 
     // 4. Create the new tab
     let createdTab: RepeaterTab;
     if (isTauriAvailable()) {
-      createdTab = await createRepeaterTab(tabName);
+      createdTab = await createRepeaterTab();
     } else {
       createdTab = {
         id: 'tab-' + nowMs,
-        name: tabName,
         method: item.method,
         url: item.url,
         headers: [],
@@ -218,261 +186,202 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     // Populate full request details on tab
     const populatedTab: RepeaterTab = {
       ...createdTab,
-      name: tabName,
-      method: item.method,
-      url: item.url,
+      method: item.method || 'GET',
+      url: item.url || 'https://httpbin.org/get',
       headers,
       params,
       bodyType,
       bodyContent,
+      updatedAtMs: nowMs,
       executionCount: 1,
       lastStatusCode: item.statusCode,
       lastDurationMs: item.durationMs,
     };
 
-    await get().updateTab(populatedTab);
+    // Store tab in backend DB & state
+    if (isTauriAvailable()) {
+      await updateRepeaterTab(populatedTab);
+    }
 
-    // Always place newly sent request at the TOP of the tabs list
+    // Prepend new tab to top of tabs list
     set((state) => ({
       tabs: [populatedTab, ...state.tabs.filter((t) => t.id !== populatedTab.id)],
+      requests: [populatedTab, ...state.tabs.filter((t) => t.id !== populatedTab.id)],
       activeTabId: populatedTab.id,
     }));
 
-    // 5. Construct initial execution result & history item from traffic capture
-    const responseHeaders: HeaderItem[] = (item.responseHeaders || []).map((h, i) => ({
-      id: `rh-${nowMs}-${i}`,
-      key: h.key,
-      value: h.value,
-      enabled: true,
-    }));
-
-    const executionResult: RepeaterExecutionResult = {
-      historyId: nowMs,
+    // 5. Construct initial execution result from traffic item history
+    const initialResult: RepeaterExecutionResult = {
+      historyId: 0,
       repeaterId: populatedTab.id,
       statusCode: item.statusCode || 200,
-      statusText: item.statusCode === 200 ? 'OK' : `HTTP ${item.statusCode}`,
-      responseHeaders,
+      statusText: 'OK',
+      responseHeaders: (item.responseHeaders || []).map((h, i) => ({
+        id: `resh-${i}`,
+        key: h.key,
+        value: h.value,
+        enabled: true,
+      })),
       responseBody: item.responseBody || '',
       durationMs: item.durationMs || 0,
-      responseSize: item.size || (item.responseBody?.length || 0),
+      responseSize: item.size || (item.responseBody ? item.responseBody.length : 0),
     };
 
     set((state) => ({
-      lastExecutionResult: { ...state.lastExecutionResult, [populatedTab.id]: executionResult },
+      lastExecutionResult: {
+        ...state.lastExecutionResult,
+        [populatedTab.id]: initialResult,
+      },
     }));
 
+    // Insert history record in backend database
     if (isTauriAvailable()) {
       try {
-        const historyItem: RepeaterHistoryItem = {
+        await insertRepeaterHistory({
           id: 0,
           repeaterId: populatedTab.id,
-          method: item.method,
-          url: item.url,
+          method: populatedTab.method,
+          url: populatedTab.url,
           requestHeaders: headers,
-          requestBody: bodyContent ? bodyContent : undefined,
+          requestBody: bodyContent,
           statusCode: item.statusCode || 200,
-          responseHeaders,
-          responseBody: item.responseBody ? item.responseBody : undefined,
+          responseHeaders: initialResult.responseHeaders,
+          responseBody: item.responseBody || '',
           durationMs: item.durationMs || 0,
-          executedAtMs: item.timestamp || nowMs,
-        };
-        await insertRepeaterHistory(historyItem);
-        await get().fetchHistory(populatedTab.id);
-      } catch (err) {
-        console.error('Failed to insert repeater history from traffic item:', err);
+          executedAtMs: nowMs,
+        });
+        get().fetchHistory(populatedTab.id);
+      } catch (e) {
+        console.warn('Failed to insert initial history log via IPC:', e);
       }
-    } else {
-      const mockHistory: RepeaterHistoryItem = {
-        id: nowMs,
-        repeaterId: populatedTab.id,
-        method: item.method,
-        url: item.url,
-        requestHeaders: headers,
-        requestBody: bodyContent,
-        statusCode: item.statusCode || 200,
-        responseHeaders,
-        responseBody: item.responseBody,
-        durationMs: item.durationMs || 0,
-        executedAtMs: item.timestamp || nowMs,
-      };
-      set((state) => ({
-        executionHistory: {
-          ...state.executionHistory,
-          [populatedTab.id]: [mockHistory],
-        },
-      }));
     }
   },
 
   updateTab: async (updatedTab) => {
+    const nextTab = { ...updatedTab, updatedAtMs: Date.now() };
     set((state) => ({
-      tabs: state.tabs.map((t) => (t.id === updatedTab.id ? updatedTab : t)),
+      tabs: state.tabs.map((t) => (t.id === nextTab.id ? nextTab : t)),
+      requests: state.tabs.map((t) => (t.id === nextTab.id ? nextTab : t)),
     }));
+
     if (isTauriAvailable()) {
       try {
-        await updateRepeaterTab(updatedTab);
+        await updateRepeaterTab(nextTab);
       } catch (err) {
-        console.error('Failed to update repeater tab:', err);
+        console.error('Failed to save repeater tab via IPC:', err);
       }
     }
   },
 
-  updateRequest: async (updatedTab) => {
-    return get().updateTab(updatedTab);
-  },
-
   deleteTab: async (id) => {
-    const { tabs, activeTabId } = get();
-    const nextTabs = tabs.filter((t) => t.id !== id);
-    let nextActive = activeTabId;
-    if (activeTabId === id) {
-      nextActive = nextTabs.length > 0 ? nextTabs[0].id : null;
+    const remaining = get().tabs.filter((t) => t.id !== id);
+    let nextActiveId = get().activeTabId;
+
+    if (get().activeTabId === id) {
+      nextActiveId = remaining[0]?.id || null;
     }
-    set({ tabs: nextTabs, activeTabId: nextActive });
+
+    set({
+      tabs: remaining,
+      requests: remaining,
+      activeTabId: nextActiveId,
+    });
 
     if (isTauriAvailable()) {
       try {
         await deleteRepeaterTab(id);
       } catch (err) {
-        console.error('Failed to delete repeater tab:', err);
+        console.error('Failed to delete repeater tab via IPC:', err);
       }
+    }
+
+    if (nextActiveId) {
+      get().fetchHistory(nextActiveId);
     }
   },
 
-  deleteRequest: async (id) => {
-    return get().deleteTab(id);
-  },
-
-  openTab: (tab) => {
-    const { tabs } = get();
-    const filtered = tabs.filter((t) => t.id !== tab.id);
-    set({ tabs: [tab, ...filtered], activeTabId: tab.id });
-    get().fetchHistory(tab.id);
-  },
-
-  closeTab: (id) => {
-    get().deleteTab(id);
-  },
-
-  createGroup: async () => {},
-  deleteGroup: async () => {},
-
-  importCurlCommand: (curlStr) => {
-    if (!curlStr.trim()) return;
-    get().createNewRequest('cURL Import');
-  },
-
-  executeActiveRequest: async (id) => {
-    const activeTab = get().tabs.find((t) => t.id === id);
-    if (activeTab && isTauriAvailable()) {
-      try {
-        await updateRepeaterTab(activeTab);
-      } catch (err) {
-        console.warn('Failed to sync tab before execution:', err);
-      }
-    }
+  executeActiveRequest: async (tabId) => {
+    const targetId = tabId || get().activeTabId;
+    if (!targetId) return;
 
     set((state) => ({
-      isExecuting: { ...state.isExecuting, [id]: true },
+      isExecuting: { ...state.isExecuting, [targetId]: true },
     }));
 
     try {
       if (isTauriAvailable()) {
-        const result = await executeRepeaterRequest(id);
+        const result = await executeRepeaterRequest(targetId);
         set((state) => ({
-          isExecuting: { ...state.isExecuting, [id]: false },
-          lastExecutionResult: { ...state.lastExecutionResult, [id]: result },
+          lastExecutionResult: { ...state.lastExecutionResult, [targetId]: result },
+          isExecuting: { ...state.isExecuting, [targetId]: false },
         }));
-        await get().fetchHistory(id);
-        // Refresh tab metadata (executionCount, lastStatusCode, lastDurationMs)
-        const updatedTabs = await getRepeaterTabs();
-        if (updatedTabs) {
-          set({ tabs: updatedTabs });
-        }
+        await get().fetchHistory(targetId);
+        // Refresh tabs to update last status code & latency stats
+        const refreshedTabs = await getRepeaterTabs();
+        set({ tabs: refreshedTabs, requests: refreshedTabs });
       } else {
-        const tab = get().tabs.find((t) => t.id === id);
+        // Fallback mock execution
+        await new Promise((r) => setTimeout(r, 450));
         const mockResult: RepeaterExecutionResult = {
           historyId: Date.now(),
-          repeaterId: id,
+          repeaterId: targetId,
           statusCode: 200,
           statusText: 'OK',
           responseHeaders: [
-            { id: 'rh1', key: 'Content-Type', value: 'application/json', enabled: true },
-            { id: 'rh2', key: 'Server', value: 'gunicorn/19.9.0', enabled: true },
+            { id: '1', key: 'Content-Type', value: 'application/json', enabled: true },
+            { id: '2', key: 'Server', value: 'mock-repeater-server/1.0', enabled: true },
           ],
-          responseBody: JSON.stringify({
-            args: {},
-            headers: { 'User-Agent': 'MITM-Developer-Studio/2.0' },
-            origin: '127.0.0.1',
-            url: tab?.url || 'https://httpbin.org/get',
-          }, null, 2),
-          durationMs: 64,
-          responseSize: 312,
+          responseBody: JSON.stringify({ message: 'Repeater execution successful', tabId: targetId }, null, 2),
+          durationMs: 45,
+          responseSize: 184,
         };
         set((state) => ({
-          isExecuting: { ...state.isExecuting, [id]: false },
-          lastExecutionResult: { ...state.lastExecutionResult, [id]: mockResult },
-          tabs: state.tabs.map((t) =>
-            t.id === id
-              ? {
-                  ...t,
-                  executionCount: (t.executionCount || 0) + 1,
-                  lastStatusCode: 200,
-                  lastDurationMs: 64,
-                }
-              : t
-          ),
+          lastExecutionResult: { ...state.lastExecutionResult, [targetId]: mockResult },
+          isExecuting: { ...state.isExecuting, [targetId]: false },
         }));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to execute repeater request:', err);
-      const errMessage = typeof err === 'string' ? err : (err as any)?.message || JSON.stringify(err);
-      const errorResult: RepeaterExecutionResult = {
-        historyId: 0,
-        repeaterId: id,
-        statusCode: 0,
-        statusText: 'ERR_FAILED',
-        responseHeaders: [],
-        responseBody: `Error executing request: ${errMessage}`,
-        durationMs: 0,
-        responseSize: 0,
-      };
       set((state) => ({
-        isExecuting: { ...state.isExecuting, [id]: false },
-        lastExecutionResult: { ...state.lastExecutionResult, [id]: errorResult },
+        isExecuting: { ...state.isExecuting, [targetId]: false },
       }));
     }
   },
 
-  fetchHistory: async (id) => {
-    const targetId = id || get().activeTabId;
-    if (!targetId) return;
-
-    if (isTauriAvailable()) {
-      try {
-        const history = await getRepeaterHistory(targetId, 1, 50);
-        set((state) => ({
-          executionHistory: { ...state.executionHistory, [targetId]: history },
-        }));
-      } catch (err) {
-        console.error('Failed to fetch repeater history:', err);
-      }
+  fetchHistory: async (tabId: string) => {
+    if (!tabId || !isTauriAvailable()) return;
+    try {
+      const historyLogs = await getRepeaterHistory(tabId, 1, 100);
+      set((state) => ({
+        executionHistory: {
+          ...state.executionHistory,
+          [tabId]: historyLogs,
+        },
+      }));
+    } catch (err) {
+      console.error('Failed to fetch repeater execution history:', err);
     }
   },
 
-  toggleHistoryDrawer: () => {
-    set((state) => ({ isHistoryDrawerOpen: !state.isHistoryDrawerOpen }));
+  toggleHistoryDrawer: (open) => {
+    const nextState = open !== undefined ? open : !get().isHistoryDrawerOpen;
+    set({ isHistoryDrawerOpen: nextState });
+    if (nextState && get().activeTabId) {
+      get().fetchHistory(get().activeTabId!);
+    }
   },
 
   setHistoryDrawerOpen: (open) => {
-    set((state) => ({
-      isHistoryDrawerOpen: typeof open === 'boolean' ? open : !state.isHistoryDrawerOpen,
-    }));
+    get().toggleHistoryDrawer(open);
   },
 
-  setCurlModalOpen: (open) => {
-    set((state) => ({
-      isCurlModalOpen: typeof open === 'boolean' ? open : !state.isCurlModalOpen,
-    }));
-  },
+  setViewMode: (viewMode) => set({ viewMode }),
+
+  // Legacy compatibility methods
+  closeTab: (id) => get().deleteTab(id),
+  openTab: (id) => get().setActiveTab(id),
+  createGroup: () => {},
+  deleteGroup: () => {},
+  setCurlModalOpen: (open) => set({ isCurlModalOpen: open }),
+  importCurlCommand: () => {},
 }));

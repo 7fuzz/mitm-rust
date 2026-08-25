@@ -13,7 +13,6 @@ export const RepeaterView: React.FC = () => {
     activeTabId,
     setActiveTab,
     createNewRequest,
-    updateTab,
     deleteTab,
     lastExecutionResult,
     initStore,
@@ -21,9 +20,6 @@ export const RepeaterView: React.FC = () => {
     viewMode,
     setViewMode,
   } = useRepeaterStore();
-
-  const [editingTabId, setEditingTabId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState('');
 
   // Resizable panel dimensions
   const [reqWidthPercent, setReqWidthPercent] = useState<number>(50);
@@ -44,16 +40,20 @@ export const RepeaterView: React.FC = () => {
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0] || null;
   const activeResponse = activeTab ? lastExecutionResult[activeTab.id] || null : null;
 
-  const handleStartRename = (id: string, name: string) => {
-    setEditingTabId(id);
-    setEditingName(name);
-  };
-
-  const handleSaveRename = (tab: any) => {
-    if (editingName.trim() && editingName !== tab.name) {
-      updateTab({ ...tab, name: editingName.trim() });
+  const parseUrlParts = (rawUrl: string) => {
+    if (!rawUrl || !rawUrl.trim()) return { host: 'https://localhost', path: '/' };
+    try {
+      const urlWithScheme = !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')
+        ? `https://${rawUrl}`
+        : rawUrl;
+      const parsed = new URL(urlWithScheme);
+      return {
+        host: `${parsed.protocol}//${parsed.host}`,
+        path: (parsed.pathname || '/') + parsed.search,
+      };
+    } catch {
+      return { host: rawUrl, path: '/' };
     }
-    setEditingTabId(null);
   };
 
   const handleMouseDownMainSplit = (e: React.MouseEvent) => {
@@ -125,11 +125,11 @@ export const RepeaterView: React.FC = () => {
       {/* View Mode & Tab Header Control Bar */}
       <div className="bg-header border-b border-border flex items-center justify-between px-2 pt-1 pb-1 shrink-0 select-none">
         {/* Left View Mode Toggle */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           <div className="p-0.5 bg-surface border border-border rounded flex items-center gap-0.5">
             <button
               onClick={() => setViewMode('sidebar')}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
                 viewMode === 'sidebar'
                   ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
@@ -142,7 +142,7 @@ export const RepeaterView: React.FC = () => {
 
             <button
               onClick={() => setViewMode('tabs')}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
                 viewMode === 'tabs'
                   ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
@@ -158,48 +158,38 @@ export const RepeaterView: React.FC = () => {
         {/* Top TabBar Mode (Rendered when viewMode === 'tabs') */}
         {viewMode === 'tabs' && (
           <div className="flex-1 flex items-center gap-1 px-2 overflow-x-auto no-scrollbar">
-            {tabs.map((tab, idx) => {
+            {tabs.map((tab) => {
               const isActive = tab.id === activeTabId;
-              const isEditing = editingTabId === tab.id;
+              const { host, path } = parseUrlParts(tab.url);
 
               return (
                 <div
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  onDoubleClick={() => handleStartRename(tab.id, tab.name)}
-                  className={`group flex items-center gap-2 px-3 py-1 rounded-t-lg border-t border-x text-xs cursor-pointer font-mono transition-colors min-w-[120px] max-w-[200px] ${
+                  className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-t-lg border-t border-x text-xs cursor-pointer font-mono transition-colors min-w-[140px] max-w-[240px] ${
                     isActive
                       ? 'bg-surface border-border text-foreground font-semibold shadow-xs'
-                      : 'bg-zinc-900/60 border-transparent text-muted-foreground hover:bg-neutral-subtle hover:text-foreground'
+                      : 'bg-surface/60 border-border/50 text-foreground/80 hover:bg-neutral-subtle hover:text-foreground'
                   }`}
+                  title={`${tab.method} ${tab.url}`}
                 >
                   <MethodBadge method={tab.method} />
 
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      autoFocus
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      onBlur={() => handleSaveRename(tab)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveRename(tab);
-                        if (e.key === 'Escape') setEditingTabId(null);
-                      }}
-                      className="bg-background border border-border rounded px-1 text-xs text-foreground font-sans w-full focus:outline-none"
-                    />
-                  ) : (
-                    <span className="truncate flex-1 font-sans text-xs font-medium" title={tab.name}>
-                      {tab.name || `Tab ${idx + 1}`}
+                  <div className="flex flex-col flex-1 min-w-0 font-sans leading-none gap-0.5">
+                    <span className={`truncate text-xs font-semibold ${isActive ? 'text-primary' : 'text-foreground'}`}>
+                      {host}
                     </span>
-                  )}
+                    <span className="truncate text-[10px] text-muted-foreground font-mono">
+                      {path || '/'}
+                    </span>
+                  </div>
 
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteTab(tab.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-500 p-0.5 rounded transition-opacity cursor-pointer"
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-500 p-0.5 rounded transition-opacity cursor-pointer shrink-0"
                     title="Close Tab (×)"
                   >
                     <MingCuteIcon name="close_line" size={12} />
@@ -285,7 +275,7 @@ export const RepeaterView: React.FC = () => {
               <span>No repeater request selected.</span>
               <button
                 onClick={() => createNewRequest()}
-                className="mt-3 px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded font-sans not-italic text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="mt-3 px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded font-sans not-italic text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
               >
                 <MingCuteIcon name="plus_line" size={14} />
                 <span>Create New Request</span>

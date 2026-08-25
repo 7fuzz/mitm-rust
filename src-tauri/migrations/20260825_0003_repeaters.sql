@@ -1,6 +1,5 @@
 CREATE TABLE IF NOT EXISTS repeaters (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
     method TEXT NOT NULL DEFAULT 'GET',
     url TEXT NOT NULL,
     headers_json TEXT NOT NULL DEFAULT '[]',

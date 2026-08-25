@@ -81,7 +81,6 @@ export interface ExtractRuleItem {
 
 export interface RepeaterTab {
   id: string;
-  name: string;
   method: string;
   url: string;
   headers: HeaderItem[];
