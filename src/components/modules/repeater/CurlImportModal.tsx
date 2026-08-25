@@ -10,7 +10,7 @@ export const CurlImportModal: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!curlText.trim()) return;
-    await importCurlCommand(curlText.trim(), reqName.trim());
+    await importCurlCommand(curlText.trim());
     setCurlText('');
   };
 

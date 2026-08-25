@@ -9,7 +9,7 @@ interface ExecutionHistoryDrawerProps {
 }
 
 export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ requestId, widthPx = 288 }) => {
-  const { executionHistory, isHistoryDrawerOpen, toggleHistoryDrawer } = useRepeaterStore();
+  const { executionHistory, isHistoryDrawerOpen, setHistoryDrawerOpen } = useRepeaterStore();
 
   if (!isHistoryDrawerOpen) return null;
 
@@ -21,7 +21,7 @@ export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ 
       style={{ width: `${widthPx}px` }}
     >
       <div
-        onClick={() => toggleHistoryDrawer(false)}
+        onClick={() => setHistoryDrawerOpen(false)}
         className="p-3 bg-header border-b border-border font-semibold flex items-center justify-between cursor-pointer hover:bg-neutral-subtle transition-colors group"
         title="Click title to close Execution History"
       >

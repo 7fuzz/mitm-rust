@@ -123,7 +123,7 @@ pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<()
     let extract_rules_json = serde_json::to_string(&tab.extract_rules).unwrap_or_else(|_| "[]".to_string());
 
     conn.execute(
-        "INSERT INTO repeaters (id, name, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, order_index, created_at_ms, updated_at_ms)
+        "INSERT OR REPLACE INTO repeaters (id, name, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, order_index, created_at_ms, updated_at_ms)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
             tab.id,
@@ -145,29 +145,7 @@ pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<()
 }
 
 pub fn update_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    let headers_json = serde_json::to_string(&tab.headers).unwrap_or_else(|_| "[]".to_string());
-    let params_json = serde_json::to_string(&tab.params).unwrap_or_else(|_| "[]".to_string());
-    let extract_rules_json = serde_json::to_string(&tab.extract_rules).unwrap_or_else(|_| "[]".to_string());
-
-    conn.execute(
-        "UPDATE repeaters SET name = ?, method = ?, url = ?, headers_json = ?, params_json = ?, body_type = ?, body_content = ?, extract_rules_json = ?, order_index = ?, updated_at_ms = ? WHERE id = ?",
-        params![
-            tab.name,
-            tab.method,
-            tab.url,
-            headers_json,
-            params_json,
-            tab.body_type,
-            tab.body_content,
-            extract_rules_json,
-            tab.order_index,
-            tab.updated_at_ms,
-            tab.id,
-        ],
-    ).map_err(|e| e.to_string())?;
-
-    Ok(())
+    create_repeater_tab_db(db_path, tab)
 }
 
 pub fn delete_repeater_tab_db(db_path: &PathBuf, id: &str) -> Result<(), String> {

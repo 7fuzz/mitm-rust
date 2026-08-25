@@ -74,7 +74,7 @@ export const CollectionsView: React.FC = () => {
           })}
 
           <button
-            onClick={() => createNewRequest(null)}
+            onClick={() => createNewRequest()}
             className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-neutral-subtle shrink-0 ml-1"
             title="New Collection Request Tab"
           >

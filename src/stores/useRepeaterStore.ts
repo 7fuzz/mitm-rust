@@ -10,42 +10,6 @@ import {
 } from '../services/tauri/bridge';
 import { isTauriAvailable } from '../services/tauri/ipc';
 
-const SAMPLE_TABS: RepeaterTab[] = [
-  {
-    id: 'tab-1',
-    name: 'Get User Profile',
-    method: 'GET',
-    url: 'https://httpbin.org/get',
-    headers: [
-      { id: 'h1', key: 'User-Agent', value: 'MITM-Developer-Studio/2.0', enabled: true },
-      { id: 'h2', key: 'Accept', value: 'application/json', enabled: true },
-    ],
-    params: [{ id: 'p1', key: 'verbose', value: 'true', enabled: true }],
-    bodyType: 'none',
-    bodyContent: '',
-    extractRules: [],
-    orderIndex: 0,
-    createdAtMs: Date.now() - 60000,
-    updatedAtMs: Date.now() - 60000,
-  },
-  {
-    id: 'tab-2',
-    name: 'Post Echo JSON',
-    method: 'POST',
-    url: 'https://httpbin.org/post',
-    headers: [
-      { id: 'h3', key: 'Content-Type', value: 'application/json', enabled: true },
-    ],
-    params: [],
-    bodyType: 'json',
-    bodyContent: JSON.stringify({ message: 'Hello from MITM Repeater!', timestamp: Date.now() }, null, 2),
-    extractRules: [],
-    orderIndex: 1,
-    createdAtMs: Date.now() - 30000,
-    updatedAtMs: Date.now() - 30000,
-  },
-];
-
 interface RepeaterState {
   tabs: RepeaterTab[];
   activeTabId: string | null;
@@ -59,36 +23,45 @@ interface RepeaterState {
   requests: RepeaterTab[];
   groups: any[];
   openTabIds: string[];
-  lastExecutionResponse: Record<string, any>;
+  lastExecutionResponse: Record<string, RepeaterExecutionResult | null>;
 
+  // Actions
   initStore: () => Promise<void>;
   setActiveTab: (id: string | null) => void;
-  createNewRequest: (name?: string | null) => Promise<void>;
+  createNewRequest: (name?: string) => Promise<void>;
   updateTab: (tab: RepeaterTab) => Promise<void>;
-  updateRequest: (tab: RepeaterTab) => Promise<void>;
   deleteTab: (id: string) => Promise<void>;
-  deleteRequest: (id: string) => Promise<void>;
   openTab: (tab: RepeaterTab) => void;
   closeTab: (id: string) => void;
-  createGroup: (name: string, description?: string) => Promise<void>;
-  deleteGroup: (id: string) => Promise<void>;
+
+  // Execution
   executeActiveRequest: (id: string) => Promise<void>;
-  fetchHistory: (repeaterId: string) => Promise<void>;
-  toggleHistoryDrawer: (open?: boolean) => void;
-  setCurlModalOpen: (open: boolean) => void;
-  importCurlCommand: (curlString: string, name?: string) => Promise<void>;
+  fetchHistory: (id?: string) => Promise<void>;
+  toggleHistoryDrawer: () => void;
+
+  // Modals & Tools
+  setHistoryDrawerOpen: (open?: boolean) => void;
+  setCurlModalOpen: (open?: boolean) => void;
+  importCurlCommand: (curlStr: string) => void;
+
+  // Legacy Action Aliases
+  createGroup: (name?: string) => Promise<void>;
+  deleteGroup: (id?: string) => Promise<void>;
+  updateRequest: (tab: RepeaterTab) => Promise<void>;
+  deleteRequest: (id: string) => Promise<void>;
+  getTabExecutionResult: (id: string) => RepeaterExecutionResult | null;
 }
 
 export const useRepeaterStore = create<RepeaterState>((set, get) => ({
-  tabs: SAMPLE_TABS,
-  activeTabId: 'tab-1',
+  tabs: [],
+  activeTabId: null,
   executionHistory: {},
   lastExecutionResult: {},
   isExecuting: {},
   isHistoryDrawerOpen: false,
   isCurlModalOpen: false,
 
-  // Compatibility getters/state aliases
+  // Legacy compatibility getters
   get requests() {
     return get().tabs;
   },
@@ -100,6 +73,10 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     return get().lastExecutionResult;
   },
 
+  getTabExecutionResult: (id: string) => {
+    return get().lastExecutionResult[id] || null;
+  },
+
   initStore: async () => {
     if (isTauriAvailable()) {
       try {
@@ -108,6 +85,11 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
           set({
             tabs,
             activeTabId: tabs[0].id,
+          });
+        } else {
+          set({
+            tabs: [],
+            activeTabId: null,
           });
         }
       } catch (err) {
@@ -207,6 +189,11 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
   createGroup: async () => {},
   deleteGroup: async () => {},
 
+  importCurlCommand: (curlStr) => {
+    if (!curlStr.trim()) return;
+    get().createNewRequest('cURL Import');
+  },
+
   executeActiveRequest: async (id) => {
     const activeTab = get().tabs.find((t) => t.id === id);
     if (activeTab && isTauriAvailable()) {
@@ -263,9 +250,9 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
         statusCode: 0,
         statusText: 'ERR_FAILED',
         responseHeaders: [],
-        responseBody: `[Execution Error]\n${errMessage}`,
+        responseBody: `Error executing request: ${errMessage}`,
         durationMs: 0,
-        responseSize: errMessage.length,
+        responseSize: 0,
       };
       set((state) => ({
         isExecuting: { ...state.isExecuting, [id]: false },
@@ -274,15 +261,15 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     }
   },
 
-  fetchHistory: async (repeaterId) => {
+  fetchHistory: async (id) => {
+    const targetId = id || get().activeTabId;
+    if (!targetId) return;
+
     if (isTauriAvailable()) {
       try {
-        const historyItems = await getRepeaterHistory(repeaterId, 1, 50);
+        const history = await getRepeaterHistory(targetId, 1, 50);
         set((state) => ({
-          executionHistory: {
-            ...state.executionHistory,
-            [repeaterId]: historyItems,
-          },
+          executionHistory: { ...state.executionHistory, [targetId]: history },
         }));
       } catch (err) {
         console.error('Failed to fetch repeater history:', err);
@@ -290,56 +277,19 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     }
   },
 
-  toggleHistoryDrawer: (open) => {
+  toggleHistoryDrawer: () => {
+    set((state) => ({ isHistoryDrawerOpen: !state.isHistoryDrawerOpen }));
+  },
+
+  setHistoryDrawerOpen: (open) => {
     set((state) => ({
-      isHistoryDrawerOpen: open !== undefined ? open : !state.isHistoryDrawerOpen,
+      isHistoryDrawerOpen: typeof open === 'boolean' ? open : !state.isHistoryDrawerOpen,
     }));
   },
 
-  setCurlModalOpen: (isCurlModalOpen) => set({ isCurlModalOpen }),
-
-  importCurlCommand: async (curlString, name = 'Imported cURL') => {
-    let method = 'GET';
-    if (curlString.includes('-X POST') || curlString.includes('--request POST')) method = 'POST';
-    else if (curlString.includes('-X PUT') || curlString.includes('--request PUT')) method = 'PUT';
-    else if (curlString.includes('-X DELETE') || curlString.includes('--request DELETE')) method = 'DELETE';
-
-    const urlMatch = curlString.match(/https?:\/\/[^\s"']+/);
-    const url = urlMatch ? urlMatch[0] : 'https://httpbin.org/get';
-
-    const newTab: RepeaterTab = {
-      id: 'tab-' + Date.now(),
-      name,
-      method,
-      url,
-      headers: [{ id: 'h1', key: 'User-Agent', value: 'MITM-Developer-Studio', enabled: true }],
-      params: [],
-      bodyType: method === 'GET' ? 'none' : 'json',
-      bodyContent: '{\n  "imported": true\n}',
-      extractRules: [],
-      orderIndex: get().tabs.length,
-      createdAtMs: Date.now(),
-      updatedAtMs: Date.now(),
-    };
-
-    if (isTauriAvailable()) {
-      const created = await createRepeaterTab(name);
-      created.method = method;
-      created.url = url;
-      created.bodyType = method === 'GET' ? 'none' : 'json';
-      created.bodyContent = '{\n  "imported": true\n}';
-      await updateRepeaterTab(created);
-      set((state) => ({
-        tabs: [...state.tabs, created],
-        activeTabId: created.id,
-        isCurlModalOpen: false,
-      }));
-    } else {
-      set((state) => ({
-        tabs: [...state.tabs, newTab],
-        activeTabId: newTab.id,
-        isCurlModalOpen: false,
-      }));
-    }
+  setCurlModalOpen: (open) => {
+    set((state) => ({
+      isCurlModalOpen: typeof open === 'boolean' ? open : !state.isCurlModalOpen,
+    }));
   },
 }));
