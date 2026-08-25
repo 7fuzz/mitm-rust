@@ -143,18 +143,19 @@ fn parse_path_from_url(url_str: &str) -> String {
 #[tauri::command]
 pub async fn get_history_detail(
     state: State<'_, AppState>,
-    id: i64,
+    uuid: String,
 ) -> Result<HistoryDetailItem, String> {
     let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, uuid, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at FROM history WHERE id = ?"
+            "SELECT id, uuid, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at FROM history WHERE uuid = ?"
         )
         .map_err(|e| e.to_string())?;
 
     let item = stmt
-        .query_row([id], |row| {
+        .query_row([uuid.clone()], |row| {
+
             let req_headers_json: String = row.get(6)?;
             let res_headers_json: String = row.get(7)?;
             let request_body: String = row.get(8)?;
@@ -205,7 +206,8 @@ pub async fn get_history_detail(
                 created_at: row.get(12)?,
             })
         })
-        .map_err(|e| format!("History item with id {} not found: {}", id, e))?;
+        .map_err(|e| format!("History item with uuid {} not found: {}", uuid, e))?;
+
 
     Ok(item)
 }

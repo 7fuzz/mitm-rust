@@ -118,7 +118,9 @@ impl Default for HistorySettings {
 #[serde(rename_all = "camelCase")]
 pub struct TrafficCapturedEvent {
     pub entry: HistorySummaryItem,
+    pub detail: HistoryDetailItem,
 }
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

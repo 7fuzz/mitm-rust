@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::ca::RootCa;
 use crate::proxy::intercept::handle_intercept_hook;
-use crate::state::{AppState, HistoryEntry, HistorySummaryItem, InterceptAction, InterceptPhase, TrafficCapturedEvent};
+use crate::state::{AppState, HistoryDetailItem, HistoryEntry, HistorySummaryItem, InterceptAction, InterceptPhase, TrafficCapturedEvent};
 
 pub async fn start_proxy_server(
     app_handle: AppHandle,
@@ -147,7 +147,6 @@ where
     };
 
     let path = parse_path_from_url(&raw_url);
-
 
     let mut headers = Vec::new();
     for line in lines {
@@ -348,10 +347,10 @@ async fn log_and_emit_history(
         url: full_url.to_string(),
         host: host.to_string(),
         status_code,
-        request_headers: req_headers,
-        response_headers: res_headers,
-        request_body: req_body_str,
-        response_body: res_body_str,
+        request_headers: req_headers.clone(),
+        response_headers: res_headers.clone(),
+        request_body: req_body_str.clone(),
+        response_body: res_body_str.clone(),
         phase: "response".to_string(),
         duration_ms: Some(duration_ms),
         created_at: now.clone(),
@@ -359,7 +358,7 @@ async fn log_and_emit_history(
 
     let summary_item = HistorySummaryItem {
         id: 0,
-        uuid: entry_uuid,
+        uuid: entry_uuid.clone(),
         method: method.to_string(),
         url: full_url.to_string(),
         host: host.to_string(),
@@ -368,11 +367,29 @@ async fn log_and_emit_history(
         response_size,
         status_code,
         duration_ms: Some(duration_ms),
+        created_at: now.clone(),
+    };
+
+    let detail_item = HistoryDetailItem {
+        id: 0,
+        uuid: entry_uuid,
+        method: method.to_string(),
+        url: full_url.to_string(),
+        host: host.to_string(),
+        status_code,
+        request_headers: req_headers,
+        response_headers: res_headers,
+        request_body: req_body_str,
+        response_body: res_body_str,
+        request_body_hex: None,
+        response_body_hex: None,
+        phase: "response".to_string(),
+        duration_ms: Some(duration_ms),
         created_at: now,
     };
 
     let _ = state.history_tx.send(history_entry).await;
-    let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: summary_item });
+    let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: summary_item, detail: detail_item });
 }
 
 fn parse_host_from_headers(raw: &str) -> Option<String> {
@@ -398,4 +415,3 @@ fn parse_path_from_url(url_str: &str) -> String {
         "/".to_string()
     }
 }
-
