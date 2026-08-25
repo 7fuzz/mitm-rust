@@ -7,7 +7,7 @@ import {
   getHistoryDetail,
   clearHistoryLogs,
   getProxyState,
-  toggleProxy,
+  setProxyMode,
   subscribeTrafficCaptured,
 } from "../services/tauri/bridge";
 import { UnlistenFn } from "@tauri-apps/api/event";
@@ -36,7 +36,7 @@ interface HistoryState {
   clearLogs: () => Promise<void>;
   toggleAutoScroll: () => void;
   fetchProxyStatus: () => Promise<void>;
-  toggleProxyServer: () => Promise<void>;
+  changeProxyMode: (mode: "on" | "off" | "block_client" | "block") => Promise<void>;
   initSubscription: () => Promise<void>;
 }
 
@@ -51,7 +51,14 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   selectedLogDetail: null,
   loadingDetail: false,
   autoScroll: true,
-  proxyConfig: { proxyEnabled: false, interceptEnabled: false, interceptMode: "both", port: 8080, host: "127.0.0.1" },
+  proxyConfig: {
+    proxyEnabled: false,
+    interceptEnabled: false,
+    interceptMode: "both",
+    proxyMode: "off",
+    port: 8080,
+    host: "127.0.0.1",
+  },
   isLoading: false,
   unsubFn: null,
 
@@ -121,13 +128,12 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   },
 
-  toggleProxyServer: async () => {
+  changeProxyMode: async (mode: "on" | "off" | "block_client" | "block") => {
     try {
-      const current = get().proxyConfig.proxyEnabled;
-      const config = await toggleProxy(!current);
+      const config = await setProxyMode(mode);
       set({ proxyConfig: config });
     } catch (e) {
-      console.error("Failed to toggle proxy:", e);
+      console.error("Failed to set proxy mode:", e);
     }
   },
 

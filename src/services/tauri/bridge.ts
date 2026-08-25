@@ -30,10 +30,10 @@ export interface ProxyConfig {
   proxyEnabled: boolean;
   interceptEnabled: boolean;
   interceptMode: "request" | "response" | "both";
+  proxyMode: "on" | "off" | "block_client" | "block";
   port: number;
   host: string;
 }
-
 
 export interface InterceptRule {
   id: string;
@@ -82,6 +82,12 @@ export const clearHistoryLogs = async (): Promise<void> => {
 
 export const getProxyState = async (): Promise<ProxyConfig> => {
   return await invoke<ProxyConfig>("get_proxy_state");
+};
+
+export const setProxyMode = async (
+  mode: "on" | "off" | "block_client" | "block"
+): Promise<ProxyConfig> => {
+  return await invoke<ProxyConfig>("set_proxy_mode", { mode });
 };
 
 export const toggleProxy = async (enabled: boolean): Promise<ProxyConfig> => {
