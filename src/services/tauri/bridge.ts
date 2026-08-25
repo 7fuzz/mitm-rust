@@ -7,6 +7,9 @@ export interface HistorySummaryItem {
   method: string;
   url: string;
   host: string;
+  path: string;
+  contentType: string;
+  responseSize: number;
   statusCode: number;
   durationMs?: number;
   createdAt: string;

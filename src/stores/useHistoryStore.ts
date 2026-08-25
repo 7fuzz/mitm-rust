@@ -19,7 +19,7 @@ interface HistoryState {
   searchTerm: string;
   methodFilter: string;
   statusFilter: number | null;
-  selectedLogId: number | null;
+  selectedLogUuid: string | null;
   selectedLogDetail: HistoryDetailItem | null;
   loadingDetail: boolean;
   autoScroll: boolean;
@@ -32,7 +32,7 @@ interface HistoryState {
   setSearchTerm: (term: string) => void;
   setMethodFilter: (method: string) => void;
   setStatusFilter: (status: number | null) => void;
-  selectLog: (id: number) => Promise<void>;
+  selectLog: (uuid: string) => Promise<void>;
   clearLogs: () => Promise<void>;
   toggleAutoScroll: () => void;
   fetchProxyStatus: () => Promise<void>;
@@ -47,7 +47,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   searchTerm: "",
   methodFilter: "ALL",
   statusFilter: null,
-  selectedLogId: null,
+  selectedLogUuid: null,
   selectedLogDetail: null,
   loadingDetail: false,
   autoScroll: true,
@@ -59,7 +59,6 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     port: 8080,
     host: "127.0.0.1",
   },
-
   isLoading: false,
   unsubFn: null,
 
@@ -96,21 +95,51 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     get().fetchLogs();
   },
 
-  selectLog: async (id: number) => {
-    set({ selectedLogId: id, loadingDetail: true });
-    try {
-      const detail = await getHistoryDetail(id);
-      set({ selectedLogDetail: detail, loadingDetail: false });
-    } catch (e) {
-      console.error("Failed to fetch history detail:", e);
+  selectLog: async (uuid: string) => {
+    set({ selectedLogUuid: uuid, loadingDetail: true });
+    const target = get().logs.find((l) => l.uuid === uuid);
+    if (!target) {
       set({ selectedLogDetail: null, loadingDetail: false });
+      return;
+    }
+
+    if (target.id > 0) {
+      try {
+        const detail = await getHistoryDetail(target.id);
+        set({ selectedLogDetail: detail, loadingDetail: false });
+      } catch (e) {
+        console.error("Failed to fetch history detail by id:", e);
+        set({
+          selectedLogDetail: {
+            ...target,
+            requestHeaders: [],
+            responseHeaders: target.contentType ? [["Content-Type", target.contentType]] : [],
+            requestBody: "",
+            responseBody: "",
+            phase: "response",
+          },
+          loadingDetail: false,
+        });
+      }
+    } else {
+      set({
+        selectedLogDetail: {
+          ...target,
+          requestHeaders: [],
+          responseHeaders: target.contentType ? [["Content-Type", target.contentType]] : [],
+          requestBody: "",
+          responseBody: "",
+          phase: "response",
+        },
+        loadingDetail: false,
+      });
     }
   },
 
   clearLogs: async () => {
     try {
       await clearHistoryLogs();
-      set({ logs: [], selectedLogId: null, selectedLogDetail: null });
+      set({ logs: [], selectedLogUuid: null, selectedLogDetail: null });
     } catch (e) {
       console.error("Failed to clear logs:", e);
     }
