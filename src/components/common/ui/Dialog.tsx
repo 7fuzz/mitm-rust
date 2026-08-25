@@ -44,13 +44,14 @@ export const Dialog: React.FC<DialogProps> = ({
       : 'max-w-2xl';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 select-none">
-      {/* Backdrop overlay click to close */}
-      <div className="fixed inset-0" onClick={onClose} />
-
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 select-none cursor-pointer"
+    >
       {/* Dialog container */}
       <div
-        className={`relative w-full ${sizeClasses} bg-surface border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col z-10 text-xs text-foreground select-text ${className}`}
+        onClick={(e) => e.stopPropagation()}
+        className={`relative w-full ${sizeClasses} bg-surface border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col z-10 text-xs text-foreground select-text cursor-default ${className}`}
       >
         {/* Header */}
         {(title || description) && (
