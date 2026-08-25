@@ -185,7 +185,10 @@ export const updateHistorySettings = async (
 ): Promise<HistorySettings> => {
   return await invoke<HistorySettings>("update_history_settings", {
     limiterEnabled,
+    limiter_enabled: limiterEnabled,
+    enabled: limiterEnabled,
     maxRows,
+    max_rows: maxRows,
   });
 };
 

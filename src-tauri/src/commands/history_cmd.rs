@@ -14,20 +14,25 @@ pub async fn get_history_settings(
 #[tauri::command]
 pub async fn update_history_settings(
     state: State<'_, AppState>,
-    enabled: bool,
-    max_rows: u32,
+    limiter_enabled: Option<bool>,
+    enabled: Option<bool>,
+    max_rows: Option<u32>,
+    max_limit: Option<u32>,
 ) -> Result<HistorySettings, String> {
+    let is_enabled = limiter_enabled.or(enabled).unwrap_or(true);
+    let limit = max_rows.or(max_limit).unwrap_or(500);
+
     {
         let mut settings = state.history_settings.write().await;
-        settings.limiter_enabled = enabled;
-        settings.max_rows = max_rows;
+        settings.limiter_enabled = is_enabled;
+        settings.max_rows = limit;
     }
 
-    let _ = set_preference(&state.db_path, "history_limiter_enabled", if enabled { "true" } else { "false" });
-    let _ = set_preference(&state.db_path, "history_limiter_max_rows", &max_rows.to_string());
+    let _ = set_preference(&state.db_path, "history_limiter_enabled", if is_enabled { "true" } else { "false" });
+    let _ = set_preference(&state.db_path, "history_limiter_max_rows", &limit.to_string());
 
-    if enabled {
-        let _ = prune_history_logs(&state.db_path, max_rows);
+    if is_enabled {
+        let _ = prune_history_logs(&state.db_path, limit);
     }
 
     let updated = state.history_settings.read().await;

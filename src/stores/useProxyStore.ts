@@ -213,13 +213,19 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   },
 
   updateHistorySettings: async (limiterEnabled, maxRows) => {
-    set({ historySettings: { limiterEnabled, maxRows } });
+    // 1. Instantly prune local state for immediate UI update
+    set((state) => ({
+      historySettings: { limiterEnabled, maxRows },
+      traffic: limiterEnabled ? state.traffic.slice(0, maxRows) : state.traffic,
+    }));
+
     if (isTauriAvailable()) {
       try {
         const updated = await updateHistorySettings(limiterEnabled, maxRows);
         set({ historySettings: updated });
-        // Refresh traffic list after backend prunes old records
-        const historyLogs = await getHistoryLogs(1, updated.limiterEnabled ? updated.maxRows : 10000);
+        // 2. Fetch remaining pruned logs from SQLite DB
+        const maxFetch = updated.limiterEnabled ? updated.maxRows : 10000;
+        const historyLogs = await getHistoryLogs(1, maxFetch);
         if (historyLogs) {
           set({ traffic: historyLogs.map(mapHistoryEntryToTrafficItem) });
         }
