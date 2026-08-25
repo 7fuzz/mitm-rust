@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::oneshot;
-use crate::ca::RootCa;
 use crate::db::set_preference;
 use crate::proxy::start_proxy_server;
 use crate::state::{AppState, ProxyConfig};
@@ -44,7 +43,7 @@ pub async fn set_proxy_mode(
 
             let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
             let ca_dir = app_data_dir.join("ca");
-            let ca = Arc::new(RootCa::load_or_generate(ca_dir)?);
+            let ca = Arc::new(crate::ca::get_ca(ca_dir));
 
             let (stop_tx, stop_rx) = oneshot::channel::<()>();
 

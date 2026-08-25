@@ -1,28 +1,36 @@
 use std::sync::Arc;
-use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use std::time::SystemTime;
+use tokio_rustls::rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
 use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::TlsAcceptor;
-use crate::ca::RootCa;
+use rcgen::{CertificateParams, DnType, KeyPair};
+use crate::ca::CA;
 
 pub struct MitmEngine {
-    pub ca: Arc<RootCa>,
+    pub ca: Arc<CA>,
 }
 
 impl MitmEngine {
-    pub fn new(ca: Arc<RootCa>) -> Self {
+    pub fn new(ca: Arc<CA>) -> Self {
         Self { ca }
     }
 
     pub async fn create_tls_acceptor(&self, domain: &str) -> Result<TlsAcceptor, String> {
-        let (cert_pem, key_pem) = self.ca.issue_leaf_cert(domain)?;
-        
-        let parsed_cert = pem::parse(&cert_pem)
-            .map_err(|e| format!("Failed to parse cert pem: {}", e))?;
-        let cert_der = CertificateDer::from(parsed_cert.contents().to_vec());
+        let mut params = CertificateParams::new(vec![domain.to_string()]).map_err(|e| format!("{}", e))?;
+        params.distinguished_name.push(DnType::CommonName, domain.to_string());
+        params.key_usages.push(rcgen::KeyUsagePurpose::DigitalSignature);
+        params.key_usages.push(rcgen::KeyUsagePurpose::KeyEncipherment);
+        params.extended_key_usages.push(rcgen::ExtendedKeyUsagePurpose::ServerAuth);
 
-        let parsed_key = pem::parse(&key_pem)
-            .map_err(|e| format!("Failed to parse key pem: {}", e))?;
-        let key_der = PrivateKeyDer::Pkcs8(parsed_key.contents().to_vec().into());
+        let now = SystemTime::now();
+        params.not_before = time::OffsetDateTime::from(now - std::time::Duration::from_secs(86400));
+        params.not_after = time::OffsetDateTime::from(now + std::time::Duration::from_secs(86400 * 365));
+
+        let cert_key_pair = KeyPair::generate().map_err(|e| format!("{}", e))?;
+        let cert = params.signed_by(&cert_key_pair, &self.ca.cert, &self.ca.key_pair).map_err(|e| format!("{}", e))?;
+
+        let cert_der = cert.der().clone();
+        let key_der = PrivateKeyDer::from(PrivatePkcs8KeyDer::from(cert_key_pair.serialize_der()));
 
         let config = ServerConfig::builder()
             .with_no_client_auth()

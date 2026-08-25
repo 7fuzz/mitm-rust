@@ -5,23 +5,31 @@ pub mod rules;
 use std::io::Read;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Instant;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use std::time::{Instant, SystemTime};
+
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full};
+use hyper::body::Incoming;
+use hyper::service::service_fn;
+use hyper::{Method, Request, Response, StatusCode};
+use hyper_util::rt::TokioIo;
+use rcgen::{CertificateParams, DnType, KeyPair};
+use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
+use tauri::{AppHandle, Emitter};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
-use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 use flate2::read::{GzDecoder, ZlibDecoder};
 use base64::Engine;
 
-use crate::ca::RootCa;
+use crate::ca::CA;
 use crate::proxy::intercept::handle_intercept_hook;
 use crate::state::{AppState, HistoryEntry, InterceptAction, InterceptPhase, TrafficCapturedEvent};
 
 pub async fn start_proxy_server(
     app_handle: AppHandle,
     state: Arc<AppState>,
-    ca: Arc<RootCa>,
+    ca: Arc<CA>,
     addr_str: String,
     stop_rx: oneshot::Receiver<()>,
 ) -> Result<(), String> {
@@ -44,7 +52,7 @@ pub async fn start_proxy_server(
                         let state_clone = Arc::clone(&state);
                         let ca_clone = Arc::clone(&ca);
                         tauri::async_runtime::spawn(async move {
-                            if let Err(e) = handle_connection(app_handle_clone, state_clone, ca_clone, stream, client_addr).await {
+                            if let Err(e) = handle_connection(stream, state_clone, ca_clone, app_handle_clone, client_addr).await {
                                 eprintln!("Error handling proxy connection from {}: {}", client_addr, e);
                             }
                         });
@@ -64,136 +72,163 @@ pub async fn start_proxy_server(
 }
 
 async fn handle_connection(
-    app_handle: AppHandle,
+    stream: TcpStream,
     state: Arc<AppState>,
-    ca: Arc<RootCa>,
-    mut stream: TcpStream,
+    ca: Arc<CA>,
+    app_handle: AppHandle,
     _client_addr: SocketAddr,
-) -> Result<(), String> {
-    let mut buffer = [0u8; 8192];
-    let n = stream.peek(&mut buffer).await.map_err(|e| e.to_string())?;
-    if n == 0 {
-        return Ok(());
-    }
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let io = TokioIo::new(stream);
 
-    let req_str = String::from_utf8_lossy(&buffer[..n]);
+    let state_clone = Arc::clone(&state);
+    let ca_clone = Arc::clone(&ca);
+    let app_handle_clone = app_handle.clone();
 
-    if req_str.starts_with("CONNECT ") {
-        let line = req_str.lines().next().unwrap_or_default();
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 2 {
-            return Err("Invalid CONNECT request".to_string());
-        }
+    let service = service_fn(move |req| {
+        let state = Arc::clone(&state_clone);
+        let ca = Arc::clone(&ca_clone);
+        let app_handle = app_handle_clone.clone();
+        async move {
+            if req.method() == Method::CONNECT {
+                let host = req.uri().host().unwrap_or_default().to_string();
+                let port = req.uri().port_u16().unwrap_or(443);
 
-        let host_port = parts[1];
-        let domain = host_port.split(':').next().unwrap_or(host_port);
-
-        let mut conn_buf = vec![0u8; n];
-        let _ = stream.read(&mut conn_buf).await;
-
-        stream.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await.map_err(|e| e.to_string())?;
-
-        let mitm_engine = crate::proxy::mitm::MitmEngine::new(ca);
-        if let Ok(acceptor) = mitm_engine.create_tls_acceptor(domain).await {
-            if let Ok(mut tls_stream) = acceptor.accept(stream).await {
-                let mut tls_buf = [0u8; 8192];
-                if let Ok(read_bytes) = tls_stream.read(&mut tls_buf).await {
-                    if read_bytes > 0 {
-                        process_http_request(app_handle, state, &mut tls_stream, &tls_buf[..read_bytes], domain, true).await?;
+                tokio::spawn(async move {
+                    if let Err(e) = handle_connect(req, state, ca, app_handle, host, port).await {
+                        eprintln!("Error in CONNECT: {}", e);
                     }
-                }
+                });
+
+                Ok(Response::new(Full::new(Bytes::new())))
+            } else {
+                handle_http(req, state, app_handle).await
             }
         }
-    } else {
-        let mut req_buf = vec![0u8; n];
-        let _ = stream.read(&mut req_buf).await;
-        let host = parse_host_from_headers(&req_str).unwrap_or_else(|| "127.0.0.1".to_string());
-        process_http_request(app_handle, state, &mut stream, &req_buf, &host, false).await?;
+    });
+
+    if let Err(_err) = hyper::server::conn::http1::Builder::new()
+        .preserve_header_case(true)
+        .title_case_headers(true)
+        .serve_connection(io, service)
+        .with_upgrades()
+        .await
+    {
     }
 
     Ok(())
 }
 
-async fn process_http_request<S>(
-    app_handle: AppHandle,
+async fn handle_connect(
+    req: Request<Incoming>,
     state: Arc<AppState>,
-    stream: &mut S,
-    raw_req_bytes: &[u8],
-    default_host: &str,
-    is_tls: bool,
-) -> Result<(), String>
-where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
-{
-    let proxy_mode = { state.proxy_config.read().await.proxy_mode.clone() };
+    ca: Arc<CA>,
+    app_handle: AppHandle,
+    host: String,
+    _port: u16,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let upgraded = hyper::upgrade::on(req).await?;
+    let upgraded_io = TokioIo::new(upgraded);
 
-    let req_str = String::from_utf8_lossy(raw_req_bytes);
-    let mut lines = req_str.lines();
-    let first_line = lines.next().unwrap_or_default();
-    let parts: Vec<&str> = first_line.split_whitespace().collect();
+    let mut params = CertificateParams::new(vec![host.clone()]).map_err(|e| format!("{}", e))?;
+    params.distinguished_name.push(DnType::CommonName, host.clone());
+    params.key_usages.push(rcgen::KeyUsagePurpose::DigitalSignature);
+    params.key_usages.push(rcgen::KeyUsagePurpose::KeyEncipherment);
+    params.extended_key_usages.push(rcgen::ExtendedKeyUsagePurpose::ServerAuth);
 
-    let method = parts.get(0).unwrap_or(&"GET").to_string();
-    let raw_url = parts.get(1).unwrap_or(&"/").to_string();
-    let raw_host = parse_host_from_headers(&req_str).unwrap_or_else(|| default_host.to_string());
+    let now = SystemTime::now();
+    params.not_before = time::OffsetDateTime::from(now - std::time::Duration::from_secs(86400));
+    params.not_after = time::OffsetDateTime::from(now + std::time::Duration::from_secs(86400 * 365));
 
-    let scheme = if is_tls { "https" } else { "http" };
-    let full_host = if raw_host.starts_with("http://") || raw_host.starts_with("https://") {
-        raw_host.clone()
-    } else {
-        format!("{}://{}", scheme, raw_host)
+    let cert_key_pair = KeyPair::generate().map_err(|e| format!("{}", e))?;
+    let cert = params.signed_by(&cert_key_pair, &ca.cert, &ca.key_pair).map_err(|e| format!("{}", e))?;
+
+    let cert_der = cert.der().clone();
+    let key_der = PrivateKeyDer::from(PrivatePkcs8KeyDer::from(cert_key_pair.serialize_der()));
+
+    let server_config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(vec![cert_der], key_der)?;
+
+    let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
+    let tls_stream = match acceptor.accept(upgraded_io).await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("TLS accept error for {}: {}", host, e);
+            return Err(e.into());
+        }
     };
 
-    let full_url = if raw_url.starts_with("http://") || raw_url.starts_with("https://") {
-        raw_url.clone()
-    } else {
-        format!("{}://{}{}", scheme, raw_host, raw_url)
-    };
+    let io = TokioIo::new(tls_stream);
 
-    let path = parse_path_from_url(&raw_url);
+    let host_for_service = host.clone();
+    let service = service_fn(move |mut req| {
+        let state = Arc::clone(&state);
+        let app_handle = app_handle.clone();
+        let host = host_for_service.clone();
+        async move {
+            let uri = format!("https://{}{}", host, req.uri());
+            *req.uri_mut() = uri.parse().unwrap();
+            handle_http(req, state, app_handle).await
+        }
+    });
 
-    let mut headers = Vec::new();
-    for line in lines {
-        if line.is_empty() {
-            break;
-        }
-        if let Some((k, v)) = line.split_once(':') {
-            headers.push((k.trim().to_string(), v.trim().to_string()));
-        }
+    if let Err(err) = hyper::server::conn::http1::Builder::new()
+        .serve_connection(io, service)
+        .with_upgrades()
+        .await
+    {
+        eprintln!("Error serving TLS connection for {}: {}", host, err);
     }
 
-    let body_start = if let Some(pos) = req_str.find("\r\n\r\n") {
-        pos + 4
-    } else if let Some(pos) = req_str.find("\n\n") {
-        pos + 2
-    } else {
-        raw_req_bytes.len()
-    };
+    Ok(())
+}
 
-    let req_body_bytes = if body_start < raw_req_bytes.len() {
-        raw_req_bytes[body_start..].to_vec()
-    } else {
-        Vec::new()
-    };
+async fn handle_http(
+    req: Request<Incoming>,
+    state: Arc<AppState>,
+    app_handle: AppHandle,
+) -> Result<Response<Full<Bytes>>, hyper::Error> {
+    let https = hyper_rustls::HttpsConnectorBuilder::new()
+        .with_webpki_roots()
+        .https_or_http()
+        .enable_http1()
+        .build();
+    let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new()).build(https);
 
-    // Mode: "block" -> Never send to server, never send to client
+    let method = req.method().clone();
+    let url = req.uri().to_string();
+    let host = req.uri().host().unwrap_or_default().to_string();
+    let request_headers = headers_to_vec(req.headers());
+
+    let (_parts, body) = req.into_parts();
+    let collected_req_body = body.collect().await?.to_bytes();
+    let request_body_bytes = collected_req_body;
+
+    let path = parse_path_from_url(&url);
+
+    let proxy_mode = { state.proxy_config.read().await.proxy_mode.clone() };
+
     if proxy_mode == "block" {
         log_and_emit_history(
             &app_handle,
             &state,
-            &method,
-            &full_url,
-            &full_host,
+            &method.to_string(),
+            &url,
+            &host,
             &path,
             502,
-            headers,
+            request_headers,
             vec![("Content-Type".to_string(), "text/plain".to_string())],
-            req_body_bytes,
+            request_body_bytes.to_vec(),
             "[MITM] Request blocked by proxy (Block mode)".to_string().into_bytes(),
             0,
         ).await;
 
-        let _ = stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\n[MITM] Blocked (Proxy mode: Block)").await;
-        return Ok(());
+        return Ok(Response::builder()
+            .status(StatusCode::BAD_GATEWAY)
+            .header("Content-Type", "text/plain")
+            .body(Full::new(Bytes::from("Request blocked by MITM proxy (Proxy mode: Block)")))
+            .unwrap());
     }
 
     // 1. Request Intercept Hook
@@ -201,128 +236,128 @@ where
         &app_handle,
         &state,
         InterceptPhase::Request,
-        &method,
-        &full_url,
-        &full_host,
-        headers.clone(),
-        req_body_bytes.clone(),
+        &method.to_string(),
+        &url,
+        &host,
+        request_headers.clone(),
+        request_body_bytes.to_vec(),
     ).await {
         Some(InterceptAction::Drop) => {
-            let _ = stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\n[MITM] Request dropped by Interceptor").await;
-            return Ok(());
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_GATEWAY)
+                .body(Full::new(Bytes::from("[MITM] Request dropped by Interceptor")))
+                .unwrap());
         }
         Some(InterceptAction::Forward { modified_headers, modified_body }) => (
-            modified_headers.unwrap_or(headers),
-            modified_body.unwrap_or(req_body_bytes),
+            modified_headers.unwrap_or(request_headers),
+            modified_body.unwrap_or(request_body_bytes.to_vec()),
         ),
-        None => (headers, req_body_bytes),
+        None => (request_headers, request_body_bytes.to_vec()),
     };
 
-    // 2. Forward request to target server using reqwest
+    let mut new_req = Request::builder()
+        .method(method.clone())
+        .uri(url.clone());
+
+    let mut headers_cleaned = final_req_headers.clone();
+    headers_cleaned.retain(|(k, _)| !k.eq_ignore_ascii_case("content-length") && !k.eq_ignore_ascii_case("transfer-encoding"));
+
+    for (k, v) in headers_cleaned.iter() {
+        new_req = new_req.header(k, v);
+    }
+
+    let new_req = new_req.body(Full::new(Bytes::from(final_req_body.clone()))).unwrap();
+
     let start_time = Instant::now();
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .map_err(|e| e.to_string())?;
+    match client.request(new_req).await {
+        Ok(res) => {
+            let duration_ms = start_time.elapsed().as_millis() as u64;
+            let status = res.status().as_u16();
+            let response_headers = headers_to_vec(res.headers());
+            let (_parts, body) = res.into_parts();
+            let collected_res_body = body.collect().await?.to_bytes();
+            let response_body_bytes = collected_res_body;
 
-    let mut req_builder = match method.to_uppercase().as_str() {
-        "POST" => client.post(&full_url),
-        "PUT" => client.put(&full_url),
-        "DELETE" => client.delete(&full_url),
-        "PATCH" => client.patch(&full_url),
-        "HEAD" => client.head(&full_url),
-        "OPTIONS" => client.request(reqwest::Method::OPTIONS, &full_url),
-        _ => client.get(&full_url),
-    };
+            // 2. Response Intercept Hook
+            let (final_res_headers, final_res_body) = match handle_intercept_hook(
+                &app_handle,
+                &state,
+                InterceptPhase::Response,
+                &method.to_string(),
+                &url,
+                &host,
+                response_headers.clone(),
+                response_body_bytes.to_vec(),
+            ).await {
+                Some(InterceptAction::Drop) => {
+                    return Ok(Response::builder()
+                        .status(StatusCode::BAD_GATEWAY)
+                        .body(Full::new(Bytes::from("[MITM] Response dropped by Interceptor")))
+                        .unwrap());
+                }
+                Some(InterceptAction::Forward { modified_headers, modified_body }) => (
+                    modified_headers.unwrap_or(response_headers),
+                    modified_body.unwrap_or(response_body_bytes.to_vec()),
+                ),
+                None => (response_headers, response_body_bytes.to_vec()),
+            };
 
-    for (k, v) in &final_req_headers {
-        if k.eq_ignore_ascii_case("host") || k.eq_ignore_ascii_case("content-length") {
-            continue;
-        }
-        req_builder = req_builder.header(k, v);
-    }
+            log_and_emit_history(
+                &app_handle,
+                &state,
+                &method.to_string(),
+                &url,
+                &host,
+                &path,
+                status,
+                final_req_headers,
+                final_res_headers.clone(),
+                final_req_body,
+                final_res_body.clone(),
+                duration_ms,
+            ).await;
 
-    if !final_req_body.is_empty() {
-        req_builder = req_builder.body(final_req_body.clone());
-    }
-
-    let res = req_builder.send().await;
-    let duration_ms = start_time.elapsed().as_millis() as u64;
-
-    let (status_code, res_headers, res_body_bytes) = match res {
-        Ok(response) => {
-            let status = response.status().as_u16();
-            let mut headers_vec = Vec::new();
-            for (k, v) in response.headers().iter() {
-                headers_vec.push((k.as_str().to_string(), v.to_str().unwrap_or_default().to_string()));
+            if proxy_mode == "block_client" {
+                return Ok(Response::builder()
+                    .status(StatusCode::BAD_GATEWAY)
+                    .header("Content-Type", "text/plain")
+                    .body(Full::new(Bytes::from("[MITM] Response blocked from client (Block Client mode)")))
+                    .unwrap());
             }
-            let body_bytes = response.bytes().await.map(|b| b.to_vec()).unwrap_or_default();
-            (status, headers_vec, body_bytes)
+
+            let mut response_headers_cleaned = final_res_headers.clone();
+            response_headers_cleaned.retain(|(k, _)| !k.eq_ignore_ascii_case("content-length") && !k.eq_ignore_ascii_case("transfer-encoding"));
+
+            let mut builder = Response::builder().status(status);
+            for (k, v) in response_headers_cleaned.iter() {
+                builder = builder.header(k, v);
+            }
+            Ok(builder.body(Full::new(Bytes::from(final_res_body))).unwrap())
         }
         Err(e) => {
-            (502, vec![("Content-Type".to_string(), "text/plain".to_string())], format!("Proxy Error: {}", e).into_bytes())
+            let duration_ms = start_time.elapsed().as_millis() as u64;
+            let err_msg = format!("Proxy error: {}", e);
+            log_and_emit_history(
+                &app_handle,
+                &state,
+                &method.to_string(),
+                &url,
+                &host,
+                &path,
+                502,
+                final_req_headers,
+                vec![("Content-Type".to_string(), "text/plain".to_string())],
+                final_req_body,
+                err_msg.as_bytes().to_vec(),
+                duration_ms,
+            ).await;
+
+            Ok(Response::builder()
+                .status(StatusCode::BAD_GATEWAY)
+                .body(Full::new(Bytes::from(err_msg)))
+                .unwrap())
         }
-    };
-
-    // 3. Response Intercept Hook
-    let (final_res_headers, final_res_body) = match handle_intercept_hook(
-        &app_handle,
-        &state,
-        InterceptPhase::Response,
-        &method,
-        &full_url,
-        &full_host,
-        res_headers.clone(),
-        res_body_bytes.clone(),
-    ).await {
-        Some(InterceptAction::Drop) => {
-            let _ = stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\n[MITM] Response dropped by Interceptor").await;
-            return Ok(());
-        }
-        Some(InterceptAction::Forward { modified_headers, modified_body }) => (
-            modified_headers.unwrap_or(res_headers),
-            modified_body.unwrap_or(res_body_bytes),
-        ),
-        None => (res_headers, res_body_bytes),
-    };
-
-    // 4. Log History & Broadcast Event
-    log_and_emit_history(
-        &app_handle,
-        &state,
-        &method,
-        &full_url,
-        &full_host,
-        &path,
-        status_code,
-        final_req_headers,
-        final_res_headers.clone(),
-        final_req_body,
-        final_res_body.clone(),
-        duration_ms,
-    ).await;
-
-    // Mode: "block_client" -> Sent to server and logged, but client does NOT get response
-    if proxy_mode == "block_client" {
-        let _ = stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\n[MITM] Response blocked from client (Block Client mode)").await;
-        return Ok(());
     }
-
-    // Mode: "on" -> Send Response Back to Client Stream
-    let mut response_head = format!("HTTP/1.1 {} OK\r\n", status_code);
-    for (k, v) in &final_res_headers {
-        if k.eq_ignore_ascii_case("transfer-encoding") || k.eq_ignore_ascii_case("content-length") {
-            continue;
-        }
-        response_head.push_str(&format!("{}: {}\r\n", k, v));
-    }
-    response_head.push_str(&format!("Content-Length: {}\r\n", final_res_body.len()));
-    response_head.push_str("\r\n");
-
-    stream.write_all(response_head.as_bytes()).await.map_err(|e| e.to_string())?;
-    stream.write_all(&final_res_body).await.map_err(|e| e.to_string())?;
-
-    Ok(())
 }
 
 async fn log_and_emit_history(
@@ -392,6 +427,17 @@ async fn log_and_emit_history(
 
     let _ = state.history_tx.send(history_entry.clone()).await;
     let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: history_entry });
+}
+
+fn headers_to_vec(headers: &hyper::HeaderMap) -> Vec<(String, String)> {
+    let mut vec = Vec::new();
+    for (name, value) in headers.iter() {
+        vec.push((
+            name.to_string().to_lowercase(),
+            value.to_str().unwrap_or("").to_string(),
+        ));
+    }
+    vec
 }
 
 fn decompress_body(body: &[u8], encoding: &str) -> Option<Vec<u8>> {
@@ -472,15 +518,6 @@ fn encode_body_for_ui(body: &[u8], content_type: &str) -> String {
         String::from_utf8(body.to_vec())
             .unwrap_or_else(|_| String::from_utf8_lossy(body).to_string())
     }
-}
-
-fn parse_host_from_headers(raw: &str) -> Option<String> {
-    for line in raw.lines() {
-        if line.to_lowercase().starts_with("host:") {
-            return Some(line[5..].trim().to_string());
-        }
-    }
-    None
 }
 
 fn parse_path_from_url(url_str: &str) -> String {

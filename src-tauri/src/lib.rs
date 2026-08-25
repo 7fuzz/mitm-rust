@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use tauri::Manager;
 use state::{AppState, HistoryEntry};
-use ca::RootCa;
 use proxy::start_proxy_server;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -39,7 +38,7 @@ pub fn run() {
                 let app_handle_clone = app_handle.clone();
                 let app_data_dir = app_handle.path().app_data_dir().expect("Failed to get app data dir");
                 let ca_dir = app_data_dir.join("ca");
-                let ca = Arc::new(RootCa::load_or_generate(ca_dir).expect("Failed to generate Root CA"));
+                let ca = Arc::new(ca::get_ca(ca_dir));
 
                 let (stop_tx, stop_rx) = oneshot::channel::<()>();
                 
