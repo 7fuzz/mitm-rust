@@ -129,7 +129,7 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
       if (isTauriAvailable()) {
         const created = await createRepeaterTab(tabName);
         set((state) => ({
-          tabs: [...state.tabs, created],
+          tabs: [created, ...state.tabs.filter((t) => t.id !== created.id)],
           activeTabId: created.id,
         }));
         get().fetchHistory(created.id);
@@ -150,7 +150,7 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
           executionCount: 0,
         };
         set((state) => ({
-          tabs: [...state.tabs, newTab],
+          tabs: [newTab, ...state.tabs],
           activeTabId: newTab.id,
         }));
       }
@@ -231,7 +231,12 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     };
 
     await get().updateTab(populatedTab);
-    set({ activeTabId: populatedTab.id });
+
+    // Always place newly sent request at the TOP of the tabs list
+    set((state) => ({
+      tabs: [populatedTab, ...state.tabs.filter((t) => t.id !== populatedTab.id)],
+      activeTabId: populatedTab.id,
+    }));
 
     // 5. Construct initial execution result & history item from traffic capture
     const responseHeaders: HeaderItem[] = (item.responseHeaders || []).map((h, i) => ({
@@ -321,7 +326,7 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     const nextTabs = tabs.filter((t) => t.id !== id);
     let nextActive = activeTabId;
     if (activeTabId === id) {
-      nextActive = nextTabs.length > 0 ? nextTabs[nextTabs.length - 1].id : null;
+      nextActive = nextTabs.length > 0 ? nextTabs[0].id : null;
     }
     set({ tabs: nextTabs, activeTabId: nextActive });
 
@@ -340,11 +345,8 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
 
   openTab: (tab) => {
     const { tabs } = get();
-    if (!tabs.some((t) => t.id === tab.id)) {
-      set({ tabs: [...tabs, tab], activeTabId: tab.id });
-    } else {
-      set({ activeTabId: tab.id });
-    }
+    const filtered = tabs.filter((t) => t.id !== tab.id);
+    set({ tabs: [tab, ...filtered], activeTabId: tab.id });
     get().fetchHistory(tab.id);
   },
 

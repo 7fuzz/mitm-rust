@@ -95,7 +95,7 @@ pub fn get_repeater_tabs_db(db_path: &PathBuf) -> Result<Vec<RepeaterTab>, Strin
         FROM repeaters r
         LEFT JOIN repeater_histories h ON r.id = h.repeater_id
         GROUP BY r.id
-        ORDER BY r.order_index ASC, r.created_at_ms ASC
+        ORDER BY r.created_at_ms DESC, r.updated_at_ms DESC
     ";
 
     let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
