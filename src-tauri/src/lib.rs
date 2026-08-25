@@ -1,10 +1,12 @@
 pub mod ca;
+pub mod collections;
 pub mod commands;
 pub mod db;
 pub mod encoding;
 pub mod proxy;
 pub mod repeater;
 pub mod state;
+pub mod workspace;
 
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
@@ -107,8 +109,25 @@ pub fn run() {
             commands::repeater_cmd::execute_repeater_request,
             commands::repeater_cmd::get_repeater_history,
             commands::repeater_cmd::insert_repeater_history,
-        ])
 
+            commands::workspace_cmd::get_workspaces,
+            commands::workspace_cmd::create_workspace,
+            commands::workspace_cmd::update_workspace,
+            commands::workspace_cmd::delete_workspace,
+            commands::workspace_cmd::set_active_workspace,
+            commands::workspace_cmd::import_workspace_json,
+            commands::workspace_cmd::get_workspace_environments,
+            commands::workspace_cmd::save_workspace_environment,
+
+            commands::collection_cmd::get_collections,
+            commands::collection_cmd::create_collection,
+            commands::collection_cmd::update_collection,
+            commands::collection_cmd::delete_collection,
+            commands::collection_cmd::create_request,
+            commands::collection_cmd::update_request,
+            commands::collection_cmd::delete_request,
+            commands::collection_cmd::execute_collection_request,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
