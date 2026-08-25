@@ -154,18 +154,18 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
       </div>
 
       {/* Format Selector Bar & Copy Response Dropdown */}
-      <div className="px-3 py-1.5 bg-surface/80 border-b border-border/80 flex items-center justify-between shrink-0 font-mono text-[11px]">
+      <div className="px-3 py-1.5 bg-surface border-b border-border flex items-center justify-between shrink-0 font-mono text-[11px]">
         {/* Format selectors (active in Body tab) */}
         {activeTab === 'body' ? (
-          <div className="flex items-center gap-1 bg-background/60 p-0.5 rounded border border-border/60">
+          <div className="flex items-center gap-1 bg-background p-0.5 rounded border border-border">
             {(['pretty', 'raw', 'hex', 'html'] as const).map((fmt) => (
               <button
                 key={fmt}
                 onClick={() => setBodyFormat(fmt)}
                 className={`px-2 py-0.5 rounded uppercase text-[10px] font-semibold transition-colors cursor-pointer ${
                   bodyFormat === fmt
-                    ? 'bg-zinc-800 text-primary border border-primary/40 shadow-2xs'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-zinc-800/40'
+                    ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
                 }`}
               >
                 {fmt}
@@ -189,27 +189,27 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
           </button>
 
           {copyMenuOpen && (
-            <div className="absolute right-0 mt-1 w-44 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
+            <div className="absolute right-0 mt-1 w-44 bg-surface border border-border rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
               <button
                 onClick={handleCopyBody}
                 disabled={!responseBody}
-                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-40"
+                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-40"
               >
                 <MingCuteIcon name="file_text_line" size={14} className="text-primary" />
                 <span>Copy Body</span>
               </button>
               <button
                 onClick={handleCopyHeaders}
-                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
               >
-                <MingCuteIcon name="list_check_line" size={14} className="text-emerald-400" />
+                <MingCuteIcon name="list_check_line" size={14} className="text-emerald-500" />
                 <span>Copy Headers</span>
               </button>
               <button
                 onClick={handleCopyAll}
-                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
+                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer border-t border-border/80"
               >
-                <MingCuteIcon name="copy_line" size={14} className="text-amber-400" />
+                <MingCuteIcon name="copy_line" size={14} className="text-amber-500" />
                 <span>Copy All (Full Res)</span>
               </button>
             </div>

@@ -175,33 +175,33 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
           </button>
 
           {copyMenuOpen && (
-            <div className="absolute right-0 mt-1 w-44 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
+            <div className="absolute right-0 mt-1 w-44 bg-surface border border-border rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
               <button
                 onClick={handleCopyBody}
-                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
               >
                 <MingCuteIcon name="file_text_line" size={14} className="text-primary" />
                 <span>Copy Body</span>
               </button>
               <button
                 onClick={handleCopyHeaders}
-                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
               >
-                <MingCuteIcon name="list_check_line" size={14} className="text-emerald-400" />
+                <MingCuteIcon name="list_check_line" size={14} className="text-emerald-500" />
                 <span>Copy Headers</span>
               </button>
               <button
                 onClick={handleCopyAll}
-                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
+                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer border-t border-border/80"
               >
-                <MingCuteIcon name="copy_line" size={14} className="text-amber-400" />
+                <MingCuteIcon name="copy_line" size={14} className="text-amber-500" />
                 <span>Copy All (Full Req)</span>
               </button>
               <button
                 onClick={handleCopyCurl}
-                className="px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
               >
-                <MingCuteIcon name="code_line" size={14} className="text-blue-400" />
+                <MingCuteIcon name="code_line" size={14} className="text-blue-500" />
                 <span>Copy as cURL</span>
               </button>
             </div>
