@@ -67,10 +67,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::history_cmd::get_history_logs,
-            commands::history_cmd::get_history_detail,
             commands::history_cmd::clear_history_logs,
             commands::history_cmd::get_history_settings,
             commands::history_cmd::update_history_settings,
+
             commands::proxy_cmd::get_proxy_state,
             commands::proxy_cmd::set_proxy_mode,
             commands::proxy_cmd::toggle_proxy,

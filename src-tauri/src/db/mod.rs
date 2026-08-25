@@ -31,13 +31,15 @@ pub fn init_database(app_handle: &AppHandle) -> Result<PathBuf, String> {
     let db_path = get_db_path(app_handle);
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
 
-    // Migration check: Ensure history table has 'uuid' column.
-    // If an old table exists without 'uuid', drop it to recreate with clean schema.
+    // Migration check: Ensure history table primary key is TEXT id.
+    // If an old table with autoincrement integer id exists, drop it.
     let table_exists = conn.prepare("SELECT 1 FROM history LIMIT 1").is_ok();
     if table_exists {
-        let has_uuid = conn.prepare("SELECT uuid FROM history LIMIT 1").is_ok();
-        if !has_uuid {
-            eprintln!("[DB Migration] Recreating outdated history table to add 'uuid' column");
+        let is_text_id = conn
+            .prepare("SELECT id FROM history WHERE typeof(id) = 'text' LIMIT 1")
+            .is_ok();
+        if !is_text_id {
+            eprintln!("[DB Migration] Recreating history table with TEXT primary key");
             let _ = conn.execute("DROP TABLE history", []);
         }
     }
@@ -48,11 +50,13 @@ pub fn init_database(app_handle: &AppHandle) -> Result<PathBuf, String> {
          PRAGMA foreign_keys = ON;
 
          CREATE TABLE IF NOT EXISTS history (
-             id INTEGER PRIMARY KEY AUTOINCREMENT,
-             uuid TEXT NOT NULL UNIQUE,
+             id TEXT PRIMARY KEY,
              method TEXT NOT NULL,
              url TEXT NOT NULL,
              host TEXT NOT NULL,
+             path TEXT NOT NULL DEFAULT '/',
+             content_type TEXT NOT NULL DEFAULT '-',
+             response_size INTEGER NOT NULL DEFAULT 0,
              status_code INTEGER NOT NULL,
              request_headers TEXT NOT NULL,
              response_headers TEXT NOT NULL,
@@ -67,7 +71,6 @@ pub fn init_database(app_handle: &AppHandle) -> Result<PathBuf, String> {
          CREATE INDEX IF NOT EXISTS idx_history_method ON history(method);
          CREATE INDEX IF NOT EXISTS idx_history_status ON history(status_code);
          CREATE INDEX IF NOT EXISTS idx_history_host ON history(host);
-         CREATE INDEX IF NOT EXISTS idx_history_uuid ON history(uuid);
 
          CREATE TABLE IF NOT EXISTS intercept_rules (
              id TEXT PRIMARY KEY,
@@ -116,7 +119,7 @@ pub fn prune_history_logs_conn(conn: &Connection, max_rows: u32) -> Result<usize
         return Ok(0);
     }
     conn.execute(
-        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY id DESC LIMIT ?)",
+        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY created_at DESC, rowid DESC LIMIT ?)",
         params![max_rows],
     ).map_err(|e| e.to_string())
 }

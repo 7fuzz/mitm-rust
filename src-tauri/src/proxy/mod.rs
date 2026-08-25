@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::ca::RootCa;
 use crate::proxy::intercept::handle_intercept_hook;
-use crate::state::{AppState, HistoryDetailItem, HistoryEntry, HistorySummaryItem, InterceptAction, InterceptPhase, TrafficCapturedEvent};
+use crate::state::{AppState, HistoryEntry, InterceptAction, InterceptPhase, TrafficCapturedEvent};
 
 pub async fn start_proxy_server(
     app_handle: AppHandle,
@@ -171,7 +171,6 @@ where
     } else {
         Vec::new()
     };
-
 
     // Mode: "block" -> Never send to server, never send to client
     if proxy_mode == "block" {
@@ -348,30 +347,13 @@ async fn log_and_emit_history(
 
     let response_size = res_body.len() as u64;
 
-    let entry_uuid = Uuid::new_v4().to_string();
+    let entry_id = Uuid::new_v4().to_string();
     let now = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_default();
 
     let history_entry = HistoryEntry {
-        id: 0,
-        uuid: entry_uuid.clone(),
-        method: method.to_string(),
-        url: full_url.to_string(),
-        host: host.to_string(),
-        status_code,
-        request_headers: req_headers.clone(),
-        response_headers: res_headers.clone(),
-        request_body: req_body_str.clone(),
-        response_body: res_body_str.clone(),
-        phase: "response".to_string(),
-        duration_ms: Some(duration_ms),
-        created_at: now.clone(),
-    };
-
-    let summary_item = HistorySummaryItem {
-        id: 0,
-        uuid: entry_uuid.clone(),
+        id: entry_id,
         method: method.to_string(),
         url: full_url.to_string(),
         host: host.to_string(),
@@ -379,30 +361,17 @@ async fn log_and_emit_history(
         content_type,
         response_size,
         status_code,
-        duration_ms: Some(duration_ms),
-        created_at: now.clone(),
-    };
-
-    let detail_item = HistoryDetailItem {
-        id: 0,
-        uuid: entry_uuid,
-        method: method.to_string(),
-        url: full_url.to_string(),
-        host: host.to_string(),
-        status_code,
         request_headers: req_headers,
         response_headers: res_headers,
         request_body: req_body_str,
         response_body: res_body_str,
-        request_body_hex: None,
-        response_body_hex: None,
         phase: "response".to_string(),
         duration_ms: Some(duration_ms),
         created_at: now,
     };
 
-    let _ = state.history_tx.send(history_entry).await;
-    let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: summary_item, detail: detail_item });
+    let _ = state.history_tx.send(history_entry.clone()).await;
+    let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: history_entry });
 }
 
 fn parse_host_from_headers(raw: &str) -> Option<String> {

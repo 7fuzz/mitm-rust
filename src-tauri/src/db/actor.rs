@@ -54,13 +54,16 @@ fn flush_history_batch(db_path: &PathBuf, buffer: &mut Vec<HistoryEntry>) {
                         let res_headers = serde_json::to_string(&entry.response_headers).unwrap_or_else(|_| "[]".to_string());
 
                         let res = tx.execute(
-                            "INSERT INTO history (uuid, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms) 
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            "INSERT OR REPLACE INTO history (id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms) 
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             rusqlite::params![
-                                entry.uuid,
+                                entry.id,
                                 entry.method,
                                 entry.url,
                                 entry.host,
+                                entry.path,
+                                entry.content_type,
+                                entry.response_size,
                                 entry.status_code,
                                 req_headers,
                                 res_headers,
@@ -71,7 +74,7 @@ fn flush_history_batch(db_path: &PathBuf, buffer: &mut Vec<HistoryEntry>) {
                             ],
                         );
                         if let Err(e) = res {
-                            eprintln!("[DB Actor] Error inserting history entry (uuid: {}): {}", entry.uuid, e);
+                            eprintln!("[DB Actor] Error inserting history entry (id: {}): {}", entry.id, e);
                         }
                     }
                     if let Err(e) = tx.commit() {

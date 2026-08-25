@@ -47,26 +47,7 @@ pub struct PendingFlowPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryEntry {
-    pub id: i64,
-    pub uuid: String,
-    pub method: String,
-    pub url: String,
-    pub host: String,
-    pub status_code: u16,
-    pub request_headers: Vec<(String, String)>,
-    pub response_headers: Vec<(String, String)>,
-    pub request_body: String,
-    pub response_body: String,
-    pub phase: String,
-    pub duration_ms: Option<u64>,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HistorySummaryItem {
-    pub id: i64,
-    pub uuid: String,
+    pub id: String,
     pub method: String,
     pub url: String,
     pub host: String,
@@ -74,25 +55,10 @@ pub struct HistorySummaryItem {
     pub content_type: String,
     pub response_size: u64,
     pub status_code: u16,
-    pub duration_ms: Option<u64>,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HistoryDetailItem {
-    pub id: i64,
-    pub uuid: String,
-    pub method: String,
-    pub url: String,
-    pub host: String,
-    pub status_code: u16,
     pub request_headers: Vec<(String, String)>,
     pub response_headers: Vec<(String, String)>,
     pub request_body: String,
     pub response_body: String,
-    pub request_body_hex: Option<String>,
-    pub response_body_hex: Option<String>,
     pub phase: String,
     pub duration_ms: Option<u64>,
     pub created_at: String,
@@ -117,10 +83,8 @@ impl Default for HistorySettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrafficCapturedEvent {
-    pub entry: HistorySummaryItem,
-    pub detail: HistoryDetailItem,
+    pub entry: HistoryEntry,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
