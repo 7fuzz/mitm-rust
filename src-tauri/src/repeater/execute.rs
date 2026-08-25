@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use super::{HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab};
 use crate::repeater::{get_repeater_tab_by_id, insert_repeater_history_db};
-use crate::encoding::format_body_for_ui;
+use crate::encoding::{build_multipart_payload, format_body_for_ui};
 
 pub async fn execute_tab_request(
     db_path: &PathBuf,
@@ -69,10 +69,13 @@ pub async fn execute_repeater_tab(
         .cloned()
         .collect();
 
+    let is_multipart = tab.body_type == "multipart" || tab.body_type == "form-data" || tab.body_type == "form";
+
     for h in &enabled_headers {
         let key_lower = h.key.trim().to_lowercase();
         // Skip headers managed automatically by reqwest
-        if key_lower == "host" || key_lower == "content-length" || key_lower == "transfer-encoding" {
+        if key_lower == "host" || key_lower == "content-length" || key_lower == "transfer-encoding"
+            || (is_multipart && key_lower == "content-type") {
             continue;
         }
 
@@ -84,10 +87,16 @@ pub async fn execute_repeater_tab(
         }
     }
 
-    // Attach body if present
+    // Attach multipart form or raw body
     let req_body_str = tab.body_content.clone().filter(|b| !b.trim().is_empty());
 
-    if let Some(ref body) = req_body_str {
+    if is_multipart {
+        if let Some(ref content) = req_body_str {
+            if let Ok(form) = build_multipart_payload(content) {
+                req_builder = req_builder.multipart(form);
+            }
+        }
+    } else if let Some(ref body) = req_body_str {
         req_builder = req_builder.body(body.clone());
     }
 

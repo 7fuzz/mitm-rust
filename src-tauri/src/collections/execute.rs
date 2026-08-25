@@ -5,7 +5,7 @@ use reqwest::Method;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-use crate::encoding::format_body_for_ui;
+use crate::encoding::{build_multipart_payload, format_body_for_ui};
 use crate::repeater::HeaderItem;
 use crate::workspace::interpolate_variables;
 
@@ -49,7 +49,7 @@ pub async fn execute_collection_request_db(
     request_id: &str,
 ) -> Result<ExecutionResult, String> {
     // 1. Fetch request details & interpolate variables in scope block so Connection is dropped before .await
-    let (id, _workspace_id, raw_method, target_url, logged_req_headers, final_body, req_headers_map) = {
+    let (id, _workspace_id, raw_method, target_url, logged_req_headers, final_body, req_headers_map, body_type) = {
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
         let mut stmt = conn
@@ -107,13 +107,16 @@ pub async fn execute_collection_request_db(
             url = format!("https://{}", url);
         }
 
+        let is_multipart = body_type == "multipart" || body_type == "form-data" || body_type == "form";
+
         let mut req_headers_map = HeaderMap::new();
         let mut logged_req_headers = Vec::new();
 
         for h in headers_list {
             if h.enabled && !h.key.trim().is_empty() {
                 let k_lower = h.key.trim().to_lowercase();
-                if k_lower == "host" || k_lower == "content-length" || k_lower == "transfer-encoding" {
+                if k_lower == "host" || k_lower == "content-length" || k_lower == "transfer-encoding"
+                    || (is_multipart && k_lower == "content-type") {
                     continue;
                 }
 
@@ -137,7 +140,7 @@ pub async fn execute_collection_request_db(
 
         let final_body = if body_type != "none" { interpolated_body } else { None };
 
-        (id, workspace_id, raw_method, url, logged_req_headers, final_body, req_headers_map)
+        (id, workspace_id, raw_method, url, logged_req_headers, final_body, req_headers_map, body_type)
     };
 
     // 2. Construct reqwest HTTP client & send request
@@ -150,7 +153,15 @@ pub async fn execute_collection_request_db(
     let method = Method::from_bytes(raw_method.as_bytes()).map_err(|e| e.to_string())?;
     let mut req_builder = client.request(method, &target_url).headers(req_headers_map);
 
-    if let Some(ref body_str) = final_body {
+    let is_multipart = body_type == "multipart" || body_type == "form-data" || body_type == "form";
+
+    if is_multipart {
+        if let Some(ref content) = final_body {
+            if let Ok(form) = build_multipart_payload(content) {
+                req_builder = req_builder.multipart(form);
+            }
+        }
+    } else if let Some(ref body_str) = final_body {
         if !body_str.is_empty() {
             req_builder = req_builder.body(body_str.clone());
         }
