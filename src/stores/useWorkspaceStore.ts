@@ -1,165 +1,237 @@
 import { create } from 'zustand';
 import type { EnvironmentItem, VariableItem, ReplacementRule, CollectionLink } from '../types';
-import { createEnvironment, deleteEnvironment, setActiveEnvironment, createVariable, updateVariable, deleteVariable, saveReplacementsBulk, deleteReplacement } from '../services/tauri/ipc';
-
-const SAMPLE_ENVIRONMENTS: EnvironmentItem[] = [
-  { id: 'env-global', name: 'Global', isDefault: true, color: '#94a3b8' },
-  { id: 'env-dev', name: 'Development', color: '#38bdf8' },
-  { id: 'env-staging', name: 'Staging', color: '#f59e0b' },
-  { id: 'env-prod', name: 'Production', color: '#ef4444' },
-];
-
-const SAMPLE_VARIABLES: VariableItem[] = [
-  { id: 'var-1', key: 'BASE_URL', value: 'https://api-dev.internal.net', environmentId: 'env-dev', isSecret: false, type: 'string', description: 'Dev server base endpoint' },
-  { id: 'var-2', key: 'AUTH_TOKEN', value: 'bearer_token_super_secret_992182', environmentId: 'env-dev', isSecret: true, type: 'string', description: 'JWT authentication bearer' },
-  { id: 'var-3', key: 'BASE_URL', value: 'https://api.production.com', environmentId: 'env-prod', isSecret: false, type: 'string', description: 'Production server base endpoint' },
-  { id: 'var-4', key: 'STRIPE_SECRET_KEY', value: 'sk_live_51M000000000000000', environmentId: 'env-prod', isSecret: true, type: 'string', description: 'Stripe live key' },
-  { id: 'var-5', key: 'GLOBAL_TIMEOUT', value: '5000', environmentId: 'env-global', isSecret: false, type: 'number', description: 'Default API timeout ms' },
-];
-
-const SAMPLE_REPLACEMENTS: ReplacementRule[] = [
-  { id: 'rep-1', domain: '*.internal.dev', target: 'header', isRegex: false, pattern: 'User-Agent', replacement: 'MITM-Custom-Security-Agent/1.0', enabled: true },
-  { id: 'rep-2', domain: 'api.github.com', target: 'body', isRegex: true, pattern: '\"is_admin\":\\s*false', replacement: '"is_admin": true', enabled: false },
-];
-
-const SAMPLE_COLLECTION_LINKS: CollectionLink[] = [
-  { groupId: 'grp-auth', environmentId: 'env-dev' },
-  { groupId: 'grp-auth', environmentId: 'env-staging' },
-  { groupId: 'grp-payment', environmentId: 'env-dev' },
-];
+import {
+  getWorkspaces,
+  createWorkspace,
+  updateWorkspace,
+  deleteWorkspace,
+  setActiveWorkspace,
+  importWorkspaceJson,
+  getWorkspaceEnvironments,
+  saveWorkspaceEnvironment,
+  Workspace,
+  Environment,
+  ImportSummary,
+} from '../services/tauri/bridge';
+import { isTauriAvailable } from '../services/tauri/ipc';
 
 interface WorkspaceState {
-  environments: EnvironmentItem[];
+  workspaces: Workspace[];
+  activeWorkspaceId: string | null;
+  environmentsList: Environment[];
   activeEnvironmentId: string;
+  isImportModalOpen: boolean;
+
+  // Legacy compatibility fields
+  environments: EnvironmentItem[];
   variables: VariableItem[];
   replacements: ReplacementRule[];
   collectionLinks: CollectionLink[];
 
+  // Actions
+  initStore: () => Promise<void>;
+  selectWorkspace: (id: string) => Promise<void>;
+  createNewWorkspace: (name: string, description?: string) => Promise<Workspace | null>;
+  updateWorkspaceDetails: (workspace: Workspace) => Promise<void>;
+  deleteWorkspaceById: (id: string) => Promise<void>;
+  importProjectJson: (jsonContent: string) => Promise<ImportSummary | null>;
+  loadEnvironments: (workspaceId: string) => Promise<void>;
+  saveEnvironmentVariables: (env: Environment) => Promise<void>;
+  setImportModalOpen: (open: boolean) => void;
+
+  // Legacy compatibility methods
   setActiveEnv: (id: string) => Promise<void>;
   createEnv: (name: string, color?: string) => Promise<void>;
   deleteEnv: (id: string) => Promise<void>;
-
   addVar: (v: Partial<VariableItem>) => Promise<void>;
   updateVar: (v: VariableItem) => Promise<void>;
   deleteVar: (id: string) => Promise<void>;
-
   addReplacement: (rule: Omit<ReplacementRule, 'id'>) => Promise<void>;
   toggleReplacement: (id: string) => Promise<void>;
   deleteReplacementRule: (id: string) => Promise<void>;
-
   toggleCollectionLink: (groupId: string, environmentId: string) => void;
 }
 
+const SAMPLE_WORKSPACES: Workspace[] = [
+  {
+    id: 'ws-default',
+    name: 'Default Workspace',
+    description: 'Main development and testing workspace',
+    activeEnvironmentId: 'env-dev',
+    createdAtMs: Date.now(),
+    updatedAtMs: Date.now(),
+  },
+];
+
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
-  environments: SAMPLE_ENVIRONMENTS,
+  workspaces: SAMPLE_WORKSPACES,
+  activeWorkspaceId: 'ws-default',
+  environmentsList: [],
   activeEnvironmentId: 'env-dev',
-  variables: SAMPLE_VARIABLES,
-  replacements: SAMPLE_REPLACEMENTS,
-  collectionLinks: SAMPLE_COLLECTION_LINKS,
+  isImportModalOpen: false,
 
-  setActiveEnv: async (id) => {
-    set({ activeEnvironmentId: id });
-    try {
-      await setActiveEnvironment(id);
-    } catch (err) {
-      console.error('Failed to set active environment:', err);
+  environments: [
+    { id: 'env-global', name: 'Global', isDefault: true, color: '#94a3b8' },
+    { id: 'env-dev', name: 'Development', color: '#38bdf8' },
+    { id: 'env-staging', name: 'Staging', color: '#f59e0b' },
+    { id: 'env-prod', name: 'Production', color: '#ef4444' },
+  ],
+  variables: [],
+  replacements: [],
+  collectionLinks: [],
+
+  initStore: async () => {
+    if (isTauriAvailable()) {
+      try {
+        const fetchedWorkspaces = await getWorkspaces();
+        if (fetchedWorkspaces.length > 0) {
+          set({ workspaces: fetchedWorkspaces });
+          const activeId = get().activeWorkspaceId || fetchedWorkspaces[0].id;
+          set({ activeWorkspaceId: activeId });
+          await get().loadEnvironments(activeId);
+        } else {
+          // Create default workspace if none exists
+          const created = await createWorkspace('Default Workspace', 'Main development workspace');
+          set({ workspaces: [created], activeWorkspaceId: created.id });
+          await get().loadEnvironments(created.id);
+        }
+      } catch (err) {
+        console.error('Failed to init workspace store:', err);
+      }
     }
   },
 
-  createEnv: async (name, color) => {
-    try {
-      const newEnv = await createEnvironment(name, color);
-      set((state) => ({ environments: [...state.environments, newEnv] }));
-    } catch (err) {
-      console.error('Failed to create environment:', err);
+  selectWorkspace: async (id) => {
+    set({ activeWorkspaceId: id });
+    if (isTauriAvailable()) {
+      try {
+        await setActiveWorkspace(id);
+        await get().loadEnvironments(id);
+      } catch (err) {
+        console.error('Failed to set active workspace:', err);
+      }
     }
   },
 
-  deleteEnv: async (id) => {
-    if (id === 'env-global') return; // Cannot delete global
+  createNewWorkspace: async (name, description) => {
+    try {
+      if (isTauriAvailable()) {
+        const created = await createWorkspace(name, description);
+        set((state) => ({
+          workspaces: [created, ...state.workspaces],
+          activeWorkspaceId: created.id,
+        }));
+        await get().loadEnvironments(created.id);
+        return created;
+      } else {
+        const newWs: Workspace = {
+          id: 'ws-' + Date.now(),
+          name,
+          description,
+          createdAtMs: Date.now(),
+          updatedAtMs: Date.now(),
+        };
+        set((state) => ({
+          workspaces: [newWs, ...state.workspaces],
+          activeWorkspaceId: newWs.id,
+        }));
+        return newWs;
+      }
+    } catch (err) {
+      console.error('Failed to create workspace:', err);
+      return null;
+    }
+  },
+
+  updateWorkspaceDetails: async (workspace) => {
     set((state) => ({
-      environments: state.environments.filter((e) => e.id !== id),
-      variables: state.variables.filter((v) => v.environmentId !== id),
-      activeEnvironmentId: state.activeEnvironmentId === id ? 'env-global' : state.activeEnvironmentId,
+      workspaces: state.workspaces.map((w) => (w.id === workspace.id ? workspace : w)),
     }));
-    try {
-      await deleteEnvironment(id);
-    } catch (err) {
-      console.error('Failed to delete environment:', err);
+    if (isTauriAvailable()) {
+      try {
+        await updateWorkspace(workspace);
+      } catch (err) {
+        console.error('Failed to update workspace:', err);
+      }
     }
   },
 
-  addVar: async (v) => {
-    try {
-      const created = await createVariable(v);
-      set((state) => ({ variables: [...state.variables, created] }));
-    } catch (err) {
-      console.error('Failed to add variable:', err);
+  deleteWorkspaceById: async (id) => {
+    const remaining = get().workspaces.filter((w) => w.id !== id);
+    const nextActiveId = remaining[0]?.id || null;
+    set({ workspaces: remaining, activeWorkspaceId: nextActiveId });
+
+    if (isTauriAvailable()) {
+      try {
+        await deleteWorkspace(id);
+        if (nextActiveId) {
+          await get().loadEnvironments(nextActiveId);
+        }
+      } catch (err) {
+        console.error('Failed to delete workspace:', err);
+      }
     }
   },
 
-  updateVar: async (v) => {
+  importProjectJson: async (jsonContent) => {
+    if (isTauriAvailable()) {
+      try {
+        const summary = await importWorkspaceJson(jsonContent);
+        await get().initStore();
+        if (summary.workspaceId) {
+          await get().selectWorkspace(summary.workspaceId);
+        }
+        return summary;
+      } catch (err) {
+        console.error('Failed to import workspace JSON:', err);
+        throw err;
+      }
+    }
+    return null;
+  },
+
+  loadEnvironments: async (workspaceId) => {
+    if (isTauriAvailable() && workspaceId) {
+      try {
+        const envs = await getWorkspaceEnvironments(workspaceId);
+        set({ environmentsList: envs });
+        const activeEnv = envs.find((e) => e.isActive) || envs[0];
+        if (activeEnv) {
+          set({ activeEnvironmentId: activeEnv.id });
+        }
+      } catch (err) {
+        console.error('Failed to load workspace environments:', err);
+      }
+    }
+  },
+
+  saveEnvironmentVariables: async (env) => {
     set((state) => ({
-      variables: state.variables.map((item) => (item.id === v.id ? v : item)),
+      environmentsList: state.environmentsList.map((e) => (e.id === env.id ? env : e)),
     }));
-    try {
-      await updateVariable(v);
-    } catch (err) {
-      console.error('Failed to update variable:', err);
+    if (isTauriAvailable()) {
+      try {
+        await saveWorkspaceEnvironment(env);
+        if (get().activeWorkspaceId) {
+          await get().loadEnvironments(get().activeWorkspaceId!);
+        }
+      } catch (err) {
+        console.error('Failed to save environment variables:', err);
+      }
     }
   },
 
-  deleteVar: async (id) => {
-    set((state) => ({
-      variables: state.variables.filter((item) => item.id !== id),
-    }));
-    try {
-      await deleteVariable(id);
-    } catch (err) {
-      console.error('Failed to delete variable:', err);
-    }
-  },
+  setImportModalOpen: (open) => set({ isImportModalOpen: open }),
 
-  addReplacement: async (rule) => {
-    const newRule: ReplacementRule = { ...rule, id: 'rep-' + Date.now() };
-    const nextRules = [...get().replacements, newRule];
-    set({ replacements: nextRules });
-    try {
-      await saveReplacementsBulk(nextRules);
-    } catch (err) {
-      console.error('Failed to save replacements:', err);
-    }
-  },
-
-  toggleReplacement: async (id) => {
-    const nextRules = get().replacements.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r));
-    set({ replacements: nextRules });
-    try {
-      await saveReplacementsBulk(nextRules);
-    } catch (err) {
-      console.error('Failed to save replacements:', err);
-    }
-  },
-
-  deleteReplacementRule: async (id) => {
-    const nextRules = get().replacements.filter((r) => r.id !== id);
-    set({ replacements: nextRules });
-    try {
-      await deleteReplacement(id);
-    } catch (err) {
-      console.error('Failed to delete replacement:', err);
-    }
-  },
-
-  toggleCollectionLink: (groupId, environmentId) => {
-    const { collectionLinks } = get();
-    const exists = collectionLinks.some((l) => l.groupId === groupId && l.environmentId === environmentId);
-    if (exists) {
-      set({
-        collectionLinks: collectionLinks.filter((l) => !(l.groupId === groupId && l.environmentId === environmentId)),
-      });
-    } else {
-      set({ collectionLinks: [...collectionLinks, { groupId, environmentId }] });
-    }
-  },
+  // Legacy compatibility methods
+  setActiveEnv: async (id) => set({ activeEnvironmentId: id }),
+  createEnv: async () => {},
+  deleteEnv: async () => {},
+  addVar: async () => {},
+  updateVar: async () => {},
+  deleteVar: async () => {},
+  addReplacement: async () => {},
+  toggleReplacement: async () => {},
+  deleteReplacementRule: async () => {},
+  toggleCollectionLink: () => {},
 }));
