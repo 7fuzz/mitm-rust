@@ -45,42 +45,72 @@ fn flush_history_batch(db_path: &PathBuf, buffer: &mut Vec<HistoryEntry>) {
         return;
     }
 
-    if let Ok(mut conn) = rusqlite::Connection::open(db_path) {
-        if let Ok(tx) = conn.transaction() {
-            for entry in buffer.iter() {
-                let req_headers = serde_json::to_string(&entry.request_headers).unwrap_or_else(|_| "[]".to_string());
-                let res_headers = serde_json::to_string(&entry.response_headers).unwrap_or_else(|_| "[]".to_string());
+    match rusqlite::Connection::open(db_path) {
+        Ok(mut conn) => {
+            match conn.transaction() {
+                Ok(tx) => {
+                    for entry in buffer.iter() {
+                        let req_headers = serde_json::to_string(&entry.request_headers).unwrap_or_else(|_| "[]".to_string());
+                        let res_headers = serde_json::to_string(&entry.response_headers).unwrap_or_else(|_| "[]".to_string());
 
-                let _ = tx.execute(
-                    "INSERT INTO history (uuid, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    rusqlite::params![
-                        entry.uuid,
-                        entry.method,
-                        entry.url,
-                        entry.host,
-                        entry.status_code,
-                        req_headers,
-                        res_headers,
-                        entry.request_body,
-                        entry.response_body,
-                        entry.phase,
-                        entry.duration_ms,
-                    ],
-                );
+                        let res = tx.execute(
+                            "INSERT INTO history (uuid, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms) 
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            rusqlite::params![
+                                entry.uuid,
+                                entry.method,
+                                entry.url,
+                                entry.host,
+                                entry.status_code,
+                                req_headers,
+                                res_headers,
+                                entry.request_body,
+                                entry.response_body,
+                                entry.phase,
+                                entry.duration_ms,
+                            ],
+                        );
+                        if let Err(e) = res {
+                            eprintln!("[DB Actor] Error inserting history entry (uuid: {}): {}", entry.uuid, e);
+                        }
+                    }
+                    if let Err(e) = tx.commit() {
+                        eprintln!("[DB Actor] Failed to commit history batch transaction: {}", e);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[DB Actor] Failed to begin transaction: {}", e);
+                }
             }
-            let _ = tx.commit();
-        }
 
-        // Check if history rotation limiter is enabled and prune excess rows
-        let limiter_enabled = crate::db::get_preference(db_path, "history_limiter_enabled")
-            .map(|v| v == "true")
-            .unwrap_or(true);
-        if limiter_enabled {
-            let max_rows = crate::db::get_preference(db_path, "history_limiter_max_rows")
-                .and_then(|v| v.parse::<u32>().ok())
-                .unwrap_or(500);
-            let _ = prune_history_logs_conn(&conn, max_rows);
+            // Check if history rotation limiter is enabled and prune excess rows directly on conn
+            let limiter_enabled: bool = conn
+                .query_row(
+                    "SELECT value FROM app_preferences WHERE key = 'history_limiter_enabled'",
+                    [],
+                    |r| r.get::<_, String>(0),
+                )
+                .map(|v| v == "true")
+                .unwrap_or(true);
+
+            if limiter_enabled {
+                let max_rows: u32 = conn
+                    .query_row(
+                        "SELECT value FROM app_preferences WHERE key = 'history_limiter_max_rows'",
+                        [],
+                        |r| r.get::<_, String>(0),
+                    )
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(500);
+
+                if let Err(e) = prune_history_logs_conn(&conn, max_rows) {
+                    eprintln!("[DB Actor] Error pruning history logs: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("[DB Actor] Failed to open SQLite connection to {:?}: {}", db_path, e);
         }
     }
     buffer.clear();

@@ -30,7 +30,18 @@ pub fn get_db_path(app_handle: &AppHandle) -> PathBuf {
 pub fn init_database(app_handle: &AppHandle) -> Result<PathBuf, String> {
     let db_path = get_db_path(app_handle);
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
-    
+
+    // Migration check: Ensure history table has 'uuid' column.
+    // If an old table exists without 'uuid', drop it to recreate with clean schema.
+    let table_exists = conn.prepare("SELECT 1 FROM history LIMIT 1").is_ok();
+    if table_exists {
+        let has_uuid = conn.prepare("SELECT uuid FROM history LIMIT 1").is_ok();
+        if !has_uuid {
+            eprintln!("[DB Migration] Recreating outdated history table to add 'uuid' column");
+            let _ = conn.execute("DROP TABLE history", []);
+        }
+    }
+
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
          PRAGMA synchronous = NORMAL;
@@ -56,6 +67,7 @@ pub fn init_database(app_handle: &AppHandle) -> Result<PathBuf, String> {
          CREATE INDEX IF NOT EXISTS idx_history_method ON history(method);
          CREATE INDEX IF NOT EXISTS idx_history_status ON history(status_code);
          CREATE INDEX IF NOT EXISTS idx_history_host ON history(host);
+         CREATE INDEX IF NOT EXISTS idx_history_uuid ON history(uuid);
 
          CREATE TABLE IF NOT EXISTS intercept_rules (
              id TEXT PRIMARY KEY,
