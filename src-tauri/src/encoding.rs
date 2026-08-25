@@ -5,6 +5,28 @@ use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UrlEncodedParamSpec {
+    pub id: Option<String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    pub key: String,
+    pub value: String,
+}
+
+pub fn build_urlencoded_payload(content_json: &str) -> Result<Vec<(String, String)>, String> {
+    let params: Vec<UrlEncodedParamSpec> = serde_json::from_str(content_json)
+        .map_err(|e| format!("Invalid URL-encoded payload JSON format: {}", e))?;
+
+    let active_tuples: Vec<(String, String)> = params
+        .into_iter()
+        .filter(|p| p.enabled && !p.key.trim().is_empty())
+        .map(|p| (p.key.trim().to_string(), p.value))
+        .collect();
+
+    Ok(active_tuples)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultipartFieldSpec {
     pub id: Option<String>,
     #[serde(default = "default_true")]

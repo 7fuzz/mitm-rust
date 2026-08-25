@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use super::{HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab};
 use crate::repeater::{get_repeater_tab_by_id, insert_repeater_history_db};
-use crate::encoding::{build_multipart_payload, format_body_for_ui};
+use crate::encoding::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
 
 pub async fn execute_tab_request(
     db_path: &PathBuf,
@@ -70,12 +70,14 @@ pub async fn execute_repeater_tab(
         .collect();
 
     let is_multipart = tab.body_type == "multipart" || tab.body_type == "form-data" || tab.body_type == "form";
+    let is_urlencoded = tab.body_type == "urlencoded" || tab.body_type == "x-www-form-urlencoded";
 
     for h in &enabled_headers {
         let key_lower = h.key.trim().to_lowercase();
         // Skip headers managed automatically by reqwest
         if key_lower == "host" || key_lower == "content-length" || key_lower == "transfer-encoding"
-            || (is_multipart && key_lower == "content-type") {
+            || (is_multipart && key_lower == "content-type")
+            || (is_urlencoded && key_lower == "content-type") {
             continue;
         }
 
@@ -87,10 +89,16 @@ pub async fn execute_repeater_tab(
         }
     }
 
-    // Attach multipart form or raw body
+    // Attach multipart form, urlencoded form, or raw body
     let req_body_str = tab.body_content.clone().filter(|b| !b.trim().is_empty());
 
-    if is_multipart {
+    if is_urlencoded {
+        if let Some(ref content) = req_body_str {
+            if let Ok(params) = build_urlencoded_payload(content) {
+                req_builder = req_builder.form(&params);
+            }
+        }
+    } else if is_multipart {
         if let Some(ref content) = req_body_str {
             if let Ok(form) = build_multipart_payload(content) {
                 req_builder = req_builder.multipart(form);

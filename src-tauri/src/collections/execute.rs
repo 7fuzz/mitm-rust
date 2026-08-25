@@ -5,7 +5,7 @@ use reqwest::Method;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-use crate::encoding::{build_multipart_payload, format_body_for_ui};
+use crate::encoding::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
 use crate::repeater::HeaderItem;
 use crate::workspace::interpolate_variables;
 
@@ -108,6 +108,7 @@ pub async fn execute_collection_request_db(
         }
 
         let is_multipart = body_type == "multipart" || body_type == "form-data" || body_type == "form";
+        let is_urlencoded = body_type == "urlencoded" || body_type == "x-www-form-urlencoded";
 
         let mut req_headers_map = HeaderMap::new();
         let mut logged_req_headers = Vec::new();
@@ -116,7 +117,8 @@ pub async fn execute_collection_request_db(
             if h.enabled && !h.key.trim().is_empty() {
                 let k_lower = h.key.trim().to_lowercase();
                 if k_lower == "host" || k_lower == "content-length" || k_lower == "transfer-encoding"
-                    || (is_multipart && k_lower == "content-type") {
+                    || (is_multipart && k_lower == "content-type")
+                    || (is_urlencoded && k_lower == "content-type") {
                     continue;
                 }
 
@@ -154,8 +156,15 @@ pub async fn execute_collection_request_db(
     let mut req_builder = client.request(method, &target_url).headers(req_headers_map);
 
     let is_multipart = body_type == "multipart" || body_type == "form-data" || body_type == "form";
+    let is_urlencoded = body_type == "urlencoded" || body_type == "x-www-form-urlencoded";
 
-    if is_multipart {
+    if is_urlencoded {
+        if let Some(ref content) = final_body {
+            if let Ok(params) = build_urlencoded_payload(content) {
+                req_builder = req_builder.form(&params);
+            }
+        }
+    } else if is_multipart {
         if let Some(ref content) = final_body {
             if let Ok(form) = build_multipart_payload(content) {
                 req_builder = req_builder.multipart(form);
