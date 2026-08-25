@@ -7,6 +7,7 @@ use uuid::Uuid;
 #[serde(rename_all = "camelCase")]
 pub struct RepeaterGroup {
     pub id: String,
+    pub parent_id: Option<String>,
     pub name: String,
     pub order_index: i32,
     pub extract: Option<serde_json::Value>,
@@ -171,12 +172,25 @@ pub async fn delete_repeater_request(app_handle: AppHandle, id: String) -> Resul
     Ok(())
 }
 
+fn delete_group_and_descendants(conn: &rusqlite::Connection, group_id: &str) -> Result<(), String> {
+    let mut stmt = conn.prepare("SELECT id FROM repeater_groups WHERE parent_id = ?").map_err(|e| e.to_string())?;
+    let child_ids: Vec<String> = stmt.query_map([group_id], |row| row.get(0)).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+    for cid in &child_ids {
+        delete_group_and_descendants(conn, cid)?;
+    }
+    conn.execute("DELETE FROM request_bodies WHERE request_id IN (SELECT id FROM repeater_requests WHERE group_id = ?)", [group_id]).ok();
+    conn.execute("DELETE FROM repeater_requests WHERE group_id = ?", [group_id]).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM environment_groups WHERE group_id = ?", [group_id]).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM repeater_groups WHERE id = ?", [group_id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
-pub async fn create_repeater_group(app_handle: AppHandle, name: String) -> Result<String, String> {
+pub async fn create_repeater_group(app_handle: AppHandle, name: String, parent_id: Option<String>) -> Result<String, String> {
     let db_path = get_db_path(&app_handle);
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
     let id = Uuid::new_v4().to_string();
-    conn.execute("INSERT INTO repeater_groups (id, name) VALUES (?, ?)", [id.clone(), name]).map_err(|e| e.to_string())?;
+    conn.execute("INSERT INTO repeater_groups (id, parent_id, name) VALUES (?, ?, ?)", rusqlite::params![id, parent_id, name]).map_err(|e| e.to_string())?;
     Ok(id)
 }
 
@@ -184,21 +198,51 @@ pub async fn create_repeater_group(app_handle: AppHandle, name: String) -> Resul
 pub async fn delete_repeater_group(app_handle: AppHandle, id: String) -> Result<(), String> {
     let db_path = get_db_path(&app_handle);
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM repeater_groups WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    delete_group_and_descendants(&conn, &id)?;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn bulk_delete_repeater_groups(app_handle: AppHandle, ids: Vec<String>) -> Result<(), String> {
     let db_path = get_db_path(&app_handle);
-    let mut conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
     for id in ids {
-        tx.execute("DELETE FROM repeater_groups WHERE id = ?", [&id]).map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM repeater_requests WHERE group_id = ?", [&id]).map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM environment_groups WHERE group_id = ?", [&id]).map_err(|e| e.to_string())?;
+        delete_group_and_descendants(&conn, &id)?;
     }
-    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn get_group_and_descendant_ids(conn: &rusqlite::Connection, group_id: &str) -> Vec<String> {
+    let mut ids = vec![group_id.to_string()];
+    if let Ok(mut stmt) = conn.prepare("SELECT id FROM repeater_groups WHERE parent_id = ?") {
+        if let Ok(rows) = stmt.query_map([group_id], |row| row.get(0)) {
+            let child_ids: Vec<String> = rows.filter_map(|r| r.ok()).collect();
+            for cid in child_ids {
+                ids.extend(get_group_and_descendant_ids(conn, &cid));
+            }
+        }
+    }
+    ids
+}
+
+#[tauri::command]
+pub async fn clear_group_requests(app_handle: AppHandle, group_id: String) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    let target_gids = get_group_and_descendant_ids(&conn, &group_id);
+    for gid in target_gids {
+        conn.execute("DELETE FROM request_bodies WHERE request_id IN (SELECT id FROM repeater_requests WHERE group_id = ?)", [&gid]).ok();
+        conn.execute("DELETE FROM repeater_requests WHERE group_id = ?", [&gid]).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn clear_uncategorized_requests(app_handle: AppHandle) -> Result<(), String> {
+    let db_path = get_db_path(&app_handle);
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM request_bodies WHERE request_id IN (SELECT id FROM repeater_requests WHERE group_id IS NULL)", []).ok();
+    conn.execute("DELETE FROM repeater_requests WHERE group_id IS NULL", []).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -468,36 +512,45 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
             }
         }
 
-        for (group_idx, tc) in test_cases.iter().enumerate() {
-            let tc_obj = tc.as_object().ok_or("Invalid test case object")?;
+        fn import_group_recursive(
+            conn: &rusqlite::Connection,
+            tc_obj: &serde_json::Map<String, serde_json::Value>,
+            parent_id: Option<String>,
+            group_idx: usize,
+            global_url: &str,
+            global_header: Option<&serde_json::Value>,
+            target_env_ids: &[String],
+            import_group_names: &[String],
+            imported_groups: &mut i32,
+            imported_requests: &mut i32,
+        ) -> Result<(), String> {
             let group_name = tc_obj.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| format!("Imported Group {}", group_idx));
             
-            // Check if this group should be imported
-            if !import_group_names.is_empty() && !import_group_names.contains(&group_name) {
-                continue;
+            // Check if this group should be imported (selective import at root level)
+            if parent_id.is_none() && !import_group_names.is_empty() && !import_group_names.contains(&group_name) {
+                return Ok(());
             }
 
             let new_group_id = Uuid::new_v4().to_string();
-            let global_url = data.url.as_deref().unwrap_or("");
             let group_url = tc_obj.get("url").and_then(|v| v.as_str()).unwrap_or(global_url);
-
             let group_desc = tc_obj.get("description").and_then(|v| v.as_str()).map(|s| s.to_string());
+
             conn.execute(
-                "INSERT INTO repeater_groups (id, name, order_index, description) VALUES (?, ?, ?, ?)",
-                rusqlite::params![new_group_id, group_name, group_idx, group_desc],
+                "INSERT INTO repeater_groups (id, parent_id, name, order_index, description) VALUES (?, ?, ?, ?, ?)",
+                rusqlite::params![new_group_id, parent_id, group_name, group_idx as i32, group_desc],
             ).map_err(|e| e.to_string())?;
 
-            imported_groups += 1;
+            *imported_groups += 1;
 
             // Link group to environments
-            for env_id in &target_env_ids {
+            for env_id in target_env_ids {
                 conn.execute(
                     "INSERT OR IGNORE INTO environment_groups (group_id, environment_id) VALUES (?, ?)",
                     rusqlite::params![new_group_id, env_id],
                 ).map_err(|e| e.to_string())?;
             }
 
-            // Import requests in this group
+            // Import direct request targets
             if let Some(targets) = tc_obj.get("target").and_then(|v| v.as_array()) {
                 for (req_idx, target) in targets.iter().enumerate() {
                     let target_obj = target.as_object().ok_or("Invalid target object")?;
@@ -523,8 +576,8 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
 
                     // Merge headers
                     let mut headers: Vec<(String, String)> = Vec::new();
-                    if let Some(global_header) = &data.header {
-                        if let Some(header_obj) = global_header.as_object() {
+                    if let Some(gh) = global_header {
+                        if let Some(header_obj) = gh.as_object() {
                             for (k, v) in header_obj {
                                 if let Some(val) = v.as_str() {
                                     headers.push((k.clone(), val.to_string()));
@@ -535,14 +588,12 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
                     if let Some(target_headers) = target_obj.get("header").and_then(|v| v.as_object()) {
                         for (k, v) in target_headers {
                             if let Some(val) = v.as_str() {
-                                // Replace or add header
                                 if let Some(existing) = headers.iter_mut().find(|(hk, _)| hk == k) {
                                     existing.1 = val.to_string();
                                 } else {
                                     headers.push((k.clone(), val.to_string()));
                                 }
                             } else if v.is_null() {
-                                // Remove header
                                 headers.retain(|(hk, _)| hk != k);
                             }
                         }
@@ -578,7 +629,7 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
 
                     conn.execute(
                         "INSERT INTO repeater_requests (id, name, group_id, method, url, headers, body, extract, order_index, description, url_params) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        rusqlite::params![req_id, req_name, new_group_id, method, full_url, headers_json, body, extract, req_idx, req_desc, url_params],
+                        rusqlite::params![req_id, req_name, new_group_id, method, full_url, headers_json, body, extract, req_idx as i32, req_desc, url_params],
                     ).map_err(|e| e.to_string())?;
 
                     conn.execute(
@@ -586,8 +637,49 @@ pub async fn import_repeater_data(app_handle: AppHandle, data: ImportRepeaterDat
                         rusqlite::params![req_id, body_mode, body, body_json, body_urlencoded, body_multipart],
                     ).map_err(|e| e.to_string())?;
 
-                    imported_requests += 1;
+                    *imported_requests += 1;
                 }
+            }
+
+            // Import subfolders recursively
+            if let Some(sub_folders) = tc_obj.get("folders").and_then(|v| v.as_array()) {
+                for (sub_idx, sub_f) in sub_folders.iter().enumerate() {
+                    if let Some(sub_obj) = sub_f.as_object() {
+                        import_group_recursive(
+                            conn,
+                            sub_obj,
+                            Some(new_group_id.clone()),
+                            sub_idx,
+                            group_url,
+                            global_header,
+                            target_env_ids,
+                            import_group_names,
+                            imported_groups,
+                            imported_requests,
+                        )?;
+                    }
+                }
+            }
+
+            Ok(())
+        }
+
+        let global_url = data.url.as_deref().unwrap_or("");
+
+        for (group_idx, tc) in test_cases.iter().enumerate() {
+            if let Some(tc_obj) = tc.as_object() {
+                import_group_recursive(
+                    &conn,
+                    tc_obj,
+                    None,
+                    group_idx,
+                    global_url,
+                    data.header.as_ref(),
+                    &target_env_ids,
+                    &import_group_names,
+                    &mut imported_groups,
+                    &mut imported_requests,
+                )?;
             }
         }
     }

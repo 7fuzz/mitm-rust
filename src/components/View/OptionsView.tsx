@@ -12,6 +12,7 @@ import { SyncSection } from '../modules/workspace/SyncSection';
 
 const OPTION_SECTIONS = [
   { key: 'network', label: 'Network Binding', description: 'Configure proxy listeners and network capture settings.' },
+  { key: 'webhook', label: 'Webhook & Tunnels', description: 'Configure public domain URLs (Cloudflare Tunnel) and listener settings.' },
   { key: 'ssl', label: 'SSL Certificates', description: 'Download or regenerate the local root CA.' },
   { key: 'database', label: 'Database', description: 'Control persistence, storage, and local save preferences.' },
   { key: 'sync', label: 'Sync', description: 'Manual sync status and history overview.' },
@@ -25,6 +26,8 @@ export function OptionsView() {
   const { confirm } = useDialog();
 
   const [bindings, setBindings] = useState<string[]>(['8080']);
+  const [whDomain, setWhDomain] = useState(prefs.webhookPublicDomain || 'https://example.com');
+  const [whPort, setWhPort] = useState<number>(prefs.webhookPort || 9000);
   const [isSaving, setIsSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
@@ -232,9 +235,53 @@ export function OptionsView() {
               </div>
             </div>
 
+            {/* Webhook Listener Port Binding */}
+            <div className="p-6 border border-zinc-800 rounded bg-zinc-900/30 space-y-6">
+              <h2 className="text-cyan-400 font-bold uppercase tracking-widest text-[10px] flex items-center gap-2">
+                <span className="opacity-50">#</span> 2. Webhook_HTTP_Listener_Port
+              </h2>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-mono text-zinc-300 block mb-1 font-bold">
+                    HTTP Webhook Server Port (127.0.0.1)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      value={whPort}
+                      onChange={(e) => setWhPort(Number(e.target.value))}
+                      placeholder="9000"
+                      className="w-48 bg-zinc-950 border border-zinc-700 p-2.5 rounded text-cyan-400 font-black outline-none focus:border-cyan-500 text-xs font-mono"
+                    />
+                    <Button
+                      variant="sky"
+                      size="sm"
+                      onClick={async () => {
+                        updatePrefs({ webhookPort: whPort });
+                        try {
+                          await invoke('stop_webhook_listener');
+                          await invoke('start_webhook_listener', { port: whPort });
+                          setSaveMessage(`Webhook server listening on port :${whPort}`);
+                        } catch (e) {
+                          setSaveMessage(`Webhook server port updated to :${whPort}`);
+                        }
+                        setTimeout(() => setSaveMessage(''), 3000);
+                      }}
+                    >
+                      Rebind Webhook Port
+                    </Button>
+                  </div>
+                  <p className="text-zinc-500 text-[10px] font-mono leading-relaxed mt-2">
+                    Point your Cloudflare Tunnel (<code className="text-cyan-400">cloudflared --url http://localhost:{whPort}</code>) to this port to receive external webhooks.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="p-6 border border-zinc-800 rounded bg-zinc-900/30 space-y-6">
               <h2 className="text-purple-400 font-bold uppercase tracking-widest text-[10px] flex items-center gap-2">
-                <span className="opacity-50">#</span> 2. Proxy_Halt_Modes
+                <span className="opacity-50">#</span> 3. Proxy_Halt_Modes
               </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -531,6 +578,52 @@ export function OptionsView() {
                     />
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'webhook':
+        return (
+          <div className="p-6 border border-zinc-800 rounded bg-zinc-900/30 space-y-6">
+            <h2 className="text-cyan-400 font-bold uppercase tracking-widest text-[10px] flex items-center gap-2">
+              <span className="opacity-50">#</span> Webhook_And_Tunnel_Settings
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-mono text-zinc-300 block mb-1 font-bold">
+                  Public Webhook Domain / Cloudflare Tunnel URL
+                </label>
+                <input
+                  type="text"
+                  value={whDomain}
+                  onChange={(e) => setWhDomain(e.target.value)}
+                  placeholder="https://example.com"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-xs text-cyan-400 font-mono focus:outline-none focus:border-cyan-500"
+                />
+                <p className="text-[11px] text-zinc-500 mt-1.5 leading-relaxed">
+                  Enter your Cloudflare Tunnel public domain (e.g. <code className="text-cyan-400">https://def.my.id</code> or <code className="text-cyan-400">https://xxx.trycloudflare.com</code>).
+                  Saved securely to your local database (<code className="text-zinc-400">mitm.db</code>) on this machine.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-zinc-800/50">
+                <span className="text-xs font-mono text-emerald-400">
+                  {saveMessage}
+                </span>
+                <Button
+                  variant="sky"
+                  size="md"
+                  onClick={() => {
+                    updatePrefs({ webhookPublicDomain: whDomain });
+                    setSaveMessage('Webhook domain saved to database.');
+                    setTimeout(() => setSaveMessage(''), 3000);
+                  }}
+                  className="min-w-32"
+                >
+                  Save Webhook Domain
+                </Button>
               </div>
             </div>
           </div>

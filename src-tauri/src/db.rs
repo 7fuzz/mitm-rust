@@ -179,6 +179,35 @@ fn apply_migrations(conn: &mut Connection) -> rusqlite::Result<()> {
         DROP TABLE repeater_groups;
         ALTER TABLE repeater_groups_dg_tmp RENAME TO repeater_groups;
         PRAGMA foreign_keys = ON;",
+        // Version 12: Webhook endpoints & deliveries tables
+        "CREATE TABLE IF NOT EXISTS webhook_endpoints (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            path_slug TEXT NOT NULL UNIQUE,
+            mock_status INTEGER DEFAULT 200,
+            mock_headers TEXT DEFAULT '{}',
+            mock_body TEXT DEFAULT '{\"status\":\"received\"}',
+            auto_forward_url TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at INTEGER DEFAULT (strftime('%s', 'now'))
+        );
+        CREATE TABLE IF NOT EXISTS webhook_deliveries (
+            id TEXT PRIMARY KEY,
+            endpoint_id TEXT,
+            method TEXT NOT NULL,
+            path TEXT NOT NULL,
+            headers TEXT NOT NULL,
+            query_params TEXT DEFAULT '{}',
+            body TEXT DEFAULT '',
+            client_ip TEXT,
+            forwarded INTEGER DEFAULT 0,
+            forward_status INTEGER,
+            forward_response_body TEXT,
+            timestamp INTEGER NOT NULL,
+            FOREIGN KEY(endpoint_id) REFERENCES webhook_endpoints(id) ON DELETE SET NULL
+        );",
+        // Version 13: Nested folders support for repeater_groups (parent_id)
+        "ALTER TABLE repeater_groups ADD COLUMN parent_id TEXT REFERENCES repeater_groups(id) ON DELETE CASCADE;",
     ];
 
     let target_version = migrations.len() as i32;

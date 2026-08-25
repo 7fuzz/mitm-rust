@@ -3,6 +3,8 @@ import JsonViewer from "./JsonViewer";
 import { useTraffic } from '@/hooks/traffic';
 import { useNotification } from "./NotificationProvider";
 import { DebouncedInput } from "./DebouncedInput";
+import { detectBase64, saveBase64ToFile } from "@/lib/utils/base64Helper";
+import { Base64PreviewModal } from "../Modals/Base64PreviewModal";
 
 const formatMarkup = (val: string) => {
   let formatted = '';
@@ -48,13 +50,7 @@ const parseHttpMessage = (text: string) => {
 
   // Handle base64-encoded binary bodies
   if (rawBody.startsWith("base64:")) {
-    const base64Data = rawBody.substring(7); // Remove "base64:" prefix
-    try {
-      const binaryString = atob(base64Data);
-      rawBody = `[Binary data - ${binaryString.length} bytes]\n\nBase64 encoded content:\n${base64Data.substring(0, 100)}${base64Data.length > 100 ? '...' : ''}`;
-    } catch (e) {
-      rawBody = "[Failed to decode base64 data]";
-    }
+    rawBody = rawBody.substring(7).trim();
   }
 
   const lines = headersStr.split(/\r?\n/).filter(line => line.trim());
@@ -172,16 +168,19 @@ export default function HttpResponseViewer({ text }: { text: string }) {
   const { setToolkitJson } = useTraffic();
   const { notify } = useNotification();
 
-  const isImage = parsed.contentType.startsWith('image/');
-  const isVideo = parsed.contentType.startsWith('video/');
-  const isAudio = parsed.contentType.startsWith('audio/');
+  const base64Info = useMemo(() => detectBase64(parsed.rawBody), [parsed.rawBody]);
+
+  const isImage = parsed.contentType.startsWith('image/') || base64Info?.previewType === 'image';
+  const isVideo = parsed.contentType.startsWith('video/') || base64Info?.previewType === 'video';
+  const isAudio = parsed.contentType.startsWith('audio/') || base64Info?.previewType === 'audio';
+  const isPdf = parsed.contentType.includes('pdf') || base64Info?.previewType === 'pdf';
   const isXml = parsed.contentType.includes('xml');
   const isHtml = parsed.contentType.includes('html');
   const isUrlEncoded = parsed.contentType.includes('x-www-form-urlencoded');
   const isMultipart = parsed.contentType.includes('multipart/form-data');
   const isForm = isUrlEncoded || isMultipart;
 
-  const isMediaOrFile = isImage || isVideo || isAudio || (parsed.contentType.includes('application/') && !parsed.json && !isXml && !isHtml && !isUrlEncoded);
+  const isMediaOrFile = isImage || isVideo || isAudio || isPdf || (parsed.contentType.includes('application/') && !parsed.json && !isXml && !isHtml && !isUrlEncoded);
 
   const [viewMode, setViewMode] = useState<"pretty" | "raw" | "render" | "form" | "message">("pretty");
 
@@ -198,6 +197,7 @@ export default function HttpResponseViewer({ text }: { text: string }) {
 
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedFull, setCopiedFull] = useState(false);
+  const [isB64ModalOpen, setIsB64ModalOpen] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
@@ -260,21 +260,18 @@ export default function HttpResponseViewer({ text }: { text: string }) {
     if (!parsed.rawBody || !isMediaOrFile) return;
     let objectUrl: string | null = null;
     try {
-      const isBase64 = !parsed.rawBody.includes(' ') && parsed.rawBody.length % 4 === 0 && /^[A-Za-z0-9+/=]+$/.test(parsed.rawBody.substring(0, 100));
-      if (isBase64) {
-        fetch(`data:${parsed.contentType};base64,${parsed.rawBody}`).then(res => res.blob()).then(blob => {
-          objectUrl = URL.createObjectURL(blob);
-          setMediaUrl(objectUrl);
-        });
+      if (base64Info) {
+        objectUrl = `data:${base64Info.mimeType};base64,${base64Info.cleanB64}`;
+        setMediaUrl(objectUrl);
       } else {
-        const blob = new Blob([parsed.rawBody], { type: parsed.contentType });
+        const blob = new Blob([parsed.rawBody], { type: parsed.contentType || 'application/octet-stream' });
         objectUrl = URL.createObjectURL(blob);
         const url = objectUrl;
         setTimeout(() => setMediaUrl(url), 0);
       }
     } catch (err) { console.error("Failed to parse media blob", err); }
-    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [parsed.rawBody, parsed.contentType, isMediaOrFile]);
+    return () => { if (objectUrl && !objectUrl.startsWith('data:')) URL.revokeObjectURL(objectUrl); };
+  }, [parsed.rawBody, parsed.contentType, isMediaOrFile, base64Info]);
 
   const handleCopyFull = () => {
     const content = parsed.headersStr ? `${parsed.headersStr}\n\n${formattedBody}` : formattedBody;
@@ -292,8 +289,50 @@ export default function HttpResponseViewer({ text }: { text: string }) {
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded overflow-hidden h-full flex flex-col relative">
 
+      {/* TOP MEDIA LIVE PREVIEW (renders at top when media preview is active) */}
+      {isMediaOrFile && mediaUrl && viewMode === "pretty" && (
+        <div className="p-4 bg-zinc-950/80 border-b border-zinc-800 flex flex-col items-center justify-center shrink-0 max-h-[60vh] overflow-auto">
+          {isImage ? (
+            <div className="flex flex-col items-center gap-3">
+              <img src={mediaUrl} alt="Preview" className="max-w-full max-h-[350px] object-contain rounded border border-zinc-800 shadow-xl bg-zinc-900/50 p-2" />
+              <a href={mediaUrl} download={`image.${base64Info?.extension || 'png'}`} className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-[10px] tracking-widest rounded flex items-center gap-1.5">
+                💾 Download Image ({base64Info?.extension || 'png'})
+              </a>
+            </div>
+          ) : isVideo ? (
+            <div className="flex flex-col items-center gap-3 w-full max-w-2xl">
+              <video controls src={mediaUrl} className="max-w-full max-h-[350px] rounded border border-zinc-800 shadow-xl w-full" />
+              <a href={mediaUrl} download={`video.${base64Info?.extension || 'mp4'}`} className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-[10px] tracking-widest rounded flex items-center gap-1.5">
+                💾 Download Video ({base64Info?.extension || 'mp4'})
+              </a>
+            </div>
+          ) : isAudio ? (
+            <div className="flex flex-col items-center gap-3 w-full max-w-md p-4 bg-zinc-900/60 rounded-lg border border-zinc-800">
+              <audio controls src={mediaUrl} className="w-full" />
+              <a href={mediaUrl} download={`audio.${base64Info?.extension || 'mp3'}`} className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-[10px] tracking-widest rounded flex items-center gap-1.5">
+                💾 Download Audio ({base64Info?.extension || 'mp3'})
+              </a>
+            </div>
+          ) : isPdf ? (
+            <div className="flex flex-col items-center gap-3 w-full h-[400px]">
+              <iframe src={mediaUrl} className="w-full h-full rounded border border-zinc-800 bg-white" title="PDF Live Preview" />
+              <a href={mediaUrl} download="document.pdf" className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-[10px] tracking-widest rounded flex items-center gap-1.5">
+                💾 Download PDF
+              </a>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3 p-4">
+              <div className="text-zinc-400 font-mono text-xs italic">Binary file ({base64Info?.mimeType || parsed.contentType})</div>
+              <a href={mediaUrl} download={`file.${base64Info?.extension || 'bin'}`} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-xs tracking-widest rounded">
+                Download File
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
       {(parsed.headerList.length > 0 || parsed.firstLine) && viewMode !== "message" && (
-        <div className="border-b border-zinc-800 bg-zinc-950 resize-y overflow-auto min-h-20 max-h-[60%] z-10" style={{ height: '160px' }}>
+        <div className="border-b border-zinc-800 bg-zinc-950 resize-y overflow-auto min-h-16 max-h-[40%] z-10" style={{ height: isMediaOrFile && viewMode === 'pretty' ? '90px' : '160px' }}>
           <div className="p-4 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1 text-[11px] font-mono">
             {parsed.firstLine && (
               <div className="col-span-2 text-sky-text font-black text-[12px] mb-2 pb-2 border-b border-zinc-800/50 break-all">
@@ -384,6 +423,29 @@ export default function HttpResponseViewer({ text }: { text: string }) {
 
         {/* RIGHT BLOCK (Top on Mobile) - justify-between splits Toolkit & Copy actions nicely */}
         <div className="flex items-center justify-between lg:justify-end gap-3 w-full lg:w-auto lg:ml-auto">
+          {base64Info && (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={() => setIsB64ModalOpen(true)}
+                className="h-7 flex items-center gap-1 px-2.5 text-[9px] uppercase font-bold text-sky-400 hover:bg-sky-500/20 tracking-widest transition-colors border border-sky-500/30 bg-sky-500/10 rounded cursor-pointer"
+                title="Open / Preview Base64 Payload"
+              >
+                <span>👁️ Open Base64</span>
+              </button>
+              <button
+                onClick={async () => {
+                  if (base64Info) {
+                    await saveBase64ToFile(base64Info.cleanB64, `response.${base64Info.extension}`, base64Info.mimeType);
+                  }
+                }}
+                className="h-7 flex items-center gap-1 px-2.5 text-[9px] uppercase font-bold text-emerald-400 hover:bg-emerald-500/20 tracking-widest transition-colors border border-emerald-500/30 bg-emerald-500/10 rounded cursor-pointer"
+                title="Save Decoded Base64 as File"
+              >
+                <span>💾 Save Base64</span>
+              </button>
+            </div>
+          )}
+
           {parsed.json ? (
             <button
               onClick={() => {
@@ -395,7 +457,9 @@ export default function HttpResponseViewer({ text }: { text: string }) {
             >
               Send to Toolkit
             </button>
-          ) : <div></div> /* Empty div keeps 'Copy' buttons right-aligned if no JSON */}
+          ) : !base64Info ? (
+            <div></div> /* Empty div keeps 'Copy' buttons right-aligned if no JSON */
+          ) : null}
 
           {/* STRICT HEIGHT: h-7 */}
           <div className="flex items-center gap-2 h-7">
@@ -423,18 +487,28 @@ export default function HttpResponseViewer({ text }: { text: string }) {
           <iframe srcDoc={parsed.rawBody} className="w-full h-full bg-zinc-950 rounded" title="HTML Preview" sandbox="allow-same-origin" />
         ) : isImage && mediaUrl ? (
           <div className="flex flex-col items-center justify-center gap-4 h-full">
-            <img src={mediaUrl} alt="Preview" className="max-w-full max-h-100 rounded border border-zinc-800 shadow-xl" />
-            <a href={mediaUrl} download="image.png" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-[10px] tracking-widest rounded">Download</a>
+            <img src={mediaUrl} alt="Preview" className="max-w-full max-h-100 rounded border border-zinc-800 shadow-xl bg-zinc-900/50 p-2" />
+            <a href={mediaUrl} download={`image.${base64Info?.extension || 'png'}`} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-[10px] tracking-widest rounded">Download Image</a>
           </div>
         ) : isVideo && mediaUrl ? (
           <div className="flex flex-col items-center justify-center gap-4 h-full">
             <video controls src={mediaUrl} className="max-w-full max-h-100 rounded border border-zinc-800 shadow-xl" />
-            <a href={mediaUrl} download="video.mp4" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-[10px] tracking-widest rounded">Download</a>
+            <a href={mediaUrl} download={`video.${base64Info?.extension || 'mp4'}`} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-[10px] tracking-widest rounded">Download Video</a>
+          </div>
+        ) : isAudio && mediaUrl ? (
+          <div className="flex flex-col items-center justify-center gap-4 h-full">
+            <audio controls src={mediaUrl} className="w-full max-w-md" />
+            <a href={mediaUrl} download={`audio.${base64Info?.extension || 'mp3'}`} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-[10px] tracking-widest rounded">Download Audio</a>
+          </div>
+        ) : isPdf && mediaUrl ? (
+          <div className="flex flex-col items-center justify-center gap-4 h-full w-full">
+            <iframe src={mediaUrl} className="w-full h-full min-h-[450px] rounded border border-zinc-800 bg-white" title="PDF Live Preview" />
+            <a href={mediaUrl} download="document.pdf" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-[10px] tracking-widest rounded">Download PDF</a>
           </div>
         ) : isMediaOrFile && mediaUrl ? (
           <div className="flex flex-col items-center justify-center gap-4 h-full">
-            <div className="text-zinc-500 mb-2 italic">Binary file ({parsed.contentType})</div>
-            <a href={mediaUrl} download="file.bin" className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-xs tracking-widest rounded">Download File</a>
+            <div className="text-zinc-500 mb-2 italic">Binary file ({base64Info?.mimeType || parsed.contentType})</div>
+            <a href={mediaUrl} download={`file.${base64Info?.extension || 'bin'}`} className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black uppercase text-xs tracking-widest rounded">Download File</a>
           </div>
         ) : parsed.json ? (
 
@@ -459,6 +533,13 @@ export default function HttpResponseViewer({ text }: { text: string }) {
           </pre>
         )}
       </div>
+
+      <Base64PreviewModal
+        isOpen={isB64ModalOpen}
+        onClose={() => setIsB64ModalOpen(false)}
+        data={parsed.rawBody}
+        fieldName="response_body"
+      />
     </div>
   );
 }

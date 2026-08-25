@@ -215,7 +215,7 @@ export function useRepeater(activeEnvId?: string) {
     input.click();
   }, []);
 
-  const finalizeImport = useCallback(async (data: Record<string, any>, options: Record<string, any>, notify: any) => {
+  const finalizeImport = useCallback(async (data: Record<string, any>, options: Record<string, any>, notify: any, syncAllFn?: (silent?: boolean) => Promise<void>) => {
     try {
       // Transform the data for the import command
       const importPayload = {
@@ -247,7 +247,11 @@ export function useRepeater(activeEnvId?: string) {
           : '✓ Import completed';
         
         notify?.success?.(message);
-        await refreshRepeater();
+        if (syncAllFn) {
+          await syncAllFn(true);
+        } else {
+          await refreshRepeater();
+        }
       } else {
         notify?.error?.(`Import failed: ${result.error || 'Unknown error'}`);
       }
@@ -257,10 +261,10 @@ export function useRepeater(activeEnvId?: string) {
     }
   }, [refreshRepeater]);
 
-  const createGroup = useCallback(async (name: string) => {
+  const createGroup = useCallback(async (name: string, parentId?: string | null) => {
     if (!name.trim()) return null;
     try {
-      const id = await invoke<string>('create_repeater_group', { name });
+      const id = await invoke<string>('create_repeater_group', { name, parentId: parentId || null });
       await refreshRepeater();
       return id;
     } catch (e) { console.error(e); return null; }
@@ -282,13 +286,12 @@ export function useRepeater(activeEnvId?: string) {
   }, []);
 
   const deleteGroup = useCallback(async (id: string) => {
-    setRepeaterGroups(prev => prev.filter(g => g.id !== id));
-    setRepeaterRequests(prev => prev.filter(r => r.groupId !== id));
     try {
       await invoke('delete_repeater_group', { id });
       if (activeGroupId === id) switchGroup('null');
+      await refreshRepeater();
     } catch (e) { console.error(e); }
-  }, [activeGroupId, switchGroup]);
+  }, [activeGroupId, switchGroup, refreshRepeater]);
 
   const bulkDeleteGroups = useCallback(async (ids: string[]) => {
     if (!ids || ids.length === 0) return;
@@ -381,17 +384,31 @@ export function useRepeater(activeEnvId?: string) {
     }
   }, [activeEnvId, refreshRepeater]);
 
+  const clearUncategorizedRequests = useCallback(async () => {
+    try {
+      await invoke('clear_uncategorized_requests');
+      await refreshRepeater();
+    } catch (e) { console.error('Failed to clear uncategorized requests:', e); }
+  }, [refreshRepeater]);
+
+  const clearGroupRequests = useCallback(async (groupId: string) => {
+    try {
+      await invoke('clear_group_requests', { groupId });
+      await refreshRepeater();
+    } catch (e) { console.error('Failed to clear group requests:', e); }
+  }, [refreshRepeater]);
+
   return useMemo(() => ({
     repeaterRequests, repeaterGroups, activeGroupId, switchGroup,
     _setRawRepeater: setRepeaterRequests, _setRawGroups: setRepeaterGroups, initActiveGroup,
     refreshRepeater, addEmptyRequest, duplicateRequest, createFromCurl, deleteRequest, updateRequest, importPostman,
     importProject, finalizeImport, createGroup, renameGroup, deleteGroup, bulkDeleteGroups, cloneGroup, reorderRequests, reorderGroups,
-    manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions
+    manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions, clearUncategorizedRequests, clearGroupRequests
   }), [
     repeaterRequests, repeaterGroups, activeGroupId, switchGroup, initActiveGroup,
     refreshRepeater, addEmptyRequest, duplicateRequest, createFromCurl, deleteRequest, updateRequest, importPostman,
     importProject, finalizeImport, createGroup, renameGroup, deleteGroup, bulkDeleteGroups, cloneGroup, reorderRequests, reorderGroups,
-    manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions
+    manageGroupAssignment, getAllGroups, bulkSync, updateGroupExtractions, clearUncategorizedRequests, clearGroupRequests
   ]);
 }
 

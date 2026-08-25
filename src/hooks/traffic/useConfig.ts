@@ -35,6 +35,8 @@ export function useConfig() {
     replacementsAutoSave: true,
     debugMode: false,
     theme: 'dark' as 'dark' | 'light',
+    webhookPublicDomain: 'https://example.com',
+    webhookPort: 9000,
     shortcuts: DEFAULT_SHORTCUTS
   });
   const [proxyMode, setProxyModeState] = useState<'off' | 'normal' | 'halt_client' | 'halt_all'>('normal');
@@ -78,14 +80,15 @@ export function useConfig() {
     }
   }, []);
 
-  const updatePrefs = useCallback(async (newPrefs: typeof prefs) => {
-    setPrefs(newPrefs);
-    try {
-      await invoke('update_prefs', { prefs: newPrefs });
-    } catch (e) {
-      console.error('Failed to update prefs:', e);
-    }
-  }, [prefs]);
+  const updatePrefs = useCallback(async (updates: Partial<typeof prefs>) => {
+    setPrefs((prev) => {
+      const merged = { ...prev, ...updates };
+      invoke('update_prefs', { prefs: merged }).catch((e) => {
+        console.error('Failed to update prefs:', e);
+      });
+      return merged;
+    });
+  }, []);
 
   const updateUILayout = useCallback(async (updates: Partial<UILayout>) => {
     setUiLayout(prev => {

@@ -10,4 +10,6 @@ export { ImportModal } from './ImportModal';
 export { CollectionAssignmentModal } from './CollectionAssignmentModal';
 export { CollectionDocModal } from './CollectionDocModal';
 export { CurlImportModal } from './CurlImportModal';
+export { DeleteEnvironmentModal } from './DeleteEnvironmentModal';
+export { Base64PreviewModal } from './Base64PreviewModal';
 export * from './QuickSwitcherModals';

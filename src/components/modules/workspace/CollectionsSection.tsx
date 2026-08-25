@@ -20,22 +20,26 @@ function SortableGroupItem({
   isSelected,
   onSelect, 
   onToggleSelect,
+  onAddSubfolder,
   onRename, 
   onDelete, 
   onAssign, 
   onClone,
   onEditDocs,
+  onClearRequests,
 }: { 
   group: RepeaterGroup; 
   isActive: boolean; 
   isSelected: boolean;
   onSelect: (id: string) => void; 
   onToggleSelect: (id: string) => void;
+  onAddSubfolder: (group: RepeaterGroup) => void;
   onRename: (group: RepeaterGroup) => void; 
   onDelete: (group: RepeaterGroup) => void; 
   onAssign: (group: RepeaterGroup) => void; 
   onClone: (group: RepeaterGroup) => void; 
   onEditDocs: (group: RepeaterGroup) => void;
+  onClearRequests: (group: RepeaterGroup) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: group.id });
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 50 : undefined, opacity: isDragging ? 0.5 : 1 };
@@ -78,11 +82,25 @@ function SortableGroupItem({
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button 
+          onClick={(e) => { e.stopPropagation(); onAddSubfolder(group); }} 
+          className="px-2 py-1 text-[8px] font-black uppercase tracking-widest border border-purple-500/30 text-purple-400 bg-purple-500/10 rounded hover:border-purple-500 hover:text-purple-300 transition-all flex items-center gap-1"
+          title="Add Subfolder inside this collection"
+        >
+          <span>+ Subfolder</span>
+        </button>
+        <button 
           onClick={(e) => { e.stopPropagation(); onEditDocs(group); }} 
           className="px-2 py-1 text-[8px] font-black uppercase tracking-widest border border-purple-500/30 text-purple-400 bg-purple-500/10 rounded hover:border-purple-500 hover:text-purple-300 transition-all flex items-center gap-1"
           title="View / Edit Collection Markdown Documentation"
         >
           <span>📝 Docs</span>
+        </button>
+        <button 
+          onClick={(e) => { e.stopPropagation(); onClearRequests(group); }} 
+          className="px-2 py-1 text-[8px] font-black uppercase tracking-widest border border-amber-500/30 text-amber-400 bg-amber-500/10 rounded hover:border-amber-500 hover:text-amber-300 transition-all flex items-center gap-1"
+          title="Clear all requests inside this collection and subfolders without deleting folders"
+        >
+          <span>🧹 Clear Requests</span>
         </button>
         <button 
           onClick={(e) => { e.stopPropagation(); onAssign(group); }} 
@@ -104,7 +122,7 @@ function SortableGroupItem({
 }
 
 export function CollectionsSection({ selectedGroupId, setSelectedGroupId, openPrompt, openConfirm }: CollectionsSectionProps) {
-  const { repeaterGroups, createGroup, renameGroup, deleteGroup, bulkDeleteGroups, cloneGroup, reorderGroups, refreshRepeater } = useTraffic();
+  const { repeaterGroups, createGroup, renameGroup, deleteGroup, bulkDeleteGroups, cloneGroup, reorderGroups, refreshRepeater, clearGroupRequests } = useTraffic();
   const [localGroups, setLocalGroups] = useState<RepeaterGroup[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [envFilter, setEnvFilter] = useState<'current' | 'all' | 'unassigned'>('all');
@@ -246,11 +264,13 @@ export function CollectionsSection({ selectedGroupId, setSelectedGroupId, openPr
                     isSelected={selectedGroupIds.includes(group.id)}
                     onSelect={setSelectedGroupId}
                     onToggleSelect={toggleSelectGroup}
+                    onAddSubfolder={(g: RepeaterGroup) => openPrompt('New Subfolder Name', '', (val) => createGroup(val, g.id))}
                     onRename={(g: RepeaterGroup) => openPrompt('Rename Collection', g.name, (val) => renameGroup(g.id, val))}
                     onDelete={(g: RepeaterGroup) => openConfirm('Delete Collection', `Permanently destroy "${g.name}" and all requests inside?`, () => deleteGroup(g.id))}
                     onAssign={(g: RepeaterGroup) => setAssignModal({ isOpen: true, groupId: g.id, groupName: g.name })}
                     onClone={(g: RepeaterGroup) => openPrompt('Clone Collection', `${g.name} (Copy)`, (val) => cloneGroup(g.id, val))}
                     onEditDocs={(g: RepeaterGroup) => setDocModal({ isOpen: true, group: g })}
+                    onClearRequests={(g: RepeaterGroup) => openConfirm('Clear Collection Requests', `Are you sure you want to remove all requests inside "${g.name}" and its subfolders? Collection structure and environments will remain unchanged.`, () => clearGroupRequests(g.id))}
                   />
                 ))}
               </SortableContext>
