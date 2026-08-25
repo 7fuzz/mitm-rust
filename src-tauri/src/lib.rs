@@ -49,7 +49,9 @@ pub fn run() {
                     proxy_active: std::sync::atomic::AtomicBool::new(true),
                     broadcast_tx: app_state.broadcast_tx.clone(),
                     proxy_config: Arc::clone(&app_state.proxy_config),
+                    history_settings: Arc::clone(&app_state.history_settings),
                     stop_signal: Arc::new(tokio::sync::Mutex::new(Some(stop_tx))),
+
                     pending_flows: Arc::clone(&app_state.pending_flows),
                     rules: Arc::clone(&app_state.rules),
                 });
@@ -67,6 +69,8 @@ pub fn run() {
             commands::history_cmd::get_history_logs,
             commands::history_cmd::get_history_detail,
             commands::history_cmd::clear_history_logs,
+            commands::history_cmd::get_history_settings,
+            commands::history_cmd::update_history_settings,
             commands::proxy_cmd::get_proxy_state,
             commands::proxy_cmd::set_proxy_mode,
             commands::proxy_cmd::toggle_proxy,
@@ -83,6 +87,7 @@ pub fn run() {
             commands::intercept_cmd::drop_all_intercepted_flows,
             commands::intercept_cmd::get_pending_flows,
         ])
+
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

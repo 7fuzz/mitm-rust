@@ -61,7 +61,9 @@ pub async fn set_proxy_mode(
                 proxy_active: std::sync::atomic::AtomicBool::new(true),
                 broadcast_tx: state.broadcast_tx.clone(),
                 proxy_config: Arc::clone(&state.proxy_config),
+                history_settings: Arc::clone(&state.history_settings),
                 stop_signal: Arc::clone(&state.stop_signal),
+
                 pending_flows: Arc::clone(&state.pending_flows),
                 rules: Arc::clone(&state.rules),
             });

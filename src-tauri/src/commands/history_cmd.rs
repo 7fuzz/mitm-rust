@@ -1,6 +1,38 @@
 use tauri::State;
 use rusqlite::Connection;
-use crate::state::{AppState, HistoryDetailItem, HistorySummaryItem};
+use crate::db::{prune_history_logs, set_preference};
+use crate::state::{AppState, HistoryDetailItem, HistorySettings, HistorySummaryItem};
+
+#[tauri::command]
+pub async fn get_history_settings(
+    state: State<'_, AppState>,
+) -> Result<HistorySettings, String> {
+    let settings = state.history_settings.read().await;
+    Ok(settings.clone())
+}
+
+#[tauri::command]
+pub async fn update_history_settings(
+    state: State<'_, AppState>,
+    enabled: bool,
+    max_rows: u32,
+) -> Result<HistorySettings, String> {
+    {
+        let mut settings = state.history_settings.write().await;
+        settings.limiter_enabled = enabled;
+        settings.max_rows = max_rows;
+    }
+
+    let _ = set_preference(&state.db_path, "history_limiter_enabled", if enabled { "true" } else { "false" });
+    let _ = set_preference(&state.db_path, "history_limiter_max_rows", &max_rows.to_string());
+
+    if enabled {
+        let _ = prune_history_logs(&state.db_path, max_rows);
+    }
+
+    let updated = state.history_settings.read().await;
+    Ok(updated.clone())
+}
 
 #[tauri::command]
 pub async fn get_history_logs(
@@ -107,7 +139,6 @@ fn parse_path_from_url(url_str: &str) -> String {
         "/".to_string()
     }
 }
-
 
 #[tauri::command]
 pub async fn get_history_detail(

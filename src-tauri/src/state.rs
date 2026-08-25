@@ -78,7 +78,6 @@ pub struct HistorySummaryItem {
     pub created_at: String,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryDetailItem {
@@ -97,6 +96,22 @@ pub struct HistoryDetailItem {
     pub phase: String,
     pub duration_ms: Option<u64>,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistorySettings {
+    pub limiter_enabled: bool,
+    pub max_rows: u32,
+}
+
+impl Default for HistorySettings {
+    fn default() -> Self {
+        Self {
+            limiter_enabled: true,
+            max_rows: 500,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,6 +150,7 @@ pub struct AppState {
     pub proxy_active: AtomicBool,
     pub broadcast_tx: broadcast::Sender<TrafficCapturedEvent>,
     pub proxy_config: Arc<RwLock<ProxyConfig>>,
+    pub history_settings: Arc<RwLock<HistorySettings>>,
     pub stop_signal: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     pub pending_flows: Arc<DashMap<String, PendingFlow>>,
     pub rules: Arc<RwLock<Vec<InterceptRule>>>,
@@ -157,6 +173,13 @@ impl AppState {
         let initial_intercept_mode = crate::db::get_preference(&db_path, "intercept_mode")
             .unwrap_or_else(|| "both".to_string());
 
+        let limiter_enabled = crate::db::get_preference(&db_path, "history_limiter_enabled")
+            .map(|v| v == "true")
+            .unwrap_or(true);
+        let max_rows = crate::db::get_preference(&db_path, "history_limiter_max_rows")
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(500);
+
         let initial_rules = crate::db::load_intercept_rules(&db_path).unwrap_or_default();
 
         let proxy_config = ProxyConfig {
@@ -168,12 +191,18 @@ impl AppState {
             host: "127.0.0.1".to_string(),
         };
 
+        let history_settings = HistorySettings {
+            limiter_enabled,
+            max_rows,
+        };
+
         Self {
             db_path,
             history_tx,
             proxy_active: AtomicBool::new(initial_proxy_enabled),
             broadcast_tx,
             proxy_config: Arc::new(RwLock::new(proxy_config)),
+            history_settings: Arc::new(RwLock::new(history_settings)),
             stop_signal: Arc::new(Mutex::new(None)),
             pending_flows: Arc::new(DashMap::new()),
             rules: Arc::new(RwLock::new(initial_rules)),
