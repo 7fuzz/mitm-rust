@@ -88,7 +88,7 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
 
   // Parse params from URL
   const parsedParams = React.useMemo(() => {
-    if (!item) return [];
+    if (!item || !item.url) return [];
     try {
       const urlObj = new URL(item.url);
       const list: Array<{ id: string; key: string; value: string; enabled: boolean }> = [];
@@ -103,8 +103,8 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
 
   // Parse cookies from headers
   const reqCookies = React.useMemo(() => {
-    if (!item) return [];
-    const cookieHeader = item.requestHeaders.find((h) => h.key.toLowerCase() === 'cookie')?.value || '';
+    if (!item || !item.requestHeaders) return [];
+    const cookieHeader = (item.requestHeaders || []).find((h) => h.key?.toLowerCase() === 'cookie')?.value || '';
     if (!cookieHeader) return [];
     return cookieHeader.split(';').map((pair, idx) => {
       const [k, v] = pair.trim().split('=');
@@ -113,10 +113,10 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
   }, [item?.requestHeaders]);
 
   const resCookies = React.useMemo(() => {
-    if (!item) return [];
-    const cookieHeaders = item.responseHeaders.filter((h) => h.key.toLowerCase() === 'set-cookie');
+    if (!item || !item.responseHeaders) return [];
+    const cookieHeaders = (item.responseHeaders || []).filter((h) => h.key?.toLowerCase() === 'set-cookie');
     return cookieHeaders.map((h, idx) => {
-      const [k, v] = h.value.split(';')[0].trim().split('=');
+      const [k, v] = (h.value || '').split(';')[0].trim().split('=');
       return { id: `sc-${idx}`, key: k || '', value: v || '', enabled: true };
     });
   }, [item?.responseHeaders]);
@@ -209,7 +209,7 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
           <div className="flex-1 p-2 overflow-auto bg-surface">
             {reqTab === 'headers' && (
               <KeyValueEditor
-                items={item.requestHeaders.map((h, i) => ({ id: `rh-${i}`, key: h.key, value: h.value, enabled: true }))}
+                items={(item.requestHeaders || []).map((h, i) => ({ id: `rh-${i}`, key: h.key, value: h.value, enabled: true }))}
                 onChange={() => {}}
                 readOnly
               />
@@ -273,7 +273,7 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
           <div className="flex-1 p-2 overflow-auto bg-surface">
             {resTab === 'headers' && (
               <KeyValueEditor
-                items={item.responseHeaders.map((h, i) => ({ id: `resh-${i}`, key: h.key, value: h.value, enabled: true }))}
+                items={(item.responseHeaders || []).map((h, i) => ({ id: `resh-${i}`, key: h.key, value: h.value, enabled: true }))}
                 onChange={() => {}}
                 readOnly
               />
