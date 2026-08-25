@@ -216,3 +216,11 @@ export interface MultipartField {
   content_type?: string;
 }
 
+export interface UrlEncodedParam {
+  id: string;
+  enabled: boolean;
+  key: string;
+  value: string;
+}
+
+

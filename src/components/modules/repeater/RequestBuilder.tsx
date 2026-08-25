@@ -4,6 +4,7 @@ import { useRepeaterStore } from '../../../stores/useRepeaterStore';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
 import { MultipartEditor } from '../../common/MultipartEditor';
+import { UrlEncodedEditor } from '../../common/UrlEncodedEditor';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Select } from '../../common/ui';
 
@@ -241,11 +242,28 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
                   { value: 'json', label: 'JSON' },
                   { value: 'raw', label: 'Raw Text' },
                   { value: 'form', label: 'Form Data (Multipart)' },
+                  { value: 'urlencoded', label: 'URL-Encoded (x-www-form-urlencoded)' },
                 ]}
                 sizeVariant="xs"
               />
             </div>
-            {request.bodyType === 'form' || request.bodyType === 'form-data' || request.bodyType === 'multipart' ? (
+            {request.bodyType === 'urlencoded' || request.bodyType === 'x-www-form-urlencoded' ? (
+              <div className="flex-1 overflow-y-auto">
+                <UrlEncodedEditor
+                  params={(() => {
+                    try {
+                      const parsed = JSON.parse(request.bodyContent || '');
+                      if (Array.isArray(parsed)) return parsed;
+                    } catch {}
+                    return [];
+                  })()}
+                  onChange={(newParams) => {
+                    const jsonStr = JSON.stringify(newParams, null, 2);
+                    updateTab({ ...request, bodyContent: jsonStr });
+                  }}
+                />
+              </div>
+            ) : request.bodyType === 'form' || request.bodyType === 'form-data' || request.bodyType === 'multipart' ? (
               <div className="flex-1 overflow-y-auto">
                 <MultipartEditor
                   fields={(() => {

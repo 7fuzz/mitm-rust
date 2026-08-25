@@ -4,9 +4,10 @@ import { Select, Button } from '../../common/ui';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
 import { MultipartEditor } from '../../common/MultipartEditor';
+import { UrlEncodedEditor } from '../../common/UrlEncodedEditor';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import type { RequestItem, HeaderItem, ParamItem } from '../../../services/tauri/bridge';
-import type { MultipartField } from '../../../types';
+import type { MultipartField, UrlEncodedParam } from '../../../types';
 
 const HTTP_METHODS = [
   { value: 'GET', label: 'GET' },
@@ -50,8 +51,31 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     return [];
   };
 
+  const parseUrlEncodedParams = (jsonStr: string): UrlEncodedParam[] => {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
+    return [];
+  };
+
   const handleMultipartChange = (fields: MultipartField[]) => {
     const jsonStr = JSON.stringify({ __form_data: fields }, null, 2);
+    setBodyContent(jsonStr);
+    updateRequestDetails({
+      ...request,
+      method,
+      url,
+      headers,
+      params,
+      bodyType,
+      bodyContent: jsonStr,
+      updatedAtMs: Date.now(),
+    });
+  };
+
+  const handleUrlEncodedChange = (newParams: UrlEncodedParam[]) => {
+    const jsonStr = JSON.stringify(newParams, null, 2);
     setBodyContent(jsonStr);
     updateRequestDetails({
       ...request,
@@ -180,25 +204,38 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
         {activeTab === 'body' && (
           <div className="h-full flex flex-col gap-2">
             <div className="flex items-center gap-3 font-mono text-xs text-muted-foreground pb-1">
-              {['none', 'json', 'raw', 'form-data'].map((type) => (
-                <label key={type} className="flex items-center gap-1.5 cursor-pointer">
+              {[
+                { id: 'none', label: 'none' },
+                { id: 'json', label: 'json' },
+                { id: 'raw', label: 'raw' },
+                { id: 'form-data', label: 'form-data' },
+                { id: 'urlencoded', label: 'x-www-form-urlencoded' },
+              ].map((opt) => (
+                <label key={opt.id} className="flex items-center gap-1.5 cursor-pointer">
                   <input
                     type="radio"
                     name={`body-type-${request.id}`}
-                    value={type}
-                    checked={bodyType === type}
+                    value={opt.id}
+                    checked={bodyType === opt.id}
                     onChange={(e) => {
                       setBodyType(e.target.value);
                       handleUpdateStore();
                     }}
                     className="accent-primary cursor-pointer"
                   />
-                  <span className={bodyType === type ? 'text-foreground font-semibold' : ''}>{type}</span>
+                  <span className={bodyType === opt.id ? 'text-foreground font-semibold' : ''}>{opt.label}</span>
                 </label>
               ))}
             </div>
 
-            {bodyType === 'form-data' || bodyType === 'multipart' ? (
+            {bodyType === 'urlencoded' || bodyType === 'x-www-form-urlencoded' ? (
+              <div className="flex-1 overflow-y-auto">
+                <UrlEncodedEditor
+                  params={parseUrlEncodedParams(bodyContent)}
+                  onChange={handleUrlEncodedChange}
+                />
+              </div>
+            ) : bodyType === 'form-data' || bodyType === 'multipart' ? (
               <div className="flex-1 overflow-y-auto">
                 <MultipartEditor
                   fields={parseMultipartFields(bodyContent)}
