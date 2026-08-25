@@ -1,15 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useHistoryStore } from "../../stores/useHistoryStore";
-import {
-  Power,
-  Trash2,
-  Search,
-  RefreshCw,
-  FileText,
-  Activity,
-} from "lucide-react";
-
-
+import { MingCuteIcon } from "../common/MingCuteIcon";
+import { ProxyPowerButton } from "../common/ProxyPowerButton";
 
 export const HistoryViewer: React.FC = () => {
   const {
@@ -18,7 +10,6 @@ export const HistoryViewer: React.FC = () => {
     methodFilter,
     selectedLogId,
     selectedLogDetail,
-    proxyConfig,
     isLoading,
     fetchLogs,
     setSearchTerm,
@@ -26,10 +17,8 @@ export const HistoryViewer: React.FC = () => {
     selectLog,
     clearLogs,
     fetchProxyStatus,
-    toggleProxyServer,
     initSubscription,
   } = useHistoryStore();
-
 
   const [activeDetailTab, setActiveDetailTab] = useState<"request" | "response">("request");
 
@@ -72,7 +61,7 @@ export const HistoryViewer: React.FC = () => {
       <header className="flex items-center justify-between px-4 py-3 bg-zinc-900/90 border-b border-zinc-800 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-indigo-400 animate-pulse" />
+            <MingCuteIcon name="history_line" size={18} className="text-indigo-400" />
             <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
               Traffic Inspector
             </h1>
@@ -80,32 +69,14 @@ export const HistoryViewer: React.FC = () => {
 
           <div className="h-4 w-px bg-zinc-800 mx-1" />
 
-          {/* Proxy Power Control Button */}
-          <button
-            onClick={toggleProxyServer}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition-all shadow-sm border ${
-              proxyConfig.proxyEnabled
-                ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20"
-                : "bg-rose-500/10 text-rose-300 border-rose-500/30 hover:bg-rose-500/20"
-            }`}
-          >
-            <span
-              className={`w-2.5 h-2.5 rounded-full transition-all ${
-                proxyConfig.proxyEnabled
-                  ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"
-                  : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
-              }`}
-            />
-            <Power className={`w-3.5 h-3.5 ${proxyConfig.proxyEnabled ? "text-emerald-400" : "text-rose-400"}`} />
-            <span>{proxyConfig.proxyEnabled ? `Proxy ON (${proxyConfig.port})` : "Proxy OFF"}</span>
-          </button>
-
+          {/* Proxy Power Control Button with Overlay */}
+          <ProxyPowerButton />
         </div>
 
         {/* Filter Controls & Search */}
         <div className="flex items-center gap-3">
           <div className="relative flex items-center">
-            <Search className="w-4 h-4 absolute left-3 text-zinc-400 pointer-events-none" />
+            <MingCuteIcon name="search_line" size={14} className="absolute left-3 text-zinc-400 pointer-events-none" />
             <input
               type="text"
               placeholder="Search URL, Host, Method..."
@@ -134,7 +105,7 @@ export const HistoryViewer: React.FC = () => {
             className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
             title="Refresh Logs"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+            <MingCuteIcon name="refresh_line" size={15} className={isLoading ? "animate-spin" : ""} />
           </button>
 
           <button
@@ -142,7 +113,7 @@ export const HistoryViewer: React.FC = () => {
             className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 text-rose-400 text-xs rounded-lg transition-colors font-medium"
             title="Clear History"
           >
-            <Trash2 className="w-3.5 h-3.5" /> Clear
+            <MingCuteIcon name="delete_2_line" size={14} /> Clear
           </button>
         </div>
       </header>
@@ -331,7 +302,7 @@ export const HistoryViewer: React.FC = () => {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-zinc-500 p-6 text-center">
-              <FileText className="w-10 h-10 mb-2 stroke-[1.5] text-zinc-600" />
+              <MingCuteIcon name="file_code_line" size={32} className="mb-2 text-zinc-600" />
               <p className="text-sm font-medium">Select a request from the table to view details</p>
             </div>
           )}

@@ -1,26 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { useInterceptStore } from "../../stores/useInterceptStore";
-import {
-  ShieldAlert,
-  Play,
-  X,
-  FastForward,
-  Trash2,
-  Plus,
-  Check,
-  Code,
-} from "lucide-react";
-
+import { MingCuteIcon } from "../common/MingCuteIcon";
 
 export const InterceptViewer: React.FC = () => {
   const {
     interceptEnabled,
     interceptMode,
-    rules,
     pendingFlows,
     selectedFlowId,
     editedHeaders,
     editedBodyText,
+    rules,
     initInterceptStore,
     setInterceptEnabled,
     setInterceptMode,
@@ -31,28 +21,27 @@ export const InterceptViewer: React.FC = () => {
     dropCurrentFlow,
     forwardAllFlows,
     dropAllFlows,
+    addRule,
     toggleRule,
     deleteRule,
-    addRule,
   } = useInterceptStore();
 
-  const [activeTab, setActiveTab] = useState<"inspector" | "rules">("inspector");
-  const [showAddRuleModal, setShowAddRuleModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<"headers" | "body">("headers");
+  const [rulesModalOpen, setRulesModalOpen] = useState(false);
 
-  // New rule form state
-  const [newMatchField, setNewMatchField] = useState<"url" | "host" | "path" | "method" | "header">("url");
-  const [newOperator, setNewOperator] = useState<"contains" | "equals" | "regex">("contains");
-  const [newMatchValue, setNewMatchValue] = useState("");
-  const [newTargetPhase, setNewTargetPhase] = useState<"request" | "response" | "both">("both");
+  const [newRulePhase, setNewRulePhase] = useState<"request" | "response" | "both">("both");
+  const [newRuleField, setNewRuleField] = useState<"url" | "host" | "path" | "method" | "header">("url");
+  const [newRuleOperator, setNewRuleOperator] = useState<"contains" | "equals" | "regex">("contains");
+  const [newRuleValue, setNewRuleValue] = useState("");
+
+  const selectedFlow = pendingFlows.find((f) => f.flowId === selectedFlowId);
 
   useEffect(() => {
     initInterceptStore();
   }, []);
 
-  const selectedFlow = pendingFlows.find((f) => f.flowId === selectedFlowId);
-
   const handleHeaderChange = (index: number, key: string, value: string) => {
-    const updated = [...editedHeaders];
+    const updated: [string, string][] = [...editedHeaders];
     updated[index] = [key, value];
     setEditedHeaders(updated);
   };
@@ -65,381 +54,382 @@ export const InterceptViewer: React.FC = () => {
     setEditedHeaders(editedHeaders.filter((_, i) => i !== index));
   };
 
-  const handleAddRuleSubmit = async (e: React.FormEvent) => {
+  const handleCreateRule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMatchValue.trim()) return;
+    if (!newRuleValue.trim()) return;
     await addRule({
       isEnabled: true,
-      targetPhase: newTargetPhase,
-      matchField: newMatchField,
-      operator: newOperator,
-      matchValue: newMatchValue.trim(),
+      targetPhase: newRulePhase,
+      matchField: newRuleField,
+      operator: newRuleOperator,
+      matchValue: newRuleValue.trim(),
       orderIndex: rules.length,
     });
-    setNewMatchValue("");
-    setShowAddRuleModal(false);
+    setNewRuleValue("");
   };
 
   return (
     <div className="flex flex-col h-screen w-full bg-zinc-950 text-zinc-100 font-sans antialiased overflow-hidden">
-      {/* Intercept Control Header */}
+      {/* Top Header Controls */}
       <header className="flex items-center justify-between px-4 py-3 bg-zinc-900/90 border-b border-zinc-800 backdrop-blur-md">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <ShieldAlert className={`w-5 h-5 ${interceptEnabled ? "text-amber-400 animate-pulse" : "text-zinc-500"}`} />
+            <MingCuteIcon name="shield_line" size={18} className="text-amber-400" />
             <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
               Traffic Interceptor
             </h1>
           </div>
 
-          <div className="h-4 w-px bg-zinc-800 mx-1" />
+          <div className="h-4 w-px bg-zinc-800" />
 
           {/* Master Intercept Toggle Button */}
           <button
             onClick={() => setInterceptEnabled(!interceptEnabled)}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all shadow-sm ${
               interceptEnabled
-                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 shadow-amber-950/20"
-                : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:bg-zinc-700/60"
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 shadow-amber-950/20"
+                : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:bg-zinc-700"
             }`}
           >
-            {interceptEnabled ? "Intercept ON" : "Intercept OFF"}
+            <MingCuteIcon name="shield_line" size={14} className={interceptEnabled ? "text-amber-400 animate-pulse" : ""} />
+            <span>Intercept is {interceptEnabled ? "ON" : "OFF"}</span>
           </button>
 
-          {/* Intercept Mode Dropdown */}
-          <select
-            value={interceptMode}
-            onChange={(e) => setInterceptMode(e.target.value as "request" | "response" | "both")}
-            disabled={!interceptEnabled}
-            className="bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 rounded-lg text-xs px-2.5 py-1.5 text-zinc-300 outline-none cursor-pointer disabled:opacity-50"
-          >
-            <option value="both font-sans">Intercept Requests & Responses</option>
-            <option value="request">Intercept Requests Only</option>
-            <option value="response">Intercept Responses Only</option>
-          </select>
+          {/* Intercept Phase Selector */}
+          <div className="flex items-center bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-xs">
+            <button
+              onClick={() => setInterceptMode("request")}
+              className={`px-2.5 py-1 rounded-md transition-colors ${
+                interceptMode === "request"
+                  ? "bg-amber-500/20 text-amber-300 font-medium"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Requests
+            </button>
+            <button
+              onClick={() => setInterceptMode("response")}
+              className={`px-2.5 py-1 rounded-md transition-colors ${
+                interceptMode === "response"
+                  ? "bg-amber-500/20 text-amber-300 font-medium"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Responses
+            </button>
+            <button
+              onClick={() => setInterceptMode("both")}
+              className={`px-2.5 py-1 rounded-md transition-colors ${
+                interceptMode === "both"
+                  ? "bg-amber-500/20 text-amber-300 font-medium"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Both
+            </button>
+          </div>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setRulesModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg transition-colors border border-zinc-700 font-medium"
+          >
+            <MingCuteIcon name="tool_line" size={14} /> Rules ({rules.length})
+          </button>
+
+          <div className="h-4 w-px bg-zinc-800 mx-1" />
+
+          <button
+            disabled={!selectedFlow}
             onClick={forwardCurrentFlow}
-            disabled={!selectedFlowId}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium transition-all"
-            title="Forward modified flow"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 border border-emerald-500/30 hover:bg-emerald-500/30 text-emerald-300 text-xs rounded-lg transition-colors font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Play className="w-3.5 h-3.5 fill-current" /> Forward
+            <MingCuteIcon name="play_line" size={14} /> Forward
           </button>
 
           <button
+            disabled={!selectedFlow}
             onClick={dropCurrentFlow}
-            disabled={!selectedFlowId}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/20 border border-rose-500/30 text-rose-300 hover:bg-rose-500/30 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium transition-all"
-            title="Drop flow"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/20 border border-rose-500/30 hover:bg-rose-500/30 text-rose-300 text-xs rounded-lg transition-colors font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <X className="w-3.5 h-3.5 stroke-[2.5]" /> Drop
+            <MingCuteIcon name="close_line" size={14} /> Drop
           </button>
 
-          <div className="h-4 w-px bg-zinc-800 mx-1" />
-
           <button
+            disabled={pendingFlows.length === 0}
             onClick={forwardAllFlows}
-            disabled={pendingFlows.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/60 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium transition-all"
-            title="Forward all queued flows"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500/20 border border-sky-500/30 hover:bg-sky-500/30 text-sky-300 text-xs rounded-lg transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <FastForward className="w-3.5 h-3.5 fill-current" /> Forward All ({pendingFlows.length})
+            <MingCuteIcon name="fast_forward_line" size={14} /> Forward All
           </button>
 
           <button
-            onClick={dropAllFlows}
             disabled={pendingFlows.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-rose-400 border border-zinc-700/60 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium transition-all"
-            title="Drop all queued flows"
+            onClick={dropAllFlows}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-xs rounded-lg transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Trash2 className="w-3.5 h-3.5" /> Drop All
+            <MingCuteIcon name="delete_2_line" size={14} /> Drop All
           </button>
-
-          <div className="h-4 w-px bg-zinc-800 mx-1" />
-
-          {/* View Tab Switcher */}
-          <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800">
-            <button
-              onClick={() => setActiveTab("inspector")}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                activeTab === "inspector" ? "bg-zinc-800 text-amber-300" : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              Inspector ({pendingFlows.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("rules")}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                activeTab === "rules" ? "bg-zinc-800 text-amber-300" : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              Rules ({rules.length})
-            </button>
-          </div>
         </div>
       </header>
 
-      {/* Main Body */}
-      {activeTab === "inspector" ? (
-        <div className="flex flex-1 overflow-hidden">
-          {/* Flow Queue Drawer / List */}
-          <div className="w-72 lg:w-80 flex flex-col border-r border-zinc-800 bg-zinc-950/60">
-            <div className="p-3 border-b border-zinc-800 text-xs font-semibold text-zinc-400 uppercase tracking-wider flex justify-between items-center">
-              <span>Paused Flow Queue</span>
-              <span className="bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full text-[10px] font-mono">
-                {pendingFlows.length}
-              </span>
-            </div>
-
-            <div className="flex-1 overflow-y-auto divide-y divide-zinc-900/60">
-              {pendingFlows.length === 0 ? (
-                <div className="p-8 text-center text-zinc-500 text-xs italic">
-                  No paused flows in queue. When requests match rules, they will appear here.
-                </div>
-              ) : (
-                pendingFlows.map((flow) => {
-                  const isSelected = flow.flowId === selectedFlowId;
-                  return (
-                    <div
-                      key={flow.flowId}
-                      onClick={() => selectFlow(flow.flowId)}
-                      className={`p-3 cursor-pointer transition-colors ${
-                        isSelected
-                          ? "bg-amber-500/10 border-l-2 border-amber-400"
-                          : "hover:bg-zinc-900/40"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-amber-300 uppercase">
-                          {flow.phase}
-                        </span>
-                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400">
-                          {flow.method}
-                        </span>
-                      </div>
-                      <div className="text-xs text-zinc-200 font-mono truncate">{flow.url}</div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+      {/* Main Split Pane Layout */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Drawer: Paused Flow Queue */}
+        <div className="w-80 flex flex-col border-r border-zinc-800 bg-zinc-950/60 shrink-0">
+          <div className="px-3 py-2 bg-zinc-900/60 border-b border-zinc-800 flex items-center justify-between text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+            <span>Paused Queue</span>
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono">
+              {pendingFlows.length}
+            </span>
           </div>
 
-          {/* Payload Editor Drawer */}
-          <div className="flex-1 flex flex-col bg-zinc-900/40 min-w-0">
-            {selectedFlow ? (
-              <div className="flex flex-col h-full overflow-hidden p-4 space-y-4">
-                {/* Flow Metadata Banner */}
-                <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 font-mono text-xs flex justify-between items-center">
-                  <div>
-                    <span className="text-amber-400 font-bold mr-2">[{selectedFlow.phase.toUpperCase()}]</span>
-                    <span className="text-zinc-300 font-semibold mr-2">{selectedFlow.method}</span>
-                    <span className="text-zinc-400">{selectedFlow.url}</span>
+          <div className="flex-1 overflow-y-auto divide-y divide-zinc-900/80">
+            {pendingFlows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full p-6 text-center text-zinc-500">
+                <MingCuteIcon name="shield_line" size={32} className="mb-2 text-zinc-700" />
+                <p className="text-xs">No traffic paused</p>
+                <p className="text-[11px] text-zinc-600 mt-1">
+                  Enable interceptor and send requests to capture flows.
+                </p>
+              </div>
+            ) : (
+              pendingFlows.map((flow) => {
+                const isSelected = selectedFlowId === flow.flowId;
+                return (
+                  <div
+                    key={flow.flowId}
+                    onClick={() => selectFlow(flow.flowId)}
+                    className={`p-3 cursor-pointer transition-colors border-l-2 ${
+                      isSelected
+                        ? "bg-amber-500/10 border-amber-500"
+                        : "border-transparent hover:bg-zinc-900/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-amber-400 font-mono text-[10px] font-bold">
+                        {flow.method}
+                      </span>
+                      <span className="text-[10px] font-mono uppercase text-zinc-500">
+                        {flow.phase}
+                      </span>
+                    </div>
+                    <div className="text-xs font-mono text-zinc-300 truncate">{flow.url}</div>
                   </div>
-                  <span className="text-zinc-500 text-[10px] font-mono">ID: {selectedFlow.flowId.substring(0, 8)}</span>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Right Pane: Headers & Body Payload Editor */}
+        <div className="flex-1 flex flex-col bg-zinc-900/30 min-w-0">
+          {selectedFlow ? (
+            <div className="flex flex-col h-full">
+              {/* Flow Detail Bar */}
+              <div className="px-4 py-2.5 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between text-xs font-mono">
+                <div className="flex items-center gap-2 truncate">
+                  <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
+                    {selectedFlow.method}
+                  </span>
+                  <span className="text-zinc-200 truncate">{selectedFlow.url}</span>
                 </div>
+                <div className="text-zinc-500 shrink-0 text-[11px]">
+                  Phase: <span className="uppercase text-amber-400">{selectedFlow.phase}</span>
+                </div>
+              </div>
 
-                {/* Headers Editor */}
-                <div className="flex-1 flex flex-col bg-zinc-950 p-3 rounded-lg border border-zinc-800 overflow-hidden min-h-[180px]">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold uppercase text-zinc-400 tracking-wider">
-                      Headers Editor ({editedHeaders.length})
-                    </span>
-                    <button
-                      onClick={handleAddHeader}
-                      className="flex items-center gap-1 text-[11px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1 rounded transition-colors"
-                    >
-                      <Plus className="w-3 h-3" /> Add Header
-                    </button>
-                  </div>
+              {/* Payload Editor Tabs */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-950 border-b border-zinc-800">
+                <button
+                  onClick={() => setActiveTab("headers")}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                    activeTab === "headers"
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Headers ({editedHeaders.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab("body")}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                    activeTab === "body"
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Body Payload
+                </button>
+              </div>
 
-                  <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {/* Editor Workspace */}
+              <div className="flex-1 overflow-y-auto p-4 font-mono text-xs">
+                {activeTab === "headers" ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-zinc-400 font-sans text-xs font-semibold">
+                        Edit HTTP Headers
+                      </span>
+                      <button
+                        onClick={handleAddHeader}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-amber-400 rounded text-xs transition-colors"
+                      >
+                        <MingCuteIcon name="plus_line" size={14} /> Add Header
+                      </button>
+                    </div>
+
                     {editedHeaders.map(([key, val], idx) => (
-                      <div key={idx} className="flex gap-2 items-center">
+                      <div key={idx} className="flex items-center gap-2">
                         <input
                           type="text"
                           placeholder="Header Key"
                           value={key}
                           onChange={(e) => handleHeaderChange(idx, e.target.value, val)}
-                          className="bg-zinc-900 border border-zinc-800 text-xs px-2.5 py-1.5 rounded font-mono text-indigo-300 w-1/3 outline-none focus:border-amber-500/50"
+                          className="flex-1 bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 rounded px-2.5 py-1.5 text-zinc-200 outline-none"
                         />
                         <input
                           type="text"
                           placeholder="Header Value"
                           value={val}
                           onChange={(e) => handleHeaderChange(idx, key, e.target.value)}
-                          className="bg-zinc-900 border border-zinc-800 text-xs px-2.5 py-1.5 rounded font-mono text-zinc-200 flex-1 outline-none focus:border-amber-500/50"
+                          className="flex-2 bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 rounded px-2.5 py-1.5 text-zinc-200 outline-none"
                         />
                         <button
                           onClick={() => handleRemoveHeader(idx)}
-                          className="p-1 text-zinc-500 hover:text-rose-400 transition-colors"
+                          className="p-1.5 text-zinc-500 hover:text-rose-400 rounded transition-colors"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <MingCuteIcon name="close_line" size={14} />
                         </button>
                       </div>
                     ))}
                   </div>
-                </div>
-
-                {/* Body Editor */}
-                <div className="flex-1 flex flex-col bg-zinc-950 p-3 rounded-lg border border-zinc-800 overflow-hidden min-h-[200px]">
-                  <div className="text-xs font-semibold uppercase text-zinc-400 tracking-wider mb-2">
-                    Body Content Payload Editor
+                ) : (
+                  <div className="flex flex-col h-full space-y-2">
+                    <span className="text-zinc-400 font-sans text-xs font-semibold">
+                      Edit Body Content
+                    </span>
+                    <textarea
+                      value={editedBodyText}
+                      onChange={(e) => setEditedBodyText(e.target.value)}
+                      placeholder="Enter raw request/response body payload..."
+                      className="flex-1 min-h-[350px] w-full bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 rounded-lg p-3 text-zinc-200 outline-none resize-none font-mono text-xs leading-relaxed"
+                    />
                   </div>
-                  <textarea
-                    value={editedBodyText}
-                    onChange={(e) => setEditedBodyText(e.target.value)}
-                    placeholder="Payload body content..."
-                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded p-3 text-xs font-mono text-zinc-200 outline-none focus:border-amber-500/50 resize-none"
-                  />
-                </div>
+                )}
               </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 p-6 text-center">
-                <Code className="w-12 h-12 mb-3 stroke-[1.2] text-zinc-600" />
-                <p className="text-sm font-medium">Select a paused flow from the left queue to inspect and modify</p>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        /* Rules Configuration View */
-        <div className="flex-1 p-6 overflow-y-auto max-w-5xl mx-auto w-full">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h2 className="text-lg font-bold text-zinc-100">Intercept Rules Engine</h2>
-              <p className="text-xs text-zinc-400">Configure matching rules for automatic traffic interception</p>
             </div>
-            <button
-              onClick={() => setShowAddRuleModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-semibold hover:bg-amber-500/30 transition-all"
-            >
-              <Plus className="w-4 h-4" /> Add Rule
-            </button>
-          </div>
-
-          {/* Rules List */}
-          <div className="bg-zinc-900/60 rounded-xl border border-zinc-800 overflow-hidden divide-y divide-zinc-800">
-            {rules.length === 0 ? (
-              <div className="p-12 text-center text-zinc-500 text-sm">
-                No active rules defined. When Intercept is enabled with no rules, all traffic is paused by default.
-              </div>
-            ) : (
-              rules.map((rule) => (
-                <div key={rule.id} className="p-4 flex items-center justify-between hover:bg-zinc-900/40 transition-colors">
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={() => toggleRule(rule.id)}
-                      className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${
-                        rule.isEnabled ? "bg-amber-500 border-amber-400 text-zinc-950" : "border-zinc-700 bg-zinc-950"
-                      }`}
-                    >
-                      {rule.isEnabled && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                    </button>
-                    <div>
-                      <div className="flex items-center gap-2 font-mono text-xs">
-                        <span className="px-2 py-0.5 rounded bg-zinc-800 text-amber-300 uppercase text-[10px]">
-                          {rule.targetPhase}
-                        </span>
-                        <span className="text-zinc-400">{rule.matchField}</span>
-                        <span className="text-amber-400 font-bold">{rule.operator}</span>
-                        <span className="text-zinc-200 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
-                          {rule.matchValue}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => deleteRule(rule.id)}
-                    className="p-1.5 text-zinc-500 hover:text-rose-400 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Add Rule Modal */}
-          {showAddRuleModal && (
-            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <form onSubmit={handleAddRuleSubmit} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-full max-w-md space-y-4">
-                <h3 className="text-base font-bold text-zinc-100">Add Intercept Rule</h3>
-
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Target Phase</label>
-                  <select
-                    value={newTargetPhase}
-                    onChange={(e) => setNewTargetPhase(e.target.value as any)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded text-xs p-2 text-zinc-200 outline-none"
-                  >
-                    <option value="both">Both (Request & Response)</option>
-                    <option value="request">Request</option>
-                    <option value="response">Response</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Match Field</label>
-                  <select
-                    value={newMatchField}
-                    onChange={(e) => setNewMatchField(e.target.value as any)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded text-xs p-2 text-zinc-200 outline-none"
-                  >
-                    <option value="url">URL</option>
-                    <option value="host">Host</option>
-                    <option value="path">Path</option>
-                    <option value="method">Method</option>
-                    <option value="header">Header</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Operator</label>
-                  <select
-                    value={newOperator}
-                    onChange={(e) => setNewOperator(e.target.value as any)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded text-xs p-2 text-zinc-200 outline-none"
-                  >
-                    <option value="contains">Contains</option>
-                    <option value="equals">Equals</option>
-                    <option value="regex">Regex Match</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Match Value Pattern</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. api.example.com"
-                    value={newMatchValue}
-                    onChange={(e) => setNewMatchValue(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded text-xs p-2 text-zinc-200 outline-none font-mono"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddRuleModal(false)}
-                    className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-xs font-medium hover:bg-zinc-700"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-amber-500 text-zinc-950 rounded-lg text-xs font-bold hover:bg-amber-400"
-                  >
-                    Save Rule
-                  </button>
-                </div>
-              </form>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-zinc-500 p-6 text-center">
+              <MingCuteIcon name="code_line" size={36} className="mb-2 text-zinc-700" />
+              <p className="text-sm font-medium">Select a paused flow from the left queue</p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Intercept Rules Modal */}
+      {rulesModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-2xl w-full p-5 shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <MingCuteIcon name="tool_line" size={18} className="text-amber-400" />
+                <h2 className="text-sm font-bold text-zinc-100">Intercept Rules Engine</h2>
+              </div>
+              <button onClick={() => setRulesModalOpen(false)} className="text-zinc-400 hover:text-zinc-200">
+                <MingCuteIcon name="close_line" size={18} />
+              </button>
+            </div>
+
+            {/* Add New Rule Form */}
+            <form onSubmit={handleCreateRule} className="py-4 border-b border-zinc-800 space-y-3">
+              <div className="text-xs font-semibold text-zinc-400">Add New Matching Rule</div>
+              <div className="grid grid-cols-4 gap-2 text-xs">
+                <select
+                  value={newRulePhase}
+                  onChange={(e: any) => setNewRulePhase(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-zinc-300 outline-none"
+                >
+                  <option value="both">Both Phases</option>
+                  <option value="request">Request</option>
+                  <option value="response">Response</option>
+                </select>
+                <select
+                  value={newRuleField}
+                  onChange={(e: any) => setNewRuleField(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-zinc-300 outline-none"
+                >
+                  <option value="url">URL</option>
+                  <option value="host">Host</option>
+                  <option value="path">Path</option>
+                  <option value="method">Method</option>
+                  <option value="header">Header</option>
+                </select>
+                <select
+                  value={newRuleOperator}
+                  onChange={(e: any) => setNewRuleOperator(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-zinc-300 outline-none"
+                >
+                  <option value="contains">Contains</option>
+                  <option value="equals">Equals</option>
+                  <option value="regex">Regex</option>
+                </select>
+                <button
+                  type="submit"
+                  className="flex items-center justify-center gap-1 bg-amber-500 hover:bg-amber-600 text-zinc-950 font-semibold rounded px-3 py-1.5 transition-colors"
+                >
+                  <MingCuteIcon name="plus_line" size={14} /> Add Rule
+                </button>
+              </div>
+              <input
+                type="text"
+                placeholder="Match pattern value (e.g. api.example.com or /v1/auth)..."
+                value={newRuleValue}
+                onChange={(e) => setNewRuleValue(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 rounded px-3 py-1.5 text-xs text-zinc-200 outline-none"
+              />
+            </form>
+
+            {/* Existing Rules List */}
+            <div className="flex-1 overflow-y-auto py-3 space-y-2 text-xs">
+              {rules.length === 0 ? (
+                <div className="text-center py-6 text-zinc-500">
+                  No custom rules added. All traffic will be paused when interceptor is active.
+                </div>
+              ) : (
+                rules.map((rule) => (
+                  <div
+                    key={rule.id}
+                    className="flex items-center justify-between p-2.5 bg-zinc-950 rounded-lg border border-zinc-800"
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={rule.isEnabled}
+                        onChange={() => toggleRule(rule.id)}
+                        className="rounded accent-amber-500 cursor-pointer"
+                      />
+                      <span className="font-mono text-amber-400 font-semibold uppercase text-[10px]">
+                        [{rule.targetPhase}]
+                      </span>
+                      <span className="font-mono text-zinc-300">
+                        {rule.matchField} {rule.operator} "{rule.matchValue}"
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => deleteRule(rule.id)}
+                      className="text-zinc-500 hover:text-rose-400 transition-colors p-1"
+                    >
+                      <MingCuteIcon name="delete_2_line" size={14} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
