@@ -43,7 +43,13 @@ export type MingCuteIconName =
   | 'external_link_line'
   | 'code_line'
   | 'calculator_line'
-  | 'hash_line';
+  | 'hash_line'
+  | 'power_line'
+  | 'power'
+  | 'zap_line'
+  | 'radio_line'
+  | 'ban_line'
+  | 'fast_forward_line';
 
 interface MingCuteIconProps {
   name: MingCuteIconName | string;
@@ -62,6 +68,27 @@ export const MingCuteIcon: React.FC<MingCuteIconProps> = ({
 
   const renderSvgPath = () => {
     switch (name) {
+      case 'power_line':
+      case 'power':
+        return (
+          <path d="M12 3a1 1 0 0 1 1 1v8a1 1 0 1 1-2 0V4a1 1 0 0 1 1-1zm4.78 2.22a1 1 0 0 1 1.41 1.42A8.96 8.96 0 0 1 21 13a9 9 0 1 1-15.19-6.36a1 1 0 0 1 1.41 1.42A7 7 0 1 0 19 13a6.97 6.97 0 0 0-2.22-4.78z" />
+        );
+      case 'zap_line':
+        return (
+          <path d="M13 2L3 14h9l-1 8l10-12h-8l1-8z" />
+        );
+      case 'radio_line':
+        return (
+          <path d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8a8 8 0 0 1-8 8zm0-12a4 4 0 1 0 4 4a4 4 0 0 0-4-4zm0 6a2 2 0 1 1 2-2a2 2 0 0 1-2 2z" />
+        );
+      case 'ban_line':
+        return (
+          <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm-6.71 4.71l11 11A8 8 0 0 1 5.29 6.71zm13.42 10.58l-11-11A8 8 0 0 1 18.71 17.29z" />
+        );
+      case 'fast_forward_line':
+        return (
+          <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" />
+        );
       case 'http_line':
       case 'history_line':
         return (
