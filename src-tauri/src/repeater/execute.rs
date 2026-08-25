@@ -24,18 +24,28 @@ pub async fn execute_repeater_tab(
         .build()
         .map_err(|e| e.to_string())?;
 
-    // Parse method
+    // Parse method (fallback to GET if invalid)
     let method = Method::from_bytes(tab.method.as_bytes())
-        .map_err(|_| format!("Invalid HTTP method: {}", tab.method))?;
+        .unwrap_or(Method::GET);
 
-    // Parse URL & append enabled query parameters
+    // Filter enabled query parameters
     let enabled_params: Vec<&super::ParamItem> = tab
         .params
         .iter()
         .filter(|p| p.enabled && !p.key.trim().is_empty())
         .collect();
 
-    let mut parsed_url = reqwest::Url::parse(&tab.url).map_err(|e| format!("Invalid URL '{}': {}", tab.url, e))?;
+    // Auto-prefix http:// if URL missing scheme
+    let raw_url = tab.url.trim();
+    let url_with_scheme = if !raw_url.starts_with("http://") && !raw_url.starts_with("https://") {
+        format!("http://{}", raw_url)
+    } else {
+        raw_url.to_string()
+    };
+
+    let mut parsed_url = reqwest::Url::parse(&url_with_scheme)
+        .map_err(|e| format!("Invalid URL '{}': {}", tab.url, e))?;
+
     if !enabled_params.is_empty() {
         let mut query_pairs = parsed_url.query_pairs_mut();
         for p in enabled_params {
@@ -56,7 +66,7 @@ pub async fn execute_repeater_tab(
 
     for h in &enabled_headers {
         if let (Ok(name), Ok(val)) = (
-            HeaderName::from_bytes(h.key.as_bytes()),
+            HeaderName::from_bytes(h.key.trim().as_bytes()),
             HeaderValue::from_str(&h.value),
         ) {
             req_builder = req_builder.header(name, val);
@@ -129,6 +139,34 @@ pub async fn execute_repeater_tab(
                 response_size,
             })
         }
-        Err(err) => Err(format!("Request execution failed: {}", err)),
+        Err(err) => {
+            let err_msg = format!("Network Error: {}", err);
+            let history_entry = RepeaterHistoryItem {
+                id: 0,
+                repeater_id: tab.id.clone(),
+                method: tab.method.clone(),
+                url: final_url_str.clone(),
+                request_headers: enabled_headers,
+                request_body: req_body_str,
+                status_code: 0,
+                response_headers: vec![],
+                response_body: Some(err_msg.clone()),
+                duration_ms,
+                executed_at_ms: now_ms,
+            };
+
+            let history_id = insert_repeater_history_db(db_path, &history_entry).unwrap_or(0);
+
+            Ok(RepeaterExecutionResult {
+                history_id,
+                repeater_id: tab.id.clone(),
+                status_code: 0,
+                status_text: "ERR_FAILED".to_string(),
+                response_headers: vec![],
+                response_body: err_msg.clone(),
+                duration_ms,
+                response_size: err_msg.len() as u64,
+            })
+        }
     }
 }

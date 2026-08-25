@@ -208,6 +208,15 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
   deleteGroup: async () => {},
 
   executeActiveRequest: async (id) => {
+    const activeTab = get().tabs.find((t) => t.id === id);
+    if (activeTab && isTauriAvailable()) {
+      try {
+        await updateRepeaterTab(activeTab);
+      } catch (err) {
+        console.warn('Failed to sync tab before execution:', err);
+      }
+    }
+
     set((state) => ({
       isExecuting: { ...state.isExecuting, [id]: true },
     }));
@@ -247,8 +256,20 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
       }
     } catch (err) {
       console.error('Failed to execute repeater request:', err);
+      const errMessage = typeof err === 'string' ? err : (err as any)?.message || JSON.stringify(err);
+      const errorResult: RepeaterExecutionResult = {
+        historyId: 0,
+        repeaterId: id,
+        statusCode: 0,
+        statusText: 'ERR_FAILED',
+        responseHeaders: [],
+        responseBody: `[Execution Error]\n${errMessage}`,
+        durationMs: 0,
+        responseSize: errMessage.length,
+      };
       set((state) => ({
         isExecuting: { ...state.isExecuting, [id]: false },
+        lastExecutionResult: { ...state.lastExecutionResult, [id]: errorResult },
       }));
     }
   },
