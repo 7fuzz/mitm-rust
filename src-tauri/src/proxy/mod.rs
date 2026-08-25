@@ -158,7 +158,20 @@ where
         }
     }
 
-    let req_body_bytes = Vec::new();
+    let body_start = if let Some(pos) = req_str.find("\r\n\r\n") {
+        pos + 4
+    } else if let Some(pos) = req_str.find("\n\n") {
+        pos + 2
+    } else {
+        raw_req_bytes.len()
+    };
+
+    let req_body_bytes = if body_start < raw_req_bytes.len() {
+        raw_req_bytes[body_start..].to_vec()
+    } else {
+        Vec::new()
+    };
+
 
     // Mode: "block" -> Never send to server, never send to client
     if proxy_mode == "block" {
