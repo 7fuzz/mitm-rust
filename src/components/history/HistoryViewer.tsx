@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { useHistoryStore } from "../../stores/useHistoryStore";
 import {
-  Play,
-  Pause,
+  Power,
   Trash2,
   Search,
   RefreshCw,
   FileText,
   Activity,
 } from "lucide-react";
+
+
 
 export const HistoryViewer: React.FC = () => {
   const {
@@ -79,26 +80,26 @@ export const HistoryViewer: React.FC = () => {
 
           <div className="h-4 w-px bg-zinc-800 mx-1" />
 
-          {/* Proxy Control Button */}
+          {/* Proxy Power Control Button */}
           <button
             onClick={toggleProxyServer}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all shadow-sm ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition-all shadow-sm border ${
               proxyConfig.proxyEnabled
-                ? "bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/30 shadow-rose-950/20"
-                : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 shadow-emerald-950/20"
+                ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20"
+                : "bg-rose-500/10 text-rose-300 border-rose-500/30 hover:bg-rose-500/20"
             }`}
           >
-            {proxyConfig.proxyEnabled ? (
-              <>
-                <Pause className="w-3.5 h-3.5 fill-current" /> Stop Proxy ({proxyConfig.port})
-              </>
-            ) : (
-
-              <>
-                <Play className="w-3.5 h-3.5 fill-current" /> Start Proxy ({proxyConfig.port})
-              </>
-            )}
+            <span
+              className={`w-2.5 h-2.5 rounded-full transition-all ${
+                proxyConfig.proxyEnabled
+                  ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"
+                  : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
+              }`}
+            />
+            <Power className={`w-3.5 h-3.5 ${proxyConfig.proxyEnabled ? "text-emerald-400" : "text-rose-400"}`} />
+            <span>{proxyConfig.proxyEnabled ? `Proxy ON (${proxyConfig.port})` : "Proxy OFF"}</span>
           </button>
+
         </div>
 
         {/* Filter Controls & Search */}

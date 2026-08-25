@@ -1,7 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useSettingsStore } from '../../stores/useSettingsStore';
-import { useProxyStore } from '../../stores/useProxyStore';
+import { useHistoryStore } from '../../stores/useHistoryStore';
+import { useInterceptStore } from '../../stores/useInterceptStore';
 import { MingCuteIcon, MingCuteIconName } from '../common/MingCuteIcon';
+import { Power } from 'lucide-react';
 import type { NavModule } from '../../types';
 
 interface NavTabItem {
@@ -24,20 +26,27 @@ const NAV_TABS: NavTabItem[] = [
 ];
 
 export const TopNav: React.FC = () => {
+
   const { activeModule, setActiveModule, theme, toggleTheme } = useSettingsStore();
-  const { pendingQueue } = useProxyStore();
+  const { proxyConfig, fetchProxyStatus, toggleProxyServer } = useHistoryStore();
+  const { pendingFlows } = useInterceptStore();
   const navRef = useRef<HTMLDivElement>(null);
 
-  // Convert vertical mouse wheel scrolling (deltaY) into horizontal tab scrolling
+  useEffect(() => {
+    fetchProxyStatus();
+  }, []);
+
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     if (navRef.current) {
       navRef.current.scrollLeft += e.deltaY || e.deltaX;
     }
   };
 
+  const isProxyActive = proxyConfig.proxyEnabled;
+
   return (
     <header className="h-10 bg-header border-b border-border flex items-center justify-between px-2 shrink-0 select-none text-xs overflow-hidden">
-      {/* Left: Navigation Tabs with vertical wheel to horizontal scroll */}
+      {/* Left: Navigation Tabs */}
       <div
         ref={navRef}
         onWheel={handleWheel}
@@ -46,7 +55,7 @@ export const TopNav: React.FC = () => {
         {NAV_TABS.map((tab) => {
           const isActive = activeModule === tab.id;
           const isIntercept = tab.id === 'intercept';
-          const pendingCount = pendingQueue.length;
+          const pendingCount = pendingFlows.length;
 
           return (
             <button
@@ -63,7 +72,7 @@ export const TopNav: React.FC = () => {
               <span className="text-[9px] opacity-60 font-mono">[{tab.shortcut}]</span>
 
               {isIntercept && pendingCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 bg-rose-500 text-white rounded-full text-[9px] font-mono font-bold animate-pulse">
+                <span className="ml-1 px-1.5 py-0.2 bg-amber-500 text-zinc-950 rounded-full text-[9px] font-mono font-bold animate-pulse">
                   {pendingCount}
                 </span>
               )}
@@ -72,8 +81,31 @@ export const TopNav: React.FC = () => {
         })}
       </div>
 
-      {/* Right: Dark / Light Mode Switch ONLY */}
-      <div className="flex items-center shrink-0 pl-2">
+      {/* Right Controls: Master Power Switch (Red/Green) & Theme Toggle */}
+      <div className="flex items-center gap-2 shrink-0 pl-2">
+        {/* Power Switch Button with Red/Green LED Indicator */}
+        <button
+          onClick={toggleProxyServer}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide transition-all border shadow-xs ${
+            isProxyActive
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+              : 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20'
+          }`}
+          title={`Click to ${isProxyActive ? 'STOP' : 'START'} Proxy Server`}
+        >
+          {/* LED Dot Indicator */}
+          <span
+            className={`w-2 h-2 rounded-full transition-all ${
+              isProxyActive
+                ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse'
+                : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
+            }`}
+          />
+          <Power className={`w-3.5 h-3.5 ${isProxyActive ? 'text-emerald-400' : 'text-rose-400'}`} />
+          <span>{isProxyActive ? `Proxy ON (${proxyConfig.port})` : 'Proxy OFF'}</span>
+        </button>
+
+        {/* Theme Switch */}
         <button
           onClick={toggleTheme}
           className="p-1.5 rounded bg-surface border border-border text-muted-foreground hover:text-foreground hover:bg-neutral-subtle transition-colors"

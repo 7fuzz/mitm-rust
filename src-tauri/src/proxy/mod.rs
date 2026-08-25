@@ -4,12 +4,16 @@ pub mod rules;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Instant;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
+use uuid::Uuid;
 
 use crate::ca::RootCa;
-use crate::state::{AppState, HistoryEntry, HistorySummaryItem};
+use crate::proxy::intercept::handle_intercept_hook;
+use crate::state::{AppState, HistoryEntry, HistorySummaryItem, InterceptAction, InterceptPhase, TrafficCapturedEvent};
 
 pub async fn start_proxy_server(
     app_handle: AppHandle,
@@ -26,6 +30,8 @@ pub async fn start_proxy_server(
         .await
         .map_err(|e| format!("Failed to bind proxy listener to {}: {}", addr, e))?;
 
+    println!("Proxy listener active on {}", addr);
+
     tokio::select! {
         _ = async {
             loop {
@@ -34,7 +40,7 @@ pub async fn start_proxy_server(
                         let app_handle_clone = app_handle.clone();
                         let state_clone = Arc::clone(&state);
                         let ca_clone = Arc::clone(&ca);
-                        tokio::spawn(async move {
+                        tauri::async_runtime::spawn(async move {
                             if let Err(e) = handle_connection(app_handle_clone, state_clone, ca_clone, stream, client_addr).await {
                                 eprintln!("Error handling proxy connection from {}: {}", client_addr, e);
                             }
@@ -55,58 +61,249 @@ pub async fn start_proxy_server(
 }
 
 async fn handle_connection(
-    _app_handle: AppHandle,
-    _state: Arc<AppState>,
-    _ca: Arc<RootCa>,
-    _stream: TcpStream,
+    app_handle: AppHandle,
+    state: Arc<AppState>,
+    ca: Arc<RootCa>,
+    mut stream: TcpStream,
     _client_addr: SocketAddr,
 ) -> Result<(), String> {
+    let mut buffer = [0u8; 8192];
+    let n = stream.peek(&mut buffer).await.map_err(|e| e.to_string())?;
+    if n == 0 {
+        return Ok(());
+    }
+
+    let req_str = String::from_utf8_lossy(&buffer[..n]);
+
+    if req_str.starts_with("CONNECT ") {
+        let line = req_str.lines().next().unwrap_or_default();
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 2 {
+            return Err("Invalid CONNECT request".to_string());
+        }
+
+        let host_port = parts[1];
+        let domain = host_port.split(':').next().unwrap_or(host_port);
+
+        // Read out CONNECT request line from buffer
+        let mut conn_buf = vec![0u8; n];
+        let _ = stream.read(&mut conn_buf).await;
+
+        // Respond 200 Connection Established to client
+        stream.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await.map_err(|e| e.to_string())?;
+
+        let mitm_engine = crate::proxy::mitm::MitmEngine::new(ca);
+        if let Ok(acceptor) = mitm_engine.create_tls_acceptor(domain).await {
+            if let Ok(mut tls_stream) = acceptor.accept(stream).await {
+                let mut tls_buf = [0u8; 8192];
+                if let Ok(read_bytes) = tls_stream.read(&mut tls_buf).await {
+                    if read_bytes > 0 {
+                        process_http_request(app_handle, state, &mut tls_stream, &tls_buf[..read_bytes], domain, true).await?;
+                    }
+                }
+            }
+        }
+    } else {
+        let mut req_buf = vec![0u8; n];
+        let _ = stream.read(&mut req_buf).await;
+        let host = parse_host_from_headers(&req_str).unwrap_or_else(|| "127.0.0.1".to_string());
+        process_http_request(app_handle, state, &mut stream, &req_buf, &host, false).await?;
+    }
+
     Ok(())
 }
 
-pub fn create_history_entry_payload(
-    id: i64,
-    uuid: String,
-    method: String,
-    url: String,
-    host: String,
-    status_code: u16,
-    request_headers: Vec<(String, String)>,
-    response_headers: Vec<(String, String)>,
-    request_body: String,
-    response_body: String,
-    duration_ms: Option<u64>,
-) -> (HistoryEntry, HistorySummaryItem) {
+async fn process_http_request<S>(
+    app_handle: AppHandle,
+    state: Arc<AppState>,
+    stream: &mut S,
+    raw_req_bytes: &[u8],
+    default_host: &str,
+    is_tls: bool,
+) -> Result<(), String>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let req_str = String::from_utf8_lossy(raw_req_bytes);
+    let mut lines = req_str.lines();
+    let first_line = lines.next().unwrap_or_default();
+    let parts: Vec<&str> = first_line.split_whitespace().collect();
+
+    let method = parts.get(0).unwrap_or(&"GET").to_string();
+    let raw_url = parts.get(1).unwrap_or(&"/").to_string();
+
+    let host = parse_host_from_headers(&req_str).unwrap_or_else(|| default_host.to_string());
+
+    let scheme = if is_tls { "https" } else { "http" };
+    let full_url = if raw_url.starts_with("http://") || raw_url.starts_with("https://") {
+        raw_url.clone()
+    } else {
+        format!("{}://{}{}", scheme, host, raw_url)
+    };
+
+    let mut headers = Vec::new();
+    for line in lines {
+        if line.is_empty() {
+            break;
+        }
+        if let Some((k, v)) = line.split_once(':') {
+            headers.push((k.trim().to_string(), v.trim().to_string()));
+        }
+    }
+
+    let req_body_bytes = Vec::new();
+
+    // 1. Request Intercept Hook
+    let (final_req_headers, final_req_body) = match handle_intercept_hook(
+        &app_handle,
+        &state,
+        InterceptPhase::Request,
+        &method,
+        &full_url,
+        &host,
+        headers.clone(),
+        req_body_bytes.clone(),
+    ).await {
+        Some(InterceptAction::Drop) => {
+            let _ = stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\n[MITM] Request dropped by Interceptor").await;
+            return Ok(());
+        }
+        Some(InterceptAction::Forward { modified_headers, modified_body }) => (
+            modified_headers.unwrap_or(headers),
+            modified_body.unwrap_or(req_body_bytes),
+        ),
+        None => (headers, req_body_bytes),
+    };
+
+    // 2. Forward request to target server using reqwest
+    let start_time = Instant::now();
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut req_builder = match method.to_uppercase().as_str() {
+        "POST" => client.post(&full_url),
+        "PUT" => client.put(&full_url),
+        "DELETE" => client.delete(&full_url),
+        "PATCH" => client.patch(&full_url),
+        "HEAD" => client.head(&full_url),
+        "OPTIONS" => client.request(reqwest::Method::OPTIONS, &full_url),
+        _ => client.get(&full_url),
+    };
+
+    for (k, v) in &final_req_headers {
+        if k.eq_ignore_ascii_case("host") || k.eq_ignore_ascii_case("content-length") {
+            continue;
+        }
+        req_builder = req_builder.header(k, v);
+    }
+
+    if !final_req_body.is_empty() {
+        req_builder = req_builder.body(final_req_body.clone());
+    }
+
+    let res = req_builder.send().await;
+    let duration_ms = start_time.elapsed().as_millis() as u64;
+
+    let (status_code, res_headers, res_body_bytes) = match res {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            let mut headers_vec = Vec::new();
+            for (k, v) in response.headers().iter() {
+                headers_vec.push((k.as_str().to_string(), v.to_str().unwrap_or_default().to_string()));
+            }
+            let body_bytes = response.bytes().await.map(|b| b.to_vec()).unwrap_or_default();
+            (status, headers_vec, body_bytes)
+        }
+        Err(e) => {
+            (502, vec![("Content-Type".to_string(), "text/plain".to_string())], format!("Proxy Error: {}", e).into_bytes())
+        }
+    };
+
+    // 3. Response Intercept Hook
+    let (final_res_headers, final_res_body) = match handle_intercept_hook(
+        &app_handle,
+        &state,
+        InterceptPhase::Response,
+        &method,
+        &full_url,
+        &host,
+        res_headers.clone(),
+        res_body_bytes.clone(),
+    ).await {
+        Some(InterceptAction::Drop) => {
+            let _ = stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\n[MITM] Response dropped by Interceptor").await;
+            return Ok(());
+        }
+        Some(InterceptAction::Forward { modified_headers, modified_body }) => (
+            modified_headers.unwrap_or(res_headers),
+            modified_body.unwrap_or(res_body_bytes),
+        ),
+        None => (res_headers, res_body_bytes),
+    };
+
+    // 4. Log History & Broadcast Event
+    let req_body_str = String::from_utf8_lossy(&final_req_body).to_string();
+    let res_body_str = String::from_utf8_lossy(&final_res_body).to_string();
+
+    let entry_uuid = Uuid::new_v4().to_string();
     let now = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_default();
 
-    let entry = HistoryEntry {
-        id,
-        uuid: uuid.clone(),
+    let history_entry = HistoryEntry {
+        id: 0,
+        uuid: entry_uuid.clone(),
         method: method.clone(),
-        url: url.clone(),
+        url: full_url.clone(),
         host: host.clone(),
         status_code,
-        request_headers,
-        response_headers,
-        request_body,
-        response_body,
+        request_headers: final_req_headers.clone(),
+        response_headers: final_res_headers.clone(),
+        request_body: req_body_str,
+        response_body: res_body_str,
         phase: "response".to_string(),
-        duration_ms,
+        duration_ms: Some(duration_ms),
         created_at: now.clone(),
     };
 
-    let summary = HistorySummaryItem {
-        id,
-        uuid,
-        method,
-        url,
+    let summary_item = HistorySummaryItem {
+        id: 0,
+        uuid: entry_uuid,
+        method: method.clone(),
+        url: full_url,
         host,
         status_code,
-        duration_ms,
+        duration_ms: Some(duration_ms),
         created_at: now,
     };
 
-    (entry, summary)
+    let _ = state.history_tx.send(history_entry).await;
+    let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: summary_item });
+
+    // 5. Send Response Back to Client Stream
+    let mut response_head = format!("HTTP/1.1 {} OK\r\n", status_code);
+    for (k, v) in &final_res_headers {
+        if k.eq_ignore_ascii_case("transfer-encoding") || k.eq_ignore_ascii_case("content-length") {
+            continue;
+        }
+        response_head.push_str(&format!("{}: {}\r\n", k, v));
+    }
+    response_head.push_str(&format!("Content-Length: {}\r\n", final_res_body.len()));
+    response_head.push_str("\r\n");
+
+    stream.write_all(response_head.as_bytes()).await.map_err(|e| e.to_string())?;
+    stream.write_all(&final_res_body).await.map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+fn parse_host_from_headers(raw: &str) -> Option<String> {
+    for line in raw.lines() {
+        if line.to_lowercase().starts_with("host:") {
+            return Some(line[5..].trim().to_string());
+        }
+    }
+    None
 }
