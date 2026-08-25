@@ -39,7 +39,7 @@ pub fn init_database(app_handle: &AppHandle) -> Result<PathBuf, String> {
          PRAGMA foreign_keys = ON;"
     ).map_err(|e| e.to_string())?;
 
-    migrations::run_all(&conn)?;
+    migrations::run_all(app_handle, &conn)?;
 
     Ok(db_path)
 }

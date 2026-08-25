@@ -27,45 +27,57 @@ pub fn run() {
         .setup(move |app| {
             let app_handle = app.handle().clone();
 
-            let db_path = db::init_database(&app_handle)
-                .expect("Failed to initialize SQLite database");
+            // Perform DB initialization safely; if it fails, log error so window opens and recovery modal handles it!
+            match db::init_database(&app_handle) {
+                Ok(db_path) => {
+                    db::actor::start_history_actor(db_path.clone(), history_rx);
+                    let app_state = AppState::new(db_path, history_tx);
 
-            db::actor::start_history_actor(db_path.clone(), history_rx);
+                    // Auto-start proxy server if initial mode is ON (default)
+                    if app_state.is_proxy_active() {
+                        let app_handle_clone = app_handle.clone();
+                        let app_data_dir = app_handle.path().app_data_dir().expect("Failed to get app data dir");
+                        let ca_dir = app_data_dir.join("ca");
+                        let ca = Arc::new(ca::get_ca(ca_dir));
 
-            let app_state = AppState::new(db_path, history_tx);
+                        let (stop_tx, stop_rx) = oneshot::channel::<()>();
+                        
+                        let state_arc = Arc::new(AppState {
+                            db_path: app_state.db_path.clone(),
+                            history_tx: app_state.history_tx.clone(),
+                            proxy_active: std::sync::atomic::AtomicBool::new(true),
+                            broadcast_tx: app_state.broadcast_tx.clone(),
+                            proxy_config: Arc::clone(&app_state.proxy_config),
+                            history_settings: Arc::clone(&app_state.history_settings),
+                            stop_signal: Arc::new(tokio::sync::Mutex::new(Some(stop_tx))),
 
-            // Auto-start proxy server if initial mode is ON (default)
-            if app_state.is_proxy_active() {
-                let app_handle_clone = app_handle.clone();
-                let app_data_dir = app_handle.path().app_data_dir().expect("Failed to get app data dir");
-                let ca_dir = app_data_dir.join("ca");
-                let ca = Arc::new(ca::get_ca(ca_dir));
+                            pending_flows: Arc::clone(&app_state.pending_flows),
+                            rules: Arc::clone(&app_state.rules),
+                        });
 
-                let (stop_tx, stop_rx) = oneshot::channel::<()>();
-                
-                let state_arc = Arc::new(AppState {
-                    db_path: app_state.db_path.clone(),
-                    history_tx: app_state.history_tx.clone(),
-                    proxy_active: std::sync::atomic::AtomicBool::new(true),
-                    broadcast_tx: app_state.broadcast_tx.clone(),
-                    proxy_config: Arc::clone(&app_state.proxy_config),
-                    history_settings: Arc::clone(&app_state.history_settings),
-                    stop_signal: Arc::new(tokio::sync::Mutex::new(Some(stop_tx))),
-
-                    pending_flows: Arc::clone(&app_state.pending_flows),
-                    rules: Arc::clone(&app_state.rules),
-                });
-
-                tauri::async_runtime::spawn(async move {
-                    let _ = start_proxy_server(app_handle_clone, state_arc, ca, "127.0.0.1:8080".to_string(), stop_rx).await;
-                });
+                        tauri::async_runtime::spawn(async move {
+                            let _ = start_proxy_server(app_handle_clone, state_arc, ca, "127.0.0.1:8080".to_string(), stop_rx).await;
+                        });
+                    }
+                    app.manage(app_state);
+                }
+                Err(err) => {
+                    eprintln!("[DB Startup Warning] Database init deferred due to error: {}", err);
+                    // Minimal app state fallback so commands can still be invoked
+                    let fallback_path = db::get_db_path(&app_handle);
+                    let app_state = AppState::new(fallback_path, history_tx);
+                    app.manage(app_state);
+                }
             }
-
-            app.manage(app_state);
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::db_recovery_cmd::run_database_migrations,
+            commands::db_recovery_cmd::backup_and_reset_database,
+            commands::db_recovery_cmd::export_database_file,
+            commands::db_recovery_cmd::quit_application,
+
             commands::history_cmd::get_history_logs,
             commands::history_cmd::clear_history_logs,
             commands::history_cmd::get_history_settings,
