@@ -2,6 +2,7 @@ pub mod ca;
 pub mod commands;
 pub mod db;
 pub mod proxy;
+pub mod repeater;
 pub mod state;
 
 use std::sync::Arc;
@@ -85,6 +86,13 @@ pub fn run() {
             commands::intercept_cmd::forward_all_intercepted_flows,
             commands::intercept_cmd::drop_all_intercepted_flows,
             commands::intercept_cmd::get_pending_flows,
+
+            commands::repeater_cmd::get_repeater_tabs,
+            commands::repeater_cmd::create_repeater_tab,
+            commands::repeater_cmd::update_repeater_tab,
+            commands::repeater_cmd::delete_repeater_tab,
+            commands::repeater_cmd::execute_repeater_request,
+            commands::repeater_cmd::get_repeater_history,
         ])
 
         .run(tauri::generate_context!())
