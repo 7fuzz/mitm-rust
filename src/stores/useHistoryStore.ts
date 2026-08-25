@@ -3,9 +3,12 @@ import {
   HistorySummaryItem,
   HistoryDetailItem,
   ProxyConfig,
+
   getHistoryLogs,
   getHistoryDetail,
   clearHistoryLogs,
+  getHistorySettings,
+  updateHistorySettings,
   getProxyState,
   setProxyMode,
   subscribeTrafficCaptured,
@@ -24,6 +27,9 @@ interface HistoryState {
   loadingDetail: boolean;
   autoScroll: boolean;
   proxyConfig: ProxyConfig;
+  limiterEnabled: boolean;
+  maxRows: number;
+  settingsModalOpen: boolean;
   isLoading: boolean;
   unsubFn: UnlistenFn | null;
 
@@ -36,6 +42,9 @@ interface HistoryState {
   clearLogs: () => Promise<void>;
   toggleAutoScroll: () => void;
   fetchProxyStatus: () => Promise<void>;
+  fetchHistorySettings: () => Promise<void>;
+  setHistoryLimiter: (enabled: boolean, maxRows: number) => Promise<void>;
+  setSettingsModalOpen: (open: boolean) => void;
   changeProxyMode: (mode: "on" | "off" | "block_client" | "block") => Promise<void>;
   initSubscription: () => Promise<void>;
 }
@@ -59,6 +68,9 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     port: 8080,
     host: "127.0.0.1",
   },
+  limiterEnabled: true,
+  maxRows: 500,
+  settingsModalOpen: false,
   isLoading: false,
   unsubFn: null,
 
@@ -158,6 +170,36 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   },
 
+  fetchHistorySettings: async () => {
+    try {
+      const settings = await getHistorySettings();
+      set({
+        limiterEnabled: settings.limiterEnabled,
+        maxRows: settings.maxRows,
+      });
+    } catch (e) {
+      console.error("Failed to fetch history settings:", e);
+    }
+  },
+
+  setHistoryLimiter: async (enabled: boolean, maxRows: number) => {
+    try {
+      const updated = await updateHistorySettings(enabled, maxRows);
+      set({
+        limiterEnabled: updated.limiterEnabled,
+        maxRows: updated.maxRows,
+      });
+      // Re-fetch logs to reflect pruned history
+      get().fetchLogs();
+    } catch (e) {
+      console.error("Failed to update history limiter:", e);
+    }
+  },
+
+  setSettingsModalOpen: (open: boolean) => {
+    set({ settingsModalOpen: open });
+  },
+
   changeProxyMode: async (mode: "on" | "off" | "block_client" | "block") => {
     try {
       const config = await setProxyMode(mode);
@@ -173,9 +215,14 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       currentUnsub();
     }
     const unsub = await subscribeTrafficCaptured((event) => {
-      set((state) => ({
-        logs: [event.entry, ...state.logs],
-      }));
+      set((state) => {
+        const updatedLogs = [event.entry, ...state.logs];
+        // Enforce maxRows in local state if limiter is enabled
+        if (state.limiterEnabled && updatedLogs.length > state.maxRows) {
+          return { logs: updatedLogs.slice(0, state.maxRows) };
+        }
+        return { logs: updatedLogs };
+      });
     });
     set({ unsubFn: unsub });
   },

@@ -25,6 +25,11 @@ export interface HistoryDetailItem extends HistorySummaryItem {
   phase: string;
 }
 
+export interface HistorySettings {
+  limiterEnabled: boolean;
+  maxRows: number;
+}
+
 export interface TrafficCapturedEvent {
   entry: HistorySummaryItem;
 }
@@ -81,6 +86,20 @@ export const getHistoryDetail = async (id: number): Promise<HistoryDetailItem> =
 
 export const clearHistoryLogs = async (): Promise<void> => {
   return await invoke<void>("clear_history_logs");
+};
+
+export const getHistorySettings = async (): Promise<HistorySettings> => {
+  return await invoke<HistorySettings>("get_history_settings");
+};
+
+export const updateHistorySettings = async (
+  enabled: boolean,
+  maxRows: number
+): Promise<HistorySettings> => {
+  return await invoke<HistorySettings>("update_history_settings", {
+    enabled,
+    maxRows,
+  });
 };
 
 export const getProxyState = async (): Promise<ProxyConfig> => {
