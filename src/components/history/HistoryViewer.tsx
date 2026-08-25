@@ -84,6 +84,39 @@ export const HistoryViewer: React.FC = () => {
     }
   };
 
+  const renderBodyContent = (body: string, contentType?: string) => {
+    if (!body || body.trim() === "") return "(empty)";
+
+    if (body.startsWith("base64:")) {
+      const rawB64 = body.substring(7);
+      const mime = contentType || "image/png";
+      if (mime.includes("image/")) {
+        return (
+          <div className="flex flex-col items-center gap-2 py-2">
+            <img
+              src={`data:${mime};base64,${rawB64}`}
+              alt="Response Preview"
+              className="max-h-64 rounded border border-zinc-800 object-contain"
+            />
+            <span className="text-[10px] text-zinc-500 font-mono">Base64 Image Preview ({mime})</span>
+          </div>
+        );
+      }
+      return (
+        <div className="p-2 bg-zinc-900 rounded text-zinc-400 font-mono text-[11px]">
+          [Binary Content ({mime}): {rawB64.length} chars base64]
+        </div>
+      );
+    }
+
+    try {
+      const parsed = JSON.parse(body);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return body;
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen w-full bg-zinc-950 text-zinc-100 font-sans antialiased overflow-hidden">
       {/* Top Toolbar / Control Header */}
@@ -305,7 +338,7 @@ export const HistoryViewer: React.FC = () => {
                         Body
                       </div>
                       <pre className="text-zinc-200 bg-zinc-900 p-2.5 rounded overflow-x-auto text-[11px] whitespace-pre-wrap break-all">
-                        {selectedLogDetail.requestBody || "(empty)"}
+                        {renderBodyContent(selectedLogDetail.requestBody)}
                       </pre>
                     </div>
                   </>
@@ -344,7 +377,7 @@ export const HistoryViewer: React.FC = () => {
                         Body
                       </div>
                       <pre className="text-zinc-200 bg-zinc-900 p-2.5 rounded overflow-x-auto text-[11px] whitespace-pre-wrap break-all">
-                        {selectedLogDetail.responseBody || "(empty)"}
+                        {renderBodyContent(selectedLogDetail.responseBody, selectedLogDetail.contentType)}
                       </pre>
                     </div>
                   </>
@@ -359,6 +392,7 @@ export const HistoryViewer: React.FC = () => {
           )}
         </div>
       </div>
+
 
       {/* History Log Rotation Limiter Settings Modal */}
       {settingsModalOpen && (
