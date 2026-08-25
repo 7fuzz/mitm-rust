@@ -72,6 +72,9 @@ pub fn init_database(app_handle: &AppHandle) -> Result<PathBuf, String> {
              key TEXT PRIMARY KEY,
              value TEXT NOT NULL
          );
+
+         INSERT OR IGNORE INTO app_preferences (key, value) VALUES ('history_limiter_enabled', 'true');
+         INSERT OR IGNORE INTO app_preferences (key, value) VALUES ('history_limiter_max_rows', '500');
         "
     ).map_err(|e| e.to_string())?;
     
@@ -94,6 +97,21 @@ pub fn set_preference(db_path: &PathBuf, key: &str, value: &str) -> Result<(), S
         params![key, value],
     ).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub fn prune_history_logs_conn(conn: &Connection, max_rows: u32) -> Result<usize, String> {
+    if max_rows == 0 {
+        return Ok(0);
+    }
+    conn.execute(
+        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY id DESC LIMIT ?)",
+        params![max_rows],
+    ).map_err(|e| e.to_string())
+}
+
+pub fn prune_history_logs(db_path: &PathBuf, max_rows: u32) -> Result<usize, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    prune_history_logs_conn(&conn, max_rows)
 }
 
 pub fn load_intercept_rules(db_path: &PathBuf) -> Result<Vec<InterceptRule>, String> {

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
 use crate::state::HistoryEntry;
+use crate::db::prune_history_logs_conn;
 
 pub fn start_history_actor(
     db_path: PathBuf,
@@ -69,6 +70,17 @@ fn flush_history_batch(db_path: &PathBuf, buffer: &mut Vec<HistoryEntry>) {
                 );
             }
             let _ = tx.commit();
+        }
+
+        // Check if history rotation limiter is enabled and prune excess rows
+        let limiter_enabled = crate::db::get_preference(db_path, "history_limiter_enabled")
+            .map(|v| v == "true")
+            .unwrap_or(true);
+        if limiter_enabled {
+            let max_rows = crate::db::get_preference(db_path, "history_limiter_max_rows")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(500);
+            let _ = prune_history_logs_conn(&conn, max_rows);
         }
     }
     buffer.clear();
