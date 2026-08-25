@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { useProxyStore } from '../../../stores/useProxyStore';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
 import { useSettingsStore } from '../../../stores/useSettingsStore';
@@ -109,16 +108,6 @@ export const HistoryView: React.FC = () => {
 
   const selectedItem = traffic.find((t) => t.id === selectedTrafficId) || null;
 
-  // Virtualizer parent container
-  const parentRef = useRef<HTMLDivElement>(null);
-
-  const rowVirtualizer = useVirtualizer({
-    count: filteredTraffic.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 32, // compact 32px height
-    overscan: 20,
-  });
-
   const handleContextMenu = (e: React.MouseEvent, item: TrafficItem) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, item });
@@ -202,73 +191,72 @@ export const HistoryView: React.FC = () => {
 
       {/* Main Resizable Split Area: Table Top vs Inspector Bottom */}
       <div ref={mainSplitRef} className="flex-1 flex flex-col overflow-hidden">
-        {/* Virtualized Traffic Table (Resizable Height) */}
+        {/* Traffic Table (Resizable Height) */}
         <div
           className="flex flex-col border-b border-border bg-surface overflow-hidden min-h-[100px]"
           style={{ height: `${topHeightPercent}%` }}
         >
-          {/* Table Header */}
-          <div className="bg-header border-b border-border flex items-center text-[11px] font-medium text-muted-foreground select-none shrink-0 font-mono px-2 py-1">
-            <span className="w-10 text-center">#</span>
-            <span className="w-16">Method</span>
-            <span className="w-48 truncate px-2">Host</span>
-            <span className="flex-1 truncate px-2">Path</span>
-            <span className="w-16 text-center">Status</span>
-            <span className="w-32 truncate px-2">Content-Type</span>
-            <span className="w-20 text-right px-2">Size</span>
-            <span className="w-20 text-right px-2">Time (ms)</span>
-          </div>
+          {/* Table Container */}
+          <div className="flex-1 overflow-auto">
+            <table className="w-full text-left text-xs border-collapse table-fixed font-mono">
+              <thead className="bg-header sticky top-0 border-b border-border text-[11px] font-medium text-muted-foreground select-none z-10 shadow-sm">
+                <tr>
+                  <th className="py-2 px-2 w-10 text-center text-muted-foreground">#</th>
+                  <th className="py-2 px-2 w-16">Method</th>
+                  <th className="py-2 px-2 w-48">Host</th>
+                  <th className="py-2 px-2">Path</th>
+                  <th className="py-2 px-2 w-16 text-center">Status</th>
+                  <th className="py-2 px-2 w-32">Content-Type</th>
+                  <th className="py-2 px-2 w-20 text-right">Size</th>
+                  <th className="py-2 px-2 w-20 text-right">Time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {filteredTraffic.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-muted-foreground italic text-xs">
+                      No traffic items match the current filters
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTraffic.map((item, index) => {
+                    const isSelected = selectedTrafficId === item.id;
 
-          {/* Table Body (Virtualized) */}
-          <div ref={parentRef} className="flex-1 overflow-auto">
-            {filteredTraffic.length === 0 ? (
-              <div className="py-12 text-center text-muted-foreground italic text-xs">
-                No traffic items match the current filters
-              </div>
-            ) : (
-              <div
-                style={{
-                  height: `${rowVirtualizer.getTotalSize()}px`,
-                  width: '100%',
-                  position: 'relative',
-                }}
-              >
-                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const item = filteredTraffic[virtualRow.index];
-                  const isSelected = selectedTrafficId === item.id;
-
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => selectTrafficItem(item.id)}
-                      onContextMenu={(e) => handleContextMenu(e, item)}
-                      className={`absolute top-0 left-0 w-full flex items-center text-xs border-b border-border/50 cursor-pointer font-mono transition-colors ${
-                        isSelected
-                          ? 'bg-primary/15 text-foreground font-semibold border-primary/30'
-                          : 'hover:bg-neutral-subtle text-foreground'
-                      }`}
-                      style={{
-                        height: `${virtualRow.size}px`,
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }}
-                    >
-                      <span className="w-10 text-center text-muted-foreground text-[10px]">{virtualRow.index + 1}</span>
-                      <span className="w-16">
-                        <MethodBadge method={item.method} />
-                      </span>
-                      <span className="w-48 truncate px-2 text-foreground font-medium">{item.host}</span>
-                      <span className="flex-1 truncate px-2 text-muted-foreground">{item.path}</span>
-                      <span className="w-16 text-center">
-                        <StatusBadge code={item.statusCode} />
-                      </span>
-                      <span className="w-32 truncate px-2 text-muted-foreground text-[11px]">{item.contentType}</span>
-                      <span className="w-20 text-right px-2 text-muted-foreground text-[11px]">{item.size}</span>
-                      <span className="w-20 text-right px-2 text-muted-foreground text-[11px]">{item.durationMs}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    return (
+                      <tr
+                        key={item.id}
+                        onClick={() => selectTrafficItem(item.id)}
+                        onContextMenu={(e) => handleContextMenu(e, item)}
+                        className={`cursor-pointer transition-colors hover:bg-neutral-subtle ${
+                          isSelected
+                            ? 'bg-primary/15 text-foreground font-semibold border-l-2 border-primary'
+                            : 'text-foreground'
+                        }`}
+                      >
+                        <td className="py-1.5 px-2 text-center text-muted-foreground text-[10px]">{filteredTraffic.length - index}</td>
+                        <td className="py-1.5 px-2">
+                          <MethodBadge method={item.method} />
+                        </td>
+                        <td className="py-1.5 px-2 text-foreground font-medium overflow-hidden">
+                          <div className="truncate" title={item.host}>{item.host}</div>
+                        </td>
+                        <td className="py-1.5 px-2 text-muted-foreground overflow-hidden">
+                          <div className="truncate" title={item.path}>{item.path}</div>
+                        </td>
+                        <td className="py-1.5 px-2 text-center">
+                          <StatusBadge code={item.statusCode} />
+                        </td>
+                        <td className="py-1.5 px-2 text-muted-foreground text-[11px] overflow-hidden">
+                          <div className="truncate" title={item.contentType}>{item.contentType || '-'}</div>
+                        </td>
+                        <td className="py-1.5 px-2 text-right text-muted-foreground text-[11px]">{item.size}</td>
+                        <td className="py-1.5 px-2 text-right text-muted-foreground text-[11px]">{item.durationMs != null ? `${item.durationMs}ms` : '-'}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 

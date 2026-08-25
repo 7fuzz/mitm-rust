@@ -283,9 +283,12 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   },
 
   addTrafficItem: (item) => {
-    set((state) => ({
-      traffic: [item, ...state.traffic].slice(0, 10000), // Virtualized capacity limit
-    }));
+    set((state) => {
+      const filtered = state.traffic.filter((t) => t.id !== item.id);
+      return {
+        traffic: [item, ...filtered].slice(0, 10000),
+      };
+    });
   },
 
   selectTrafficItem: (id) => set({ selectedTrafficId: id }),
