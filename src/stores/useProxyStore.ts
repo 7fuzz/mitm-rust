@@ -8,7 +8,9 @@ import {
   clearHttpHistory,
   isTauriAvailable,
 } from '../services/tauri/ipc';
-import { tauriBridge } from '../services/tauri/bridge';
+import { subscribeTrafficCaptured, getHistoryLogs } from '../services/tauri/bridge';
+
+
 
 const SAMPLE_TRAFFIC: TrafficItem[] = [
   {
@@ -232,26 +234,41 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   initStore: async () => {
     if (isTauriAvailable()) {
       try {
-        const history = await tauriBridge.history.get();
-        if (history && history.length > 0) {
-          set({ traffic: history, selectedTrafficId: history[0]?.id || null });
+        const historyLogs = await getHistoryLogs();
+        if (historyLogs && historyLogs.length > 0) {
+          const mapped: TrafficItem[] = historyLogs.map((item) => ({
+            id: String(item.id),
+            method: item.method,
+            host: item.host,
+            path: item.url,
+            url: item.url,
+            statusCode: item.statusCode,
+            contentType: 'application/json',
+            size: 0,
+            durationMs: item.durationMs || 0,
+            timestamp: Date.parse(item.createdAt) || Date.now(),
+            requestHeaders: [],
+            responseHeaders: [],
+            requestBody: '',
+            responseBody: '',
+            phase: 'response',
+            isIntercepted: false,
+          }));
+          set({ traffic: mapped, selectedTrafficId: mapped[0]?.id || null });
         }
       } catch (e) {
         console.warn('Failed to fetch initial HTTP history via IPC:', e);
       }
     }
 
+
     // Subscribe to live captured traffic from Rust backend
-    tauriBridge.listenTraffic((item) => {
-      get().addTrafficItem(item);
+    subscribeTrafficCaptured((event: any) => {
+      if (event?.entry) {
+        get().addTrafficItem(event.entry);
+      }
     });
 
-    // Subscribe to live intercepted pending flows from Rust backend
-    tauriBridge.listenIntercept((flow) => {
-      set((state) => ({
-        pendingQueue: [flow, ...state.pendingQueue.filter((f) => f.id !== flow.id)],
-      }));
-    });
   },
 
   setProxyMode: async (mode) => {

@@ -1,0 +1,138 @@
+use tauri::State;
+use rusqlite::Connection;
+use crate::state::{AppState, HistoryDetailItem, HistorySummaryItem};
+
+#[tauri::command]
+pub async fn get_history_logs(
+    state: State<'_, AppState>,
+    page: u32,
+    limit: u32,
+    search_term: Option<String>,
+    method_filter: Option<String>,
+    status_filter: Option<u16>,
+) -> Result<Vec<HistorySummaryItem>, String> {
+    let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
+
+    let offset = (page.saturating_sub(1)) * limit;
+    let mut query = String::from(
+        "SELECT id, uuid, method, url, host, status_code, duration_ms, created_at FROM history WHERE 1=1"
+    );
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+    if let Some(ref search) = search_term {
+        if !search.trim().is_empty() {
+            query.push_str(" AND (url LIKE ? OR host LIKE ? OR method LIKE ?)");
+            let pattern = format!("%{}%", search.trim());
+            params.push(Box::new(pattern.clone()));
+            params.push(Box::new(pattern.clone()));
+            params.push(Box::new(pattern));
+        }
+    }
+
+    if let Some(ref method) = method_filter {
+        if !method.trim().is_empty() && method.to_uppercase() != "ALL" {
+            query.push_str(" AND method = ?");
+            params.push(Box::new(method.to_uppercase()));
+        }
+    }
+
+    if let Some(status) = status_filter {
+        query.push_str(" AND status_code = ?");
+        params.push(Box::new(status));
+    }
+
+    query.push_str(" ORDER BY id DESC LIMIT ? OFFSET ?");
+    params.push(Box::new(limit));
+    params.push(Box::new(offset));
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+    let logs = stmt
+        .query_map(&param_refs[..], |row| {
+            Ok(HistorySummaryItem {
+                id: row.get(0)?,
+                uuid: row.get(1)?,
+                method: row.get(2)?,
+                url: row.get(3)?,
+                host: row.get(4)?,
+                status_code: row.get(5)?,
+                duration_ms: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(logs)
+}
+
+#[tauri::command]
+pub async fn get_history_detail(
+    state: State<'_, AppState>,
+    id: i64,
+) -> Result<HistoryDetailItem, String> {
+    let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, uuid, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at FROM history WHERE id = ?"
+        )
+        .map_err(|e| e.to_string())?;
+
+    let item = stmt
+        .query_row([id], |row| {
+            let req_headers_json: String = row.get(6)?;
+            let res_headers_json: String = row.get(7)?;
+            let request_body: String = row.get(8)?;
+            let response_body: String = row.get(9)?;
+
+            let request_headers: Vec<(String, String)> =
+                serde_json::from_str(&req_headers_json).unwrap_or_default();
+            let response_headers: Vec<(String, String)> =
+                serde_json::from_str(&res_headers_json).unwrap_or_default();
+
+            let request_body_hex = if !request_body.is_empty() {
+                Some(hex::encode(request_body.as_bytes()))
+            } else {
+                None
+            };
+
+            let response_body_hex = if !response_body.is_empty() {
+                Some(hex::encode(response_body.as_bytes()))
+            } else {
+                None
+            };
+
+            Ok(HistoryDetailItem {
+                id: row.get(0)?,
+                uuid: row.get(1)?,
+                method: row.get(2)?,
+                url: row.get(3)?,
+                host: row.get(4)?,
+                status_code: row.get(5)?,
+                request_headers,
+                response_headers,
+                request_body,
+                response_body,
+                request_body_hex,
+                response_body_hex,
+                phase: row.get(10)?,
+                duration_ms: row.get(11)?,
+                created_at: row.get(12)?,
+            })
+        })
+        .map_err(|e| format!("History item with id {} not found: {}", id, e))?;
+
+    Ok(item)
+}
+
+#[tauri::command]
+pub async fn clear_history_logs(
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM history", []).map_err(|e| e.to_string())?;
+    Ok(())
+}
