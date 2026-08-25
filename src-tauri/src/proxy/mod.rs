@@ -85,11 +85,9 @@ async fn handle_connection(
         let host_port = parts[1];
         let domain = host_port.split(':').next().unwrap_or(host_port);
 
-        // Read out CONNECT request line from buffer
         let mut conn_buf = vec![0u8; n];
         let _ = stream.read(&mut conn_buf).await;
 
-        // Respond 200 Connection Established to client
         stream.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await.map_err(|e| e.to_string())?;
 
         let mitm_engine = crate::proxy::mitm::MitmEngine::new(ca);
@@ -124,6 +122,8 @@ async fn process_http_request<S>(
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
+    let proxy_mode = { state.proxy_config.read().await.proxy_mode.clone() };
+
     let req_str = String::from_utf8_lossy(raw_req_bytes);
     let mut lines = req_str.lines();
     let first_line = lines.next().unwrap_or_default();
@@ -131,7 +131,6 @@ where
 
     let method = parts.get(0).unwrap_or(&"GET").to_string();
     let raw_url = parts.get(1).unwrap_or(&"/").to_string();
-
     let host = parse_host_from_headers(&req_str).unwrap_or_else(|| default_host.to_string());
 
     let scheme = if is_tls { "https" } else { "http" };
@@ -152,6 +151,26 @@ where
     }
 
     let req_body_bytes = Vec::new();
+
+    // Mode: "block" -> Never send to server, never send to client
+    if proxy_mode == "block" {
+        log_and_emit_history(
+            &app_handle,
+            &state,
+            &method,
+            &full_url,
+            &host,
+            502,
+            headers,
+            vec![("Content-Type".to_string(), "text/plain".to_string())],
+            req_body_bytes,
+            "[MITM] Request blocked by proxy (Block mode)".to_string().into_bytes(),
+            0,
+        ).await;
+
+        let _ = stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\n[MITM] Blocked (Proxy mode: Block)").await;
+        return Ok(());
+    }
 
     // 1. Request Intercept Hook
     let (final_req_headers, final_req_body) = match handle_intercept_hook(
@@ -244,45 +263,27 @@ where
     };
 
     // 4. Log History & Broadcast Event
-    let req_body_str = String::from_utf8_lossy(&final_req_body).to_string();
-    let res_body_str = String::from_utf8_lossy(&final_res_body).to_string();
-
-    let entry_uuid = Uuid::new_v4().to_string();
-    let now = time::OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_default();
-
-    let history_entry = HistoryEntry {
-        id: 0,
-        uuid: entry_uuid.clone(),
-        method: method.clone(),
-        url: full_url.clone(),
-        host: host.clone(),
+    log_and_emit_history(
+        &app_handle,
+        &state,
+        &method,
+        &full_url,
+        &host,
         status_code,
-        request_headers: final_req_headers.clone(),
-        response_headers: final_res_headers.clone(),
-        request_body: req_body_str,
-        response_body: res_body_str,
-        phase: "response".to_string(),
-        duration_ms: Some(duration_ms),
-        created_at: now.clone(),
-    };
+        final_req_headers,
+        final_res_headers.clone(),
+        final_req_body,
+        final_res_body.clone(),
+        duration_ms,
+    ).await;
 
-    let summary_item = HistorySummaryItem {
-        id: 0,
-        uuid: entry_uuid,
-        method: method.clone(),
-        url: full_url,
-        host,
-        status_code,
-        duration_ms: Some(duration_ms),
-        created_at: now,
-    };
+    // Mode: "block_client" -> Sent to server and logged, but client does NOT get response
+    if proxy_mode == "block_client" {
+        let _ = stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\n[MITM] Response blocked from client (Block Client mode)").await;
+        return Ok(());
+    }
 
-    let _ = state.history_tx.send(history_entry).await;
-    let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: summary_item });
-
-    // 5. Send Response Back to Client Stream
+    // Mode: "on" -> Send Response Back to Client Stream
     let mut response_head = format!("HTTP/1.1 {} OK\r\n", status_code);
     for (k, v) in &final_res_headers {
         if k.eq_ignore_ascii_case("transfer-encoding") || k.eq_ignore_ascii_case("content-length") {
@@ -297,6 +298,58 @@ where
     stream.write_all(&final_res_body).await.map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+async fn log_and_emit_history(
+    app_handle: &AppHandle,
+    state: &Arc<AppState>,
+    method: &str,
+    full_url: &str,
+    host: &str,
+    status_code: u16,
+    req_headers: Vec<(String, String)>,
+    res_headers: Vec<(String, String)>,
+    req_body: Vec<u8>,
+    res_body: Vec<u8>,
+    duration_ms: u64,
+) {
+    let req_body_str = String::from_utf8_lossy(&req_body).to_string();
+    let res_body_str = String::from_utf8_lossy(&res_body).to_string();
+
+    let entry_uuid = Uuid::new_v4().to_string();
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_default();
+
+    let history_entry = HistoryEntry {
+        id: 0,
+        uuid: entry_uuid.clone(),
+        method: method.to_string(),
+        url: full_url.to_string(),
+        host: host.to_string(),
+        status_code,
+        request_headers: req_headers,
+        response_headers: res_headers,
+        request_body: req_body_str,
+        response_body: res_body_str,
+        phase: "response".to_string(),
+        duration_ms: Some(duration_ms),
+        created_at: now.clone(),
+    };
+
+    let summary_item = HistorySummaryItem {
+        id: 0,
+        uuid: entry_uuid,
+        method: method.to_string(),
+        url: full_url.to_string(),
+        host: host.to_string(),
+        status_code,
+        duration_ms: Some(duration_ms),
+        created_at: now,
+    };
+
+    let _ = state.history_tx.send(history_entry).await;
+    let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: summary_item });
 }
 
 fn parse_host_from_headers(raw: &str) -> Option<String> {

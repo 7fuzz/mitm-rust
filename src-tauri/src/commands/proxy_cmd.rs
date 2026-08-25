@@ -15,19 +15,28 @@ pub async fn get_proxy_state(
 }
 
 #[tauri::command]
-pub async fn toggle_proxy(
+pub async fn set_proxy_mode(
     app_handle: AppHandle,
     state: State<'_, AppState>,
-    enabled: bool,
+    mode: String,
 ) -> Result<ProxyConfig, String> {
-    {
-        let mut cfg = state.proxy_config.write().await;
-        cfg.proxy_enabled = enabled;
+    let valid_modes = ["on", "off", "block_client", "block"];
+    if !valid_modes.contains(&mode.as_str()) {
+        return Err(format!("Invalid proxy mode '{}'. Expected one of: {:?}", mode, valid_modes));
     }
 
-    let _ = set_preference(&state.db_path, "proxy_enabled", if enabled { "true" } else { "false" });
+    let is_enabled = mode != "off";
 
-    if enabled {
+    {
+        let mut cfg = state.proxy_config.write().await;
+        cfg.proxy_mode = mode.clone();
+        cfg.proxy_enabled = is_enabled;
+    }
+
+    let _ = set_preference(&state.db_path, "proxy_mode", &mode);
+    let _ = set_preference(&state.db_path, "proxy_enabled", if is_enabled { "true" } else { "false" });
+
+    if is_enabled {
         if !state.is_proxy_active() {
             let proxy_port = { state.proxy_config.read().await.port };
             let proxy_host = { state.proxy_config.read().await.host.clone() };
@@ -76,6 +85,16 @@ pub async fn toggle_proxy(
 }
 
 #[tauri::command]
+pub async fn toggle_proxy(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<ProxyConfig, String> {
+    let mode = if enabled { "on" } else { "off" };
+    set_proxy_mode(app_handle, state, mode.to_string()).await
+}
+
+#[tauri::command]
 pub async fn start_proxy(
     app_handle: AppHandle,
     state: State<'_, AppState>,
@@ -88,7 +107,7 @@ pub async fn start_proxy(
     if let Some(h) = host {
         state.proxy_config.write().await.host = h;
     }
-    toggle_proxy(app_handle, state, true).await
+    set_proxy_mode(app_handle, state, "on".to_string()).await
 }
 
 #[tauri::command]
@@ -96,7 +115,7 @@ pub async fn stop_proxy(
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ProxyConfig, String> {
-    toggle_proxy(app_handle, state, false).await
+    set_proxy_mode(app_handle, state, "off".to_string()).await
 }
 
 #[tauri::command]

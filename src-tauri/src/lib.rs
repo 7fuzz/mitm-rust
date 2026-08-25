@@ -39,6 +39,7 @@ pub fn run() {
             commands::history_cmd::get_history_detail,
             commands::history_cmd::clear_history_logs,
             commands::proxy_cmd::get_proxy_state,
+            commands::proxy_cmd::set_proxy_mode,
             commands::proxy_cmd::toggle_proxy,
             commands::proxy_cmd::start_proxy,
             commands::proxy_cmd::stop_proxy,

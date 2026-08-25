@@ -107,6 +107,7 @@ pub struct ProxyConfig {
     pub proxy_enabled: bool,
     pub intercept_enabled: bool,
     pub intercept_mode: String, // 'request', 'response', 'both'
+    pub proxy_mode: String,     // 'on', 'off', 'block_client', 'block'
     pub port: u16,
     pub host: String,
 }
@@ -117,6 +118,7 @@ impl Default for ProxyConfig {
             proxy_enabled: false,
             intercept_enabled: false,
             intercept_mode: "both".to_string(),
+            proxy_mode: "off".to_string(),
             port: 8080,
             host: "127.0.0.1".to_string(),
         }
@@ -141,9 +143,9 @@ impl AppState {
     ) -> Self {
         let (broadcast_tx, _) = broadcast::channel(500);
 
-        let initial_proxy_enabled = crate::db::get_preference(&db_path, "proxy_enabled")
-            .map(|v| v == "true")
-            .unwrap_or(false);
+        let initial_proxy_mode = crate::db::get_preference(&db_path, "proxy_mode")
+            .unwrap_or_else(|| "off".to_string());
+        let initial_proxy_enabled = initial_proxy_mode != "off";
         let initial_intercept_enabled = crate::db::get_preference(&db_path, "intercept_enabled")
             .map(|v| v == "true")
             .unwrap_or(false);
@@ -156,6 +158,7 @@ impl AppState {
             proxy_enabled: initial_proxy_enabled,
             intercept_enabled: initial_intercept_enabled,
             intercept_mode: initial_intercept_mode,
+            proxy_mode: initial_proxy_mode,
             port: 8080,
             host: "127.0.0.1".to_string(),
         };
