@@ -5,12 +5,7 @@ description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "mitm_rust_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
@@ -25,7 +20,6 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_bytes = "0.11"
 time = "0.3"
 rusqlite = { version = "0.31", features = ["bundled"] }
 rcgen = { version = "0.13", features = ["pem", "x509-parser"] }
@@ -35,24 +29,15 @@ hyper-util = { version = "0.1", features = ["full"] }
 tokio-rustls = "0.26"
 rustls = { version = "0.23", features = ["ring"] }
 rustls-pki-types = "1"
-async-trait = "0.1"
 uuid = { version = "1", features = ["v4", "serde"] }
 http-body-util = "0.1"
 hyper-rustls = { version = "0.27", features = ["http1", "tls12", "ring", "webpki-roots"] }
-tower = { version = "0.4", features = ["full"] }
 bytes = "1"
-futures = "0.3"
-pem = "3"
 flate2 = "1.0"
 brotli = "7.0"
 zstd = "0.13"
 base64 = "0.22"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
-openssl = { version = "0.10", features = ["vendored"] }
-tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
 ring = "0.17"
-hex = "0.4"
 dashmap = "6"
 regex = "1"
-
-
