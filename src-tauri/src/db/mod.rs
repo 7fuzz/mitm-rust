@@ -35,9 +35,12 @@ pub fn init_database(app_handle: &AppHandle) -> Result<PathBuf, String> {
     // If an old table with autoincrement integer id exists, drop it.
     let table_exists = conn.prepare("SELECT 1 FROM history LIMIT 1").is_ok();
     if table_exists {
-        let is_text_id = conn
-            .prepare("SELECT id FROM history WHERE typeof(id) = 'text' LIMIT 1")
-            .is_ok();
+        let is_text_id = conn.query_row(
+            "SELECT type FROM pragma_table_info('history') WHERE name = 'id'",
+            [],
+            |row| row.get::<_, String>(0)
+        ).map(|t| t.to_uppercase() == "TEXT").unwrap_or(false);
+
         if !is_text_id {
             eprintln!("[DB Migration] Recreating history table with TEXT primary key");
             let _ = conn.execute("DROP TABLE history", []);

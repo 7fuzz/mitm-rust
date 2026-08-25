@@ -10,7 +10,7 @@ pub fn start_history_actor(
 ) {
     tauri::async_runtime::spawn(async move {
         let mut buffer: Vec<HistoryEntry> = Vec::with_capacity(50);
-        let mut flush_timer = interval(Duration::from_millis(100));
+        let mut flush_timer = interval(Duration::from_millis(50));
 
         loop {
             tokio::select! {
@@ -18,9 +18,7 @@ pub fn start_history_actor(
                     match maybe_entry {
                         Some(entry) => {
                             buffer.push(entry);
-                            if buffer.len() >= 50 {
-                                flush_history_batch(&db_path, &mut buffer);
-                            }
+                            flush_history_batch(&db_path, &mut buffer);
                         }
                         None => {
                             if !buffer.is_empty() {
