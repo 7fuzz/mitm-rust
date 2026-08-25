@@ -185,18 +185,20 @@ export const HistoryViewer: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  logs.map((item) => {
-                    const isSelected = selectedLogUuid === item.uuid;
+                  logs.map((item, idx) => {
+                    const itemKey = item.uuid || `log-${item.id}-${idx}`;
+                    const isSelected = Boolean(selectedLogUuid && item.uuid && selectedLogUuid === item.uuid);
                     return (
                       <tr
-                        key={item.uuid}
-                        onClick={() => selectLog(item.uuid)}
+                        key={itemKey}
+                        onClick={() => item.uuid && selectLog(item.uuid)}
                         className={`cursor-pointer transition-colors ${
                           isSelected
                             ? "bg-indigo-600/15 border-l-2 border-indigo-500"
                             : "hover:bg-zinc-900/40"
                         }`}
                       >
+
                         <td className="py-2 px-3">
                           <span
                             className={`inline-block px-2 py-0.5 rounded border text-[10px] font-mono font-bold ${getStatusBadgeClass(

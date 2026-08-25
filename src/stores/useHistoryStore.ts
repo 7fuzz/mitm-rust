@@ -109,6 +109,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   },
 
   selectLog: async (uuid: string) => {
+    if (!uuid) return;
     set({ selectedLogUuid: uuid, loadingDetail: true });
 
     const cachedDetail = get().detailMap[uuid];
@@ -125,7 +126,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
         loadingDetail: false,
       }));
     } catch (e) {
-      console.error("Failed to fetch history detail by uuid:", e);
+      console.warn("Detail not found by uuid in DB yet, using summary fallback:", e);
       const targetSummary = get().logs.find((l) => l.uuid === uuid);
       if (targetSummary) {
         set({
@@ -210,10 +211,17 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     if (currentUnsub) {
       currentUnsub();
     }
-    const unsub = await subscribeTrafficCaptured((event) => {
+    const unsub = await subscribeTrafficCaptured((event: any) => {
       set((state) => {
-        const updatedLogs = [event.entry, ...state.logs];
-        const updatedDetailMap = { ...state.detailMap, [event.entry.uuid]: event.detail };
+        const entry: HistorySummaryItem = event?.entry || event;
+        const detail: HistoryDetailItem = event?.detail || event;
+
+        if (!entry || !entry.uuid) {
+          return state;
+        }
+
+        const updatedLogs = [entry, ...state.logs];
+        const updatedDetailMap = { ...state.detailMap, [entry.uuid]: detail };
 
         if (state.limiterEnabled && updatedLogs.length > state.maxRows) {
           return {
