@@ -1,8 +1,1 @@
-@import "tailwindcss";
-
-body {
-  background-color: #ffffff;
-  color: #000000;
-  margin: 0;
-  padding: 0;
-}
+@import "./app.css";
