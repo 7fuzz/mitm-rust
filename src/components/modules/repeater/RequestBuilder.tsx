@@ -3,6 +3,7 @@ import type { RepeaterTab } from '../../../services/tauri/bridge';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
+import { MultipartEditor } from '../../common/MultipartEditor';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Select } from '../../common/ui';
 
@@ -239,12 +240,29 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
                   { value: 'none', label: 'None' },
                   { value: 'json', label: 'JSON' },
                   { value: 'raw', label: 'Raw Text' },
-                  { value: 'form', label: 'Form Data' },
+                  { value: 'form', label: 'Form Data (Multipart)' },
                 ]}
                 sizeVariant="xs"
               />
             </div>
-            {request.bodyType !== 'none' && (
+            {request.bodyType === 'form' || request.bodyType === 'form-data' || request.bodyType === 'multipart' ? (
+              <div className="flex-1 overflow-y-auto">
+                <MultipartEditor
+                  fields={(() => {
+                    try {
+                      const parsed = JSON.parse(request.bodyContent || '');
+                      if (parsed && Array.isArray(parsed.__form_data)) return parsed.__form_data;
+                      if (Array.isArray(parsed)) return parsed;
+                    } catch {}
+                    return [];
+                  })()}
+                  onChange={(fields) => {
+                    const jsonStr = JSON.stringify({ __form_data: fields }, null, 2);
+                    updateTab({ ...request, bodyContent: jsonStr });
+                  }}
+                />
+              </div>
+            ) : request.bodyType !== 'none' ? (
               <div className="flex-1 overflow-hidden border border-border rounded">
                 <CodeEditor
                   value={request.bodyContent || ''}
@@ -252,7 +270,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
                   language={request.bodyType === 'json' ? 'json' : 'plaintext'}
                 />
               </div>
-            )}
+            ) : null}
           </div>
         )}
 

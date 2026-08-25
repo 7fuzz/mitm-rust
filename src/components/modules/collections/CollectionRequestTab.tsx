@@ -3,8 +3,10 @@ import { useCollectionStore } from '../../../stores/useCollectionStore';
 import { Select, Button } from '../../common/ui';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
+import { MultipartEditor } from '../../common/MultipartEditor';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import type { RequestItem, HeaderItem, ParamItem } from '../../../services/tauri/bridge';
+import type { MultipartField } from '../../../types';
 
 const HTTP_METHODS = [
   { value: 'GET', label: 'GET' },
@@ -38,6 +40,30 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     setBodyType(request.bodyType || 'none');
     setBodyContent(request.bodyContent || '');
   }, [request.id]);
+
+  const parseMultipartFields = (jsonStr: string): MultipartField[] => {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && Array.isArray(parsed.__form_data)) return parsed.__form_data;
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
+    return [];
+  };
+
+  const handleMultipartChange = (fields: MultipartField[]) => {
+    const jsonStr = JSON.stringify({ __form_data: fields }, null, 2);
+    setBodyContent(jsonStr);
+    updateRequestDetails({
+      ...request,
+      method,
+      url,
+      headers,
+      params,
+      bodyType,
+      bodyContent: jsonStr,
+      updatedAtMs: Date.now(),
+    });
+  };
 
   const handleSaveAndSend = async () => {
     const updated: RequestItem = {
@@ -172,7 +198,14 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
               ))}
             </div>
 
-            {bodyType !== 'none' ? (
+            {bodyType === 'form-data' || bodyType === 'multipart' ? (
+              <div className="flex-1 overflow-y-auto">
+                <MultipartEditor
+                  fields={parseMultipartFields(bodyContent)}
+                  onChange={handleMultipartChange}
+                />
+              </div>
+            ) : bodyType !== 'none' ? (
               <div className="flex-1 border border-border rounded-lg overflow-hidden bg-background">
                 <CodeEditor
                   value={bodyContent}

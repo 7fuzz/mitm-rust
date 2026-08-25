@@ -205,3 +205,14 @@ export interface AppPreferences {
   proxyHost: string;
   dbPath: string;
 }
+
+export interface MultipartField {
+  id: string;
+  enabled: boolean;
+  key: string;
+  value: string; // Plain string, local file path, or base64 Data URI
+  type: 'text' | 'file_path' | 'base64';
+  file_name?: string;
+  content_type?: string;
+}
+
