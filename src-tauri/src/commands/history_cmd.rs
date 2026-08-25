@@ -15,7 +15,7 @@ pub async fn get_history_logs(
 
     let offset = (page.saturating_sub(1)) * limit;
     let mut query = String::from(
-        "SELECT id, uuid, method, url, host, status_code, duration_ms, created_at FROM history WHERE 1=1"
+        "SELECT id, uuid, method, url, host, status_code, response_headers, response_body, duration_ms, created_at FROM history WHERE 1=1"
     );
     let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
@@ -50,15 +50,40 @@ pub async fn get_history_logs(
 
     let logs = stmt
         .query_map(&param_refs[..], |row| {
+            let url: String = row.get(3)?;
+            let host: String = row.get(4)?;
+            let res_headers_json: String = row.get(6)?;
+            let res_body: String = row.get(7)?;
+
+            let res_headers: Vec<(String, String)> = serde_json::from_str(&res_headers_json).unwrap_or_default();
+            let content_type = res_headers
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+                .map(|(_, v)| v.clone())
+                .unwrap_or_else(|| "-".to_string());
+
+            let full_host = if host.starts_with("http://") || host.starts_with("https://") {
+                host
+            } else if url.starts_with("https://") {
+                format!("https://{}", host)
+            } else {
+                format!("http://{}", host)
+            };
+
+            let path = parse_path_from_url(&url);
+
             Ok(HistorySummaryItem {
                 id: row.get(0)?,
                 uuid: row.get(1)?,
                 method: row.get(2)?,
-                url: row.get(3)?,
-                host: row.get(4)?,
+                url,
+                host: full_host,
+                path,
+                content_type,
+                response_size: res_body.len() as u64,
                 status_code: row.get(5)?,
-                duration_ms: row.get(6)?,
-                created_at: row.get(7)?,
+                duration_ms: row.get(8)?,
+                created_at: row.get(9)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -67,6 +92,22 @@ pub async fn get_history_logs(
 
     Ok(logs)
 }
+
+fn parse_path_from_url(url_str: &str) -> String {
+    if let Some(pos) = url_str.find("://") {
+        let rest = &url_str[pos + 3..];
+        if let Some(slash_pos) = rest.find('/') {
+            return rest[slash_pos..].to_string();
+        }
+        return "/".to_string();
+    }
+    if url_str.starts_with('/') {
+        url_str.to_string()
+    } else {
+        "/".to_string()
+    }
+}
+
 
 #[tauri::command]
 pub async fn get_history_detail(
@@ -105,12 +146,22 @@ pub async fn get_history_detail(
                 None
             };
 
+            let host: String = row.get(4)?;
+            let url: String = row.get(3)?;
+            let full_host = if host.starts_with("http://") || host.starts_with("https://") {
+                host
+            } else if url.starts_with("https://") {
+                format!("https://{}", host)
+            } else {
+                format!("http://{}", host)
+            };
+
             Ok(HistoryDetailItem {
                 id: row.get(0)?,
                 uuid: row.get(1)?,
                 method: row.get(2)?,
-                url: row.get(3)?,
-                host: row.get(4)?,
+                url,
+                host: full_host,
                 status_code: row.get(5)?,
                 request_headers,
                 response_headers,

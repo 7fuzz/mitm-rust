@@ -131,14 +131,23 @@ where
 
     let method = parts.get(0).unwrap_or(&"GET").to_string();
     let raw_url = parts.get(1).unwrap_or(&"/").to_string();
-    let host = parse_host_from_headers(&req_str).unwrap_or_else(|| default_host.to_string());
+    let raw_host = parse_host_from_headers(&req_str).unwrap_or_else(|| default_host.to_string());
 
     let scheme = if is_tls { "https" } else { "http" };
+    let full_host = if raw_host.starts_with("http://") || raw_host.starts_with("https://") {
+        raw_host.clone()
+    } else {
+        format!("{}://{}", scheme, raw_host)
+    };
+
     let full_url = if raw_url.starts_with("http://") || raw_url.starts_with("https://") {
         raw_url.clone()
     } else {
-        format!("{}://{}{}", scheme, host, raw_url)
+        format!("{}://{}{}", scheme, raw_host, raw_url)
     };
+
+    let path = parse_path_from_url(&raw_url);
+
 
     let mut headers = Vec::new();
     for line in lines {
@@ -159,7 +168,8 @@ where
             &state,
             &method,
             &full_url,
-            &host,
+            &full_host,
+            &path,
             502,
             headers,
             vec![("Content-Type".to_string(), "text/plain".to_string())],
@@ -179,7 +189,7 @@ where
         InterceptPhase::Request,
         &method,
         &full_url,
-        &host,
+        &full_host,
         headers.clone(),
         req_body_bytes.clone(),
     ).await {
@@ -247,7 +257,7 @@ where
         InterceptPhase::Response,
         &method,
         &full_url,
-        &host,
+        &full_host,
         res_headers.clone(),
         res_body_bytes.clone(),
     ).await {
@@ -268,7 +278,8 @@ where
         &state,
         &method,
         &full_url,
-        &host,
+        &full_host,
+        &path,
         status_code,
         final_req_headers,
         final_res_headers.clone(),
@@ -306,6 +317,7 @@ async fn log_and_emit_history(
     method: &str,
     full_url: &str,
     host: &str,
+    path: &str,
     status_code: u16,
     req_headers: Vec<(String, String)>,
     res_headers: Vec<(String, String)>,
@@ -315,6 +327,14 @@ async fn log_and_emit_history(
 ) {
     let req_body_str = String::from_utf8_lossy(&req_body).to_string();
     let res_body_str = String::from_utf8_lossy(&res_body).to_string();
+
+    let content_type = res_headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+        .map(|(_, v)| v.clone())
+        .unwrap_or_else(|| "-".to_string());
+
+    let response_size = res_body.len() as u64;
 
     let entry_uuid = Uuid::new_v4().to_string();
     let now = time::OffsetDateTime::now_utc()
@@ -343,6 +363,9 @@ async fn log_and_emit_history(
         method: method.to_string(),
         url: full_url.to_string(),
         host: host.to_string(),
+        path: path.to_string(),
+        content_type,
+        response_size,
         status_code,
         duration_ms: Some(duration_ms),
         created_at: now,
@@ -360,3 +383,19 @@ fn parse_host_from_headers(raw: &str) -> Option<String> {
     }
     None
 }
+
+fn parse_path_from_url(url_str: &str) -> String {
+    if let Some(pos) = url_str.find("://") {
+        let rest = &url_str[pos + 3..];
+        if let Some(slash_pos) = rest.find('/') {
+            return rest[slash_pos..].to_string();
+        }
+        return "/".to_string();
+    }
+    if url_str.starts_with('/') {
+        url_str.to_string()
+    } else {
+        "/".to_string()
+    }
+}
+

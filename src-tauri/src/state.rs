@@ -70,10 +70,14 @@ pub struct HistorySummaryItem {
     pub method: String,
     pub url: String,
     pub host: String,
+    pub path: String,
+    pub content_type: String,
+    pub response_size: u64,
     pub status_code: u16,
     pub duration_ms: Option<u64>,
     pub created_at: String,
 }
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
