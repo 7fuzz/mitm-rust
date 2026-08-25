@@ -42,7 +42,8 @@ export const TopNav: React.FC = () => {
   };
 
   return (
-    <header className="h-10 bg-header border-b border-border flex items-center justify-between px-2 shrink-0 select-none text-xs overflow-hidden">
+    <header className="h-10 bg-header border-b border-border flex items-center justify-between px-2 shrink-0 select-none text-xs relative z-40">
+
       {/* Left: Navigation Tabs */}
       <div
         ref={navRef}
