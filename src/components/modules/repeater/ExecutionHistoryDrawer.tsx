@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
 import { StatusBadge } from '../../common/StatusBadge';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
@@ -9,7 +9,13 @@ interface ExecutionHistoryDrawerProps {
 }
 
 export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ requestId, widthPx = 288 }) => {
-  const { executionHistory, isHistoryDrawerOpen, setHistoryDrawerOpen } = useRepeaterStore();
+  const { executionHistory, isHistoryDrawerOpen, setHistoryDrawerOpen, fetchHistory } = useRepeaterStore();
+
+  useEffect(() => {
+    if (isHistoryDrawerOpen && requestId) {
+      fetchHistory(requestId);
+    }
+  }, [isHistoryDrawerOpen, requestId, fetchHistory]);
 
   if (!isHistoryDrawerOpen) return null;
 

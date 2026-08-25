@@ -92,6 +92,9 @@ export interface RepeaterTab {
   orderIndex: number;
   createdAtMs: number;
   updatedAtMs: number;
+  executionCount?: number;
+  lastStatusCode?: number;
+  lastDurationMs?: number;
 }
 
 export interface RepeaterHistoryItem {

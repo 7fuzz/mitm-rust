@@ -49,6 +49,9 @@ pub async fn create_repeater_tab(
         order_index: 0,
         created_at_ms: now_ms,
         updated_at_ms: now_ms,
+        execution_count: 0,
+        last_status_code: None,
+        last_duration_ms: None,
     };
 
     create_repeater_tab_db(&state.db_path, &tab)?;

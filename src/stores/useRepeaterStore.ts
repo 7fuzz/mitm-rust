@@ -13,6 +13,7 @@ import { isTauriAvailable } from '../services/tauri/ipc';
 interface RepeaterState {
   tabs: RepeaterTab[];
   activeTabId: string | null;
+  viewMode: 'sidebar' | 'tabs';
   executionHistory: Record<string, RepeaterHistoryItem[]>;
   lastExecutionResult: Record<string, RepeaterExecutionResult | null>;
   isExecuting: Record<string, boolean>;
@@ -27,6 +28,7 @@ interface RepeaterState {
 
   // Actions
   initStore: () => Promise<void>;
+  setViewMode: (mode: 'sidebar' | 'tabs') => void;
   setActiveTab: (id: string | null) => void;
   createNewRequest: (name?: string) => Promise<void>;
   updateTab: (tab: RepeaterTab) => Promise<void>;
@@ -55,6 +57,7 @@ interface RepeaterState {
 export const useRepeaterStore = create<RepeaterState>((set, get) => ({
   tabs: [],
   activeTabId: null,
+  viewMode: 'sidebar',
   executionHistory: {},
   lastExecutionResult: {},
   isExecuting: {},
@@ -77,6 +80,8 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     return get().lastExecutionResult[id] || null;
   },
 
+  setViewMode: (mode) => set({ viewMode: mode }),
+
   initStore: async () => {
     if (isTauriAvailable()) {
       try {
@@ -84,8 +89,12 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
         if (tabs && tabs.length > 0) {
           set({
             tabs,
-            activeTabId: tabs[0].id,
+            activeTabId: get().activeTabId || tabs[0].id,
           });
+          // Auto-fetch histories for all loaded tabs
+          for (const tab of tabs) {
+            get().fetchHistory(tab.id);
+          }
         } else {
           set({
             tabs: [],
@@ -98,7 +107,12 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     }
   },
 
-  setActiveTab: (id) => set({ activeTabId: id }),
+  setActiveTab: (id) => {
+    set({ activeTabId: id });
+    if (id) {
+      get().fetchHistory(id);
+    }
+  },
 
   createNewRequest: async (name) => {
     const tabName = name || 'Untitled Request';
@@ -109,6 +123,7 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
           tabs: [...state.tabs, created],
           activeTabId: created.id,
         }));
+        get().fetchHistory(created.id);
       } else {
         const newTab: RepeaterTab = {
           id: 'tab-' + Date.now(),
@@ -123,6 +138,7 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
           orderIndex: get().tabs.length,
           createdAtMs: Date.now(),
           updatedAtMs: Date.now(),
+          executionCount: 0,
         };
         set((state) => ({
           tabs: [...state.tabs, newTab],
@@ -180,6 +196,7 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     } else {
       set({ activeTabId: tab.id });
     }
+    get().fetchHistory(tab.id);
   },
 
   closeTab: (id) => {
@@ -215,7 +232,12 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
           isExecuting: { ...state.isExecuting, [id]: false },
           lastExecutionResult: { ...state.lastExecutionResult, [id]: result },
         }));
-        get().fetchHistory(id);
+        await get().fetchHistory(id);
+        // Refresh tab metadata (executionCount, lastStatusCode, lastDurationMs)
+        const updatedTabs = await getRepeaterTabs();
+        if (updatedTabs) {
+          set({ tabs: updatedTabs });
+        }
       } else {
         const tab = get().tabs.find((t) => t.id === id);
         const mockResult: RepeaterExecutionResult = {
@@ -239,6 +261,16 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
         set((state) => ({
           isExecuting: { ...state.isExecuting, [id]: false },
           lastExecutionResult: { ...state.lastExecutionResult, [id]: mockResult },
+          tabs: state.tabs.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  executionCount: (t.executionCount || 0) + 1,
+                  lastStatusCode: 200,
+                  lastDurationMs: 64,
+                }
+              : t
+          ),
         }));
       }
     } catch (err) {
