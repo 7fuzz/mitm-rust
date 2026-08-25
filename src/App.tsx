@@ -1,3 +1,10 @@
+import { GlobalShell } from './components/layout/GlobalShell';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+
 export default function App() {
-  return <div>placeholder</div>;
+  return (
+    <ErrorBoundary>
+      <GlobalShell />
+    </ErrorBoundary>
+  );
 }

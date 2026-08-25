@@ -10,6 +10,7 @@ pub mod history;
 pub mod db_viewer;
 pub mod websocket;
 pub mod webhook;
+pub mod utilities;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -447,9 +448,14 @@ pub fn run() {
             update_state,
             update_filter_config,
             resume_flow,
+            history::get_history,
+            history::get_http_history,
             history::clear_history,
+            history::clear_http_history,
             history::delete_history_item,
             history::save_traffic_history,
+            utilities::calculate_cvss,
+            utilities::convert_encoding,
             repeater::create_repeater_item,
             repeater::update_repeater_request,
             repeater::delete_repeater_request,
