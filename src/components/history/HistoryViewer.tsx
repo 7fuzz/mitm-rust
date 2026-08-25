@@ -8,7 +8,7 @@ export const HistoryViewer: React.FC = () => {
     logs,
     searchTerm,
     methodFilter,
-    selectedLogId,
+    selectedLogUuid,
     selectedLogDetail,
     isLoading,
     fetchLogs,
@@ -27,6 +27,14 @@ export const HistoryViewer: React.FC = () => {
     fetchLogs();
     initSubscription();
   }, []);
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes || bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  };
 
   const getStatusBadgeClass = (status: number) => {
     if (status >= 200 && status < 300)
@@ -79,7 +87,7 @@ export const HistoryViewer: React.FC = () => {
             <MingCuteIcon name="search_line" size={14} className="absolute left-3 text-zinc-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search URL, Host, Method..."
+              placeholder="Search URL, Host, Path..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="bg-zinc-950 border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/60 rounded-lg text-xs pl-9 pr-3 py-1.5 w-64 text-zinc-200 placeholder-zinc-500 outline-none transition-all"
@@ -129,24 +137,26 @@ export const HistoryViewer: React.FC = () => {
                   <th className="py-2.5 px-3 w-16">Status</th>
                   <th className="py-2.5 px-3 w-20">Method</th>
                   <th className="py-2.5 px-3 w-48 truncate">Host</th>
-                  <th className="py-2.5 px-3 truncate">URL / Path</th>
-                  <th className="py-2.5 px-3 w-20 text-right">Time (ms)</th>
+                  <th className="py-2.5 px-3 truncate">Path</th>
+                  <th className="py-2.5 px-3 w-36 truncate">Content Type</th>
+                  <th className="py-2.5 px-3 w-20 text-right">Size</th>
+                  <th className="py-2.5 px-3 w-20 text-right">Time</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-900/60">
                 {logs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-16 text-zinc-500 text-sm">
+                    <td colSpan={7} className="text-center py-16 text-zinc-500 text-sm">
                       No traffic captured yet. Start proxy and send HTTP requests.
                     </td>
                   </tr>
                 ) : (
                   logs.map((item) => {
-                    const isSelected = selectedLogId === item.id;
+                    const isSelected = selectedLogUuid === item.uuid;
                     return (
                       <tr
-                        key={item.id}
-                        onClick={() => selectLog(item.id)}
+                        key={item.uuid}
+                        onClick={() => selectLog(item.uuid)}
                         className={`cursor-pointer transition-colors ${
                           isSelected
                             ? "bg-indigo-600/15 border-l-2 border-indigo-500"
@@ -171,11 +181,17 @@ export const HistoryViewer: React.FC = () => {
                             {item.method}
                           </span>
                         </td>
-                        <td className="py-2 px-3 font-mono text-zinc-300 truncate max-w-[12rem]">
+                        <td className="py-2 px-3 font-mono text-indigo-300 truncate max-w-[12rem]" title={item.host}>
                           {item.host}
                         </td>
-                        <td className="py-2 px-3 font-mono text-zinc-400 truncate max-w-[20rem]">
-                          {item.url}
+                        <td className="py-2 px-3 font-mono text-zinc-300 truncate max-w-[18rem]" title={item.path}>
+                          {item.path}
+                        </td>
+                        <td className="py-2 px-3 font-mono text-zinc-400 truncate max-w-[9rem]" title={item.contentType}>
+                          {item.contentType || "-"}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono text-zinc-400">
+                          {formatBytes(item.responseSize)}
                         </td>
                         <td className="py-2 px-3 text-right font-mono text-zinc-400">
                           {item.durationMs != null ? `${item.durationMs}ms` : "-"}
@@ -218,7 +234,7 @@ export const HistoryViewer: React.FC = () => {
                   </button>
                 </div>
                 <div className="text-[11px] font-mono text-zinc-400">
-                  ID: #{selectedLogDetail.id}
+                  UUID: {selectedLogDetail.uuid.slice(0, 8)}...
                 </div>
               </div>
 
@@ -230,7 +246,7 @@ export const HistoryViewer: React.FC = () => {
                       <div className="text-indigo-400 font-semibold mb-1">
                         {selectedLogDetail.method} {selectedLogDetail.url}
                       </div>
-                      <div className="text-zinc-500 text-[11px]">Host: {selectedLogDetail.host}</div>
+                      <div className="text-zinc-400 text-[11px]">Host: {selectedLogDetail.host}</div>
                     </div>
 
                     {/* Request Headers */}
@@ -302,7 +318,7 @@ export const HistoryViewer: React.FC = () => {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-zinc-500 p-6 text-center">
-              <MingCuteIcon name="file_code_line" size={32} className="mb-2 text-zinc-600" />
+              <MingCuteIcon name="file_code_line" size={36} className="mb-2 text-zinc-700" />
               <p className="text-sm font-medium">Select a request from the table to view details</p>
             </div>
           )}
