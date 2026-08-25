@@ -3,7 +3,6 @@ import {
   HistorySummaryItem,
   HistoryDetailItem,
   ProxyConfig,
-
   getHistoryLogs,
   getHistoryDetail,
   clearHistoryLogs,
@@ -17,6 +16,7 @@ import { UnlistenFn } from "@tauri-apps/api/event";
 
 interface HistoryState {
   logs: HistorySummaryItem[];
+  detailMap: Record<string, HistoryDetailItem>;
   page: number;
   limit: number;
   searchTerm: string;
@@ -51,6 +51,7 @@ interface HistoryState {
 
 export const useHistoryStore = create<HistoryState>((set, get) => ({
   logs: [],
+  detailMap: {},
   page: 1,
   limit: 100,
   searchTerm: "",
@@ -109,49 +110,45 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   selectLog: async (uuid: string) => {
     set({ selectedLogUuid: uuid, loadingDetail: true });
-    const target = get().logs.find((l) => l.uuid === uuid);
-    if (!target) {
-      set({ selectedLogDetail: null, loadingDetail: false });
+
+    const cachedDetail = get().detailMap[uuid];
+    if (cachedDetail) {
+      set({ selectedLogDetail: cachedDetail, loadingDetail: false });
       return;
     }
 
-    if (target.id > 0) {
-      try {
-        const detail = await getHistoryDetail(target.id);
-        set({ selectedLogDetail: detail, loadingDetail: false });
-      } catch (e) {
-        console.error("Failed to fetch history detail by id:", e);
+    try {
+      const detail = await getHistoryDetail(uuid);
+      set((state) => ({
+        selectedLogDetail: detail,
+        detailMap: { ...state.detailMap, [uuid]: detail },
+        loadingDetail: false,
+      }));
+    } catch (e) {
+      console.error("Failed to fetch history detail by uuid:", e);
+      const targetSummary = get().logs.find((l) => l.uuid === uuid);
+      if (targetSummary) {
         set({
           selectedLogDetail: {
-            ...target,
+            ...targetSummary,
             requestHeaders: [],
-            responseHeaders: target.contentType ? [["Content-Type", target.contentType]] : [],
+            responseHeaders: targetSummary.contentType ? [["Content-Type", targetSummary.contentType]] : [],
             requestBody: "",
             responseBody: "",
             phase: "response",
           },
           loadingDetail: false,
         });
+      } else {
+        set({ selectedLogDetail: null, loadingDetail: false });
       }
-    } else {
-      set({
-        selectedLogDetail: {
-          ...target,
-          requestHeaders: [],
-          responseHeaders: target.contentType ? [["Content-Type", target.contentType]] : [],
-          requestBody: "",
-          responseBody: "",
-          phase: "response",
-        },
-        loadingDetail: false,
-      });
     }
   },
 
   clearLogs: async () => {
     try {
       await clearHistoryLogs();
-      set({ logs: [], selectedLogUuid: null, selectedLogDetail: null });
+      set({ logs: [], detailMap: {}, selectedLogUuid: null, selectedLogDetail: null });
     } catch (e) {
       console.error("Failed to clear logs:", e);
     }
@@ -189,7 +186,6 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
         limiterEnabled: updated.limiterEnabled,
         maxRows: updated.maxRows,
       });
-      // Re-fetch logs to reflect pruned history
       get().fetchLogs();
     } catch (e) {
       console.error("Failed to update history limiter:", e);
@@ -217,11 +213,18 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     const unsub = await subscribeTrafficCaptured((event) => {
       set((state) => {
         const updatedLogs = [event.entry, ...state.logs];
-        // Enforce maxRows in local state if limiter is enabled
+        const updatedDetailMap = { ...state.detailMap, [event.entry.uuid]: event.detail };
+
         if (state.limiterEnabled && updatedLogs.length > state.maxRows) {
-          return { logs: updatedLogs.slice(0, state.maxRows) };
+          return {
+            logs: updatedLogs.slice(0, state.maxRows),
+            detailMap: updatedDetailMap,
+          };
         }
-        return { logs: updatedLogs };
+        return {
+          logs: updatedLogs,
+          detailMap: updatedDetailMap,
+        };
       });
     });
     set({ unsubFn: unsub });

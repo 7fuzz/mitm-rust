@@ -32,6 +32,7 @@ export interface HistorySettings {
 
 export interface TrafficCapturedEvent {
   entry: HistorySummaryItem;
+  detail: HistoryDetailItem;
 }
 
 export interface ProxyConfig {
@@ -80,8 +81,8 @@ export const getHistoryLogs = async (
   });
 };
 
-export const getHistoryDetail = async (id: number): Promise<HistoryDetailItem> => {
-  return await invoke<HistoryDetailItem>("get_history_detail", { id });
+export const getHistoryDetail = async (uuid: string): Promise<HistoryDetailItem> => {
+  return await invoke<HistoryDetailItem>("get_history_detail", { uuid });
 };
 
 export const clearHistoryLogs = async (): Promise<void> => {
