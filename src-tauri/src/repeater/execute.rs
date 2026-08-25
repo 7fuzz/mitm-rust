@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use super::{HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab};
 use crate::repeater::{get_repeater_tab_by_id, insert_repeater_history_db};
+use crate::encoding::format_body_for_ui;
 
 pub async fn execute_tab_request(
     db_path: &PathBuf,
@@ -21,6 +22,10 @@ pub async fn execute_repeater_tab(
 ) -> Result<RepeaterExecutionResult, String> {
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
+        .gzip(true)
+        .brotli(true)
+        .deflate(true)
+        .zstd(true)
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -99,18 +104,30 @@ pub async fn execute_repeater_tab(
             let status_text = res.status().canonical_reason().unwrap_or("").to_string();
 
             let mut response_headers: Vec<HeaderItem> = Vec::new();
+            let mut content_encoding = String::new();
+            let mut content_type = String::new();
+
             for (key, val) in res.headers() {
+                let key_str = key.to_string();
+                let val_str = val.to_str().unwrap_or("").to_string();
+
+                if key_str.eq_ignore_ascii_case("content-encoding") {
+                    content_encoding = val_str.clone();
+                } else if key_str.eq_ignore_ascii_case("content-type") {
+                    content_type = val_str.clone();
+                }
+
                 response_headers.push(HeaderItem {
                     id: Uuid::new_v4().to_string(),
-                    key: key.to_string(),
-                    value: val.to_str().unwrap_or("").to_string(),
+                    key: key_str,
+                    value: val_str,
                     enabled: true,
                 });
             }
 
             let res_bytes = res.bytes().await.map_err(|e| e.to_string())?;
             let response_size = res_bytes.len() as u64;
-            let response_body = String::from_utf8_lossy(&res_bytes).to_string();
+            let response_body = format_body_for_ui(&res_bytes, &content_type, &content_encoding);
 
             let history_entry = RepeaterHistoryItem {
                 id: 0,

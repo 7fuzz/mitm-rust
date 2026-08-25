@@ -1,6 +1,7 @@
 pub mod ca;
 pub mod commands;
 pub mod db;
+pub mod encoding;
 pub mod proxy;
 pub mod repeater;
 pub mod state;

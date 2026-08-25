@@ -2,7 +2,6 @@ pub mod mitm;
 pub mod intercept;
 pub mod rules;
 
-use std::io::Read;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
@@ -19,8 +18,6 @@ use tauri::{AppHandle, Emitter};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
 use uuid::Uuid;
-use flate2::read::{GzDecoder, ZlibDecoder};
-use base64::Engine;
 
 use crate::ca::CA;
 use crate::proxy::intercept::handle_intercept_hook;
@@ -380,11 +377,7 @@ async fn log_and_emit_history(
         .map(|(_, v)| v.as_str())
         .unwrap_or("");
 
-    let decompressed_res_body = if !content_encoding.is_empty() {
-        decompress_body(&res_body, content_encoding).unwrap_or_else(|| res_body.clone())
-    } else {
-        res_body.clone()
-    };
+    let decompressed_res_body = decompress_body(&res_body, content_encoding);
 
     let content_type = res_headers
         .iter()
@@ -398,8 +391,8 @@ async fn log_and_emit_history(
         .map(|(_, v)| v.as_str())
         .unwrap_or("");
 
-    let req_body_str = encode_body_for_ui(&req_body, req_content_type);
-    let res_body_str = encode_body_for_ui(&decompressed_res_body, &content_type);
+    let req_body_str = encode_body_for_ui(&req_body, req_content_type, "");
+    let res_body_str = encode_body_for_ui(&decompressed_res_body, &content_type, content_encoding);
     let response_size = decompressed_res_body.len() as u64;
 
     let entry_id = Uuid::new_v4().to_string();
@@ -440,85 +433,7 @@ fn headers_to_vec(headers: &hyper::HeaderMap) -> Vec<(String, String)> {
     vec
 }
 
-fn decompress_body(body: &[u8], encoding: &str) -> Option<Vec<u8>> {
-    let encodings: Vec<&str> = encoding.split(',').map(|s| s.trim()).collect();
-    let mut current_body = body.to_vec();
-    let mut decompressed = false;
-
-    for enc in encodings.iter().rev() {
-        let enc = enc.to_lowercase();
-        match enc.as_str() {
-            "gzip" | "x-gzip" => {
-                let mut decoder = GzDecoder::new(&current_body[..]);
-                let mut decoded = Vec::new();
-                if decoder.read_to_end(&mut decoded).is_ok() {
-                    current_body = decoded;
-                    decompressed = true;
-                } else {
-                    return None;
-                }
-            }
-            "deflate" => {
-                let mut decoder = ZlibDecoder::new(&current_body[..]);
-                let mut decoded = Vec::new();
-                if decoder.read_to_end(&mut decoded).is_ok() {
-                    current_body = decoded;
-                    decompressed = true;
-                } else {
-                    return None;
-                }
-            }
-            "br" => {
-                let mut decoded = Vec::new();
-                if brotli::Decompressor::new(&current_body[..], 4096).read_to_end(&mut decoded).is_ok() {
-                    current_body = decoded;
-                    decompressed = true;
-                } else {
-                    return None;
-                }
-            }
-            "zstd" => {
-                if let Ok(decoded) = zstd::decode_all(&current_body[..]) {
-                    current_body = decoded;
-                    decompressed = true;
-                } else {
-                    return None;
-                }
-            }
-            "identity" | "" => {}
-            _ => {
-                return if decompressed { Some(current_body) } else { None };
-            }
-        }
-    }
-
-    if decompressed {
-        Some(current_body)
-    } else {
-        None
-    }
-}
-
-fn encode_body_for_ui(body: &[u8], content_type: &str) -> String {
-    let is_binary = !content_type.is_empty() && (
-        content_type.contains("image/") ||
-        content_type.contains("video/") ||
-        content_type.contains("audio/") ||
-        content_type.contains("application/octet-stream") ||
-        content_type.contains("application/pdf") ||
-        content_type.contains("application/zip") ||
-        content_type.contains("application/gzip") ||
-        content_type.contains("font/")
-    );
-
-    if is_binary {
-        let encoded = base64::engine::general_purpose::STANDARD.encode(body);
-        format!("base64:{}", encoded)
-    } else {
-        String::from_utf8(body.to_vec())
-            .unwrap_or_else(|_| String::from_utf8_lossy(body).to_string())
-    }
-}
+use crate::encoding::{decompress_body, format_body_for_ui as encode_body_for_ui};
 
 fn parse_path_from_url(url_str: &str) -> String {
     if let Some(pos) = url_str.find("://") {
