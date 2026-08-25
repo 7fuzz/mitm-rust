@@ -45,11 +45,11 @@ export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ 
             >
               <div className="flex items-center justify-between">
                 <StatusBadge code={hist.statusCode} />
-                <span className="text-[10px] text-muted-foreground">{new Date(hist.timestamp).toLocaleTimeString()}</span>
+                <span className="text-[10px] text-muted-foreground">{new Date(hist.executedAtMs).toLocaleTimeString()}</span>
               </div>
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span>Latency: {hist.durationMs}ms</span>
-                <span>Size: {hist.size}B</span>
+                <span>Size: {hist.responseBody?.length || 0}B</span>
               </div>
               <div className="text-foreground text-[11px] truncate">{hist.url}</div>
             </div>

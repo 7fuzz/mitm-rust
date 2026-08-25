@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export interface HistoryEntry {
   id: string;
@@ -19,13 +19,13 @@ export interface HistoryEntry {
   createdAt: string;
 }
 
+export interface TrafficCapturedEvent {
+  entry: HistoryEntry;
+}
+
 export interface HistorySettings {
   limiterEnabled: boolean;
   maxRows: number;
-}
-
-export interface TrafficCapturedEvent {
-  entry: HistoryEntry;
 }
 
 export interface ProxyConfig {
@@ -33,8 +33,6 @@ export interface ProxyConfig {
   interceptEnabled: boolean;
   interceptMode: "request" | "response" | "both";
   proxyMode: "on" | "off" | "block_client" | "block";
-  port: number;
-  host: string;
 }
 
 export interface InterceptRule {
@@ -46,6 +44,7 @@ export interface InterceptRule {
   matchValue: string;
   orderIndex: number;
   createdAtMs: number;
+  action?: "intercept" | "pass";
 }
 
 export interface PendingFlowPayload {
@@ -56,6 +55,68 @@ export interface PendingFlowPayload {
   headers: [string, string][];
   body: number[];
   bodyText: string;
+}
+
+export interface HeaderItem {
+  id: string;
+  key: string;
+  value: string;
+  enabled: boolean;
+}
+
+export interface ParamItem {
+  id: string;
+  key: string;
+  value: string;
+  enabled: boolean;
+}
+
+export interface ExtractRuleItem {
+  id: string;
+  type: string;
+  expression: string;
+  targetVariable: string;
+  enabled: boolean;
+}
+
+export interface RepeaterTab {
+  id: string;
+  name: string;
+  method: string;
+  url: string;
+  headers: HeaderItem[];
+  params: ParamItem[];
+  bodyType: string;
+  bodyContent?: string;
+  extractRules: ExtractRuleItem[];
+  orderIndex: number;
+  createdAtMs: number;
+  updatedAtMs: number;
+}
+
+export interface RepeaterHistoryItem {
+  id: number;
+  repeaterId: string;
+  method: string;
+  url: string;
+  requestHeaders: HeaderItem[];
+  requestBody?: string;
+  statusCode: number;
+  responseHeaders: HeaderItem[];
+  responseBody?: string;
+  durationMs: number;
+  executedAtMs: number;
+}
+
+export interface RepeaterExecutionResult {
+  historyId: number;
+  repeaterId: string;
+  statusCode: number;
+  statusText: string;
+  responseHeaders: HeaderItem[];
+  responseBody: string;
+  durationMs: number;
+  responseSize: number;
 }
 
 export const getHistoryLogs = async (
@@ -83,11 +144,11 @@ export const getHistorySettings = async (): Promise<HistorySettings> => {
 };
 
 export const updateHistorySettings = async (
-  enabled: boolean,
+  limiterEnabled: boolean,
   maxRows: number
 ): Promise<HistorySettings> => {
   return await invoke<HistorySettings>("update_history_settings", {
-    enabled,
+    limiterEnabled,
     maxRows,
   });
 };
@@ -149,6 +210,48 @@ export const dropAllInterceptedFlows = async (): Promise<void> => {
 
 export const getPendingFlows = async (): Promise<PendingFlowPayload[]> => {
   return await invoke<PendingFlowPayload[]>("get_pending_flows");
+};
+
+export const getRepeaterTabs = async (): Promise<RepeaterTab[]> => {
+  return await invoke<RepeaterTab[]>("get_repeater_tabs");
+};
+
+export const createRepeaterTab = async (
+  name?: string,
+  fromHistoryId?: string
+): Promise<RepeaterTab> => {
+  return await invoke<RepeaterTab>("create_repeater_tab", {
+    name: name || null,
+    fromHistoryId: fromHistoryId || null,
+  });
+};
+
+export const updateRepeaterTab = async (
+  tab: RepeaterTab
+): Promise<void> => {
+  return await invoke<void>("update_repeater_tab", { tab });
+};
+
+export const deleteRepeaterTab = async (id: string): Promise<void> => {
+  return await invoke<void>("delete_repeater_tab", { id });
+};
+
+export const executeRepeaterRequest = async (
+  id: string
+): Promise<RepeaterExecutionResult> => {
+  return await invoke<RepeaterExecutionResult>("execute_repeater_request", { id });
+};
+
+export const getRepeaterHistory = async (
+  repeaterId: string,
+  page: number = 1,
+  limit: number = 50
+): Promise<RepeaterHistoryItem[]> => {
+  return await invoke<RepeaterHistoryItem[]>("get_repeater_history", {
+    repeaterId,
+    page,
+    limit,
+  });
 };
 
 export const subscribeTrafficCaptured = async (

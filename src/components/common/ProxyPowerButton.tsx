@@ -68,9 +68,8 @@ export const ProxyPowerButton: React.FC = () => {
       {isOpen && (
         <div className="fixed top-11 right-3 w-72 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-[9999] p-2 text-xs divide-y divide-zinc-800/60 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
           <div className="px-3 py-2 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-            Select Proxy Mode ({proxyConfig.port})
+            Select Proxy Mode (:8080)
           </div>
-
 
           <div className="py-1 space-y-1">
             {/* Mode 1: ON (Green) */}

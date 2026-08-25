@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { RepeaterRequestItem } from '../../../types';
+import type { RepeaterTab } from '../../../services/tauri/bridge';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
@@ -7,7 +7,7 @@ import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Select } from '../../common/ui';
 
 interface RequestBuilderProps {
-  request: RepeaterRequestItem;
+  request: RepeaterTab;
 }
 
 const METHOD_OPTIONS = [
@@ -21,17 +21,17 @@ const METHOD_OPTIONS = [
 ] as const;
 
 export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
-  const { updateRequest, executeActiveRequest, isExecuting, toggleHistoryDrawer } = useRepeaterStore();
+  const { updateTab, executeActiveRequest, isExecuting, toggleHistoryDrawer } = useRepeaterStore();
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auto-extract'>('body');
 
   const executing = isExecuting[request.id] || false;
 
   const handleMethodChange = (method: string) => {
-    updateRequest({ ...request, method });
+    updateTab({ ...request, method });
   };
 
   const handleUrlChange = (url: string) => {
-    updateRequest({ ...request, url });
+    updateTab({ ...request, url });
   };
 
   const handleExecute = async () => {
@@ -73,7 +73,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         <button
           disabled={executing}
           onClick={handleExecute}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded bg-primary text-primary-foreground font-semibold hover:bg-primary-hover transition-colors shadow-xs disabled:opacity-50"
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded bg-primary text-primary-foreground font-semibold hover:bg-primary-hover transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
         >
           <MingCuteIcon name="send_plane_line" size={15} />
           <span>{executing ? 'Sending...' : 'Send (⌘↵)'}</span>
@@ -82,7 +82,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         {/* History Drawer Trigger */}
         <button
           onClick={() => toggleHistoryDrawer()}
-          className="p-1.5 rounded bg-background border border-border text-muted-foreground hover:text-foreground"
+          className="p-1.5 rounded bg-background border border-border text-muted-foreground hover:text-foreground cursor-pointer"
           title="View Execution History"
         >
           <MingCuteIcon name="history_line" size={16} />
@@ -96,7 +96,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-3 py-1 rounded text-xs font-medium uppercase transition-colors ${
+              className={`px-3 py-1 rounded text-xs font-medium uppercase transition-colors cursor-pointer ${
                 activeTab === tab
                   ? 'bg-surface text-primary border border-border/80 shadow-2xs font-semibold'
                   : 'text-muted-foreground hover:text-foreground'
@@ -113,7 +113,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         {activeTab === 'params' && (
           <KeyValueEditor
             items={request.params || []}
-            onChange={(params) => updateRequest({ ...request, params })}
+            onChange={(params) => updateTab({ ...request, params })}
             keyPlaceholder="Parameter Key"
             valuePlaceholder="Parameter Value"
           />
@@ -122,7 +122,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         {activeTab === 'headers' && (
           <KeyValueEditor
             items={request.headers || []}
-            onChange={(headers) => updateRequest({ ...request, headers })}
+            onChange={(headers) => updateTab({ ...request, headers })}
             keyPlaceholder="Header Name"
             valuePlaceholder="Header Value"
           />
@@ -138,7 +138,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
                     type="radio"
                     name={`bodyType-${request.id}`}
                     checked={request.bodyType === bType}
-                    onChange={() => updateRequest({ ...request, bodyType: bType })}
+                    onChange={() => updateTab({ ...request, bodyType: bType })}
                     className="text-primary"
                   />
                   <span className="capitalize font-mono">{bType}</span>
@@ -149,8 +149,8 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
             {request.bodyType !== 'none' && (
               <div className="flex-1 overflow-hidden">
                 <CodeEditor
-                  value={request.body || ''}
-                  onChange={(body) => updateRequest({ ...request, body })}
+                  value={request.bodyContent || ''}
+                  onChange={(bodyContent) => updateTab({ ...request, bodyContent })}
                   language={request.bodyType === 'json' ? 'json' : 'plaintext'}
                   readOnly={false}
                 />
@@ -175,7 +175,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border bg-surface">
-                  {(request.autoExtractRules || []).map((rule, idx) => (
+                  {(request.extractRules || []).map((rule, idx) => (
                     <tr key={rule.id || idx}>
                       <td className="px-3 py-1.5 uppercase font-bold text-primary">{rule.type}</td>
                       <td className="px-3 py-1.5">{rule.expression}</td>
