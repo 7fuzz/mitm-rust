@@ -45,7 +45,7 @@ export interface InterceptRule {
   id: string;
   target: 'domain' | 'path' | 'method';
   pattern: string;
-  action: 'allow' | 'block' | 'intercept';
+  action: 'intercept' | 'pass';
   enabled: boolean;
 }
 

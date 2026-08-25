@@ -10,9 +10,8 @@ const TARGET_OPTIONS = [
 ] as const;
 
 const ACTION_OPTIONS = [
-  { value: 'intercept', label: 'Intercept' },
-  { value: 'block', label: 'Block' },
-  { value: 'allow', label: 'Allow' },
+  { value: 'intercept', label: 'Intercept (Whitelist)' },
+  { value: 'pass', label: 'Pass (Blacklist)' },
 ] as const;
 
 interface RuleManagerDrawerProps {
@@ -30,7 +29,7 @@ export const RuleManagerDrawer: React.FC<RuleManagerDrawerProps> = ({
 
   const [target, setTarget] = useState<'domain' | 'path' | 'method'>('domain');
   const [pattern, setPattern] = useState('');
-  const [action, setAction] = useState<'allow' | 'block' | 'intercept'>('intercept');
+  const [action, setAction] = useState<'intercept' | 'pass'>('intercept');
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,7 +110,7 @@ export const RuleManagerDrawer: React.FC<RuleManagerDrawerProps> = ({
                     e.stopPropagation();
                     deleteInterceptRule(rule.id);
                   }}
-                  className="text-muted-foreground hover:text-rose-500 p-0.5 rounded"
+                  className="text-muted-foreground hover:text-rose-500 p-0.5 rounded cursor-pointer"
                 >
                   <MingCuteIcon name="delete_2_line" size={13} />
                 </button>
@@ -121,13 +120,11 @@ export const RuleManagerDrawer: React.FC<RuleManagerDrawerProps> = ({
                 <span
                   className={`px-1.5 py-0.2 rounded font-mono uppercase border font-semibold ${
                     rule.action === 'intercept'
-                      ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                      : rule.action === 'block'
-                      ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
-                      : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                   }`}
                 >
-                  {rule.action}
+                  {rule.action === 'intercept' ? 'Intercept (Whitelist)' : 'Pass (Blacklist)'}
                 </span>
               </div>
             </div>
@@ -137,7 +134,7 @@ export const RuleManagerDrawer: React.FC<RuleManagerDrawerProps> = ({
 
       {/* Add Rule Form */}
       <form onSubmit={handleAdd} className="p-3 bg-header border-t border-border space-y-2">
-        <span className="font-semibold text-foreground text-[11px] block">Add Intercept Rule</span>
+        <span className="font-semibold text-foreground text-[11px] block">Add Rule (Whitelist / Blacklist)</span>
         <div className="grid grid-cols-2 gap-2">
           <Select
             value={target}
@@ -161,7 +158,7 @@ export const RuleManagerDrawer: React.FC<RuleManagerDrawerProps> = ({
         />
         <button
           type="submit"
-          className="w-full py-1.5 bg-primary text-primary-foreground font-medium rounded text-xs hover:bg-primary-hover transition-colors flex items-center justify-center gap-1"
+          className="w-full py-1.5 bg-primary text-primary-foreground font-medium rounded text-xs hover:bg-primary-hover transition-colors flex items-center justify-center gap-1 cursor-pointer"
         >
           <MingCuteIcon name="plus_line" size={14} />
           Add Rule

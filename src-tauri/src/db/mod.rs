@@ -17,6 +17,7 @@ pub struct InterceptRule {
     pub match_value: String,
     pub order_index: i32,
     pub created_at_ms: i64,
+    pub action: String,       // 'intercept' (whitelist) or 'pass' (blacklist)
 }
 
 pub fn get_db_path(app_handle: &AppHandle) -> PathBuf {
@@ -83,7 +84,8 @@ pub fn init_database(app_handle: &AppHandle) -> Result<PathBuf, String> {
              operator TEXT NOT NULL,
              match_value TEXT NOT NULL,
              order_index INTEGER NOT NULL DEFAULT 0,
-             created_at_ms INTEGER NOT NULL
+             created_at_ms INTEGER NOT NULL,
+             action TEXT NOT NULL DEFAULT 'intercept'
          );
 
          CREATE TABLE IF NOT EXISTS app_preferences (
@@ -135,7 +137,7 @@ pub fn prune_history_logs(db_path: &PathBuf, max_rows: u32) -> Result<usize, Str
 pub fn load_intercept_rules(db_path: &PathBuf) -> Result<Vec<InterceptRule>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, is_enabled, target_phase, match_field, operator, match_value, order_index, created_at_ms FROM intercept_rules ORDER BY order_index ASC")
+        .prepare("SELECT id, is_enabled, target_phase, match_field, operator, match_value, order_index, created_at_ms, COALESCE(action, 'intercept') FROM intercept_rules ORDER BY order_index ASC")
         .map_err(|e| e.to_string())?;
 
     let rules = stmt
@@ -150,6 +152,7 @@ pub fn load_intercept_rules(db_path: &PathBuf) -> Result<Vec<InterceptRule>, Str
                 match_value: row.get(5)?,
                 order_index: row.get(6)?,
                 created_at_ms: row.get(7)?,
+                action: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -167,8 +170,8 @@ pub fn save_intercept_rules(db_path: &PathBuf, rules: &[InterceptRule]) -> Resul
 
     for rule in rules {
         tx.execute(
-            "INSERT INTO intercept_rules (id, is_enabled, target_phase, match_field, operator, match_value, order_index, created_at_ms)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO intercept_rules (id, is_enabled, target_phase, match_field, operator, match_value, order_index, created_at_ms, action)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 rule.id,
                 if rule.is_enabled { 1 } else { 0 },
@@ -178,6 +181,7 @@ pub fn save_intercept_rules(db_path: &PathBuf, rules: &[InterceptRule]) -> Resul
                 rule.match_value,
                 rule.order_index,
                 rule.created_at_ms,
+                rule.action,
             ],
         ).map_err(|e| e.to_string())?;
     }

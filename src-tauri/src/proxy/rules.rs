@@ -27,11 +27,11 @@ pub async fn should_intercept(
     let enabled_rules: Vec<&InterceptRule> = rules_guard.iter().filter(|r| r.is_enabled).collect();
 
     if enabled_rules.is_empty() {
-        // Default behavior: if intercept is ON and no specific matching rule is active, intercept all
+        // Default behavior: if intercept is ON and no active rules exist, intercept all
         return true;
     }
 
-    for rule in enabled_rules {
+    let rule_matches = |rule: &InterceptRule| -> bool {
         let phase_match = match rule.target_phase.as_str() {
             "request" => phase == InterceptPhase::Request,
             "response" => phase == InterceptPhase::Response,
@@ -40,7 +40,7 @@ pub async fn should_intercept(
         };
 
         if !phase_match {
-            continue;
+            return false;
         }
 
         let target_value = match rule.match_field.as_str() {
@@ -48,13 +48,12 @@ pub async fn should_intercept(
             "host" => host,
             "method" => method,
             "header" => {
-                // Combine all headers into a string for matching
                 &headers.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<_>>().join("\n")
             }
             _ => url,
         };
 
-        let matches = match rule.operator.as_str() {
+        match rule.operator.as_str() {
             "equals" => target_value.eq_ignore_ascii_case(&rule.match_value),
             "contains" => target_value.to_lowercase().contains(&rule.match_value.to_lowercase()),
             "regex" => {
@@ -65,12 +64,31 @@ pub async fn should_intercept(
                 }
             }
             _ => target_value.to_lowercase().contains(&rule.match_value.to_lowercase()),
-        };
+        }
+    };
 
-        if matches {
-            return true;
+    // 1. Blacklist check ("pass" rules): If traffic matches ANY enabled "pass" rule, DO NOT INTERCEPT
+    let pass_rules: Vec<&&InterceptRule> = enabled_rules.iter().filter(|r| r.action.eq_ignore_ascii_case("pass") || r.action.eq_ignore_ascii_case("allow") || r.action.eq_ignore_ascii_case("block")).collect();
+    for rule in &pass_rules {
+        if rule_matches(rule) {
+            return false;
         }
     }
 
-    false
+    // 2. Whitelist check ("intercept" rules):
+    let intercept_rules: Vec<&&InterceptRule> = enabled_rules.iter().filter(|r| r.action.eq_ignore_ascii_case("intercept")).collect();
+
+    if !intercept_rules.is_empty() {
+        // If "intercept" rules exist, traffic MUST match AT LEAST ONE "intercept" rule
+        for rule in &intercept_rules {
+            if rule_matches(rule) {
+                return true;
+            }
+        }
+        // None of the whitelist rules matched -> pass through
+        return false;
+    }
+
+    // If there are only "pass" rules and none matched above -> intercept remaining traffic
+    true
 }
