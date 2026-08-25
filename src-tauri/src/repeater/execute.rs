@@ -70,6 +70,12 @@ pub async fn execute_repeater_tab(
         .collect();
 
     for h in &enabled_headers {
+        let key_lower = h.key.trim().to_lowercase();
+        // Skip headers managed automatically by reqwest
+        if key_lower == "host" || key_lower == "content-length" || key_lower == "transfer-encoding" {
+            continue;
+        }
+
         if let (Ok(name), Ok(val)) = (
             HeaderName::from_bytes(h.key.trim().as_bytes()),
             HeaderValue::from_str(&h.value),
@@ -78,12 +84,8 @@ pub async fn execute_repeater_tab(
         }
     }
 
-    // Attach body if present and enabled
-    let req_body_str = if tab.body_type != "none" {
-        tab.body_content.clone()
-    } else {
-        None
-    };
+    // Attach body if present
+    let req_body_str = tab.body_content.clone().filter(|b| !b.trim().is_empty());
 
     if let Some(ref body) = req_body_str {
         req_builder = req_builder.body(body.clone());
