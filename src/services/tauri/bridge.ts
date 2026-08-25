@@ -1,9 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 
-export interface HistorySummaryItem {
-  id: number;
-  uuid: string;
+export interface HistoryEntry {
+  id: string;
   method: string;
   url: string;
   host: string;
@@ -11,18 +10,13 @@ export interface HistorySummaryItem {
   contentType: string;
   responseSize: number;
   statusCode: number;
-  durationMs?: number;
-  createdAt: string;
-}
-
-export interface HistoryDetailItem extends HistorySummaryItem {
   requestHeaders: [string, string][];
   responseHeaders: [string, string][];
   requestBody: string;
   responseBody: string;
-  requestBodyHex?: string;
-  responseBodyHex?: string;
   phase: string;
+  durationMs?: number;
+  createdAt: string;
 }
 
 export interface HistorySettings {
@@ -31,8 +25,7 @@ export interface HistorySettings {
 }
 
 export interface TrafficCapturedEvent {
-  entry: HistorySummaryItem;
-  detail: HistoryDetailItem;
+  entry: HistoryEntry;
 }
 
 export interface ProxyConfig {
@@ -71,18 +64,14 @@ export const getHistoryLogs = async (
   searchTerm?: string,
   methodFilter?: string,
   statusFilter?: number
-): Promise<HistorySummaryItem[]> => {
-  return await invoke<HistorySummaryItem[]>("get_history_logs", {
+): Promise<HistoryEntry[]> => {
+  return await invoke<HistoryEntry[]>("get_history_logs", {
     page,
     limit,
     searchTerm: searchTerm || null,
     methodFilter: methodFilter || null,
     statusFilter: statusFilter || null,
   });
-};
-
-export const getHistoryDetail = async (uuid: string): Promise<HistoryDetailItem> => {
-  return await invoke<HistoryDetailItem>("get_history_detail", { uuid });
 };
 
 export const clearHistoryLogs = async (): Promise<void> => {

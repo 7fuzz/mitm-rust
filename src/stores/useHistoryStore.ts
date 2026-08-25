@@ -1,10 +1,8 @@
 import { create } from "zustand";
 import {
-  HistorySummaryItem,
-  HistoryDetailItem,
+  HistoryEntry,
   ProxyConfig,
   getHistoryLogs,
-  getHistoryDetail,
   clearHistoryLogs,
   getHistorySettings,
   updateHistorySettings,
@@ -15,16 +13,13 @@ import {
 import { UnlistenFn } from "@tauri-apps/api/event";
 
 interface HistoryState {
-  logs: HistorySummaryItem[];
-  detailMap: Record<string, HistoryDetailItem>;
+  logs: HistoryEntry[];
   page: number;
   limit: number;
   searchTerm: string;
   methodFilter: string;
   statusFilter: number | null;
-  selectedLogUuid: string | null;
-  selectedLogDetail: HistoryDetailItem | null;
-  loadingDetail: boolean;
+  selectedLogId: string | null;
   autoScroll: boolean;
   proxyConfig: ProxyConfig;
   limiterEnabled: boolean;
@@ -38,7 +33,7 @@ interface HistoryState {
   setSearchTerm: (term: string) => void;
   setMethodFilter: (method: string) => void;
   setStatusFilter: (status: number | null) => void;
-  selectLog: (uuid: string) => Promise<void>;
+  selectLog: (id: string | null) => void;
   clearLogs: () => Promise<void>;
   toggleAutoScroll: () => void;
   fetchProxyStatus: () => Promise<void>;
@@ -51,15 +46,12 @@ interface HistoryState {
 
 export const useHistoryStore = create<HistoryState>((set, get) => ({
   logs: [],
-  detailMap: {},
   page: 1,
   limit: 100,
   searchTerm: "",
   methodFilter: "ALL",
   statusFilter: null,
-  selectedLogUuid: null,
-  selectedLogDetail: null,
-  loadingDetail: false,
+  selectedLogId: null,
   autoScroll: true,
   proxyConfig: {
     proxyEnabled: true,
@@ -108,48 +100,14 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     get().fetchLogs();
   },
 
-  selectLog: async (uuid: string) => {
-    if (!uuid) return;
-    set({ selectedLogUuid: uuid, loadingDetail: true });
-
-    const cachedDetail = get().detailMap[uuid];
-    if (cachedDetail) {
-      set({ selectedLogDetail: cachedDetail, loadingDetail: false });
-      return;
-    }
-
-    try {
-      const detail = await getHistoryDetail(uuid);
-      set((state) => ({
-        selectedLogDetail: detail,
-        detailMap: { ...state.detailMap, [uuid]: detail },
-        loadingDetail: false,
-      }));
-    } catch (e) {
-      console.warn("Detail not found by uuid in DB yet, using summary fallback:", e);
-      const targetSummary = get().logs.find((l) => l.uuid === uuid);
-      if (targetSummary) {
-        set({
-          selectedLogDetail: {
-            ...targetSummary,
-            requestHeaders: [],
-            responseHeaders: targetSummary.contentType ? [["Content-Type", targetSummary.contentType]] : [],
-            requestBody: "",
-            responseBody: "",
-            phase: "response",
-          },
-          loadingDetail: false,
-        });
-      } else {
-        set({ selectedLogDetail: null, loadingDetail: false });
-      }
-    }
+  selectLog: (id: string | null) => {
+    set({ selectedLogId: id });
   },
 
   clearLogs: async () => {
     try {
       await clearHistoryLogs();
-      set({ logs: [], detailMap: {}, selectedLogUuid: null, selectedLogDetail: null });
+      set({ logs: [], selectedLogId: null });
     } catch (e) {
       console.error("Failed to clear logs:", e);
     }
@@ -212,27 +170,17 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       currentUnsub();
     }
     const unsub = await subscribeTrafficCaptured((event: any) => {
+      const entry: HistoryEntry = event?.entry || event;
+      if (!entry || !entry.id) return;
+
       set((state) => {
-        const entry: HistorySummaryItem = event?.entry || event;
-        const detail: HistoryDetailItem = event?.detail || event;
-
-        if (!entry || !entry.uuid) {
-          return state;
-        }
-
-        const updatedLogs = [entry, ...state.logs];
-        const updatedDetailMap = { ...state.detailMap, [entry.uuid]: detail };
+        const filtered = state.logs.filter((l) => l.id !== entry.id);
+        const updatedLogs = [entry, ...filtered];
 
         if (state.limiterEnabled && updatedLogs.length > state.maxRows) {
-          return {
-            logs: updatedLogs.slice(0, state.maxRows),
-            detailMap: updatedDetailMap,
-          };
+          return { logs: updatedLogs.slice(0, state.maxRows) };
         }
-        return {
-          logs: updatedLogs,
-          detailMap: updatedDetailMap,
-        };
+        return { logs: updatedLogs };
       });
     });
     set({ unsubFn: unsub });

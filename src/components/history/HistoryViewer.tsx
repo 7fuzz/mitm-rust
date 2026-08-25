@@ -8,8 +8,7 @@ export const HistoryViewer: React.FC = () => {
     logs,
     searchTerm,
     methodFilter,
-    selectedLogUuid,
-    selectedLogDetail,
+    selectedLogId,
     limiterEnabled,
     maxRows,
     settingsModalOpen,
@@ -25,6 +24,8 @@ export const HistoryViewer: React.FC = () => {
     setSettingsModalOpen,
     initSubscription,
   } = useHistoryStore();
+
+  const selectedLogDetail = logs.find((l) => l.id === selectedLogId) || null;
 
   const [activeDetailTab, setActiveDetailTab] = useState<"request" | "response">("request");
   const [tempLimiterEnabled, setTempLimiterEnabled] = useState(limiterEnabled);
@@ -185,20 +186,18 @@ export const HistoryViewer: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  logs.map((item, idx) => {
-                    const itemKey = item.uuid || `log-${item.id}-${idx}`;
-                    const isSelected = Boolean(selectedLogUuid && item.uuid && selectedLogUuid === item.uuid);
+                  logs.map((item) => {
+                    const isSelected = selectedLogId === item.id;
                     return (
                       <tr
-                        key={itemKey}
-                        onClick={() => item.uuid && selectLog(item.uuid)}
+                        key={item.id}
+                        onClick={() => selectLog(item.id)}
                         className={`cursor-pointer transition-colors ${
                           isSelected
                             ? "bg-indigo-600/15 border-l-2 border-indigo-500"
                             : "hover:bg-zinc-900/40"
                         }`}
                       >
-
                         <td className="py-2 px-3">
                           <span
                             className={`inline-block px-2 py-0.5 rounded border text-[10px] font-mono font-bold ${getStatusBadgeClass(
@@ -270,7 +269,7 @@ export const HistoryViewer: React.FC = () => {
                   </button>
                 </div>
                 <div className="text-[11px] font-mono text-zinc-400">
-                  UUID: {selectedLogDetail.uuid.slice(0, 8)}...
+                  ID: {selectedLogDetail.id.slice(0, 8)}...
                 </div>
               </div>
 
@@ -288,10 +287,10 @@ export const HistoryViewer: React.FC = () => {
                     {/* Request Headers */}
                     <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800">
                       <div className="text-zinc-400 font-semibold mb-2 uppercase text-[10px] tracking-wider">
-                        Headers ({selectedLogDetail.requestHeaders.length})
+                        Headers ({selectedLogDetail.requestHeaders?.length || 0})
                       </div>
                       <div className="space-y-1 divide-y divide-zinc-900/50">
-                        {selectedLogDetail.requestHeaders.map(([key, val], idx) => (
+                        {(selectedLogDetail.requestHeaders || []).map(([key, val], idx) => (
                           <div key={idx} className="pt-1 flex gap-2">
                             <span className="text-indigo-300 font-medium">{key}:</span>
                             <span className="text-zinc-300 break-all">{val}</span>
@@ -305,7 +304,7 @@ export const HistoryViewer: React.FC = () => {
                       <div className="text-zinc-400 font-semibold mb-2 uppercase text-[10px] tracking-wider">
                         Body
                       </div>
-                      <pre className="text-zinc-200 bg-zinc-900 p-2.5 rounded overflow-x-auto text-[11px]">
+                      <pre className="text-zinc-200 bg-zinc-900 p-2.5 rounded overflow-x-auto text-[11px] whitespace-pre-wrap break-all">
                         {selectedLogDetail.requestBody || "(empty)"}
                       </pre>
                     </div>
@@ -327,10 +326,10 @@ export const HistoryViewer: React.FC = () => {
                     {/* Response Headers */}
                     <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800">
                       <div className="text-zinc-400 font-semibold mb-2 uppercase text-[10px] tracking-wider">
-                        Headers ({selectedLogDetail.responseHeaders.length})
+                        Headers ({selectedLogDetail.responseHeaders?.length || 0})
                       </div>
                       <div className="space-y-1 divide-y divide-zinc-900/50">
-                        {selectedLogDetail.responseHeaders.map(([key, val], idx) => (
+                        {(selectedLogDetail.responseHeaders || []).map(([key, val], idx) => (
                           <div key={idx} className="pt-1 flex gap-2">
                             <span className="text-indigo-300 font-medium">{key}:</span>
                             <span className="text-zinc-300 break-all">{val}</span>
@@ -344,7 +343,7 @@ export const HistoryViewer: React.FC = () => {
                       <div className="text-zinc-400 font-semibold mb-2 uppercase text-[10px] tracking-wider">
                         Body
                       </div>
-                      <pre className="text-zinc-200 bg-zinc-900 p-2.5 rounded overflow-x-auto text-[11px]">
+                      <pre className="text-zinc-200 bg-zinc-900 p-2.5 rounded overflow-x-auto text-[11px] whitespace-pre-wrap break-all">
                         {selectedLogDetail.responseBody || "(empty)"}
                       </pre>
                     </div>
