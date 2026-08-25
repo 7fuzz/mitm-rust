@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useProxyStore } from '../../../stores/useProxyStore';
 import { Input, Select, TriStateFilter, Checkbox, Button, TriState } from '../../common/ui';
+import { MingCuteIcon } from '../../common/MingCuteIcon';
 
 const METHOD_OPTIONS = [
   { value: 'GET', label: 'GET' },
@@ -19,6 +20,8 @@ const STATUS_OPTIONS = [
   { value: '5xx', label: '5xx Server Error' },
 ] as const;
 
+const LIMIT_PRESETS = [100, 250, 500, 1000, 2500, 5000, 10000];
+
 export const TrafficFilterBar: React.FC = () => {
   const {
     searchQuery,
@@ -30,22 +33,43 @@ export const TrafficFilterBar: React.FC = () => {
     onlyIntercepted,
     setOnlyIntercepted,
     clearTraffic,
+    historySettings,
+    updateHistorySettings,
+    traffic,
   } = useProxyStore();
 
   const [localSearch, setLocalSearch] = useState(searchQuery);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [localEnabled, setLocalEnabled] = useState(historySettings.limiterEnabled);
+  const [localMaxRows, setLocalMaxRows] = useState(historySettings.maxRows);
+  const [isApplying, setIsApplying] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Keep local search input in sync if searchQuery is reset/cleared externally
   useEffect(() => {
     setLocalSearch(searchQuery);
   }, [searchQuery]);
 
-  // Debounce search query update by 250ms for performance
+  useEffect(() => {
+    setLocalEnabled(historySettings.limiterEnabled);
+    setLocalMaxRows(historySettings.maxRows);
+  }, [historySettings]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearchQuery(localSearch);
     }, 250);
     return () => clearTimeout(timer);
   }, [localSearch, setSearchQuery]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setPopoverOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleTriStateChange = (method: string, nextState: TriState) => {
     setMethodFilter(method, nextState);
@@ -56,11 +80,18 @@ export const TrafficFilterBar: React.FC = () => {
     setSearchQuery('');
   };
 
+  const handleApplySettings = async () => {
+    setIsApplying(true);
+    await updateHistorySettings(localEnabled, localMaxRows);
+    setIsApplying(false);
+    setPopoverOpen(false);
+  };
+
   return (
     <div className="p-2 bg-header border-b border-border flex items-center justify-between gap-3 text-xs shrink-0 select-none">
       {/* Left Filters */}
       <div className="flex items-center gap-2 flex-1 overflow-x-auto no-scrollbar">
-        {/* Debounced Keyword Search Input */}
+        {/* Keyword Search Input */}
         <div className="min-w-[220px] max-w-xs">
           <Input
             value={localSearch}
@@ -72,7 +103,7 @@ export const TrafficFilterBar: React.FC = () => {
           />
         </div>
 
-        {/* Tri-State Method Filter (Neutral -> Whitelist Green -> Blacklist Red) */}
+        {/* Tri-State Method Filter */}
         <TriStateFilter
           items={METHOD_OPTIONS}
           values={methodFilters}
@@ -96,14 +127,111 @@ export const TrafficFilterBar: React.FC = () => {
         </div>
       </div>
 
-      {/* Right Controls: Clear Logs Atomic Button */}
+      {/* Right Controls: Limit Settings & Clear Logs */}
       <div className="flex items-center gap-2">
+        {/* History Limit Settings Trigger & Popover */}
+        <div className="relative" ref={popoverRef}>
+          <button
+            onClick={() => setPopoverOpen(!popoverOpen)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-background hover:bg-neutral-subtle border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs font-mono"
+            title="Configure History Log Limits & Auto-Pruning"
+          >
+            <MingCuteIcon name="settings_3_line" size={14} className="text-primary" />
+            <span>
+              Limit: {historySettings.limiterEnabled ? `${historySettings.maxRows} logs` : 'Off'}
+            </span>
+            <MingCuteIcon name="down_line" size={12} className="opacity-60" />
+          </button>
+
+          {popoverOpen && (
+            <div className="absolute right-0 mt-2 w-72 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-3.5 z-50 font-sans text-xs text-foreground flex flex-col gap-3">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                <span className="font-semibold text-white flex items-center gap-1.5">
+                  <MingCuteIcon name="history_line" size={15} className="text-primary" />
+                  History Log Limit
+                </span>
+                <span className="text-[11px] font-mono text-zinc-400">
+                  Total: {traffic.length}
+                </span>
+              </div>
+
+              {/* Enable / Disable Limiter Switch */}
+              <div className="flex items-center justify-between bg-zinc-800/50 p-2 rounded-lg border border-zinc-800">
+                <div className="flex flex-col">
+                  <span className="font-medium text-white">Limit Max Capacity</span>
+                  <span className="text-[10px] text-zinc-400">Delete oldest logs when full</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={localEnabled}
+                  onChange={(e) => setLocalEnabled(e.target.checked)}
+                  className="accent-primary h-4 w-4 rounded cursor-pointer"
+                />
+              </div>
+
+              {/* Max Rows Input & Presets */}
+              {localEnabled && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] text-zinc-400 font-mono flex items-center justify-between">
+                    <span>Max Rows Limit:</span>
+                    <strong className="text-primary font-bold">{localMaxRows} rows</strong>
+                  </label>
+                  <input
+                    type="number"
+                    min={10}
+                    max={50000}
+                    value={localMaxRows}
+                    onChange={(e) => setLocalMaxRows(Math.max(10, parseInt(e.target.value) || 100))}
+                    className="w-full bg-background border border-zinc-700 rounded px-2.5 py-1 font-mono text-xs text-white focus:outline-none focus:border-primary"
+                  />
+
+                  {/* Quick Preset Buttons */}
+                  <div className="flex items-center gap-1 flex-wrap mt-1">
+                    {LIMIT_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        onClick={() => setLocalMaxRows(preset)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer ${
+                          localMaxRows === preset
+                            ? 'bg-primary text-white font-bold'
+                            : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+                <button
+                  onClick={() => setPopoverOpen(false)}
+                  className="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleApplySettings}
+                  disabled={isApplying}
+                  className="px-3 py-1 rounded bg-primary hover:bg-primary-hover text-white font-semibold transition-colors cursor-pointer text-xs shadow-xs disabled:opacity-50 flex items-center gap-1"
+                >
+                  <MingCuteIcon name="delete_2_line" size={13} />
+                  <span>{isApplying ? 'Saving...' : 'Apply & Delete Old'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Clear Logs Button */}
         <Button
           variant="ghost"
           icon="delete_2_line"
           onClick={clearTraffic}
           className="text-muted-foreground hover:text-rose-500"
-          title="Clear traffic log"
+          title="Clear all traffic logs"
         >
           Clear Logs
         </Button>

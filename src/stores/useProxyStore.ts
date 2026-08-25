@@ -7,7 +7,14 @@ import {
   resumeFlow,
   isTauriAvailable,
 } from '../services/tauri/ipc';
-import { subscribeTrafficCaptured, getHistoryLogs, clearHistoryLogs } from '../services/tauri/bridge';
+import {
+  subscribeTrafficCaptured,
+  getHistoryLogs,
+  clearHistoryLogs,
+  getHistorySettings,
+  updateHistorySettings,
+  HistorySettings,
+} from '../services/tauri/bridge';
 
 const mapHeaders = (headers: any): { key: string; value: string }[] => {
   if (!headers) return [];
@@ -97,6 +104,7 @@ interface ProxyState {
   proxyStatus: ProxyStatus;
   traffic: TrafficItem[];
   selectedTrafficId: string | null;
+  historySettings: HistorySettings;
   
   // Filtering
   searchQuery: string;
@@ -112,6 +120,8 @@ interface ProxyState {
 
   // Actions
   initStore: () => Promise<void>;
+  fetchHistorySettings: () => Promise<void>;
+  updateHistorySettings: (limiterEnabled: boolean, maxRows: number) => Promise<void>;
   setProxyMode: (mode: 'normal' | 'intercept' | 'off') => Promise<void>;
   addTrafficItem: (item: TrafficItem) => void;
   selectTrafficItem: (id: string | null) => void;
@@ -142,6 +152,10 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   },
   traffic: SAMPLE_TRAFFIC,
   selectedTrafficId: 'req-101',
+  historySettings: {
+    limiterEnabled: true,
+    maxRows: 500,
+  },
 
   searchQuery: '',
   selectedMethods: [],
@@ -164,7 +178,10 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   initStore: async () => {
     if (isTauriAvailable()) {
       try {
-        const historyLogs = await getHistoryLogs(1, 1000);
+        await get().fetchHistorySettings();
+        const settings = get().historySettings;
+        const maxLimit = settings.limiterEnabled ? settings.maxRows : 10000;
+        const historyLogs = await getHistoryLogs(1, maxLimit);
         if (historyLogs && historyLogs.length > 0) {
           const mapped = historyLogs.map(mapHistoryEntryToTrafficItem);
           set({ traffic: mapped, selectedTrafficId: mapped[0]?.id || null });
@@ -184,6 +201,34 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
     });
   },
 
+  fetchHistorySettings: async () => {
+    if (isTauriAvailable()) {
+      try {
+        const settings = await getHistorySettings();
+        set({ historySettings: settings });
+      } catch (e) {
+        console.warn('Failed to fetch history settings:', e);
+      }
+    }
+  },
+
+  updateHistorySettings: async (limiterEnabled, maxRows) => {
+    set({ historySettings: { limiterEnabled, maxRows } });
+    if (isTauriAvailable()) {
+      try {
+        const updated = await updateHistorySettings(limiterEnabled, maxRows);
+        set({ historySettings: updated });
+        // Refresh traffic list after backend prunes old records
+        const historyLogs = await getHistoryLogs(1, updated.limiterEnabled ? updated.maxRows : 10000);
+        if (historyLogs) {
+          set({ traffic: historyLogs.map(mapHistoryEntryToTrafficItem) });
+        }
+      } catch (e) {
+        console.error('Failed to update history settings:', e);
+      }
+    }
+  },
+
   setProxyMode: async (mode) => {
     try {
       await setProxyMode(mode);
@@ -197,9 +242,11 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
 
   addTrafficItem: (item) => {
     set((state) => {
+      const settings = state.historySettings;
+      const maxLimit = settings.limiterEnabled ? settings.maxRows : 10000;
       const filtered = state.traffic.filter((t) => t.id !== item.id);
       return {
-        traffic: [item, ...filtered].slice(0, 10000),
+        traffic: [item, ...filtered].slice(0, maxLimit),
       };
     });
   },
@@ -236,7 +283,7 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
     });
   },
   setStatusCodeRange: (statusCodeRange) => set({ statusCodeRange }),
-  setOnlyIntercepted: (onlyIntercepted) => set({ onlyIntercepted }),
+  setOnlyIntercepted: (val) => set({ onlyIntercepted: val }),
 
   toggleIntercept: async (enabled) => {
     const nextEnabled = enabled !== undefined ? enabled : !get().interceptConfig.enabled;
