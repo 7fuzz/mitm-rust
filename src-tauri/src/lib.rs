@@ -4,9 +4,12 @@ pub mod db;
 pub mod proxy;
 pub mod state;
 
-use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::{mpsc, oneshot};
 use tauri::Manager;
 use state::{AppState, HistoryEntry};
+use ca::RootCa;
+use proxy::start_proxy_server;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,6 +33,32 @@ pub fn run() {
             db::actor::start_history_actor(db_path.clone(), history_rx);
 
             let app_state = AppState::new(db_path, history_tx);
+
+            // Auto-start proxy server if initial mode is ON (default)
+            if app_state.is_proxy_active() {
+                let app_handle_clone = app_handle.clone();
+                let app_data_dir = app_handle.path().app_data_dir().expect("Failed to get app data dir");
+                let ca_dir = app_data_dir.join("ca");
+                let ca = Arc::new(RootCa::load_or_generate(ca_dir).expect("Failed to generate Root CA"));
+
+                let (stop_tx, stop_rx) = oneshot::channel::<()>();
+                
+                let state_arc = Arc::new(AppState {
+                    db_path: app_state.db_path.clone(),
+                    history_tx: app_state.history_tx.clone(),
+                    proxy_active: std::sync::atomic::AtomicBool::new(true),
+                    broadcast_tx: app_state.broadcast_tx.clone(),
+                    proxy_config: Arc::clone(&app_state.proxy_config),
+                    stop_signal: Arc::new(tokio::sync::Mutex::new(Some(stop_tx))),
+                    pending_flows: Arc::clone(&app_state.pending_flows),
+                    rules: Arc::clone(&app_state.rules),
+                });
+
+                tauri::async_runtime::spawn(async move {
+                    let _ = start_proxy_server(app_handle_clone, state_arc, ca, "127.0.0.1:8080".to_string(), stop_rx).await;
+                });
+            }
+
             app.manage(app_state);
 
             Ok(())
