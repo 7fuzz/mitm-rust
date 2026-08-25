@@ -5,8 +5,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::state::AppState;
 use crate::repeater::{
     create_repeater_tab_db, delete_repeater_tab_db, get_repeater_history_db,
-    get_repeater_tabs_db, update_repeater_tab_db, HeaderItem, RepeaterExecutionResult,
-    RepeaterHistoryItem, RepeaterTab,
+    get_repeater_tabs_db, insert_repeater_history_db, update_repeater_tab_db, HeaderItem,
+    RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab,
 };
 use crate::repeater::execute::execute_tab_request;
 
@@ -90,4 +90,12 @@ pub async fn get_repeater_history(
     limit: u32,
 ) -> Result<Vec<RepeaterHistoryItem>, String> {
     get_repeater_history_db(&state.db_path, &repeater_id, page, limit)
+}
+
+#[tauri::command]
+pub async fn insert_repeater_history(
+    state: State<'_, AppState>,
+    history: RepeaterHistoryItem,
+) -> Result<i64, String> {
+    insert_repeater_history_db(&state.db_path, &history)
 }

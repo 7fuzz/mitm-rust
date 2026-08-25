@@ -291,6 +291,12 @@ export const getRepeaterHistory = async (
   });
 };
 
+export const insertRepeaterHistory = async (
+  history: RepeaterHistoryItem
+): Promise<number> => {
+  return await invoke<number>("insert_repeater_history", { history });
+};
+
 export const subscribeTrafficCaptured = async (
   callback: (event: TrafficCapturedEvent) => void
 ): Promise<UnlistenFn> => {

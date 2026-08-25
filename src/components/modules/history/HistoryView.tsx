@@ -23,7 +23,7 @@ export const HistoryView: React.FC = () => {
     addInterceptRule,
     initStore,
   } = useProxyStore();
-  const { createNewRequest } = useRepeaterStore();
+  const { sendToRepeater } = useRepeaterStore();
   const { layoutMode, setLayoutMode, setActiveModule } = useSettingsStore();
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: TrafficItem } | null>(null);
@@ -114,44 +114,12 @@ export const HistoryView: React.FC = () => {
   };
 
   const handleSendToRepeater = async (item: TrafficItem) => {
-    await createNewRequest(`${item.method} ${item.path}`);
-    const store = useRepeaterStore.getState();
-    const activeReqId = store.activeTabId;
-    if (activeReqId) {
-      const activeReq = store.tabs.find((r) => r.id === activeReqId);
-      if (activeReq) {
-        store.updateTab({
-          ...activeReq,
-          name: `${item.method} ${item.path}`,
-          method: item.method,
-          url: item.url,
-          headers: item.requestHeaders.map((h, i) => ({ id: `h-${i}`, key: h.key, value: h.value, enabled: true })),
-          bodyContent: item.requestBody,
-          bodyType: item.requestBody ? 'json' : 'none',
-        });
-      }
-    }
+    await sendToRepeater(item);
     setActiveModule('repeater');
   };
 
   const handleAddToCollection = async (item: TrafficItem) => {
-    await createNewRequest(`${item.method} ${item.path}`);
-    const store = useRepeaterStore.getState();
-    const activeReqId = store.activeTabId;
-    if (activeReqId) {
-      const activeReq = store.tabs.find((r) => r.id === activeReqId);
-      if (activeReq) {
-        store.updateTab({
-          ...activeReq,
-          name: `${item.method} ${item.path}`,
-          method: item.method,
-          url: item.url,
-          headers: item.requestHeaders.map((h, i) => ({ id: `h-${i}`, key: h.key, value: h.value, enabled: true })),
-          bodyContent: item.requestBody,
-          bodyType: item.requestBody ? 'json' : 'none',
-        });
-      }
-    }
+    await sendToRepeater(item);
     setActiveModule('collections');
   };
 

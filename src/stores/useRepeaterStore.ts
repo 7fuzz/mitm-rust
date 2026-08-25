@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { RepeaterTab, RepeaterHistoryItem, RepeaterExecutionResult } from '../services/tauri/bridge';
+import type { TrafficItem } from '../types';
+import type {
+  RepeaterTab,
+  RepeaterHistoryItem,
+  RepeaterExecutionResult,
+  HeaderItem,
+  ParamItem,
+} from '../services/tauri/bridge';
 import {
   getRepeaterTabs,
   createRepeaterTab,
@@ -7,6 +14,7 @@ import {
   deleteRepeaterTab,
   executeRepeaterRequest,
   getRepeaterHistory,
+  insertRepeaterHistory,
 } from '../services/tauri/bridge';
 import { isTauriAvailable } from '../services/tauri/ipc';
 
@@ -31,6 +39,7 @@ interface RepeaterState {
   setViewMode: (mode: 'sidebar' | 'tabs') => void;
   setActiveTab: (id: string | null) => void;
   createNewRequest: (name?: string) => Promise<void>;
+  sendToRepeater: (item: TrafficItem) => Promise<void>;
   updateTab: (tab: RepeaterTab) => Promise<void>;
   deleteTab: (id: string) => Promise<void>;
   openTab: (tab: RepeaterTab) => void;
@@ -147,6 +156,146 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
       }
     } catch (err) {
       console.error('Failed to create repeater tab:', err);
+    }
+  },
+
+  sendToRepeater: async (item: TrafficItem) => {
+    // 1. Extract query params from URL
+    const params: ParamItem[] = [];
+    try {
+      const rawUrl = item.url || item.path || '';
+      const urlObj = new URL(rawUrl.startsWith('http') ? rawUrl : `http://localhost${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`);
+      urlObj.searchParams.forEach((value, key) => {
+        params.push({
+          id: `p-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          key,
+          value,
+          enabled: true,
+        });
+      });
+    } catch (e) {}
+
+    // 2. Map request headers
+    const headers: HeaderItem[] = (item.requestHeaders || []).map((h, idx) => ({
+      id: `h-${Date.now()}-${idx}`,
+      key: h.key,
+      value: h.value,
+      enabled: true,
+    }));
+
+    // 3. Determine bodyType & bodyContent
+    let bodyType = 'none';
+    let bodyContent = item.requestBody || '';
+    if (bodyContent.trim()) {
+      bodyType = (bodyContent.trim().startsWith('{') || bodyContent.trim().startsWith('[')) ? 'json' : 'raw';
+    }
+
+    const tabName = `${item.method} ${item.path || '/'}`;
+    const nowMs = Date.now();
+
+    // 4. Create the new tab
+    let createdTab: RepeaterTab;
+    if (isTauriAvailable()) {
+      createdTab = await createRepeaterTab(tabName);
+    } else {
+      createdTab = {
+        id: 'tab-' + nowMs,
+        name: tabName,
+        method: item.method,
+        url: item.url,
+        headers: [],
+        params: [],
+        bodyType: 'none',
+        bodyContent: '',
+        extractRules: [],
+        orderIndex: get().tabs.length,
+        createdAtMs: nowMs,
+        updatedAtMs: nowMs,
+        executionCount: 1,
+      };
+    }
+
+    // Populate full request details on tab
+    const populatedTab: RepeaterTab = {
+      ...createdTab,
+      name: tabName,
+      method: item.method,
+      url: item.url,
+      headers,
+      params,
+      bodyType,
+      bodyContent,
+      executionCount: 1,
+      lastStatusCode: item.statusCode,
+      lastDurationMs: item.durationMs,
+    };
+
+    await get().updateTab(populatedTab);
+    set({ activeTabId: populatedTab.id });
+
+    // 5. Construct initial execution result & history item from traffic capture
+    const responseHeaders: HeaderItem[] = (item.responseHeaders || []).map((h, i) => ({
+      id: `rh-${nowMs}-${i}`,
+      key: h.key,
+      value: h.value,
+      enabled: true,
+    }));
+
+    const executionResult: RepeaterExecutionResult = {
+      historyId: nowMs,
+      repeaterId: populatedTab.id,
+      statusCode: item.statusCode || 200,
+      statusText: item.statusCode === 200 ? 'OK' : `HTTP ${item.statusCode}`,
+      responseHeaders,
+      responseBody: item.responseBody || '',
+      durationMs: item.durationMs || 0,
+      responseSize: item.size || (item.responseBody?.length || 0),
+    };
+
+    set((state) => ({
+      lastExecutionResult: { ...state.lastExecutionResult, [populatedTab.id]: executionResult },
+    }));
+
+    if (isTauriAvailable()) {
+      try {
+        const historyItem: RepeaterHistoryItem = {
+          id: 0,
+          repeaterId: populatedTab.id,
+          method: item.method,
+          url: item.url,
+          requestHeaders: headers,
+          requestBody: bodyContent ? bodyContent : undefined,
+          statusCode: item.statusCode || 200,
+          responseHeaders,
+          responseBody: item.responseBody ? item.responseBody : undefined,
+          durationMs: item.durationMs || 0,
+          executedAtMs: item.timestamp || nowMs,
+        };
+        await insertRepeaterHistory(historyItem);
+        await get().fetchHistory(populatedTab.id);
+      } catch (err) {
+        console.error('Failed to insert repeater history from traffic item:', err);
+      }
+    } else {
+      const mockHistory: RepeaterHistoryItem = {
+        id: nowMs,
+        repeaterId: populatedTab.id,
+        method: item.method,
+        url: item.url,
+        requestHeaders: headers,
+        requestBody: bodyContent,
+        statusCode: item.statusCode || 200,
+        responseHeaders,
+        responseBody: item.responseBody,
+        durationMs: item.durationMs || 0,
+        executedAtMs: item.timestamp || nowMs,
+      };
+      set((state) => ({
+        executionHistory: {
+          ...state.executionHistory,
+          [populatedTab.id]: [mockHistory],
+        },
+      }));
     }
   },
 

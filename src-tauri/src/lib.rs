@@ -105,6 +105,7 @@ pub fn run() {
             commands::repeater_cmd::delete_repeater_tab,
             commands::repeater_cmd::execute_repeater_request,
             commands::repeater_cmd::get_repeater_history,
+            commands::repeater_cmd::insert_repeater_history,
         ])
 
         .run(tauri::generate_context!())
