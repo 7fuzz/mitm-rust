@@ -198,28 +198,29 @@ export const HistoryViewer: React.FC = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Left / Top: Traffic Table */}
         <div className="flex-1 flex flex-col border-r border-zinc-800 bg-zinc-950/50 min-w-0">
-          <div className="overflow-y-auto flex-1 divide-y divide-zinc-800/50">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-zinc-900/60 sticky top-0 border-b border-zinc-800 text-zinc-400 font-medium uppercase tracking-wider backdrop-blur-sm z-10">
+          <div className="overflow-y-auto flex-1">
+            <table className="w-full text-left text-xs border-collapse table-fixed">
+              <thead className="bg-zinc-900 sticky top-0 border-b border-zinc-800 text-zinc-400 font-medium uppercase tracking-wider backdrop-blur-sm z-10">
                 <tr>
+                  <th className="py-2.5 px-3 w-10 text-zinc-500 font-mono">#</th>
                   <th className="py-2.5 px-3 w-16">Status</th>
                   <th className="py-2.5 px-3 w-20">Method</th>
-                  <th className="py-2.5 px-3 w-48 truncate">Host</th>
-                  <th className="py-2.5 px-3 truncate">Path</th>
-                  <th className="py-2.5 px-3 w-36 truncate">Content Type</th>
+                  <th className="py-2.5 px-3 w-48">Host</th>
+                  <th className="py-2.5 px-3">Path</th>
+                  <th className="py-2.5 px-3 w-36">Content Type</th>
                   <th className="py-2.5 px-3 w-20 text-right">Size</th>
                   <th className="py-2.5 px-3 w-20 text-right">Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-900/60">
+              <tbody className="divide-y divide-zinc-900/60 font-mono text-[11px]">
                 {logs.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-16 text-zinc-500 text-sm">
+                    <td colSpan={8} className="text-center py-16 text-zinc-500 text-sm">
                       No traffic captured yet. Start proxy and send HTTP requests.
                     </td>
                   </tr>
                 ) : (
-                  logs.map((item) => {
+                  logs.map((item, index) => {
                     const isSelected = selectedLogId === item.id;
                     return (
                       <tr
@@ -231,6 +232,7 @@ export const HistoryViewer: React.FC = () => {
                             : "hover:bg-zinc-900/40"
                         }`}
                       >
+                        <td className="py-2 px-3 text-zinc-600 font-mono">{logs.length - index}</td>
                         <td className="py-2 px-3">
                           <span
                             className={`inline-block px-2 py-0.5 rounded border text-[10px] font-mono font-bold ${getStatusBadgeClass(
@@ -249,19 +251,19 @@ export const HistoryViewer: React.FC = () => {
                             {item.method}
                           </span>
                         </td>
-                        <td className="py-2 px-3 font-mono text-indigo-300 truncate max-w-[12rem]" title={item.host}>
-                          {item.host}
+                        <td className="py-2 px-3 text-indigo-300 overflow-hidden">
+                          <div className="truncate" title={item.host}>{item.host}</div>
                         </td>
-                        <td className="py-2 px-3 font-mono text-zinc-300 truncate max-w-[18rem]" title={item.path}>
-                          {item.path}
+                        <td className="py-2 px-3 text-zinc-300 overflow-hidden">
+                          <div className="truncate" title={item.path}>{item.path}</div>
                         </td>
-                        <td className="py-2 px-3 font-mono text-zinc-400 truncate max-w-[9rem]" title={item.contentType}>
-                          {item.contentType || "-"}
+                        <td className="py-2 px-3 text-zinc-400 overflow-hidden">
+                          <div className="truncate" title={item.contentType}>{item.contentType || "-"}</div>
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-zinc-400">
+                        <td className="py-2 px-3 text-right text-zinc-400">
                           {formatBytes(item.responseSize)}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-zinc-400">
+                        <td className="py-2 px-3 text-right text-zinc-400">
                           {item.durationMs != null ? `${item.durationMs}ms` : "-"}
                         </td>
                       </tr>
@@ -392,7 +394,6 @@ export const HistoryViewer: React.FC = () => {
           )}
         </div>
       </div>
-
 
       {/* History Log Rotation Limiter Settings Modal */}
       {settingsModalOpen && (
