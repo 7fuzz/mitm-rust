@@ -5,7 +5,6 @@ import {
   updateInterceptConfig,
   updateFilterConfig,
   resumeFlow,
-  getHttpHistory,
   clearHttpHistory,
   isTauriAvailable,
 } from '../services/tauri/ipc';
@@ -233,21 +232,22 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   initStore: async () => {
     if (isTauriAvailable()) {
       try {
-        const history = await getHttpHistory();
-        set({ traffic: history, selectedTrafficId: history[0]?.id || null });
+        const history = await tauriBridge.history.get();
+        if (history && history.length > 0) {
+          set({ traffic: history, selectedTrafficId: history[0]?.id || null });
+        }
       } catch (e) {
         console.warn('Failed to fetch initial HTTP history via IPC:', e);
-        set({ traffic: [], selectedTrafficId: null });
       }
     }
 
     // Subscribe to live captured traffic from Rust backend
-    listenTrafficCaptured((item) => {
+    tauriBridge.listenTraffic((item) => {
       get().addTrafficItem(item);
     });
 
     // Subscribe to live intercepted pending flows from Rust backend
-    listenInterceptPending((flow) => {
+    tauriBridge.listenIntercept((flow) => {
       set((state) => ({
         pendingQueue: [flow, ...state.pendingQueue.filter((f) => f.id !== flow.id)],
       }));
