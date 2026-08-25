@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useProxyStore } from '../../../stores/useProxyStore';
 import { Input, Select, TriStateFilter, Checkbox, Button, TriState } from '../../common/ui';
 
@@ -32,22 +32,43 @@ export const TrafficFilterBar: React.FC = () => {
     clearTraffic,
   } = useProxyStore();
 
+  const [localSearch, setLocalSearch] = useState(searchQuery);
+
+  // Keep local search input in sync if searchQuery is reset/cleared externally
+  useEffect(() => {
+    setLocalSearch(searchQuery);
+  }, [searchQuery]);
+
+  // Debounce search query update by 250ms for performance
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(localSearch);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [localSearch, setSearchQuery]);
+
   const handleTriStateChange = (method: string, nextState: TriState) => {
     setMethodFilter(method, nextState);
+  };
+
+  const handleClearSearch = () => {
+    setLocalSearch('');
+    setSearchQuery('');
   };
 
   return (
     <div className="p-2 bg-header border-b border-border flex items-center justify-between gap-3 text-xs shrink-0 select-none">
       {/* Left Filters */}
       <div className="flex items-center gap-2 flex-1 overflow-x-auto no-scrollbar">
-        {/* Live Keyword Search Input */}
+        {/* Debounced Keyword Search Input */}
         <div className="min-w-[220px] max-w-xs">
           <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
             placeholder="Search host, path, status, header..."
             leftIcon="search_line"
-            rightIcon={searchQuery ? 'close_line' : undefined}
+            rightIcon={localSearch ? 'close_line' : undefined}
+            onRightIconClick={handleClearSearch}
           />
         </div>
 
