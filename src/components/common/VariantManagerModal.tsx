@@ -18,12 +18,24 @@ export const VariantManagerModal: React.FC<VariantManagerModalProps> = ({
   variable,
   onSave,
 }) => {
-  const initialVariants: VariableVariant[] =
+  const rawVariants: VariableVariant[] =
     variable.variants && variable.variants.length > 0
       ? variable.variants
       : [{ name: '(auto)', value: variable.value || '' }];
 
-  const [variants, setVariants] = useState<VariableVariant[]>(initialVariants);
+  const normalizedInitialVariants = (() => {
+    const copy = [...rawVariants];
+    const autoIdx = copy.findIndex((v) => v.name === '(auto)');
+    if (autoIdx === -1) {
+      copy.unshift({ name: '(auto)', value: variable.value || '' });
+    } else if (autoIdx > 0) {
+      const [autoVar] = copy.splice(autoIdx, 1);
+      copy.unshift(autoVar);
+    }
+    return copy;
+  })();
+
+  const [variants, setVariants] = useState<VariableVariant[]>(normalizedInitialVariants);
   const [activeIndex, setActiveIndex] = useState<number>(variable.activeIndex || 0);
   const [newVariantName, setNewVariantName] = useState('');
   const [newVariantVal, setNewVariantVal] = useState('');
@@ -41,11 +53,13 @@ export const VariantManagerModal: React.FC<VariantManagerModalProps> = ({
   if (!isOpen) return null;
 
   const handleUpdateVariant = (idx: number, field: 'name' | 'value', val: string) => {
+    if (idx === 0 && field === 'name') return; // Cannot rename (auto)
     const updated = variants.map((v, i) => (i === idx ? { ...v, [field]: val } : v));
     setVariants(updated);
   };
 
   const handleRemoveVariant = (idx: number) => {
+    if (idx === 0) return; // Cannot delete (auto) variant
     if (variants.length <= 1) return;
     const updated = variants.filter((_, i) => i !== idx);
     setVariants(updated);
@@ -56,7 +70,7 @@ export const VariantManagerModal: React.FC<VariantManagerModalProps> = ({
 
   const handleAddVariant = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newVariantName.trim()) return;
+    if (!newVariantName.trim() || newVariantName.trim() === '(auto)') return;
     const updated = [...variants, { name: newVariantName.trim(), value: newVariantVal }];
     setVariants(updated);
     setActiveIndex(updated.length - 1);
@@ -114,13 +128,22 @@ export const VariantManagerModal: React.FC<VariantManagerModalProps> = ({
                 className="cursor-pointer text-primary accent-primary"
                 title="Set as active variant"
               />
-              <input
-                type="text"
-                value={variant.name}
-                onChange={(e) => handleUpdateVariant(idx, 'name', e.target.value)}
-                placeholder="Variant Name (e.g. Staging)"
-                className="w-1/3 bg-surface border border-border rounded px-2 py-1 text-xs text-amber-500 font-bold focus:outline-none focus:border-amber-500"
-              />
+
+              {idx === 0 ? (
+                <span className="w-1/3 bg-amber-500/10 text-amber-500 font-bold border border-amber-500/30 rounded px-2 py-1 text-xs flex items-center justify-between" title="System Auto Extraction Variant (Cannot delete)">
+                  <span>(auto)</span>
+                  <MingCuteIcon name="lock_line" size={12} />
+                </span>
+              ) : (
+                <input
+                  type="text"
+                  value={variant.name}
+                  onChange={(e) => handleUpdateVariant(idx, 'name', e.target.value)}
+                  placeholder="Variant Name (e.g. Staging)"
+                  className="w-1/3 bg-surface border border-border rounded px-2 py-1 text-xs text-amber-500 font-bold focus:outline-none focus:border-amber-500"
+                />
+              )}
+
               <input
                 type="text"
                 value={variant.value}
@@ -128,7 +151,8 @@ export const VariantManagerModal: React.FC<VariantManagerModalProps> = ({
                 placeholder="Variant Value..."
                 className="w-1/2 bg-surface border border-border rounded px-2 py-1 text-xs text-foreground font-mono focus:outline-none focus:border-primary"
               />
-              {variants.length > 1 && (
+
+              {idx !== 0 && variants.length > 1 ? (
                 <button
                   type="button"
                   onClick={() => handleRemoveVariant(idx)}
@@ -137,6 +161,8 @@ export const VariantManagerModal: React.FC<VariantManagerModalProps> = ({
                 >
                   <MingCuteIcon name="delete_2_line" size={14} />
                 </button>
+              ) : (
+                <div className="w-6 shrink-0" />
               )}
             </div>
           ))}

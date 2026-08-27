@@ -124,7 +124,7 @@ export const QuickVariableModal: React.FC = () => {
       if (value.trim()) {
         updatedVars[realIndex] = {
           ...currentVar,
-          key: value.trim().toUpperCase(),
+          key: value.trim(),
         };
       }
     } else if (type === 'rename-variant') {

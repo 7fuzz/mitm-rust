@@ -198,6 +198,15 @@ pub fn import_workspace_json_db(
                                     .unwrap_or_default()
                             };
 
+                            // Ensure (auto) variant exists as variant 0
+                            let has_auto = variants.iter().any(|v| v.get("name").and_then(|n| n.as_str()) == Some("(auto)"));
+                            if !has_auto {
+                                variants.insert(0, serde_json::json!({
+                                    "name": "(auto)",
+                                    "value": primary_val
+                                }));
+                            }
+
                             env_vars.push(serde_json::json!({
                                 "key": key,
                                 "value": primary_val,
@@ -237,7 +246,14 @@ pub fn import_workspace_json_db(
                         "key": key,
                         "value": val,
                         "enabled": !disabled,
-                        "type": "default"
+                        "type": "default",
+                        "activeIndex": 0,
+                        "variants": [
+                            {
+                                "name": "(auto)",
+                                "value": val
+                            }
+                        ]
                     }));
                 }
             }

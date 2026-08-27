@@ -49,20 +49,20 @@ pub async fn execute_collection_request_db(
     request_id: &str,
 ) -> Result<ExecutionResult, String> {
     // 1. Fetch request details & interpolate variables in scope block so Connection is dropped before .await
-    let (id, _workspace_id, raw_method, target_url, logged_req_headers, final_body, req_headers_map, body_type) = {
+    let (id, workspace_id, raw_method, target_url, logged_req_headers, final_body, req_headers_map, body_type, extract_rules_json) = {
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
         let mut stmt = conn
             .prepare(
-                "SELECT r.id, r.collection_id, c.workspace_id, r.name, r.method, r.url, r.headers_json, r.params_json, r.body_type, r.body_content
+                "SELECT r.id, r.collection_id, c.workspace_id, r.name, r.method, r.url, r.headers_json, r.params_json, r.body_type, r.body_content, r.extract_rules_json
                  FROM requests r
                  JOIN collections c ON r.collection_id = c.id
                  WHERE r.id = ?"
             )
             .map_err(|e| e.to_string())?;
 
-        let (id, _col_id, workspace_id, _name, raw_method, raw_url, headers_json, params_json, body_type, raw_body): 
-            (String, String, String, String, String, String, String, String, String, Option<String>) = 
+        let (id, _col_id, workspace_id, _name, raw_method, raw_url, headers_json, params_json, body_type, raw_body, raw_extract_rules): 
+            (String, String, String, String, String, String, String, String, String, Option<String>, Option<String>) = 
             stmt.query_row([request_id], |row| {
                 Ok((
                     row.get(0)?,
@@ -75,6 +75,7 @@ pub async fn execute_collection_request_db(
                     row.get(7)?,
                     row.get(8)?,
                     row.get(9)?,
+                    row.get(10)?,
                 ))
             }).map_err(|e| format!("Request with ID {} not found: {}", request_id, e))?;
 
@@ -141,8 +142,9 @@ pub async fn execute_collection_request_db(
         }
 
         let final_body = if body_type != "none" { interpolated_body } else { None };
+        let extract_rules_json = raw_extract_rules.unwrap_or_else(|| "[]".to_string());
 
-        (id, workspace_id, raw_method, url, logged_req_headers, final_body, req_headers_map, body_type)
+        (id, workspace_id, raw_method, url, logged_req_headers, final_body, req_headers_map, body_type, extract_rules_json)
     };
 
     // 2. Construct reqwest HTTP client & send request
@@ -210,7 +212,10 @@ pub async fn execute_collection_request_db(
 
     let executed_at = now_ms();
 
-    // 3. Store history log in separate DB connection
+    // 3. Perform auto-extraction if extract_rules_json is present
+    perform_auto_extraction_db(db_path, &workspace_id, &extract_rules_json, &decoded_body, &response_headers);
+
+    // 4. Store history log in separate DB connection
     let history_id = {
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
         let req_headers_json = serde_json::to_string(&logged_req_headers).unwrap_or_else(|_| "[]".to_string());
@@ -250,4 +255,163 @@ pub async fn execute_collection_request_db(
         duration_ms,
         response_size,
     })
+}
+
+fn evaluate_rust_extract_rule(
+    rule: &crate::repeater::ExtractRuleItem,
+    response_body: &str,
+    response_headers: &[HeaderItem],
+) -> Option<String> {
+    let mode = rule.r#type.as_str();
+
+    match mode {
+        "json" => {
+            let parsed: serde_json::Value = serde_json::from_str(response_body).ok()?;
+            let parts: Vec<&str> = rule.expression.trim().split('.').collect();
+            let mut current = &parsed;
+            for part in parts {
+                current = current.get(part)?;
+            }
+            if current.is_string() {
+                Some(current.as_str().unwrap_or("").to_string())
+            } else if !current.is_null() {
+                Some(current.to_string())
+            } else {
+                None
+            }
+        }
+        "header" => {
+            let target_k = rule.expression.trim().to_lowercase();
+            response_headers.iter().find(|h| h.key.trim().to_lowercase() == target_k).map(|h| h.value.clone())
+        }
+        "after_string" => {
+            let parts: Vec<&str> = rule.expression.split("||").collect();
+            let prefix = parts.get(0)?;
+            if prefix.is_empty() { return None; }
+            let limit: usize = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(256);
+            let idx = response_body.find(prefix)?;
+            let start = idx + prefix.len();
+            let mut sub = &response_body[start..std::cmp::min(start + limit, response_body.len())];
+            if let Some(nl) = sub.find(['\r', '\n']) {
+                sub = &sub[..nl];
+            }
+            Some(sub.to_string())
+        }
+        "before_string" => {
+            let parts: Vec<&str> = rule.expression.split("||").collect();
+            let suffix = parts.get(0)?;
+            if suffix.is_empty() { return None; }
+            let limit: usize = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(256);
+            let idx = response_body.find(suffix)?;
+            let start = if idx > limit { idx - limit } else { 0 };
+            let sub = &response_body[start..idx];
+            let line = sub.lines().last().unwrap_or(sub);
+            Some(line.to_string())
+        }
+        "between_string" => {
+            let parts: Vec<&str> = rule.expression.split("||").collect();
+            let start_delim = parts.get(0)?;
+            let end_delim = parts.get(1)?;
+            if start_delim.is_empty() || end_delim.is_empty() { return None; }
+            let start_idx = response_body.find(start_delim)?;
+            let content_start = start_idx + start_delim.len();
+            let end_idx = response_body[content_start..].find(end_delim)?;
+            Some(response_body[content_start..content_start + end_idx].to_string())
+        }
+        "body_regex" | "regex" => {
+            let re = regex::Regex::new(&rule.expression).ok()?;
+            let caps = re.captures(response_body)?;
+            let val = caps.get(1).or_else(|| caps.get(0))?;
+            Some(val.as_str().to_string())
+        }
+        _ => None,
+    }
+}
+
+pub fn perform_auto_extraction_db(
+    db_path: &PathBuf,
+    workspace_id: &str,
+    extract_rules_json: &str,
+    response_body: &str,
+    response_headers: &[HeaderItem],
+) {
+    if extract_rules_json.trim().is_empty() || extract_rules_json == "[]" {
+        return;
+    }
+
+    let rules: Vec<crate::repeater::ExtractRuleItem> = match serde_json::from_str(extract_rules_json) {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+
+    if rules.is_empty() {
+        return;
+    }
+
+    let mut envs = match crate::workspace::get_workspace_environments_db(db_path, workspace_id) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    let active_env = match envs.iter_mut().find(|e| e.is_active) {
+        Some(e) => e,
+        None => return,
+    };
+
+    let mut modified = false;
+
+    for rule in rules {
+        if !rule.enabled || rule.target_variable.trim().is_empty() || rule.expression.trim().is_empty() {
+            continue;
+        }
+
+        let target_var_name = rule.target_variable.trim();
+        let extracted_val = evaluate_rust_extract_rule(&rule, response_body, response_headers);
+
+        if let Some(val_str) = extracted_val {
+            if val_str.trim().is_empty() {
+                continue;
+            }
+
+            let var_entry = active_env.variables.iter_mut().find(|v| v.key.eq_ignore_ascii_case(target_var_name));
+
+            match var_entry {
+                Some(v) => {
+                    if v.variants.is_empty() || v.variants[0].name != "(auto)" {
+                        let auto_var = crate::workspace::VariableVariant {
+                            name: "(auto)".to_string(),
+                            value: val_str.clone(),
+                        };
+                        v.variants.insert(0, auto_var);
+                    } else {
+                        v.variants[0].value = val_str.clone();
+                    }
+
+                    if v.active_index == 0 {
+                        v.value = val_str;
+                    }
+                    modified = true;
+                }
+                None => {
+                    let auto_var = crate::workspace::VariableVariant {
+                        name: "(auto)".to_string(),
+                        value: val_str.clone(),
+                    };
+                    active_env.variables.push(crate::workspace::EnvironmentVariable {
+                        key: target_var_name.to_string(),
+                        value: val_str,
+                        enabled: true,
+                        r#type: "default".to_string(),
+                        active_index: 0,
+                        variants: vec![auto_var],
+                    });
+                    modified = true;
+                }
+            }
+        }
+    }
+
+    if modified {
+        let _ = crate::workspace::save_workspace_environment_db(db_path, active_env.clone());
+    }
 }

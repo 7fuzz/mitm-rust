@@ -245,19 +245,40 @@ export const WorkspaceSettingsPanel: React.FC = () => {
                       const valStr = typeof v.value === 'string' ? v.value : (v.value ? JSON.stringify(v.value) : '');
                       const isEnabled = Boolean(v.enabled);
                       const varType = typeof v.type === 'string' ? v.type : 'default';
-                      const hasVariants = v.variants && v.variants.length > 0;
-                      const activeVariantIdx = v.activeIndex || 0;
 
-                      const handleVariantChange = (newVariantIdx: number) => {
-                        if (!v.variants || !v.variants[newVariantIdx]) return;
-                        const targetVariant = v.variants[newVariantIdx];
+                      // Guarantee (auto) variant is always present as variant 0
+                      const effectiveVariants = (() => {
+                        const list = v.variants && v.variants.length > 0 ? [...v.variants] : [{ name: '(auto)', value: valStr }];
+                        const autoIdx = list.findIndex((item) => item.name === '(auto)');
+                        if (autoIdx === -1) {
+                          list.unshift({ name: '(auto)', value: valStr });
+                        } else if (autoIdx > 0) {
+                          const [autoItem] = list.splice(autoIdx, 1);
+                          list.unshift(autoItem);
+                        }
+                        return list;
+                      })();
+
+                      const activeVariantIdx = typeof v.activeIndex === 'number' && v.activeIndex < effectiveVariants.length ? v.activeIndex : 0;
+
+                      const handleVariantChange = async (newVariantIdx: number) => {
+                        if (!effectiveVariants[newVariantIdx]) return;
+                        const targetVariant = effectiveVariants[newVariantIdx];
                         const nextVars = [...localVars];
                         nextVars[i] = {
                           ...v,
+                          variants: effectiveVariants,
                           activeIndex: newVariantIdx,
                           value: targetVariant.value,
                         };
                         setLocalVars(nextVars);
+                        if (activeEnv) {
+                          await saveEnvironmentVariables({
+                            ...activeEnv,
+                            variables: nextVars,
+                            updatedAtMs: Date.now(),
+                          });
+                        }
                       };
 
                       return (
@@ -290,21 +311,17 @@ export const WorkspaceSettingsPanel: React.FC = () => {
                           </td>
                           <td className="px-2 py-1">
                             <div className="flex items-center gap-1">
-                              {hasVariants ? (
-                                <select
-                                  value={activeVariantIdx}
-                                  onChange={(e) => handleVariantChange(Number(e.target.value))}
-                                  className="w-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/30 rounded px-1.5 py-0.5 text-[11px] focus:outline-none cursor-pointer"
-                                >
-                                  {v.variants!.map((variant, idx) => (
-                                    <option key={idx} value={idx}>
-                                      {variant.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <span className="text-[10px] text-muted-foreground italic px-1 font-mono">(auto)</span>
-                              )}
+                              <select
+                                value={activeVariantIdx}
+                                onChange={(e) => handleVariantChange(Number(e.target.value))}
+                                className="w-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/30 rounded px-1.5 py-0.5 text-[11px] focus:outline-none cursor-pointer"
+                              >
+                                {effectiveVariants.map((variant, idx) => (
+                                  <option key={idx} value={idx}>
+                                    {variant.name}
+                                  </option>
+                                ))}
+                              </select>
                               <button
                                 type="button"
                                 onClick={() => setManagingVarIndex(i)}

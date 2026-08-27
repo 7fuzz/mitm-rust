@@ -25,7 +25,7 @@ export const VariablesManager: React.FC = () => {
     e.preventDefault();
     if (!newKey.trim()) return;
     await addVar({
-      key: newKey.trim().toUpperCase(),
+      key: newKey.trim(),
       value: newValue,
       environmentId: activeEnvironmentId,
       isSecret,

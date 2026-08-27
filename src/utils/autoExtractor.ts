@@ -100,7 +100,7 @@ export function processAutoExtractionRules(
     const extracted = evaluateExtractRule(rule, responseBody, responseHeaders);
     if (extracted !== null && extracted.trim().length > 0) {
       results.push({
-        variableName: rule.targetVariable.trim().toUpperCase(),
+        variableName: rule.targetVariable.trim(),
         value: extracted,
       });
     }
