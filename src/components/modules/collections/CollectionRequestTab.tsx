@@ -28,6 +28,13 @@ const HTTP_METHODS = [
   { value: 'OPTIONS', label: 'OPTIONS' },
 ] as const;
 
+const normalizeBodyType = (type?: string): string => {
+  if (!type) return 'none';
+  if (type === 'multipart') return 'form-data';
+  if (type === 'x-www-form-urlencoded') return 'urlencoded';
+  return type;
+};
+
 interface CollectionRequestTabProps {
   request: RequestItem;
 }
@@ -41,7 +48,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
   const [headers, setHeaders] = useState<HeaderItem[]>(request.headers || []);
   const [params, setParams] = useState<ParamItem[]>(request.params || []);
   const [extractRules, setExtractRules] = useState<ExtractRuleItem[]>(request.extractRules || []);
-  const [bodyType, setBodyType] = useState<string>(request.bodyType || 'none');
+  const [bodyType, setBodyType] = useState<string>(normalizeBodyType(request.bodyType));
   const [bodyContent, setBodyContent] = useState<string>(request.bodyContent || '');
 
   // 4 Separate Body Buffers
@@ -66,7 +73,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     setHeaders(request.headers || []);
     setParams(request.params || []);
     setExtractRules(request.extractRules || []);
-    setBodyType(request.bodyType || 'none');
+    setBodyType(normalizeBodyType(request.bodyType));
     setBodyContent(request.bodyContent || '');
     setBodyJson(request.bodyJson ?? (request.bodyType === 'json' ? request.bodyContent || '' : ''));
     setBodyRaw(request.bodyRaw ?? (request.bodyType === 'raw' ? request.bodyContent || '' : request.bodyContent || ''));
