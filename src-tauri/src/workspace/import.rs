@@ -8,38 +8,46 @@ fn detect_and_assign_body(
     mode_hint: Option<&str>,
     raw_payload: Option<&str>,
 ) -> (String, Option<String>, Option<String>, Option<String>, Option<String>) {
+    // Returns: (body_type, body_json, body_raw, body_form_data, body_urlencoded)
     let mode = mode_hint.unwrap_or("").to_lowercase();
     let payload = raw_payload.unwrap_or("").trim();
 
+    if payload.is_empty() && mode.is_empty() {
+        return ("none".to_string(), None, None, None, None);
+    }
+
+    let b_raw = if payload.is_empty() { None } else { Some(payload.to_string()) };
+
+    // Explicit mode handling
     if mode == "formdata" || mode == "form-data" || mode == "multipart" {
-        let b_form = if payload.is_empty() { None } else { Some(payload.to_string()) };
-        return ("form-data".to_string(), None, None, b_form, None);
+        return ("form-data".to_string(), None, b_raw.clone(), b_raw, None);
     }
 
     if mode == "urlencoded" || mode == "x-www-form-urlencoded" {
-        let b_url = if payload.is_empty() { None } else { Some(payload.to_string()) };
-        return ("urlencoded".to_string(), None, None, None, b_url);
-    }
-
-    if mode == "raw" {
-        let b_raw = if payload.is_empty() { None } else { Some(payload.to_string()) };
-        return ("raw".to_string(), None, b_raw, None, None);
+        return ("urlencoded".to_string(), None, b_raw.clone(), None, b_raw);
     }
 
     if mode == "json" {
-        let b_json = if payload.is_empty() { None } else { Some(payload.to_string()) };
-        return ("json".to_string(), b_json, None, None, None);
+        return ("json".to_string(), b_raw.clone(), b_raw, None, None);
     }
 
-    // Auto-detection if mode is unspecified or "none"
+    if mode == "raw" {
+        // If mode is raw but content is valid JSON, auto-assign both json AND raw!
+        if !payload.is_empty() && serde_json::from_str::<serde_json::Value>(payload).is_ok() {
+            return ("json".to_string(), b_raw.clone(), b_raw, None, None);
+        }
+        return ("raw".to_string(), None, b_raw, None, None);
+    }
+
+    // Auto-detection when mode is unspecified or "none" but payload exists
     if !payload.is_empty() {
         if payload.contains("__form_data") {
-            return ("form-data".to_string(), None, None, Some(payload.to_string()), None);
+            return ("form-data".to_string(), None, b_raw.clone(), b_raw, None);
         }
         if serde_json::from_str::<serde_json::Value>(payload).is_ok() {
-            return ("json".to_string(), Some(payload.to_string()), None, None, None);
+            return ("json".to_string(), b_raw.clone(), b_raw, None, None);
         }
-        return ("raw".to_string(), None, Some(payload.to_string()), None, None);
+        return ("raw".to_string(), None, b_raw, None, None);
     }
 
     ("none".to_string(), None, None, None, None)
