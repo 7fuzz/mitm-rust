@@ -48,7 +48,7 @@ pub async fn move_collection(
     collection_id: String,
     target_parent_id: Option<String>,
 ) -> Result<(), String> {
-    move_collection_db(&state.db_path, &collection_id, target_parent_id.as_deref())
+    move_collection_db(&state.db_path, &collection_id, target_parent_id)
 }
 
 #[tauri::command]
@@ -123,4 +123,29 @@ pub async fn clear_request_histories(
     request_id: String,
 ) -> Result<(), String> {
     clear_request_histories_db(&state.db_path, &request_id)
+}
+
+#[tauri::command]
+pub async fn read_file_as_base64(file_path: String) -> Result<String, String> {
+    use base64::Engine;
+    let path = std::path::Path::new(&file_path);
+    if !path.exists() {
+        return Err(format!("File does not exist: {}", file_path));
+    }
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "pdf" => "application/pdf",
+        "json" => "application/json",
+        "txt" => "text/plain",
+        "html" => "text/html",
+        _ => "application/octet-stream",
+    };
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:{};base64,{}", mime, encoded))
 }

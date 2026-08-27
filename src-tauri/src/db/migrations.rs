@@ -34,6 +34,11 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         name: "20260825_0005_fix_environments_schema",
         sql: include_str!("../../migrations/20260825_0005_fix_environments_schema.sql"),
     },
+    MigrationSpec {
+        version: 6,
+        name: "20260827_0006_separate_body_buffers",
+        sql: include_str!("../../migrations/20260827_0006_separate_body_buffers.sql"),
+    },
 ];
 
 #[derive(Clone, Serialize, Debug)]

@@ -378,6 +378,10 @@ export interface RequestItem {
   params: ParamItem[];
   bodyType: string;
   bodyContent?: string;
+  bodyJson?: string;
+  bodyRaw?: string;
+  bodyFormData?: string;
+  bodyUrlencoded?: string;
   extractRules: ExtractRuleItem[];
   description?: string;
   orderIndex: number;
@@ -549,4 +553,10 @@ export const clearRequestHistories = async (
   requestId: string
 ): Promise<void> => {
   return await invoke<void>("clear_request_histories", { requestId });
+};
+
+export const readFileAsBase64 = async (
+  filePath: string
+): Promise<string> => {
+  return await invoke<string>("read_file_as_base64", { filePath });
 };

@@ -133,6 +133,7 @@ pub fn run() {
             commands::collection_cmd::execute_collection_request,
             commands::collection_cmd::get_request_histories,
             commands::collection_cmd::clear_request_histories,
+            commands::collection_cmd::read_file_as_base64,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
