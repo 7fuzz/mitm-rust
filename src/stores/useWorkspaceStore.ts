@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { EnvironmentItem, VariableItem, ReplacementRule, CollectionLink } from '../types';
+import { useCollectionStore } from './useCollectionStore';
 import {
   getWorkspaces,
   createWorkspace,
@@ -195,6 +196,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         await get().initStore();
         if (summary.workspaceId) {
           await get().selectWorkspace(summary.workspaceId);
+          // Clear stale open tabs & fetch fresh collection tree with extract rules
+          useCollectionStore.setState({ openRequests: [], activeRequestId: null });
+          await useCollectionStore.getState().fetchCollections(summary.workspaceId);
         }
         return summary;
       } catch (err) {

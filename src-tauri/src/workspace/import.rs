@@ -523,15 +523,19 @@ fn process_custom_target(
 
     if let Some(ext_obj) = extract_field.and_then(|e| e.as_object()) {
         for (target_var, expr_val) in ext_obj {
-            if let Some(expr_str) = expr_val.as_str() {
-                extract_rules.push(serde_json::json!({
-                    "id": Uuid::new_v4().to_string(),
-                    "type": "json",
-                    "targetVariable": target_var,
-                    "expression": expr_str,
-                    "enabled": true
-                }));
-            }
+            let expr_str = if expr_val.is_string() {
+                expr_val.as_str().unwrap_or("").to_string()
+            } else {
+                expr_val.to_string()
+            };
+
+            extract_rules.push(serde_json::json!({
+                "id": Uuid::new_v4().to_string(),
+                "type": "json",
+                "targetVariable": target_var,
+                "expression": expr_str,
+                "enabled": true
+            }));
         }
     } else if let Some(ext_arr) = extract_field.and_then(|e| e.as_array()) {
         for rule in ext_arr {
@@ -545,7 +549,11 @@ fn process_custom_target(
 
             if let Some(tv) = target_var {
                 let rule_type = rule.get("type").or_else(|| rule.get("source")).and_then(|t| t.as_str()).unwrap_or("json");
-                let expr = rule.get("expression").or_else(|| rule.get("expr")).or_else(|| rule.get("path")).and_then(|e| e.as_str()).unwrap_or("");
+                let expr = rule.get("expression")
+                    .or_else(|| rule.get("expr"))
+                    .or_else(|| rule.get("path"))
+                    .map(|e| if e.is_string() { e.as_str().unwrap_or("").to_string() } else { e.to_string() })
+                    .unwrap_or_default();
                 let enabled = rule.get("enabled").and_then(|b| b.as_bool()).unwrap_or(true);
 
                 extract_rules.push(serde_json::json!({
