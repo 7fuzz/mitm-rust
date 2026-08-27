@@ -5,6 +5,7 @@ import { CodeEditor } from '../../common/CodeEditor';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { HexViewer } from '../../common/HexViewer';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
+import { JsonTreeViewer } from '../../common/JsonTreeViewer';
 
 interface ResponsePanelProps {
   response: RepeaterHistoryItem | RepeaterExecutionResult | null;
@@ -12,7 +13,9 @@ interface ResponsePanelProps {
 
 export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
   const [activeTab, setActiveTab] = useState<'body' | 'headers'>('body');
-  const [bodyFormat, setBodyFormat] = useState<'pretty' | 'raw' | 'hex' | 'html'>('pretty');
+  const [bodyFormat, setBodyFormat] = useState<'pretty' | 'tree' | 'raw' | 'hex' | 'html'>('pretty');
+  const [treeSearch, setTreeSearch] = useState('');
+  const [treeFilterMode, setTreeFilterMode] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const [copyNotification, setCopyNotification] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -89,7 +92,41 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
       );
     }
 
-    if (bodyFormat === 'pretty') {
+    if (bodyFormat === 'tree') {
+      try {
+        const parsed = JSON.parse(responseBody);
+        return (
+          <div className="h-full flex flex-col gap-2 overflow-hidden p-1">
+            <div className="flex items-center gap-2 font-mono text-xs">
+              <input
+                type="text"
+                placeholder="Search JSON tree..."
+                value={treeSearch}
+                onChange={(e) => setTreeSearch(e.target.value)}
+                className="bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground focus:outline-none focus:border-primary w-48"
+              />
+              <button
+                type="button"
+                onClick={() => setTreeFilterMode(!treeFilterMode)}
+                className={`px-2 py-0.5 text-[10px] font-bold rounded border cursor-pointer ${
+                  treeFilterMode
+                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                    : 'bg-background text-muted-foreground border-border hover:text-foreground'
+                }`}
+                title="Filter mode: show matching nodes only"
+              >
+                {treeFilterMode ? 'Filter On' : 'Filter Off'}
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto bg-background p-2 rounded border border-border font-mono">
+              <JsonTreeViewer value={parsed} searchTerm={treeSearch} filterMode={treeFilterMode} />
+            </div>
+          </div>
+        );
+      } catch {
+        return <CodeEditor value={responseBody} language="plaintext" readOnly />;
+      }
+    } else if (bodyFormat === 'pretty') {
       try {
         const parsed = JSON.parse(responseBody);
         const prettyJson = JSON.stringify(parsed, null, 2);
@@ -158,7 +195,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
         {/* Format selectors (active in Body tab) */}
         {activeTab === 'body' ? (
           <div className="flex items-center gap-1 bg-background p-0.5 rounded border border-border">
-            {(['pretty', 'raw', 'hex', 'html'] as const).map((fmt) => (
+            {(['pretty', 'tree', 'raw', 'hex', 'html'] as const).map((fmt) => (
               <button
                 key={fmt}
                 onClick={() => setBodyFormat(fmt)}
