@@ -39,6 +39,11 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         name: "20260827_0006_separate_body_buffers",
         sql: include_str!("../../migrations/20260827_0006_separate_body_buffers.sql"),
     },
+    MigrationSpec {
+        version: 7,
+        name: "20260827_0007_drop_body_content",
+        sql: include_str!("../../migrations/20260827_0007_drop_body_content.sql"),
+    },
 ];
 
 #[derive(Clone, Serialize, Debug)]
