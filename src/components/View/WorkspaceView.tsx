@@ -188,11 +188,10 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
         });
       });
 
-      const test_cases = selectedGroupIds.map(gid => {
+      const buildGroupExport = (gid: string): any => {
         const groupReqs = flattenedRequests.filter(r => (r.groupId || 'null') === gid);
-        if (groupReqs.length === 0) return null;
-
-        const groupName = gid === 'null' ? 'Default' : (repeaterGroups.find(g => g.id === gid)?.name || 'Unknown Group');
+        const groupObj = repeaterGroups.find(g => g.id === gid);
+        const groupName = gid === 'null' ? 'Default' : (groupObj?.name || 'Unknown Group');
 
         const baseUrls = groupReqs.map(r => splitUrl(r.url).baseUrl);
         const mostCommonBase = baseUrls.sort((a, b) => baseUrls.filter(v => v === a).length - baseUrls.filter(v => v === b).length).pop() || '{{apiUrl}}';
@@ -236,15 +235,29 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
           };
         });
 
-        const groupObj = repeaterGroups.find(g => g.id === gid);
+        // Find child groups whose parentId === gid and are in selectedGroupIds
+        const childGroups = repeaterGroups.filter(g => g.parentId === gid && selectedGroupIds.includes(g.id));
+        const folders = childGroups.map(cg => buildGroupExport(cg.id)).filter(Boolean);
 
         return {
           name: groupName,
           url: mostCommonBase,
           description: groupObj?.description || undefined,
-          target: targets
+          target: targets,
+          folders: folders.length > 0 ? folders : undefined
         };
-      }).filter((tc): tc is NonNullable<typeof tc> => tc !== null);
+      };
+
+      // Export root selected groups (groups without parentId or whose parent is not selected)
+      const rootGids = selectedGroupIds.filter(gid => {
+        if (gid === 'null') return true;
+        const g = repeaterGroups.find(group => group.id === gid);
+        return !g?.parentId || !selectedGroupIds.includes(g.parentId);
+      });
+
+      const test_cases = rootGids
+        .map(gid => buildGroupExport(gid))
+        .filter((tc): tc is NonNullable<typeof tc> => tc !== null);
 
       const exportData = {
         name: projectName,
@@ -256,15 +269,35 @@ export const WorkspaceView = forwardRef<WorkspaceViewHandle, object>((_, ref) =>
         test_cases
       };
 
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_export.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const defaultFileName = `${projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_export.json`;
+      const jsonContent = JSON.stringify(exportData, null, 2);
+
+      try {
+        const { save } = await import('@tauri-apps/plugin-dialog');
+        const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+
+        const filePath = await save({
+          defaultPath: defaultFileName,
+          filters: [{ name: 'JSON Export', extensions: ['json'] }]
+        });
+
+        if (filePath) {
+          await writeTextFile(filePath, jsonContent);
+          notify.success(`Export saved successfully to ${filePath}`);
+        }
+      } catch (_dialogErr) {
+        // Fallback for browser environment
+        const blob = new Blob([jsonContent], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = defaultFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        notify.success('Export file downloaded');
+      }
 
     } catch (err) { await alert('Export failed', 'Export failed: ' + err); }
   };
