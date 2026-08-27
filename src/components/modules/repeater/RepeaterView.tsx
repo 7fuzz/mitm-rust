@@ -166,6 +166,18 @@ export const RepeaterView: React.FC = () => {
                 <div
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
+                  onAuxClick={(e) => {
+                    if (e.button === 1) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      deleteTab(tab.id);
+                    }
+                  }}
+                  onMouseDown={(e) => {
+                    if (e.button === 1) {
+                      e.preventDefault();
+                    }
+                  }}
                   className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-t-lg border-t border-x text-xs cursor-pointer font-mono transition-colors min-w-[140px] max-w-[240px] ${
                     isActive
                       ? 'bg-surface border-border text-foreground font-semibold shadow-xs'

@@ -94,6 +94,18 @@ export const CollectionsView: React.FC = () => {
               <div
                 key={req.id}
                 onClick={() => setActiveRequestId(req.id)}
+                onAuxClick={(e) => {
+                  if (e.button === 1) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    closeRequestTab(req.id);
+                  }
+                }}
+                onMouseDown={(e) => {
+                  if (e.button === 1) {
+                    e.preventDefault();
+                  }
+                }}
                 className={`group flex items-center gap-1.5 px-3 py-1 rounded-t-lg border-t border-x text-xs cursor-pointer font-mono transition-colors min-w-[120px] max-w-[220px] ${
                   isActive
                     ? 'bg-surface border-border text-foreground font-semibold shadow-xs'
