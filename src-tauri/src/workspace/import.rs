@@ -4,6 +4,47 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+fn detect_and_assign_body(
+    mode_hint: Option<&str>,
+    raw_payload: Option<&str>,
+) -> (String, Option<String>, Option<String>, Option<String>, Option<String>) {
+    let mode = mode_hint.unwrap_or("").to_lowercase();
+    let payload = raw_payload.unwrap_or("").trim();
+
+    if mode == "formdata" || mode == "form-data" || mode == "multipart" {
+        let b_form = if payload.is_empty() { None } else { Some(payload.to_string()) };
+        return ("form-data".to_string(), None, None, b_form, None);
+    }
+
+    if mode == "urlencoded" || mode == "x-www-form-urlencoded" {
+        let b_url = if payload.is_empty() { None } else { Some(payload.to_string()) };
+        return ("urlencoded".to_string(), None, None, None, b_url);
+    }
+
+    if mode == "raw" {
+        let b_raw = if payload.is_empty() { None } else { Some(payload.to_string()) };
+        return ("raw".to_string(), None, b_raw, None, None);
+    }
+
+    if mode == "json" {
+        let b_json = if payload.is_empty() { None } else { Some(payload.to_string()) };
+        return ("json".to_string(), b_json, None, None, None);
+    }
+
+    // Auto-detection if mode is unspecified or "none"
+    if !payload.is_empty() {
+        if payload.contains("__form_data") {
+            return ("form-data".to_string(), None, None, Some(payload.to_string()), None);
+        }
+        if serde_json::from_str::<serde_json::Value>(payload).is_ok() {
+            return ("json".to_string(), Some(payload.to_string()), None, None, None);
+        }
+        return ("raw".to_string(), None, Some(payload.to_string()), None, None);
+    }
+
+    ("none".to_string(), None, None, None, None)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportSummary {
@@ -367,16 +408,13 @@ fn process_postman_item(
         }
         let headers_json = serde_json::to_string(&headers).unwrap_or_else(|_| "[]".to_string());
 
-        let body_type = match req_spec.body.as_ref().and_then(|b| b.mode.as_deref()) {
-            Some("raw") => "json",
-            Some("formdata") => "form-data",
-            _ => "none",
-        };
-        let body_content = req_spec.body.and_then(|b| b.raw);
+        let mode_hint = req_spec.body.as_ref().and_then(|b| b.mode.as_deref());
+        let raw_payload = req_spec.body.as_ref().and_then(|b| b.raw.as_deref());
+        let (body_type, b_json, b_raw, b_form, b_url) = detect_and_assign_body(mode_hint, raw_payload);
 
         conn.execute(
-            "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, description, order_index, created_at_ms, updated_at_ms)
-             VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, '[]', ?, ?, ?, ?)",
+            "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, body_json, body_raw, body_form_data, body_urlencoded, extract_rules_json, description, order_index, created_at_ms, updated_at_ms)
+             VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?)",
             params![
                 req_id,
                 col_id,
@@ -385,7 +423,10 @@ fn process_postman_item(
                 raw_url,
                 headers_json,
                 body_type,
-                body_content,
+                b_json,
+                b_raw,
+                b_form,
+                b_url,
                 item.description,
                 order_idx,
                 ts,
@@ -519,16 +560,12 @@ fn process_custom_target(
     let headers_json = serde_json::to_string(&headers).unwrap_or_else(|_| "[]".to_string());
 
     // Body handling
-    let body_mode = target_val.get("body_mode").and_then(|m| m.as_str()).unwrap_or("none");
-    let body_type = match body_mode {
-        "json" | "raw" => "json",
-        "formdata" | "form-data" | "urlencoded" => "form-data",
-        _ => "none",
-    };
-
-    let body_content = target_val.get("body")
+    let body_mode = target_val.get("body_mode").or_else(|| target_val.get("body_type")).and_then(|m| m.as_str());
+    let raw_payload_str = target_val.get("body")
         .and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) })
         .or_else(|| target_val.get("body_json").and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) }));
+
+    let (body_type, b_json, b_raw, b_form, b_url) = detect_and_assign_body(body_mode, raw_payload_str.as_deref());
 
     // Extraction rules handling (supports dict {"var": "expr"} or array of objects [{"type":"...","targetVariable":"...","expression":"..."}])
     let mut extract_rules = Vec::new();
@@ -585,8 +622,8 @@ fn process_custom_target(
     let extract_rules_json = serde_json::to_string(&extract_rules).unwrap_or_else(|_| "[]".to_string());
 
     conn.execute(
-        "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, description, order_index, created_at_ms, updated_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, body_json, body_raw, body_form_data, body_urlencoded, extract_rules_json, description, order_index, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
             req_id,
             col_id,
@@ -595,7 +632,10 @@ fn process_custom_target(
             raw_url,
             headers_json,
             body_type,
-            body_content,
+            b_json,
+            b_raw,
+            b_form,
+            b_url,
             extract_rules_json,
             desc,
             order_idx,

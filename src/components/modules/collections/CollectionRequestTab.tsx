@@ -49,21 +49,12 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
   const [params, setParams] = useState<ParamItem[]>(request.params || []);
   const [extractRules, setExtractRules] = useState<ExtractRuleItem[]>(request.extractRules || []);
   const [bodyType, setBodyType] = useState<string>(normalizeBodyType(request.bodyType));
-  const [bodyContent, setBodyContent] = useState<string>(request.bodyContent || '');
 
   // 4 Separate Body Buffers
-  const [bodyJson, setBodyJson] = useState<string>(
-    request.bodyJson ?? (request.bodyType === 'json' ? request.bodyContent || '' : '')
-  );
-  const [bodyRaw, setBodyRaw] = useState<string>(
-    request.bodyRaw ?? (request.bodyType === 'raw' ? request.bodyContent || '' : request.bodyContent || '')
-  );
-  const [bodyFormData, setBodyFormData] = useState<string>(
-    request.bodyFormData ?? (request.bodyType === 'form-data' || request.bodyType === 'multipart' ? request.bodyContent || '' : '')
-  );
-  const [bodyUrlencoded, setBodyUrlencoded] = useState<string>(
-    request.bodyUrlencoded ?? (request.bodyType === 'urlencoded' || request.bodyType === 'x-www-form-urlencoded' ? request.bodyContent || '' : '')
-  );
+  const [bodyJson, setBodyJson] = useState<string>(request.bodyJson || '');
+  const [bodyRaw, setBodyRaw] = useState<string>(request.bodyRaw || '');
+  const [bodyFormData, setBodyFormData] = useState<string>(request.bodyFormData || '');
+  const [bodyUrlencoded, setBodyUrlencoded] = useState<string>(request.bodyUrlencoded || '');
 
   const [isConvertMenuOpen, setIsConvertMenuOpen] = useState(false);
 
@@ -74,11 +65,10 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     setParams(request.params || []);
     setExtractRules(request.extractRules || []);
     setBodyType(normalizeBodyType(request.bodyType));
-    setBodyContent(request.bodyContent || '');
-    setBodyJson(request.bodyJson ?? (request.bodyType === 'json' ? request.bodyContent || '' : ''));
-    setBodyRaw(request.bodyRaw ?? (request.bodyType === 'raw' ? request.bodyContent || '' : request.bodyContent || ''));
-    setBodyFormData(request.bodyFormData ?? (request.bodyType === 'form-data' || request.bodyType === 'multipart' ? request.bodyContent || '' : ''));
-    setBodyUrlencoded(request.bodyUrlencoded ?? (request.bodyType === 'urlencoded' || request.bodyType === 'x-www-form-urlencoded' ? request.bodyContent || '' : ''));
+    setBodyJson(request.bodyJson || '');
+    setBodyRaw(request.bodyRaw || '');
+    setBodyFormData(request.bodyFormData || '');
+    setBodyUrlencoded(request.bodyUrlencoded || '');
   }, [
     request.id,
     request.updatedAtMs,
@@ -88,7 +78,6 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     request.method,
     request.url,
     request.bodyType,
-    request.bodyContent,
     request.bodyJson,
     request.bodyRaw,
     request.bodyFormData,
@@ -115,15 +104,13 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
   const handleMultipartChange = (fields: MultipartField[]) => {
     const jsonStr = JSON.stringify({ __form_data: fields }, null, 2);
     setBodyFormData(jsonStr);
-    setBodyContent(jsonStr);
-    handleUpdateStore({ bodyFormData: jsonStr, bodyContent: jsonStr });
+    handleUpdateStore({ bodyFormData: jsonStr });
   };
 
   const handleUrlEncodedChange = (newParams: UrlEncodedParam[]) => {
     const jsonStr = JSON.stringify(newParams, null, 2);
     setBodyUrlencoded(jsonStr);
-    setBodyContent(jsonStr);
-    handleUpdateStore({ bodyUrlencoded: jsonStr, bodyContent: jsonStr });
+    handleUpdateStore({ bodyUrlencoded: jsonStr });
   };
 
   const handleSaveAndSend = async () => {
@@ -135,7 +122,6 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       params,
       extractRules,
       bodyType,
-      bodyContent,
       bodyJson,
       bodyRaw,
       bodyFormData,
@@ -174,25 +160,9 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [method, url, headers, params, extractRules, bodyType, bodyContent, request]);
+  }, [method, url, headers, params, extractRules, bodyType, bodyJson, bodyRaw, bodyFormData, bodyUrlencoded, request]);
 
   const handleUpdateStore = (overrides?: Partial<RequestItem>) => {
-    const nextBodyType = overrides?.bodyType ?? bodyType;
-    const nextBodyJson = overrides?.bodyJson ?? bodyJson;
-    const nextBodyRaw = overrides?.bodyRaw ?? bodyRaw;
-    const nextBodyFormData = overrides?.bodyFormData ?? bodyFormData;
-    const nextBodyUrlencoded = overrides?.bodyUrlencoded ?? bodyUrlencoded;
-
-    // Determine active body content string based on bodyType
-    let nextBodyContent = overrides?.bodyContent;
-    if (nextBodyContent === undefined) {
-      if (nextBodyType === 'json') nextBodyContent = nextBodyJson;
-      else if (nextBodyType === 'raw') nextBodyContent = nextBodyRaw;
-      else if (nextBodyType === 'form-data' || nextBodyType === 'multipart') nextBodyContent = nextBodyFormData;
-      else if (nextBodyType === 'urlencoded' || nextBodyType === 'x-www-form-urlencoded') nextBodyContent = nextBodyUrlencoded;
-      else nextBodyContent = '';
-    }
-
     updateRequestDetails({
       ...request,
       method: overrides?.method ?? method,
@@ -200,12 +170,11 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       headers: overrides?.headers ?? headers,
       params: overrides?.params ?? params,
       extractRules: overrides?.extractRules ?? extractRules,
-      bodyType: nextBodyType,
-      bodyContent: nextBodyContent,
-      bodyJson: nextBodyJson,
-      bodyRaw: nextBodyRaw,
-      bodyFormData: nextBodyFormData,
-      bodyUrlencoded: nextBodyUrlencoded,
+      bodyType: overrides?.bodyType ?? bodyType,
+      bodyJson: overrides?.bodyJson ?? bodyJson,
+      bodyRaw: overrides?.bodyRaw ?? bodyRaw,
+      bodyFormData: overrides?.bodyFormData ?? bodyFormData,
+      bodyUrlencoded: overrides?.bodyUrlencoded ?? bodyUrlencoded,
       updatedAtMs: Date.now(),
     });
   };
@@ -215,47 +184,40 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     setIsConvertMenuOpen(false);
 
     if (type === 'json_to_formdata') {
-      const converted = convertJsonToFormData(bodyJson || bodyContent);
+      const converted = convertJsonToFormData(bodyJson);
       setBodyFormData(converted);
       setBodyType('form-data');
-      setBodyContent(converted);
-      handleUpdateStore({ bodyFormData: converted, bodyType: 'form-data', bodyContent: converted });
+      handleUpdateStore({ bodyFormData: converted, bodyType: 'form-data' });
     } else if (type === 'json_to_urlencoded') {
-      const converted = convertJsonToUrlEncoded(bodyJson || bodyContent);
+      const converted = convertJsonToUrlEncoded(bodyJson);
       setBodyUrlencoded(converted);
       setBodyType('urlencoded');
-      setBodyContent(converted);
-      handleUpdateStore({ bodyUrlencoded: converted, bodyType: 'urlencoded', bodyContent: converted });
+      handleUpdateStore({ bodyUrlencoded: converted, bodyType: 'urlencoded' });
     } else if (type === 'formdata_to_json') {
-      const converted = await convertFormDataToJson(bodyFormData || bodyContent);
+      const converted = await convertFormDataToJson(bodyFormData);
       setBodyJson(converted);
       setBodyType('json');
-      setBodyContent(converted);
-      handleUpdateStore({ bodyJson: converted, bodyType: 'json', bodyContent: converted });
+      handleUpdateStore({ bodyJson: converted, bodyType: 'json' });
     } else if (type === 'urlencoded_to_json') {
-      const converted = convertUrlEncodedToJson(bodyUrlencoded || bodyContent);
+      const converted = convertUrlEncodedToJson(bodyUrlencoded);
       setBodyJson(converted);
       setBodyType('json');
-      setBodyContent(converted);
-      handleUpdateStore({ bodyJson: converted, bodyType: 'json', bodyContent: converted });
+      handleUpdateStore({ bodyJson: converted, bodyType: 'json' });
     } else if (type === 'raw_to_json') {
-      const converted = convertRawToJson(bodyRaw || bodyContent);
+      const converted = convertRawToJson(bodyRaw);
       setBodyJson(converted);
       setBodyType('json');
-      setBodyContent(converted);
-      handleUpdateStore({ bodyJson: converted, bodyType: 'json', bodyContent: converted });
+      handleUpdateStore({ bodyJson: converted, bodyType: 'json' });
     } else if (type === 'formdata_to_urlencoded') {
-      const converted = convertFormDataToUrlEncoded(bodyFormData || bodyContent);
+      const converted = convertFormDataToUrlEncoded(bodyFormData);
       setBodyUrlencoded(converted);
       setBodyType('urlencoded');
-      setBodyContent(converted);
-      handleUpdateStore({ bodyUrlencoded: converted, bodyType: 'urlencoded', bodyContent: converted });
+      handleUpdateStore({ bodyUrlencoded: converted, bodyType: 'urlencoded' });
     } else if (type === 'urlencoded_to_formdata') {
-      const converted = convertUrlEncodedToFormData(bodyUrlencoded || bodyContent);
+      const converted = convertUrlEncodedToFormData(bodyUrlencoded);
       setBodyFormData(converted);
       setBodyType('form-data');
-      setBodyContent(converted);
-      handleUpdateStore({ bodyFormData: converted, bodyType: 'form-data', bodyContent: converted });
+      handleUpdateStore({ bodyFormData: converted, bodyType: 'form-data' });
     }
   };
 
@@ -384,15 +346,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
                       onChange={(e) => {
                         const nextType = e.target.value;
                         setBodyType(nextType);
-
-                        let activeText = '';
-                        if (nextType === 'json') activeText = bodyJson;
-                        else if (nextType === 'raw') activeText = bodyRaw;
-                        else if (nextType === 'form-data' || nextType === 'multipart') activeText = bodyFormData;
-                        else if (nextType === 'urlencoded' || nextType === 'x-www-form-urlencoded') activeText = bodyUrlencoded;
-
-                        setBodyContent(activeText);
-                        handleUpdateStore({ bodyType: nextType, bodyContent: activeText });
+                        handleUpdateStore({ bodyType: nextType });
                       }}
                       className="accent-primary cursor-pointer"
                     />
@@ -474,14 +428,14 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
             {bodyType === 'urlencoded' || bodyType === 'x-www-form-urlencoded' ? (
               <div className="flex-1 overflow-y-auto">
                 <UrlEncodedEditor
-                  params={parseUrlEncodedParams(bodyUrlencoded || bodyContent)}
+                  params={parseUrlEncodedParams(bodyUrlencoded)}
                   onChange={handleUrlEncodedChange}
                 />
               </div>
             ) : bodyType === 'form-data' || bodyType === 'multipart' ? (
               <div className="flex-1 overflow-y-auto">
                 <MultipartEditor
-                  fields={parseMultipartFields(bodyFormData || bodyContent)}
+                  fields={parseMultipartFields(bodyFormData)}
                   onChange={handleMultipartChange}
                 />
               </div>
@@ -492,12 +446,10 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
                   onChange={(val) => {
                     if (bodyType === 'json') {
                       setBodyJson(val);
-                      setBodyContent(val);
-                      handleUpdateStore({ bodyJson: val, bodyContent: val });
+                      handleUpdateStore({ bodyJson: val });
                     } else {
                       setBodyRaw(val);
-                      setBodyContent(val);
-                      handleUpdateStore({ bodyRaw: val, bodyContent: val });
+                      handleUpdateStore({ bodyRaw: val });
                     }
                   }}
                   language={bodyType === 'json' ? 'json' : 'plaintext'}

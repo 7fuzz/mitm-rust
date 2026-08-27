@@ -54,15 +54,15 @@ pub async fn execute_collection_request_db(
 
         let mut stmt = conn
             .prepare(
-                "SELECT r.id, r.collection_id, c.workspace_id, r.name, r.method, r.url, r.headers_json, r.params_json, r.body_type, r.body_content, r.extract_rules_json
+                "SELECT r.id, r.collection_id, c.workspace_id, r.name, r.method, r.url, r.headers_json, r.params_json, r.body_type, r.body_json, r.body_raw, r.body_form_data, r.body_urlencoded, r.extract_rules_json
                  FROM requests r
                  JOIN collections c ON r.collection_id = c.id
                  WHERE r.id = ?"
             )
             .map_err(|e| e.to_string())?;
 
-        let (id, _col_id, workspace_id, _name, raw_method, raw_url, headers_json, params_json, body_type, raw_body, raw_extract_rules): 
-            (String, String, String, String, String, String, String, String, String, Option<String>, Option<String>) = 
+        let (id, _col_id, workspace_id, _name, raw_method, raw_url, headers_json, params_json, body_type, b_json, b_raw, b_form, b_url, raw_extract_rules): 
+            (String, String, String, String, String, String, String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>) = 
             stmt.query_row([request_id], |row| {
                 Ok((
                     row.get(0)?,
@@ -76,8 +76,19 @@ pub async fn execute_collection_request_db(
                     row.get(8)?,
                     row.get(9)?,
                     row.get(10)?,
+                    row.get(11)?,
+                    row.get(12)?,
+                    row.get(13)?,
                 ))
             }).map_err(|e| format!("Request with ID {} not found: {}", request_id, e))?;
+
+        let raw_body = match body_type.as_str() {
+            "json" => b_json,
+            "raw" => b_raw,
+            "form-data" | "multipart" => b_form,
+            "urlencoded" | "x-www-form-urlencoded" => b_url,
+            _ => None,
+        };
 
         let interpolated_url = interpolate_variables(db_path, &workspace_id, &raw_url);
         let interpolated_body = raw_body.map(|b| interpolate_variables(db_path, &workspace_id, &b));

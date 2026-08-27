@@ -377,7 +377,6 @@ export interface RequestItem {
   headers: HeaderItem[];
   params: ParamItem[];
   bodyType: string;
-  bodyContent?: string;
   bodyJson?: string;
   bodyRaw?: string;
   bodyFormData?: string;
