@@ -5,12 +5,14 @@ export type MingCuteIconName =
   | 'history_line'
   | 'shield_line'
   | 'repeat_line'
+  | 'repeater'
   | 'send_plane_line'
   | 'transfer_line'
   | 'websocket_line'
   | 'link_line'
   | 'grid_line'
   | 'tool_line'
+  | 'settings_line'
   | 'settings_3_line'
   | 'sun_line'
   | 'moon_line'
@@ -19,18 +21,25 @@ export type MingCuteIconName =
   | 'play_line'
   | 'close_circle_line'
   | 'folder_line'
+  | 'folder_2_line'
+  | 'folder_open_line'
+  | 'folder_archive_line'
   | 'file_code_line'
   | 'eye_close_line'
   | 'eye_line'
   | 'copy_line'
   | 'delete_2_line'
+  | 'delete_fill'
   | 'storage_line'
   | 'download_line'
   | 'key_line'
   | 'plus_line'
+  | 'add_line'
   | 'edit_line'
   | 'arrow_up_line'
+  | 'up_line'
   | 'arrow_down_line'
+  | 'down_line'
   | 'check_line'
   | 'close_line'
   | 'chevron_right_line'
@@ -47,9 +56,16 @@ export type MingCuteIconName =
   | 'power_line'
   | 'power'
   | 'zap_line'
+  | 'lightning_line'
   | 'radio_line'
   | 'ban_line'
-  | 'fast_forward_line';
+  | 'fast_forward_line'
+  | 'earth_line'
+  | 'globe_line'
+  | 'loading_line'
+  | 'alert_line'
+  | 'warning_line'
+  | 'file_import_line';
 
 interface MingCuteIconProps {
   name: MingCuteIconName | string;
@@ -74,6 +90,7 @@ export const MingCuteIcon: React.FC<MingCuteIconProps> = ({
           <path d="M12 3a1 1 0 0 1 1 1v8a1 1 0 1 1-2 0V4a1 1 0 0 1 1-1zm4.78 2.22a1 1 0 0 1 1.41 1.42A8.96 8.96 0 0 1 21 13a9 9 0 1 1-15.19-6.36a1 1 0 0 1 1.41 1.42A7 7 0 1 0 19 13a6.97 6.97 0 0 0-2.22-4.78z" />
         );
       case 'zap_line':
+      case 'lightning_line':
         return (
           <path d="M13 2L3 14h9l-1 8l10-12h-8l1-8z" />
         );
@@ -127,6 +144,7 @@ export const MingCuteIcon: React.FC<MingCuteIconProps> = ({
         return (
           <path d="M19.14 12.94c.04-.3.06-.61.06-.94c0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.5A3.5 3.5 0 018.5 12A3.5 3.5 0 0112 8.5a3.5 3.5 0 013.5 3.5a3.5 3.5 0 01-3.5 3.5z" />
         );
+      case 'settings_line':
       case 'settings_3_line':
         return (
           <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12c5.16-1.26 9-6.45 9-12V5l-9-4zm7 10c0 4.52-3.1 8.75-7 9.81c-3.9-1.06-7-5.29-7-9.81V6.3l7-3.11l7 3.11V11zm-8-3h2v2h-2V8zm0 4h2v5h-2v-5z" />
@@ -156,10 +174,14 @@ export const MingCuteIcon: React.FC<MingCuteIconProps> = ({
           <path d="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8a8 8 0 01-8 8zm3.54-11.54L13.41 12l2.13 2.12-1.42 1.42L12 13.41l-2.12 2.13-1.42-1.42L10.59 12 8.46 9.88l1.42-1.42L12 10.59l2.12-2.13z" />
         );
       case 'folder_line':
+      case 'folder_2_line':
+      case 'folder_open_line':
+      case 'folder_archive_line':
         return (
           <path d="M12.414 5H21a1 1 0 011 1v14a1 1 0 01-1 1H3a1 1 0 01-1-1V4a1 1 0 011-1h7.414l2 2zM4 5v14h16V7h-9.414l-2-2H4z" />
         );
       case 'file_code_line':
+      case 'file_import_line':
         return (
           <path d="M15 4H5v16h14V8h-4V4zM3 2.992C3 2.444 3.447 2 3.999 2H16l5 5v13.993A1 1 0 0120.007 22H3.993A1 1 0 013 21.008V2.992zM8.5 11.5L6 14l2.5 2.5 1.414-1.414L8.328 14l1.586-1.586L8.5 11.5zm7 0l-1.414 1.414L15.672 14l-1.586 1.586L15.5 16.5l2.5-2.5-2.5-2.5z" />
         );
@@ -176,6 +198,7 @@ export const MingCuteIcon: React.FC<MingCuteIconProps> = ({
           <path d="M7 6V3a1 1 0 011-1h12a1 1 0 011 1v12a1 1 0 01-1 1h-3v3a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1h4zm2 2v10h6V8H9zm8-2V4H9v2h8z" />
         );
       case 'delete_2_line':
+      case 'delete_fill':
         return (
           <path d="M17 6h5v2h-2v13a1 1 0 01-1 1H5a1 1 0 01-1-1V8H2V6h5V3a1 1 0 011-1h8a1 1 0 011 1v3zm-8 5v6h2v-6H9zm4 0v6h2v-6h-2zM9 4v2h6V4H9z" />
         );
@@ -192,6 +215,7 @@ export const MingCuteIcon: React.FC<MingCuteIconProps> = ({
           <path d="M12.917 11.5a6 6 0 1 0-2.417 2.417l.083.083h2.917v3h3v3h3v-3.5a.5.5 0 0 0-.146-.354l-2.688-2.687a.5.5 0 0 0-.354-.146h-.98zM8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8z" />
         );
       case 'plus_line':
+      case 'add_line':
         return (
           <path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6z" />
         );
@@ -200,10 +224,12 @@ export const MingCuteIcon: React.FC<MingCuteIconProps> = ({
           <path d="M15.728 9.686l-1.414-1.414L5 17.586V19h1.414l9.314-9.314zm1.414-1.414l1.414-1.414a1 1 0 000-1.414l-1.414-1.414a1 1 0 00-1.414 0l-1.414 1.414 2.828 2.828zM3 21v-4.243L16.435 3.322a3 3 0 014.243 0l1.414 1.414a3 3 0 010 4.243L8.657 22.414A1 1 0 017.95 22.707H3.707A.707.707 0 013 22v-1z" />
         );
       case 'arrow_up_line':
+      case 'up_line':
         return (
           <path d="M13 7.828V20h-2V7.828l-5.364 5.364-1.414-1.414L12 4l7.778 7.778-1.414 1.414L13 7.828z" />
         );
       case 'arrow_down_line':
+      case 'down_line':
         return (
           <path d="M13 16.172l5.364-5.364 1.414 1.414L12 20l-7.778-7.778 1.414-1.414L11 16.172V4h2v12.172z" />
         );
@@ -224,6 +250,7 @@ export const MingCuteIcon: React.FC<MingCuteIconProps> = ({
           <path d="M12 13.172l4.95-4.95 1.414 1.414L12 16 5.636 9.636 7.05 8.222z" />
         );
       case 'refresh_line':
+      case 'loading_line':
         return (
           <path d="M5.463 4.433A9.961 9.961 0 0 1 12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10A9.96 9.96 0 0 1 2.458 14.5h2.083A7.96 7.96 0 0 0 12 20a8 8 0 1 0 0-16c-2.022 0-3.876.75-5.297 1.993l2.797 2.797H2.5V1.793l2.963 2.64z" />
         );
@@ -251,9 +278,20 @@ export const MingCuteIcon: React.FC<MingCuteIconProps> = ({
         return (
           <path d="M7.784 14l.42-4H4V8h4.415l.525-5h2.011l-.525 5h3.989l.525-5h2.011l-.525 5H20v2h-3.989l-.42 4H20v2h-4.415l-.525 5h-2.011l.525-5H9.585l-.525 5H7.049l.525-5H4v-2h3.784zm2.011 0h3.989l.42-4H10.215l-.42 4z" />
         );
-      default:
+      case 'earth_line':
+      case 'globe_line':
         return (
-          <path d="M12 2a10 10 0 1010 10A10 10 0 0012 2zm1 15h-2v-2h2zm0-4h-2V7h2z" />
+          <path d="M12 2a10 10 0 1010 10A10 10 0 0012 2zm-6.93 6h13.86a8.003 8.003 0 00-4.63-4.66A16.035 16.035 0 0012 4c-.79 0-1.57.06-2.3.18A8.003 8.003 0 005.07 8zM12 20c.79 0 1.57-.06 2.3-.18a8.003 8.003 0 004.63-4.66H5.07a8.003 8.003 0 004.63 4.66c.73.12 1.51.18 2.3.18zM4.06 10a8.04 8.04 0 000 4h3.19a18.23 18.23 0 010-4H4.06zm5.22 0a16.2 16.2 0 000 4h5.44a16.2 16.2 0 000-4H9.28zm7.47 0c.06.65.1 1.32.1 2s-.04 1.35-.1 2h3.19a8.04 8.04 0 000-4h-3.19z" />
+        );
+      case 'alert_line':
+      case 'warning_line':
+        return (
+          <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-2h2zm0-4h-2V7h2z" />
+        );
+      default:
+        // Clean neutral circle fallback instead of warning sign
+        return (
+          <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8a8 8 0 0 1-8 8zm0-5a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
         );
     }
   };

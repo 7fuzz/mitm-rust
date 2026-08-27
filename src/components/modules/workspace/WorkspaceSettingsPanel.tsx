@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useWorkspaceStore } from '../../../stores/useWorkspaceStore';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import type { Environment, EnvironmentVariable } from '../../../services/tauri/bridge';
+import { VariantManagerModal } from '../../common/VariantManagerModal';
 
 export const WorkspaceSettingsPanel: React.FC = () => {
   const {
@@ -9,6 +10,7 @@ export const WorkspaceSettingsPanel: React.FC = () => {
     activeWorkspaceId,
     environmentsList,
     updateWorkspaceDetails,
+    deleteWorkspaceById,
     saveEnvironmentVariables,
   } = useWorkspaceStore();
 
@@ -16,8 +18,11 @@ export const WorkspaceSettingsPanel: React.FC = () => {
 
   const [wsName, setWsName] = useState(activeWorkspace?.name || '');
   const [wsDesc, setWsDesc] = useState(activeWorkspace?.description || '');
+  const [savedFeedback, setSavedFeedback] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedEnvId, setSelectedEnvId] = useState<string | null>(null);
   const [localVars, setLocalVars] = useState<EnvironmentVariable[]>([]);
+  const [managingVarIndex, setManagingVarIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (activeWorkspace) {
@@ -52,6 +57,14 @@ export const WorkspaceSettingsPanel: React.FC = () => {
       description: wsDesc.trim() || undefined,
       updatedAtMs: Date.now(),
     });
+    setSavedFeedback(true);
+    setTimeout(() => setSavedFeedback(false), 2000);
+  };
+
+  const handleDeleteCurrentWorkspace = async () => {
+    if (!activeWorkspace) return;
+    await deleteWorkspaceById(activeWorkspace.id);
+    setIsDeleteModalOpen(false);
   };
 
   const handleAddVarRow = () => {
@@ -89,12 +102,30 @@ export const WorkspaceSettingsPanel: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 p-4 overflow-y-auto space-y-6 text-xs text-foreground select-none font-sans">
+    <div className="flex-1 p-4 overflow-y-auto space-y-6 text-xs text-foreground font-sans">
       {/* Workspace Meta Info Card */}
       <div className="bg-surface border border-border rounded-xl p-4 space-y-3 shadow-2xs">
-        <div className="flex items-center gap-2 border-b border-border pb-2">
-          <MingCuteIcon name="folder_block_line" size={18} className="text-primary" />
-          <span className="font-semibold text-sm">Workspace Details</span>
+        <div className="flex items-center justify-between border-b border-border pb-2">
+          <div className="flex items-center gap-2">
+            <MingCuteIcon name="folder_block_line" size={18} className="text-primary" />
+            <span className="font-semibold text-sm">Workspace Details</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {savedFeedback && (
+              <span className="text-emerald-500 font-semibold text-xs flex items-center gap-1 animate-fade-in">
+                <MingCuteIcon name="check_circle_line" size={14} />
+                <span>Saved!</span>
+              </span>
+            )}
+            <button
+              onClick={handleSaveWorkspaceInfo}
+              className="px-3 py-1 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded text-xs transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
+            >
+              <MingCuteIcon name="check_line" size={13} />
+              <span>Save Workspace Details</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -150,6 +181,7 @@ export const WorkspaceSettingsPanel: React.FC = () => {
         <div className="flex items-center gap-1 border-b border-border pb-2 overflow-x-auto">
           {environmentsList.map((env) => {
             const isSelected = env.id === selectedEnvId;
+            const displayName = typeof env.name === 'string' ? env.name : String(env.name || 'Environment');
             return (
               <button
                 key={env.id}
@@ -160,7 +192,7 @@ export const WorkspaceSettingsPanel: React.FC = () => {
                     : 'bg-background hover:bg-neutral-subtle border border-border text-foreground'
                 }`}
               >
-                <span>{env.name}</span>
+                <span>{displayName}</span>
                 {env.isActive && (
                   <span className="bg-emerald-500 text-white text-[9px] px-1 py-0.2 rounded font-mono font-bold">
                     ACTIVE
@@ -194,57 +226,105 @@ export const WorkspaceSettingsPanel: React.FC = () => {
                   <tr className="bg-header border-b border-border text-muted-foreground text-[11px]">
                     <th className="w-8 px-2 py-1.5 text-center">En</th>
                     <th className="px-3 py-1.5 font-medium">Variable Key</th>
-                    <th className="px-3 py-1.5 font-medium">Value</th>
-                    <th className="w-24 px-2 py-1.5 font-medium">Type</th>
+                    <th className="px-3 py-1.5 font-medium">Active Value</th>
+                    <th className="w-36 px-2 py-1.5 font-medium">Variant</th>
+                    <th className="w-20 px-2 py-1.5 font-medium">Type</th>
                     <th className="w-8 px-2 py-1.5 text-center"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border bg-surface">
                   {localVars.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground italic">
+                      <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground italic">
                         No variables defined in this environment yet.
                       </td>
                     </tr>
                   ) : (
-                    localVars.map((v, i) => (
-                      <tr key={i} className="hover:bg-neutral-subtle/50">
-                        <td className="px-2 py-1 text-center">
-                          <input
-                            type="checkbox"
-                            checked={v.enabled}
-                            onChange={(e) => handleVarChange(i, 'enabled', e.target.checked)}
-                            className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer accent-primary"
-                          />
-                        </td>
-                        <td className="px-2 py-1">
-                          <input
-                            type="text"
-                            placeholder="BASE_URL"
-                            value={v.key}
-                            onChange={(e) => handleVarChange(i, 'key', e.target.value)}
-                            className="w-full bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground font-mono focus:outline-none focus:border-primary"
-                          />
-                        </td>
-                        <td className="px-2 py-1">
-                          <input
-                            type={v.type === 'secret' ? 'password' : 'text'}
-                            placeholder="https://api.example.com"
-                            value={v.value}
-                            onChange={(e) => handleVarChange(i, 'value', e.target.value)}
-                            className="w-full bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground font-mono focus:outline-none focus:border-primary"
-                          />
-                        </td>
-                        <td className="px-2 py-1">
-                          <select
-                            value={v.type}
-                            onChange={(e) => handleVarChange(i, 'type', e.target.value as any)}
-                            className="w-full bg-background border border-border rounded px-1.5 py-0.5 text-[11px] text-foreground focus:outline-none cursor-pointer"
-                          >
-                            <option value="default">Default</option>
-                            <option value="secret">Secret</option>
-                          </select>
-                        </td>
+                    localVars.map((v, i) => {
+                      const keyVal = typeof v.key === 'string' ? v.key : String(v.key || '');
+                      const valStr = typeof v.value === 'string' ? v.value : (v.value ? JSON.stringify(v.value) : '');
+                      const isEnabled = Boolean(v.enabled);
+                      const varType = typeof v.type === 'string' ? v.type : 'default';
+                      const hasVariants = v.variants && v.variants.length > 0;
+                      const activeVariantIdx = v.activeIndex || 0;
+
+                      const handleVariantChange = (newVariantIdx: number) => {
+                        if (!v.variants || !v.variants[newVariantIdx]) return;
+                        const targetVariant = v.variants[newVariantIdx];
+                        const nextVars = [...localVars];
+                        nextVars[i] = {
+                          ...v,
+                          activeIndex: newVariantIdx,
+                          value: targetVariant.value,
+                        };
+                        setLocalVars(nextVars);
+                      };
+
+                      return (
+                        <tr key={i} className="hover:bg-neutral-subtle/50">
+                          <td className="px-2 py-1 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isEnabled}
+                              onChange={(e) => handleVarChange(i, 'enabled', e.target.checked)}
+                              className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer accent-primary"
+                            />
+                          </td>
+                          <td className="px-2 py-1">
+                            <input
+                              type="text"
+                              placeholder="BASE_URL"
+                              value={keyVal}
+                              onChange={(e) => handleVarChange(i, 'key', e.target.value)}
+                              className="w-full bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground font-mono focus:outline-none focus:border-primary"
+                            />
+                          </td>
+                          <td className="px-2 py-1">
+                            <input
+                              type={varType === 'secret' ? 'password' : 'text'}
+                              placeholder="https://api.example.com"
+                              value={valStr}
+                              onChange={(e) => handleVarChange(i, 'value', e.target.value)}
+                              className="w-full bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground font-mono focus:outline-none focus:border-primary"
+                            />
+                          </td>
+                          <td className="px-2 py-1">
+                            <div className="flex items-center gap-1">
+                              {hasVariants ? (
+                                <select
+                                  value={activeVariantIdx}
+                                  onChange={(e) => handleVariantChange(Number(e.target.value))}
+                                  className="w-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/30 rounded px-1.5 py-0.5 text-[11px] focus:outline-none cursor-pointer"
+                                >
+                                  {v.variants!.map((variant, idx) => (
+                                    <option key={idx} value={idx}>
+                                      {variant.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground italic px-1 font-mono">(auto)</span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setManagingVarIndex(i)}
+                                className="p-1 text-amber-500 hover:bg-amber-500/10 rounded transition-colors cursor-pointer shrink-0"
+                                title="Manage, Add, or Remove Variants"
+                              >
+                                <MingCuteIcon name="settings_3_line" size={13} />
+                              </button>
+                            </div>
+                          </td>
+                          <td className="px-2 py-1">
+                            <select
+                              value={varType}
+                              onChange={(e) => handleVarChange(i, 'type', e.target.value as any)}
+                              className="w-full bg-background border border-border rounded px-1.5 py-0.5 text-[11px] text-foreground focus:outline-none cursor-pointer"
+                            >
+                              <option value="default">Default</option>
+                              <option value="secret">Secret</option>
+                            </select>
+                          </td>
                         <td className="px-2 py-1 text-center">
                           <button
                             onClick={() => handleDeleteVarRow(i)}
@@ -254,7 +334,8 @@ export const WorkspaceSettingsPanel: React.FC = () => {
                           </button>
                         </td>
                       </tr>
-                    ))
+                    );
+                  })
                   )}
                 </tbody>
               </table>
@@ -274,6 +355,86 @@ export const WorkspaceSettingsPanel: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Danger Zone: Workspace Deletion */}
+      <div className="bg-rose-500/5 border border-rose-500/20 rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2 border-b border-rose-500/20 pb-2 text-rose-500 font-semibold text-xs">
+          <MingCuteIcon name="alert_line" size={16} />
+          <span>Danger Zone</span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="font-semibold text-foreground">Delete Workspace</h4>
+            <p className="text-muted-foreground text-[11px]">
+              Permanently remove workspace "{activeWorkspace.name}" and all associated collections, environments, and saved requests.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setIsDeleteModalOpen(true)}
+            disabled={workspaces.length <= 1}
+            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-semibold rounded text-xs transition-colors cursor-pointer shadow-2xs shrink-0 flex items-center gap-1.5"
+            title={workspaces.length <= 1 ? 'Cannot delete the only workspace' : 'Delete this workspace'}
+          >
+            <MingCuteIcon name="delete_2_line" size={14} />
+            <span>Delete Workspace</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-surface border border-border rounded-xl shadow-2xl p-5 w-full max-w-md text-foreground flex flex-col gap-4">
+            <div className="flex items-center gap-2 text-rose-500 font-bold text-sm border-b border-border pb-3">
+              <MingCuteIcon name="alert_line" size={20} />
+              <span>Confirm Workspace Deletion</span>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Are you sure you want to delete workspace <strong className="text-foreground">"{activeWorkspace.name}"</strong>?
+              All collections, environment variables, and saved requests in this workspace will be permanently destroyed.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-3.5 py-1.5 rounded bg-header hover:bg-neutral-subtle border border-border text-muted-foreground hover:text-foreground cursor-pointer font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteCurrentWorkspace}
+                className="px-4 py-1.5 rounded bg-rose-600 hover:bg-rose-700 text-white font-semibold cursor-pointer shadow-2xs"
+              >
+                Delete Workspace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Variant Manager Modal */}
+      {managingVarIndex !== null && localVars[managingVarIndex] && (
+        <VariantManagerModal
+          isOpen={managingVarIndex !== null}
+          onClose={() => setManagingVarIndex(null)}
+          variableKey={typeof localVars[managingVarIndex].key === 'string' ? localVars[managingVarIndex].key : String(localVars[managingVarIndex].key || '')}
+          variable={localVars[managingVarIndex]}
+          onSave={async (updatedVar) => {
+            const nextVars = localVars.map((v, idx) => (idx === managingVarIndex ? updatedVar : v));
+            setLocalVars(nextVars);
+            if (activeEnv) {
+              await saveEnvironmentVariables({
+                ...activeEnv,
+                variables: nextVars,
+                updatedAtMs: Date.now(),
+              });
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

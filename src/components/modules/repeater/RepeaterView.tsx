@@ -121,7 +121,7 @@ export const RepeaterView: React.FC = () => {
   };
 
   return (
-    <div ref={containerRef} className="h-full flex flex-col bg-background overflow-hidden select-none text-xs">
+    <div ref={containerRef} className="h-full flex flex-col bg-background overflow-hidden text-xs">
       {/* View Mode & Tab Header Control Bar */}
       <div className="bg-header border-b border-border flex items-center justify-between px-2 pt-1 pb-1 shrink-0 select-none">
         {/* Left View Mode Toggle */}

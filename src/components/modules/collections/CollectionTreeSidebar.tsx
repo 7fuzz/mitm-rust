@@ -129,6 +129,22 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
                   }}
                   className="bg-background border border-primary rounded px-1.5 py-0.5 text-xs text-foreground font-sans w-full focus:outline-none"
                 />
+                <button
+                  type="button"
+                  onClick={() => handleAddFolder(item.id)}
+                  className="p-1 text-emerald-400 hover:bg-emerald-500/10 rounded cursor-pointer shrink-0"
+                  title="Save Subfolder"
+                >
+                  <MingCuteIcon name="check_line" size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddingFolderParentId(null)}
+                  className="p-1 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded cursor-pointer shrink-0"
+                  title="Cancel"
+                >
+                  <MingCuteIcon name="close_line" size={13} />
+                </button>
               </div>
             )}
 
@@ -147,6 +163,22 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
                   }}
                   className="bg-background border border-primary rounded px-1.5 py-0.5 text-xs text-foreground font-sans w-full focus:outline-none"
                 />
+                <button
+                  type="button"
+                  onClick={() => handleAddRequest(item.id)}
+                  className="p-1 text-emerald-400 hover:bg-emerald-500/10 rounded cursor-pointer shrink-0"
+                  title="Save Request"
+                >
+                  <MingCuteIcon name="check_line" size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddingReqFolderId(null)}
+                  className="p-1 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded cursor-pointer shrink-0"
+                  title="Cancel"
+                >
+                  <MingCuteIcon name="close_line" size={13} />
+                </button>
               </div>
             )}
 
@@ -241,6 +273,22 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
               }}
               className="bg-background border border-primary rounded px-2 py-1 text-xs text-foreground font-sans w-full focus:outline-none"
             />
+            <button
+              type="button"
+              onClick={() => handleAddFolder(null)}
+              className="p-1 text-emerald-400 hover:bg-emerald-500/10 rounded cursor-pointer shrink-0"
+              title="Save Root Folder"
+            >
+              <MingCuteIcon name="check_line" size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setAddingFolderParentId(null)}
+              className="p-1 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded cursor-pointer shrink-0"
+              title="Cancel"
+            >
+              <MingCuteIcon name="close_line" size={13} />
+            </button>
           </div>
         )}
 

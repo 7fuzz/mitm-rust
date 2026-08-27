@@ -15,7 +15,7 @@ export const WorkspaceView: React.FC = () => {
   }, [initStore]);
 
   return (
-    <div className="h-full flex flex-col bg-background overflow-hidden select-none">
+    <div className="h-full flex flex-col bg-background overflow-hidden">
       {/* Top Header Workspace Switcher Bar */}
       <div className="bg-header border-b border-border p-2.5 flex items-center justify-between shrink-0">
         <WorkspaceSelector />

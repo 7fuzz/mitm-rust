@@ -114,7 +114,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-surface overflow-hidden text-xs select-none">
+    <div className="flex-1 flex flex-col bg-surface overflow-hidden text-xs">
       {/* Response Status Bar */}
       <div className="p-2.5 bg-header border-b border-border flex items-center justify-between font-mono shrink-0">
         <div className="flex items-center gap-3">
