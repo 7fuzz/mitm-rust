@@ -75,33 +75,13 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
   const handleMultipartChange = (fields: MultipartField[]) => {
     const jsonStr = JSON.stringify({ __form_data: fields }, null, 2);
     setBodyContent(jsonStr);
-    updateRequestDetails({
-      ...request,
-      method,
-      url,
-      headers,
-      params,
-      extractRules,
-      bodyType,
-      bodyContent: jsonStr,
-      updatedAtMs: Date.now(),
-    });
+    handleUpdateStore({ bodyContent: jsonStr });
   };
 
   const handleUrlEncodedChange = (newParams: UrlEncodedParam[]) => {
     const jsonStr = JSON.stringify(newParams, null, 2);
     setBodyContent(jsonStr);
-    updateRequestDetails({
-      ...request,
-      method,
-      url,
-      headers,
-      params,
-      extractRules,
-      bodyType,
-      bodyContent: jsonStr,
-      updatedAtMs: Date.now(),
-    });
+    handleUpdateStore({ bodyContent: jsonStr });
   };
 
   const handleSaveAndSend = async () => {
@@ -150,16 +130,16 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [method, url, headers, params, extractRules, bodyType, bodyContent, request]);
 
-  const handleUpdateStore = () => {
+  const handleUpdateStore = (overrides?: Partial<RequestItem>) => {
     updateRequestDetails({
       ...request,
-      method,
-      url,
-      headers,
-      params,
-      extractRules,
-      bodyType,
-      bodyContent,
+      method: overrides?.method ?? method,
+      url: overrides?.url ?? url,
+      headers: overrides?.headers ?? headers,
+      params: overrides?.params ?? params,
+      extractRules: overrides?.extractRules ?? extractRules,
+      bodyType: overrides?.bodyType ?? bodyType,
+      bodyContent: overrides?.bodyContent ?? bodyContent,
       updatedAtMs: Date.now(),
     });
   };
@@ -174,8 +154,9 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
           <Select
             value={method}
             onChange={(e) => {
-              setMethod(e.target.value);
-              handleUpdateStore();
+              const next = e.target.value;
+              setMethod(next);
+              handleUpdateStore({ method: next });
             }}
             options={HTTP_METHODS}
           />
@@ -192,7 +173,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
                 handleSaveAndSend();
               }
             }}
-            onBlur={handleUpdateStore}
+            onBlur={() => handleUpdateStore({ url })}
             placeholder="https://api.example.com/v1/resource or {{BASE_URL}}/endpoint"
             className="w-full bg-background border border-border rounded-md px-3 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:border-primary shadow-2xs"
           />
@@ -239,7 +220,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
             items={params}
             onChange={(newParams) => {
               setParams(newParams);
-              handleUpdateStore();
+              handleUpdateStore({ params: newParams });
             }}
             keyPlaceholder="URL Param Key"
             valuePlaceholder="Value"
@@ -251,7 +232,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
             items={headers}
             onChange={(newHeaders) => {
               setHeaders(newHeaders);
-              handleUpdateStore();
+              handleUpdateStore({ headers: newHeaders });
             }}
             keyPlaceholder="Header Name (e.g. Authorization)"
             valuePlaceholder="Header Value (e.g. Bearer {{TOKEN}})"
@@ -263,17 +244,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
             rules={extractRules}
             onChange={(newRules) => {
               setExtractRules(newRules);
-              updateRequestDetails({
-                ...request,
-                method,
-                url,
-                headers,
-                params,
-                extractRules: newRules,
-                bodyType,
-                bodyContent,
-                updatedAtMs: Date.now(),
-              });
+              handleUpdateStore({ extractRules: newRules });
             }}
           />
         )}
@@ -295,8 +266,9 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
                     value={opt.id}
                     checked={bodyType === opt.id}
                     onChange={(e) => {
-                      setBodyType(e.target.value);
-                      handleUpdateStore();
+                      const nextType = e.target.value;
+                      setBodyType(nextType);
+                      handleUpdateStore({ bodyType: nextType });
                     }}
                     className="accent-primary cursor-pointer"
                   />
@@ -325,7 +297,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
                   value={bodyContent}
                   onChange={(val) => {
                     setBodyContent(val);
-                    handleUpdateStore();
+                    handleUpdateStore({ bodyContent: val });
                   }}
                   language={bodyType === 'json' ? 'json' : 'plaintext'}
                 />
