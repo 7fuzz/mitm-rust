@@ -120,6 +120,36 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     await executeRequest(request.id);
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        const activeEl = document.activeElement;
+        const isInputOrTextArea =
+          activeEl &&
+          (activeEl.tagName === 'INPUT' ||
+            activeEl.tagName === 'TEXTAREA' ||
+            (activeEl as HTMLElement).isContentEditable ||
+            activeEl.getAttribute('role') === 'textbox');
+
+        // Ctrl+Enter or Cmd+Enter always sends request
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          handleSaveAndSend();
+          return;
+        }
+
+        // Plain Enter sends request if NOT focused inside an input/textarea
+        if (!isInputOrTextArea) {
+          e.preventDefault();
+          handleSaveAndSend();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [method, url, headers, params, extractRules, bodyType, bodyContent, request]);
+
   const handleUpdateStore = () => {
     updateRequestDetails({
       ...request,
@@ -156,6 +186,12 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSaveAndSend();
+              }
+            }}
             onBlur={handleUpdateStore}
             placeholder="https://api.example.com/v1/resource or {{BASE_URL}}/endpoint"
             className="w-full bg-background border border-border rounded-md px-3 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:border-primary shadow-2xs"
