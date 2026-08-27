@@ -43,7 +43,17 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     setExtractRules(request.extractRules || []);
     setBodyType(request.bodyType || 'none');
     setBodyContent(request.bodyContent || '');
-  }, [request.id]);
+  }, [
+    request.id,
+    request.updatedAtMs,
+    request.extractRules,
+    request.headers,
+    request.params,
+    request.method,
+    request.url,
+    request.bodyType,
+    request.bodyContent,
+  ]);
 
   const parseMultipartFields = (jsonStr: string): MultipartField[] => {
     try {

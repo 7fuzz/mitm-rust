@@ -516,7 +516,10 @@ fn process_custom_target(
 
     // Extraction rules handling (supports dict {"var": "expr"} or array of objects [{"type":"...","targetVariable":"...","expression":"..."}])
     let mut extract_rules = Vec::new();
-    let extract_field = target_val.get("extract").or_else(|| target_val.get("extract_rules"));
+    let extract_field = target_val.get("extract")
+        .or_else(|| target_val.get("extract_rules"))
+        .or_else(|| target_val.get("extraction"))
+        .or_else(|| target_val.get("extractions"));
 
     if let Some(ext_obj) = extract_field.and_then(|e| e.as_object()) {
         for (target_var, expr_val) in ext_obj {
@@ -532,15 +535,23 @@ fn process_custom_target(
         }
     } else if let Some(ext_arr) = extract_field.and_then(|e| e.as_array()) {
         for rule in ext_arr {
-            if let Some(target_var) = rule.get("targetVariable").or_else(|| rule.get("target_variable")).and_then(|v| v.as_str()) {
-                let rule_type = rule.get("type").and_then(|t| t.as_str()).unwrap_or("json");
-                let expr = rule.get("expression").and_then(|e| e.as_str()).unwrap_or("");
+            let target_var = rule.get("targetVariable")
+                .or_else(|| rule.get("target_variable"))
+                .or_else(|| rule.get("variableName"))
+                .or_else(|| rule.get("varName"))
+                .or_else(|| rule.get("var"))
+                .or_else(|| rule.get("key"))
+                .and_then(|v| v.as_str());
+
+            if let Some(tv) = target_var {
+                let rule_type = rule.get("type").or_else(|| rule.get("source")).and_then(|t| t.as_str()).unwrap_or("json");
+                let expr = rule.get("expression").or_else(|| rule.get("expr")).or_else(|| rule.get("path")).and_then(|e| e.as_str()).unwrap_or("");
                 let enabled = rule.get("enabled").and_then(|b| b.as_bool()).unwrap_or(true);
 
                 extract_rules.push(serde_json::json!({
                     "id": Uuid::new_v4().to_string(),
                     "type": rule_type,
-                    "targetVariable": target_var,
+                    "targetVariable": tv,
                     "expression": expr,
                     "enabled": enabled
                 }));

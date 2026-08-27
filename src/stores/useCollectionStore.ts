@@ -163,7 +163,10 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     if (!exists) {
       set({ openRequests: [...openRequests, request], activeRequestId: request.id });
     } else {
-      set({ activeRequestId: request.id });
+      set({
+        openRequests: openRequests.map((r) => (r.id === request.id ? request : r)),
+        activeRequestId: request.id,
+      });
     }
   },
 
