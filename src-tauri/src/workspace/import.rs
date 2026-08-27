@@ -514,9 +514,44 @@ fn process_custom_target(
         .and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) })
         .or_else(|| target_val.get("body_json").and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) }));
 
+    // Extraction rules handling (supports dict {"var": "expr"} or array of objects [{"type":"...","targetVariable":"...","expression":"..."}])
+    let mut extract_rules = Vec::new();
+    let extract_field = target_val.get("extract").or_else(|| target_val.get("extract_rules"));
+
+    if let Some(ext_obj) = extract_field.and_then(|e| e.as_object()) {
+        for (target_var, expr_val) in ext_obj {
+            if let Some(expr_str) = expr_val.as_str() {
+                extract_rules.push(serde_json::json!({
+                    "id": Uuid::new_v4().to_string(),
+                    "type": "json",
+                    "targetVariable": target_var,
+                    "expression": expr_str,
+                    "enabled": true
+                }));
+            }
+        }
+    } else if let Some(ext_arr) = extract_field.and_then(|e| e.as_array()) {
+        for rule in ext_arr {
+            if let Some(target_var) = rule.get("targetVariable").or_else(|| rule.get("target_variable")).and_then(|v| v.as_str()) {
+                let rule_type = rule.get("type").and_then(|t| t.as_str()).unwrap_or("json");
+                let expr = rule.get("expression").and_then(|e| e.as_str()).unwrap_or("");
+                let enabled = rule.get("enabled").and_then(|b| b.as_bool()).unwrap_or(true);
+
+                extract_rules.push(serde_json::json!({
+                    "id": Uuid::new_v4().to_string(),
+                    "type": rule_type,
+                    "targetVariable": target_var,
+                    "expression": expr,
+                    "enabled": enabled
+                }));
+            }
+        }
+    }
+    let extract_rules_json = serde_json::to_string(&extract_rules).unwrap_or_else(|_| "[]".to_string());
+
     conn.execute(
         "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, description, order_index, created_at_ms, updated_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, '[]', ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?)",
         params![
             req_id,
             col_id,
@@ -526,6 +561,7 @@ fn process_custom_target(
             headers_json,
             body_type,
             body_content,
+            extract_rules_json,
             desc,
             order_idx,
             ts,

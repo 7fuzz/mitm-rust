@@ -342,9 +342,33 @@ Below is a production-grade sample project JSON file demonstrating best practice
             "Authorization": "Bearer {{token}}"
           },
           "body": "",
-          "extract": {
-            "userId": "user.id"
-          }
+          "extract": [
+            {
+              "type": "json",
+              "targetVariable": "userId",
+              "expression": "user.id"
+            },
+            {
+              "type": "after_string",
+              "targetVariable": "sessionToken",
+              "expression": "token=||64"
+            },
+            {
+              "type": "between_string",
+              "targetVariable": "csrfToken",
+              "expression": "csrf_token=\"||\""
+            },
+            {
+              "type": "header",
+              "targetVariable": "AUTH_HEADER",
+              "expression": "Authorization"
+            },
+            {
+              "type": "body_regex",
+              "targetVariable": "REG_ID",
+              "expression": "id=([0-9]+)"
+            }
+          ]
         }
       ]
     },
@@ -369,6 +393,63 @@ Below is a production-grade sample project JSON file demonstrating best practice
     }
   ]
 }
+```
+
+---
+
+### Auto-Extraction Specification (`extract` / `extract_rules`)
+
+The `extract` (or `extract_rules`) field on requests supports both **Shorthand Dictionary Format** and **Advanced Multi-Mode Array Format**:
+
+#### 1. Shorthand Dictionary Format (Legacy / JSON Mode)
+Maps target variable names to JSON path expressions:
+```json
+"extract": {
+  "userId": "user.id",
+  "authToken": "data.token"
+}
+```
+
+#### 2. Advanced Multi-Mode Array Format
+Supports 6 distinct extraction modes:
+
+| Mode (`type`) | Description | Expression Format (`expression`) | Example |
+| :--- | :--- | :--- | :--- |
+| `json` | JSON Path / Dot notation | Dot path | `"expression": "data.user.id"` |
+| `after_string` | Extract text after prefix string | `prefix||max_chars` | `"expression": "token=||64"` |
+| `before_string` | Extract text before suffix string | `suffix||max_chars` | `"expression": "&expires=||64"` |
+| `between_string` | Extract text between start & end delimiters | `start_delim||end_delim` | `"expression": "session=\"||\""` |
+| `header` | Extract from HTTP response header | Header name | `"expression": "Authorization"` |
+| `body_regex` | Extract using Regex capture group | Regex pattern | `"expression": "id=([0-9]+)"` |
+
+##### Multi-Mode Array Example:
+```json
+"extract": [
+  {
+    "type": "json",
+    "targetVariable": "USER_ID",
+    "expression": "data.user.id",
+    "enabled": true
+  },
+  {
+    "type": "after_string",
+    "targetVariable": "ACCESS_TOKEN",
+    "expression": "token=||128",
+    "enabled": true
+  },
+  {
+    "type": "between_string",
+    "targetVariable": "CSRF_TOKEN",
+    "expression": "csrf_token=\"||\"",
+    "enabled": true
+  },
+  {
+    "type": "header",
+    "targetVariable": "SESSION_HEADER",
+    "expression": "Set-Cookie",
+    "enabled": true
+  }
+]
 ```
 
 ---

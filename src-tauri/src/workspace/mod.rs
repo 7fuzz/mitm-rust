@@ -142,7 +142,7 @@ pub fn delete_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
     // 1. Delete associated environments
     let _ = conn.execute("DELETE FROM environments WHERE workspace_id = ?", params![id]);
 
-    // 2. Find and delete requests inside collections of this workspace
+    // 2. Find and delete requests & request execution histories inside collections of this workspace
     let mut stmt = conn.prepare("SELECT id FROM collections WHERE workspace_id = ?").map_err(|e| e.to_string())?;
     let col_ids: Vec<String> = stmt
         .query_map([id], |row| row.get(0))
@@ -151,6 +151,17 @@ pub fn delete_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
         .collect();
 
     for col_id in col_ids {
+        if let Ok(mut req_stmt) = conn.prepare("SELECT id FROM requests WHERE collection_id = ?") {
+            let req_ids: Vec<String> = req_stmt
+                .query_map([&col_id], |row| row.get(0))
+                .map_err(|e| e.to_string())?
+                .filter_map(|r| r.ok())
+                .collect();
+
+            for req_id in req_ids {
+                let _ = conn.execute("DELETE FROM request_histories WHERE request_id = ?", params![&req_id]);
+            }
+        }
         let _ = conn.execute("DELETE FROM requests WHERE collection_id = ?", params![&col_id]);
     }
 
