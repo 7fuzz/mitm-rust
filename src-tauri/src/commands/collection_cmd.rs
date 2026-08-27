@@ -2,7 +2,8 @@ use tauri::State;
 use crate::state::AppState;
 use crate::collections::{
     clear_request_histories_db, create_collection_db, create_request_db, delete_collection_db,
-    delete_request_db, get_collections_db, get_request_histories_db, update_collection_db,
+    delete_request_db, duplicate_collection_db, duplicate_request_db, get_collections_db,
+    get_request_histories_db, move_collection_db, move_request_db, update_collection_db,
     update_request_db, Collection, CollectionTreeItem, RequestHistoryItem, RequestItem,
 };
 use crate::collections::execute::{execute_collection_request_db, ExecutionResult};
@@ -42,6 +43,23 @@ pub async fn delete_collection(
 }
 
 #[tauri::command]
+pub async fn move_collection(
+    state: State<'_, AppState>,
+    collection_id: String,
+    target_parent_id: Option<String>,
+) -> Result<(), String> {
+    move_collection_db(&state.db_path, &collection_id, target_parent_id.as_deref())
+}
+
+#[tauri::command]
+pub async fn duplicate_collection(
+    state: State<'_, AppState>,
+    collection_id: String,
+) -> Result<String, String> {
+    duplicate_collection_db(&state.db_path, &collection_id)
+}
+
+#[tauri::command]
 pub async fn create_request(
     state: State<'_, AppState>,
     collection_id: String,
@@ -64,6 +82,23 @@ pub async fn delete_request(
     id: String,
 ) -> Result<(), String> {
     delete_request_db(&state.db_path, &id)
+}
+
+#[tauri::command]
+pub async fn move_request(
+    state: State<'_, AppState>,
+    request_id: String,
+    target_collection_id: String,
+) -> Result<(), String> {
+    move_request_db(&state.db_path, &request_id, &target_collection_id)
+}
+
+#[tauri::command]
+pub async fn duplicate_request(
+    state: State<'_, AppState>,
+    request_id: String,
+) -> Result<RequestItem, String> {
+    duplicate_request_db(&state.db_path, &request_id)
 }
 
 #[tauri::command]

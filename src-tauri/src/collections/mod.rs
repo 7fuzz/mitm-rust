@@ -353,3 +353,132 @@ pub fn clear_request_histories_db(db_path: &PathBuf, request_id: &str) -> Result
         .map_err(|e| e.to_string())?;
     Ok(())
 }
+
+pub fn move_request_db(db_path: &PathBuf, request_id: &str, target_collection_id: &str) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let ts = now_ms();
+    conn.execute(
+        "UPDATE requests SET collection_id = ?, updated_at_ms = ? WHERE id = ?",
+        params![target_collection_id, ts, request_id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn move_collection_db(db_path: &PathBuf, collection_id: &str, target_parent_id: Option<&str>) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    if let Some(target_pid) = target_parent_id {
+        if target_pid == collection_id {
+            return Err("Cannot move collection into itself".to_string());
+        }
+    }
+    let ts = now_ms();
+    conn.execute(
+        "UPDATE collections SET parent_id = ?, updated_at_ms = ? WHERE id = ?",
+        params![target_parent_id, ts, collection_id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn duplicate_request_db(db_path: &PathBuf, request_id: &str) -> Result<RequestItem, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let ts = now_ms();
+    let new_id = Uuid::new_v4().to_string();
+
+    let req: RequestItem = conn.query_row(
+        "SELECT id, collection_id, name, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, description, order_index
+         FROM requests WHERE id = ?",
+        params![request_id],
+        |row| {
+            let headers_json: String = row.get(5)?;
+            let params_json: String = row.get(6)?;
+            let extract_rules_json: String = row.get(9)?;
+
+            let headers: Vec<HeaderItem> = serde_json::from_str(&headers_json).unwrap_or_default();
+            let params: Vec<ParamItem> = serde_json::from_str(&params_json).unwrap_or_default();
+            let extract_rules: Vec<ExtractRuleItem> = serde_json::from_str(&extract_rules_json).unwrap_or_default();
+
+            let orig_name: String = row.get(2)?;
+            let dup_name = format!("{} (Copy)", orig_name);
+
+            Ok(RequestItem {
+                id: new_id.clone(),
+                collection_id: row.get(1)?,
+                name: dup_name,
+                method: row.get(3)?,
+                url: row.get(4)?,
+                headers,
+                params,
+                body_type: row.get(7)?,
+                body_content: row.get(8)?,
+                extract_rules,
+                description: row.get(10)?,
+                order_index: row.get::<_, i32>(11)? + 1,
+                created_at_ms: ts,
+                updated_at_ms: ts,
+            })
+        },
+    ).map_err(|e| e.to_string())?;
+
+    let headers_json = serde_json::to_string(&req.headers).unwrap_or_else(|_| "[]".to_string());
+    let params_json = serde_json::to_string(&req.params).unwrap_or_else(|_| "[]".to_string());
+    let extract_rules_json = serde_json::to_string(&req.extract_rules).unwrap_or_else(|_| "[]".to_string());
+
+    conn.execute(
+        "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, description, order_index, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        params![
+            req.id,
+            req.collection_id,
+            req.name,
+            req.method,
+            req.url,
+            headers_json,
+            params_json,
+            req.body_type,
+            req.body_content,
+            extract_rules_json,
+            req.description,
+            req.order_index,
+            ts,
+            ts
+        ],
+    ).map_err(|e| e.to_string())?;
+
+    Ok(req)
+}
+
+pub fn duplicate_collection_db(db_path: &PathBuf, collection_id: &str) -> Result<String, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let ts = now_ms();
+
+    let (ws_id, parent_id, name, desc, order_idx): (String, Option<String>, String, Option<String>, i32) = conn.query_row(
+        "SELECT workspace_id, parent_id, name, description, order_index FROM collections WHERE id = ?",
+        params![collection_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+    ).map_err(|e| e.to_string())?;
+
+    let new_col_id = Uuid::new_v4().to_string();
+    let dup_name = format!("{} (Copy)", name);
+
+    conn.execute(
+        "INSERT INTO collections (id, workspace_id, parent_id, name, description, order_index, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        params![new_col_id, ws_id, parent_id, dup_name, desc, order_idx + 1, ts, ts],
+    ).map_err(|e| e.to_string())?;
+
+    let mut req_stmt = conn.prepare("SELECT name, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, description, order_index FROM requests WHERE collection_id = ?").map_err(|e| e.to_string())?;
+    let reqs: Vec<(String, String, String, String, String, String, Option<String>, String, Option<String>, i32)> = req_stmt.query_map([collection_id], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?))
+    }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();
+
+    for (r_name, r_method, r_url, r_headers, r_params, r_body_type, r_body_content, r_extract, r_desc, r_order) in reqs {
+        let new_req_id = Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, description, order_index, created_at_ms, updated_at_ms)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![new_req_id, new_col_id, r_name, r_method, r_url, r_headers, r_params, r_body_type, r_body_content, r_extract, r_desc, r_order, ts, ts],
+        ).map_err(|e| e.to_string())?;
+    }
+
+    Ok(new_col_id)
+}

@@ -4,9 +4,13 @@ import {
   createCollection,
   updateCollection,
   deleteCollection,
+  moveCollection,
+  duplicateCollection,
   createRequest,
   updateRequest,
   deleteRequest,
+  moveRequest,
+  duplicateRequest,
   executeCollectionRequest,
   Collection,
   CollectionTreeItem,
@@ -27,10 +31,14 @@ interface CollectionState {
   fetchCollections: (workspaceId: string) => Promise<void>;
   createNewCollection: (workspaceId: string, parentId: string | null, name: string) => Promise<Collection | null>;
   updateCollectionDetails: (collection: Collection) => Promise<void>;
-  deleteCollectionById: (id: string) => Promise<void>;
+  deleteCollectionById: (id: string, workspaceId: string) => Promise<void>;
+  moveCollectionItem: (collectionId: string, targetParentId: string | null, workspaceId: string) => Promise<void>;
+  duplicateCollectionItem: (collectionId: string, workspaceId: string) => Promise<void>;
   createNewRequest: (collectionId: string, name: string) => Promise<RequestItem | null>;
   updateRequestDetails: (request: RequestItem) => Promise<void>;
-  deleteRequestById: (id: string) => Promise<void>;
+  deleteRequestById: (id: string, workspaceId: string) => Promise<void>;
+  moveRequestItem: (requestId: string, targetCollectionId: string, workspaceId: string) => Promise<void>;
+  duplicateRequestItem: (requestId: string, workspaceId: string) => Promise<void>;
   openRequestTab: (request: RequestItem) => void;
   closeRequestTab: (id: string) => void;
   setActiveRequestId: (id: string | null) => void;
@@ -93,12 +101,35 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     }
   },
 
-  deleteCollectionById: async (id) => {
+  deleteCollectionById: async (id, workspaceId) => {
     if (isTauriAvailable()) {
       try {
         await deleteCollection(id);
+        if (workspaceId) await get().fetchCollections(workspaceId);
       } catch (err) {
         console.error('Failed to delete collection:', err);
+      }
+    }
+  },
+
+  moveCollectionItem: async (collectionId, targetParentId, workspaceId) => {
+    if (isTauriAvailable()) {
+      try {
+        await moveCollection(collectionId, targetParentId);
+        if (workspaceId) await get().fetchCollections(workspaceId);
+      } catch (err) {
+        console.error('Failed to move collection:', err);
+      }
+    }
+  },
+
+  duplicateCollectionItem: async (collectionId, workspaceId) => {
+    if (isTauriAvailable()) {
+      try {
+        await duplicateCollection(collectionId);
+        if (workspaceId) await get().fetchCollections(workspaceId);
+      } catch (err) {
+        console.error('Failed to duplicate collection:', err);
       }
     }
   },
@@ -146,13 +177,37 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     }
   },
 
-  deleteRequestById: async (id) => {
+  deleteRequestById: async (id, workspaceId) => {
     get().closeRequestTab(id);
     if (isTauriAvailable()) {
       try {
         await deleteRequest(id);
+        if (workspaceId) await get().fetchCollections(workspaceId);
       } catch (err) {
         console.error('Failed to delete request:', err);
+      }
+    }
+  },
+
+  moveRequestItem: async (requestId, targetCollectionId, workspaceId) => {
+    if (isTauriAvailable()) {
+      try {
+        await moveRequest(requestId, targetCollectionId);
+        if (workspaceId) await get().fetchCollections(workspaceId);
+      } catch (err) {
+        console.error('Failed to move request:', err);
+      }
+    }
+  },
+
+  duplicateRequestItem: async (requestId, workspaceId) => {
+    if (isTauriAvailable()) {
+      try {
+        const dup = await duplicateRequest(requestId);
+        get().openRequestTab(dup);
+        if (workspaceId) await get().fetchCollections(workspaceId);
+      } catch (err) {
+        console.error('Failed to duplicate request:', err);
       }
     }
   },

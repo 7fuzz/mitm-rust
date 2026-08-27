@@ -478,6 +478,17 @@ export const deleteCollection = async (id: string): Promise<void> => {
   return await invoke<void>("delete_collection", { id });
 };
 
+export const moveCollection = async (
+  collectionId: string,
+  targetParentId: string | null
+): Promise<void> => {
+  return await invoke<void>("move_collection", { collectionId, targetParentId });
+};
+
+export const duplicateCollection = async (collectionId: string): Promise<string> => {
+  return await invoke<string>("duplicate_collection", { collectionId });
+};
+
 export const createRequest = async (
   collectionId: string,
   name: string
@@ -491,6 +502,17 @@ export const updateRequest = async (request: RequestItem): Promise<void> => {
 
 export const deleteRequest = async (id: string): Promise<void> => {
   return await invoke<void>("delete_request", { id });
+};
+
+export const moveRequest = async (
+  requestId: string,
+  targetCollectionId: string
+): Promise<void> => {
+  return await invoke<void>("move_request", { requestId, targetCollectionId });
+};
+
+export const duplicateRequest = async (requestId: string): Promise<RequestItem> => {
+  return await invoke<RequestItem>("duplicate_request", { requestId });
 };
 
 export const isTauriAvailable = (): boolean =>
