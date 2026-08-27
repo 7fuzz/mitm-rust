@@ -8,6 +8,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct VariableVariant {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EnvironmentVariable {
     pub key: String,
     pub value: String,
@@ -15,6 +22,10 @@ pub struct EnvironmentVariable {
     pub enabled: bool,
     #[serde(default = "default_type")]
     pub r#type: String, // 'default' | 'secret'
+    #[serde(default)]
+    pub active_index: usize,
+    #[serde(default)]
+    pub variants: Vec<VariableVariant>,
 }
 
 fn default_true() -> bool {
@@ -54,8 +65,15 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
+fn ensure_schema_columns(conn: &Connection) {
+    let _ = conn.execute("ALTER TABLE environments ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE environments ADD COLUMN variables_json TEXT NOT NULL DEFAULT '[]'", []);
+    let _ = conn.execute("ALTER TABLE collections ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''", []);
+}
+
 pub fn get_workspaces_db(db_path: &PathBuf) -> Result<Vec<Workspace>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    ensure_schema_columns(&conn);
     let mut stmt = conn
         .prepare("SELECT id, name, description, active_environment_id, created_at_ms, updated_at_ms FROM workspaces ORDER BY updated_at_ms DESC")
         .map_err(|e| e.to_string())?;
@@ -119,7 +137,27 @@ pub fn update_workspace_db(db_path: &PathBuf, workspace: Workspace) -> Result<()
 
 pub fn delete_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let _ = conn.execute("PRAGMA foreign_keys = ON;", []);
+
+    // 1. Delete associated environments
+    let _ = conn.execute("DELETE FROM environments WHERE workspace_id = ?", params![id]);
+
+    // 2. Find and delete requests inside collections of this workspace
+    let mut stmt = conn.prepare("SELECT id FROM collections WHERE workspace_id = ?").map_err(|e| e.to_string())?;
+    let col_ids: Vec<String> = stmt
+        .query_map([id], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    for col_id in col_ids {
+        let _ = conn.execute("DELETE FROM requests WHERE collection_id = ?", params![&col_id]);
+    }
+
+    // 3. Delete collections and workspace record
+    let _ = conn.execute("DELETE FROM collections WHERE workspace_id = ?", params![id]);
     conn.execute("DELETE FROM workspaces WHERE id = ?", params![id]).map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
@@ -141,6 +179,7 @@ pub fn get_workspace_environments_db(
     workspace_id: &str,
 ) -> Result<Vec<Environment>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    ensure_schema_columns(&conn);
     let mut stmt = conn
         .prepare("SELECT id, workspace_id, name, is_active, variables_json, created_at_ms, updated_at_ms FROM environments WHERE workspace_id = ? ORDER BY created_at_ms ASC")
         .map_err(|e| e.to_string())?;

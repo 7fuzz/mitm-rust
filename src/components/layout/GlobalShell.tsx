@@ -13,12 +13,21 @@ import { WebhooksView } from '../modules/webhooks/WebhooksView';
 import { WorkspaceView } from '../modules/workspace/WorkspaceView';
 import { UtilitiesView } from '../modules/utilities/UtilitiesView';
 import { SettingsView } from '../modules/settings/SettingsView';
+import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import type { NavModule } from '../../types';
 
 export const GlobalShell: React.FC = () => {
   const { activeModule, setActiveModule, theme, fontSize } = useSettingsStore();
 
-  // Keyboard shortcut listener for tabs 1-9
+  const { isQuickVarModalOpen, setQuickVarModalOpen } = useSettingsStore();
+  const initWorkspaceStore = useWorkspaceStore((state) => state.initStore);
+
+  // Initialize workspace and active environment state on app startup
+  useEffect(() => {
+    initWorkspaceStore();
+  }, [initWorkspaceStore]);
+
+  // Keyboard shortcut listener for tabs 1-9 and V key for Quick Env Switcher
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger when inside inputs or textareas
@@ -28,6 +37,12 @@ export const GlobalShell: React.FC = () => {
       }
 
       if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (e.key === 'v' || e.key === 'V') {
+          e.preventDefault();
+          setQuickVarModalOpen(!isQuickVarModalOpen);
+          return;
+        }
+
         const keyMap: Record<string, NavModule> = {
           '1': 'http-history',
           '2': 'intercept',
@@ -47,7 +62,7 @@ export const GlobalShell: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setActiveModule]);
+  }, [setActiveModule, isQuickVarModalOpen, setQuickVarModalOpen]);
 
   // Ensure theme class applied on root HTML
   useEffect(() => {
@@ -85,7 +100,7 @@ export const GlobalShell: React.FC = () => {
 
   return (
     <div
-      className={`h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground select-none font-sans ${
+      className={`h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground font-sans ${
         fontSize === 'lg' ? 'text-sm' : fontSize === 'md' ? 'text-xs' : 'text-[11px]'
       }`}
     >

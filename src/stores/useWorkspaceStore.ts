@@ -21,6 +21,7 @@ interface WorkspaceState {
   environmentsList: Environment[];
   activeEnvironmentId: string;
   isImportModalOpen: boolean;
+  importTargetWorkspaceId: string | null;
 
   // Legacy compatibility fields
   environments: EnvironmentItem[];
@@ -34,10 +35,11 @@ interface WorkspaceState {
   createNewWorkspace: (name: string, description?: string) => Promise<Workspace | null>;
   updateWorkspaceDetails: (workspace: Workspace) => Promise<void>;
   deleteWorkspaceById: (id: string) => Promise<void>;
-  importProjectJson: (jsonContent: string) => Promise<ImportSummary | null>;
+  importProjectJson: (jsonContent: string, targetWorkspaceId?: string, customWorkspaceName?: string) => Promise<ImportSummary | null>;
   loadEnvironments: (workspaceId: string) => Promise<void>;
   saveEnvironmentVariables: (env: Environment) => Promise<void>;
   setImportModalOpen: (open: boolean) => void;
+  openImportModalForWorkspace: (workspaceId?: string) => void;
 
   // Legacy compatibility methods
   setActiveEnv: (id: string) => Promise<void>;
@@ -69,6 +71,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   environmentsList: [],
   activeEnvironmentId: 'env-dev',
   isImportModalOpen: false,
+  importTargetWorkspaceId: null,
 
   environments: [
     { id: 'env-global', name: 'Global', isDefault: true, color: '#94a3b8' },
@@ -86,13 +89,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         const fetchedWorkspaces = await getWorkspaces();
         if (fetchedWorkspaces.length > 0) {
           set({ workspaces: fetchedWorkspaces });
-          const activeId = get().activeWorkspaceId || fetchedWorkspaces[0].id;
-          set({ activeWorkspaceId: activeId });
-          await get().loadEnvironments(activeId);
+          const savedActiveWsId = localStorage.getItem('mitm_active_workspace_id');
+          const activeWs = fetchedWorkspaces.find((w) => w.id === savedActiveWsId) || fetchedWorkspaces[0];
+          set({ activeWorkspaceId: activeWs.id });
+          await get().loadEnvironments(activeWs.id);
         } else {
           // Create default workspace if none exists
           const created = await createWorkspace('Default Workspace', 'Main development workspace');
           set({ workspaces: [created], activeWorkspaceId: created.id });
+          localStorage.setItem('mitm_active_workspace_id', created.id);
           await get().loadEnvironments(created.id);
         }
       } catch (err) {
@@ -103,6 +108,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   selectWorkspace: async (id) => {
     set({ activeWorkspaceId: id });
+    localStorage.setItem('mitm_active_workspace_id', id);
     if (isTauriAvailable()) {
       try {
         await setActiveWorkspace(id);
@@ -121,6 +127,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           workspaces: [created, ...state.workspaces],
           activeWorkspaceId: created.id,
         }));
+        localStorage.setItem('mitm_active_workspace_id', created.id);
         await get().loadEnvironments(created.id);
         return created;
       } else {
@@ -135,6 +142,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           workspaces: [newWs, ...state.workspaces],
           activeWorkspaceId: newWs.id,
         }));
+        localStorage.setItem('mitm_active_workspace_id', newWs.id);
         return newWs;
       }
     } catch (err) {
@@ -160,12 +168,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const remaining = get().workspaces.filter((w) => w.id !== id);
     const nextActiveId = remaining[0]?.id || null;
     set({ workspaces: remaining, activeWorkspaceId: nextActiveId });
+    if (nextActiveId) {
+      localStorage.setItem('mitm_active_workspace_id', nextActiveId);
+    } else {
+      localStorage.removeItem('mitm_active_workspace_id');
+    }
 
     if (isTauriAvailable()) {
       try {
         await deleteWorkspace(id);
+        const freshWorkspaces = await getWorkspaces();
+        set({ workspaces: freshWorkspaces });
         if (nextActiveId) {
-          await get().loadEnvironments(nextActiveId);
+          await get().selectWorkspace(nextActiveId);
         }
       } catch (err) {
         console.error('Failed to delete workspace:', err);
@@ -173,10 +188,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
 
-  importProjectJson: async (jsonContent) => {
+  importProjectJson: async (jsonContent, targetWorkspaceId, customWorkspaceName) => {
     if (isTauriAvailable()) {
       try {
-        const summary = await importWorkspaceJson(jsonContent);
+        const summary = await importWorkspaceJson(jsonContent, targetWorkspaceId, customWorkspaceName);
         await get().initStore();
         if (summary.workspaceId) {
           await get().selectWorkspace(summary.workspaceId);
@@ -207,21 +222,28 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   saveEnvironmentVariables: async (env) => {
     set((state) => ({
-      environmentsList: state.environmentsList.map((e) => (e.id === env.id ? env : e)),
+      environmentsList: state.environmentsList.map((e) =>
+        e.id === env.id
+          ? { ...env }
+          : env.isActive
+          ? { ...e, isActive: false }
+          : e
+      ),
+      activeEnvironmentId: env.isActive ? env.id : state.activeEnvironmentId,
     }));
     if (isTauriAvailable()) {
       try {
         await saveWorkspaceEnvironment(env);
-        if (get().activeWorkspaceId) {
-          await get().loadEnvironments(get().activeWorkspaceId!);
-        }
       } catch (err) {
         console.error('Failed to save environment variables:', err);
       }
     }
   },
 
-  setImportModalOpen: (open) => set({ isImportModalOpen: open }),
+  setImportModalOpen: (open) => set({ isImportModalOpen: open, importTargetWorkspaceId: open ? get().importTargetWorkspaceId : null }),
+
+  openImportModalForWorkspace: (workspaceId) =>
+    set({ isImportModalOpen: true, importTargetWorkspaceId: workspaceId || get().activeWorkspaceId }),
 
   // Legacy compatibility methods
   setActiveEnv: async (id) => set({ activeEnvironmentId: id }),

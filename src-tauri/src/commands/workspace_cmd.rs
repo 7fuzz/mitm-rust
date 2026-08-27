@@ -51,8 +51,15 @@ pub async fn set_active_workspace(
 pub async fn import_workspace_json(
     state: State<'_, AppState>,
     json_content: String,
+    target_workspace_id: Option<String>,
+    custom_workspace_name: Option<String>,
 ) -> Result<ImportSummary, String> {
-    import_workspace_json_db(&state.db_path, &json_content)
+    import_workspace_json_db(
+        &state.db_path,
+        &json_content,
+        target_workspace_id.as_deref(),
+        custom_workspace_name.as_deref(),
+    )
 }
 
 #[tauri::command]

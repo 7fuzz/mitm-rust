@@ -29,6 +29,11 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         name: "20260825_0004_workspaces_and_collections",
         sql: include_str!("../../migrations/20260825_0004_workspaces_and_collections.sql"),
     },
+    MigrationSpec {
+        version: 5,
+        name: "20260825_0005_fix_environments_schema",
+        sql: include_str!("../../migrations/20260825_0005_fix_environments_schema.sql"),
+    },
 ];
 
 #[derive(Clone, Serialize, Debug)]
@@ -108,23 +113,30 @@ pub fn run_all(app_handle: &AppHandle, conn: &Connection) -> Result<(), String> 
                 },
             );
 
-            if let Err(err) = conn.execute_batch(m.sql) {
-                let err_msg = err.to_string();
-                if !err_msg.contains("duplicate column name") && !err_msg.contains("already exists") {
-                    let full_err = format!("Migration {} failed: {}", m.name, err_msg);
-                    let _ = app_handle.emit(
-                        "db-migration-progress",
-                        MigrationProgressPayload {
-                            step: idx + 1,
-                            total,
-                            name: m.name.to_string(),
-                            status: "Migration Error".to_string(),
-                            is_complete: false,
-                            has_error: true,
-                            error_message: Some(full_err.clone()),
-                        },
-                    );
-                    return Err(full_err);
+            // Execute SQL statements individually to safely handle ALTER TABLE errors
+            for statement in m.sql.split(';') {
+                let trimmed = statement.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if let Err(err) = conn.execute(trimmed, []) {
+                    let err_msg = err.to_string();
+                    if !err_msg.contains("duplicate column name") && !err_msg.contains("already exists") {
+                        let full_err = format!("Migration {} failed: {}", m.name, err_msg);
+                        let _ = app_handle.emit(
+                            "db-migration-progress",
+                            MigrationProgressPayload {
+                                step: idx + 1,
+                                total,
+                                name: m.name.to_string(),
+                                status: "Migration Error".to_string(),
+                                is_complete: false,
+                                has_error: true,
+                                error_message: Some(full_err.clone()),
+                            },
+                        );
+                        return Err(full_err);
+                    }
                 }
             }
 

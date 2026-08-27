@@ -9,6 +9,7 @@ import {
   MigrationProgressPayload,
 } from '../../services/tauri/bridge';
 import { MingCuteIcon } from './MingCuteIcon';
+import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 
 export const StartupLoadingModal: React.FC = () => {
   const [visible, setVisible] = useState(true);
@@ -32,6 +33,7 @@ export const StartupLoadingModal: React.FC = () => {
         unlisten = fn;
         runDatabaseMigrations()
           .then(() => {
+            useWorkspaceStore.getState().initStore();
             setTimeout(() => {
               setVisible(false);
             }, 300);
