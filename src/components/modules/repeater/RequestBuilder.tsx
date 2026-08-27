@@ -5,6 +5,7 @@ import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
 import { MultipartEditor } from '../../common/MultipartEditor';
 import { UrlEncodedEditor } from '../../common/UrlEncodedEditor';
+import { ExtractRulesEditor } from '../../common/ExtractRulesEditor';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Select } from '../../common/ui';
 
@@ -293,9 +294,10 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         )}
 
         {activeTab === 'auto-extract' && (
-          <div className="text-muted-foreground p-4 text-center italic text-xs">
-            Auto-Extraction Rules for dynamic variables will appear here.
-          </div>
+          <ExtractRulesEditor
+            rules={request.extractRules || []}
+            onChange={(extractRules) => updateTab({ ...request, extractRules })}
+          />
         )}
       </div>
     </div>

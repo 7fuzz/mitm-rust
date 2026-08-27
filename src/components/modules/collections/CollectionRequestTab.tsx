@@ -5,8 +5,9 @@ import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
 import { MultipartEditor } from '../../common/MultipartEditor';
 import { UrlEncodedEditor } from '../../common/UrlEncodedEditor';
+import { ExtractRulesEditor } from '../../common/ExtractRulesEditor';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
-import type { RequestItem, HeaderItem, ParamItem } from '../../../services/tauri/bridge';
+import type { RequestItem, HeaderItem, ParamItem, ExtractRuleItem } from '../../../services/tauri/bridge';
 import type { MultipartField, UrlEncodedParam } from '../../../types';
 
 const HTTP_METHODS = [
@@ -27,9 +28,10 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
 
   const [method, setMethod] = useState(request.method);
   const [url, setUrl] = useState(request.url);
-  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body'>('params');
+  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'extract_rules'>('params');
   const [headers, setHeaders] = useState<HeaderItem[]>(request.headers || []);
   const [params, setParams] = useState<ParamItem[]>(request.params || []);
+  const [extractRules, setExtractRules] = useState<ExtractRuleItem[]>(request.extractRules || []);
   const [bodyType, setBodyType] = useState<string>(request.bodyType || 'none');
   const [bodyContent, setBodyContent] = useState<string>(request.bodyContent || '');
 
@@ -38,6 +40,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     setUrl(request.url);
     setHeaders(request.headers || []);
     setParams(request.params || []);
+    setExtractRules(request.extractRules || []);
     setBodyType(request.bodyType || 'none');
     setBodyContent(request.bodyContent || '');
   }, [request.id]);
@@ -68,6 +71,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       url,
       headers,
       params,
+      extractRules,
       bodyType,
       bodyContent: jsonStr,
       updatedAtMs: Date.now(),
@@ -83,6 +87,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       url,
       headers,
       params,
+      extractRules,
       bodyType,
       bodyContent: jsonStr,
       updatedAtMs: Date.now(),
@@ -96,6 +101,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       url,
       headers,
       params,
+      extractRules,
       bodyType,
       bodyContent,
       updatedAtMs: Date.now(),
@@ -111,6 +117,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       url,
       headers,
       params,
+      extractRules,
       bodyType,
       bodyContent,
       updatedAtMs: Date.now(),
@@ -159,7 +166,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       {/* Request Config Tabs Bar */}
       <div className="bg-header border-b border-border px-3 py-1 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1">
-          {(['params', 'headers', 'body'] as const).map((tab) => (
+          {(['params', 'headers', 'body', 'extract_rules'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -169,7 +176,11 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {tab === 'headers' ? `Headers (${headers.length})` : tab}
+              {tab === 'headers'
+                ? `Headers (${headers.length})`
+                : tab === 'extract_rules'
+                ? `Extract Rules (${extractRules.length})`
+                : tab}
             </button>
           ))}
         </div>
@@ -198,6 +209,26 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
             }}
             keyPlaceholder="Header Name (e.g. Authorization)"
             valuePlaceholder="Header Value (e.g. Bearer {{TOKEN}})"
+          />
+        )}
+
+        {activeTab === 'extract_rules' && (
+          <ExtractRulesEditor
+            rules={extractRules}
+            onChange={(newRules) => {
+              setExtractRules(newRules);
+              updateRequestDetails({
+                ...request,
+                method,
+                url,
+                headers,
+                params,
+                extractRules: newRules,
+                bodyType,
+                bodyContent,
+                updatedAtMs: Date.now(),
+              });
+            }}
           />
         )}
 
