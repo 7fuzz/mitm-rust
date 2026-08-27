@@ -120,7 +120,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
   const isLoading = isExecuting[request.id] || false;
 
   return (
-    <div className="flex-1 flex flex-col bg-surface overflow-hidden text-xs select-none">
+    <div className="flex-1 flex flex-col bg-surface overflow-hidden text-xs">
       {/* Top Address Bar: Method Select + URL Bar + Send Button */}
       <div className="p-2.5 bg-header border-b border-border flex items-center gap-2 shrink-0 font-mono">
         <div className="w-28 shrink-0 font-bold">

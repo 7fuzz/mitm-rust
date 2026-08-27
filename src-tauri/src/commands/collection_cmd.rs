@@ -1,9 +1,9 @@
 use tauri::State;
 use crate::state::AppState;
 use crate::collections::{
-    create_collection_db, create_request_db, delete_collection_db, delete_request_db,
-    get_collections_db, update_collection_db, update_request_db, Collection, CollectionTreeItem,
-    RequestItem,
+    clear_request_histories_db, create_collection_db, create_request_db, delete_collection_db,
+    delete_request_db, get_collections_db, get_request_histories_db, update_collection_db,
+    update_request_db, Collection, CollectionTreeItem, RequestHistoryItem, RequestItem,
 };
 use crate::collections::execute::{execute_collection_request_db, ExecutionResult};
 
@@ -72,4 +72,20 @@ pub async fn execute_collection_request(
     request_id: String,
 ) -> Result<ExecutionResult, String> {
     execute_collection_request_db(&state.db_path, &request_id).await
+}
+
+#[tauri::command]
+pub async fn get_request_histories(
+    state: State<'_, AppState>,
+    request_id: String,
+) -> Result<Vec<RequestHistoryItem>, String> {
+    get_request_histories_db(&state.db_path, &request_id)
+}
+
+#[tauri::command]
+pub async fn clear_request_histories(
+    state: State<'_, AppState>,
+    request_id: String,
+) -> Result<(), String> {
+    clear_request_histories_db(&state.db_path, &request_id)
 }

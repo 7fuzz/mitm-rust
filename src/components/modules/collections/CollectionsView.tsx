@@ -71,7 +71,7 @@ export const CollectionsView: React.FC = () => {
   };
 
   return (
-    <div ref={containerRef} className="h-full flex bg-background overflow-hidden select-none text-xs">
+    <div ref={containerRef} className="h-full flex bg-background overflow-hidden text-xs">
       {/* Left Collection Tree Sidebar */}
       <CollectionTreeSidebar widthPx={sidebarWidthPx} />
 

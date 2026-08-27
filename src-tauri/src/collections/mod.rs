@@ -65,6 +65,7 @@ pub struct RequestHistoryItem {
     pub request_headers: Vec<HeaderItem>,
     pub request_body: Option<String>,
     pub status_code: u16,
+    pub status_text: Option<String>,
     pub response_headers: Vec<HeaderItem>,
     pub response_body: Option<String>,
     pub duration_ms: u64,
@@ -297,5 +298,58 @@ pub fn update_request_db(db_path: &PathBuf, req: RequestItem) -> Result<(), Stri
 pub fn delete_request_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM requests WHERE id = ?", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn get_request_histories_db(
+    db_path: &PathBuf,
+    request_id: &str,
+) -> Result<Vec<RequestHistoryItem>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, request_id, method, url, request_headers_json, request_body, status_code, response_headers_json, response_body, duration_ms, executed_at_ms
+             FROM request_histories
+             WHERE request_id = ?
+             ORDER BY executed_at_ms DESC
+             LIMIT 50"
+        )
+        .map_err(|e| e.to_string())?;
+
+    let histories = stmt
+        .query_map([request_id], |row| {
+            let req_headers_json: String = row.get(4)?;
+            let res_headers_json: String = row.get(7)?;
+
+            let req_headers: Vec<HeaderItem> = serde_json::from_str(&req_headers_json).unwrap_or_default();
+            let res_headers: Vec<HeaderItem> = serde_json::from_str(&res_headers_json).unwrap_or_default();
+            let duration_ms: i64 = row.get(9)?;
+
+            Ok(RequestHistoryItem {
+                id: row.get(0)?,
+                request_id: row.get(1)?,
+                method: row.get(2)?,
+                url: row.get(3)?,
+                request_headers: req_headers,
+                request_body: row.get(5)?,
+                status_code: row.get(6)?,
+                status_text: None,
+                response_headers: res_headers,
+                response_body: row.get(8)?,
+                duration_ms: duration_ms as u64,
+                executed_at_ms: row.get(10)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(histories)
+}
+
+pub fn clear_request_histories_db(db_path: &PathBuf, request_id: &str) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM request_histories WHERE request_id = ?", params![request_id])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }

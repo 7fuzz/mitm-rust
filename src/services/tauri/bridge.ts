@@ -325,11 +325,18 @@ export interface Workspace {
   updatedAtMs: number;
 }
 
+export interface VariableVariant {
+  name: string;
+  value: string;
+}
+
 export interface EnvironmentVariable {
   key: string;
   value: string;
   enabled: boolean;
   type: "default" | "secret";
+  activeIndex?: number;
+  variants?: VariableVariant[];
 }
 
 export interface Environment {
@@ -426,9 +433,15 @@ export const setActiveWorkspace = async (id: string): Promise<void> => {
 };
 
 export const importWorkspaceJson = async (
-  jsonContent: string
+  jsonContent: string,
+  targetWorkspaceId?: string,
+  customWorkspaceName?: string
 ): Promise<ImportSummary> => {
-  return await invoke<ImportSummary>("import_workspace_json", { jsonContent });
+  return await invoke<ImportSummary>("import_workspace_json", {
+    jsonContent,
+    targetWorkspaceId: targetWorkspaceId || null,
+    customWorkspaceName: customWorkspaceName || null,
+  });
 };
 
 export const getWorkspaceEnvironments = async (
@@ -480,8 +493,38 @@ export const deleteRequest = async (id: string): Promise<void> => {
   return await invoke<void>("delete_request", { id });
 };
 
+export const isTauriAvailable = (): boolean =>
+  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+export interface RequestHistoryItem {
+  id: number;
+  requestId: string;
+  method: string;
+  url: string;
+  requestHeaders: HeaderItem[];
+  requestBody?: string;
+  statusCode: number;
+  statusText?: string;
+  responseHeaders: HeaderItem[];
+  responseBody?: string;
+  durationMs: number;
+  executedAtMs: number;
+}
+
 export const executeCollectionRequest = async (
   requestId: string
 ): Promise<ExecutionResult> => {
   return await invoke<ExecutionResult>("execute_collection_request", { requestId });
+};
+
+export const getRequestHistories = async (
+  requestId: string
+): Promise<RequestHistoryItem[]> => {
+  return await invoke<RequestHistoryItem[]>("get_request_histories", { requestId });
+};
+
+export const clearRequestHistories = async (
+  requestId: string
+): Promise<void> => {
+  return await invoke<void>("clear_request_histories", { requestId });
 };
