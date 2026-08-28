@@ -46,7 +46,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
   const [method, setMethod] = useState(request.method);
   const [url, setUrl] = useState(request.url);
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'extract_rules' | 'interpolation'>('params');
-  const [previewMode, setPreviewMode] = useState<'full_url' | 'host' | 'curl'>('full_url');
+  const [previewMode, setPreviewMode] = useState<'full_url' | 'host' | 'curl'>('host');
   const [preview, setPreview] = useState<RequestPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -514,8 +514,8 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
             <div className="flex items-center justify-between pb-2 shrink-0">
               <div className="flex items-center gap-1 bg-background border border-border rounded-lg p-0.5">
                 {[
-                  { id: 'full_url', label: 'Full URL' },
-                  { id: 'host',     label: 'Host Header' },
+                  { id: 'host',     label: 'request' },
+                  { id: 'full_url', label: 'custom' },
                   { id: 'curl',     label: 'cURL' },
                 ].map(m => (
                   <button
