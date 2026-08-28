@@ -74,11 +74,13 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     if (isTauriAvailable()) {
       try {
         const fetchedTabs = await getRepeaterTabs();
-        set({ tabs: fetchedTabs, requests: fetchedTabs });
-        if (fetchedTabs.length > 0 && !get().activeTabId) {
-          const firstId = fetchedTabs[0].id;
-          set({ activeTabId: firstId });
-          get().fetchHistory(firstId);
+        if (fetchedTabs && fetchedTabs.length > 0) {
+          set({ tabs: fetchedTabs, requests: fetchedTabs });
+          if (!get().activeTabId) {
+            const firstId = fetchedTabs[0].id;
+            set({ activeTabId: firstId });
+            get().fetchHistory(firstId);
+          }
         }
       } catch (err) {
         console.error('Failed to load repeater tabs:', err);
@@ -94,38 +96,44 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
   },
 
   createNewRequest: async () => {
-    try {
-      if (isTauriAvailable()) {
-        const created = await createRepeaterTab();
-        set((state) => ({
-          tabs: [created, ...state.tabs.filter((t) => t.id !== created.id)],
-          requests: [created, ...state.tabs.filter((t) => t.id !== created.id)],
-          activeTabId: created.id,
-        }));
-        get().fetchHistory(created.id);
-      } else {
-        const newTab: RepeaterTab = {
-          id: 'tab-' + Date.now(),
-          method: 'GET',
-          url: 'https://httpbin.org/get',
-          headers: [{ id: 'h-' + Date.now(), key: 'User-Agent', value: 'MITM-Developer-Studio', enabled: true }],
-          params: [],
-          bodyType: 'none',
-          bodyContent: '',
-          extractRules: [],
-          orderIndex: get().tabs.length,
-          createdAtMs: Date.now(),
-          updatedAtMs: Date.now(),
-          executionCount: 0,
-        };
-        set((state) => ({
-          tabs: [newTab, ...state.tabs],
-          requests: [newTab, ...state.tabs],
-          activeTabId: newTab.id,
-        }));
+    let created: RepeaterTab | null = null;
+    if (isTauriAvailable()) {
+      try {
+        created = await createRepeaterTab();
+      } catch (err) {
+        console.warn('[RepeaterStore] createRepeaterTab IPC error, creating in-memory fallback tab:', err);
       }
-    } catch (err) {
-      console.error('Failed to create repeater tab:', err);
+    }
+
+    const nowMs = Date.now();
+    if (!created) {
+      created = {
+        id: 'tab-' + nowMs,
+        method: 'GET',
+        url: 'https://httpbin.org/get',
+        headers: [{ id: 'h-' + nowMs, key: 'User-Agent', value: 'MITM-Developer-Studio', enabled: true }],
+        params: [],
+        bodyType: 'none',
+        bodyContent: '',
+        extractRules: [],
+        orderIndex: get().tabs.length,
+        createdAtMs: nowMs,
+        updatedAtMs: nowMs,
+        executionCount: 0,
+      };
+    }
+
+    const newTab = created;
+    set((state) => ({
+      tabs: [newTab, ...state.tabs.filter((t) => t.id !== newTab.id)],
+      requests: [newTab, ...state.tabs.filter((t) => t.id !== newTab.id)],
+      activeTabId: newTab.id,
+    }));
+
+    if (isTauriAvailable()) {
+      try {
+        await get().fetchHistory(newTab.id);
+      } catch (e) {}
     }
   },
 
@@ -163,10 +171,15 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     const nowMs = Date.now();
 
     // 4. Create the new tab
-    let createdTab: RepeaterTab;
+    let createdTab: RepeaterTab | null = null;
     if (isTauriAvailable()) {
-      createdTab = await createRepeaterTab();
-    } else {
+      try {
+        createdTab = await createRepeaterTab();
+      } catch (e) {
+        console.warn('[RepeaterStore] createRepeaterTab IPC error in sendToRepeater:', e);
+      }
+    }
+    if (!createdTab) {
       createdTab = {
         id: 'tab-' + nowMs,
         method: item.method,
@@ -383,5 +396,116 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
   createGroup: () => {},
   deleteGroup: () => {},
   setCurlModalOpen: (open) => set({ isCurlModalOpen: open }),
-  importCurlCommand: () => {},
+  importCurlCommand: async (curl: string) => {
+    try {
+      const clean = curl.replace(/\\\n/g, ' ').replace(/\\\r\n/g, ' ');
+      let method = 'GET';
+      let url = 'https://httpbin.org/get';
+      const headers: HeaderItem[] = [];
+      const params: ParamItem[] = [];
+      let bodyType = 'none';
+      let bodyContent = '';
+
+      const methodMatch = clean.match(/(?:-X|--request)\s+([A-Za-z]+)/i);
+      if (methodMatch) {
+        method = methodMatch[1].toUpperCase();
+      }
+
+      const headerRegex = /(?:-H|--header)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/g;
+      let match;
+      let hIdx = 0;
+      while ((match = headerRegex.exec(clean)) !== null) {
+        const hVal = match[1] || match[2] || match[3] || '';
+        const colonIdx = hVal.indexOf(':');
+        if (colonIdx > 0) {
+          const key = hVal.substring(0, colonIdx).trim();
+          const value = hVal.substring(colonIdx + 1).trim();
+          headers.push({ id: `h-import-${Date.now()}-${hIdx++}`, key, value, enabled: true });
+        }
+      }
+
+      const dataMatch = clean.match(/(?:-d|--data|--data-raw|--data-binary)\s+(?:"([\s\S]*?)"|'([\s\S]*?)'|(\S+))/);
+      if (dataMatch) {
+        bodyContent = dataMatch[1] ?? dataMatch[2] ?? dataMatch[3] ?? '';
+        if (!methodMatch) method = 'POST';
+        if (bodyContent.trim().startsWith('{') || bodyContent.trim().startsWith('[')) {
+          bodyType = 'json';
+        } else {
+          bodyType = 'raw';
+        }
+      }
+
+      const urlMatch = clean.match(/https?:\/\/[^\s"']+/i);
+      if (urlMatch) {
+        url = urlMatch[0];
+      } else {
+        const tokens = clean.split(/\s+/);
+        for (let i = 1; i < tokens.length; i++) {
+          const t = tokens[i].replace(/^["']|["']$/g, '');
+          if (!t.startsWith('-') && (t.includes('.') || t.includes('localhost'))) {
+            url = t.startsWith('http') ? t : `https://${t}`;
+            break;
+          }
+        }
+      }
+
+      try {
+        const urlObj = new URL(url);
+        let pIdx = 0;
+        urlObj.searchParams.forEach((val, k) => {
+          params.push({ id: `p-import-${Date.now()}-${pIdx++}`, key: k, value: val, enabled: true });
+        });
+      } catch (e) {}
+
+      const nowMs = Date.now();
+      let createdTab: RepeaterTab | null = null;
+      if (isTauriAvailable()) {
+        try {
+          createdTab = await createRepeaterTab();
+        } catch (e) {
+          console.warn('[RepeaterStore] createRepeaterTab IPC error in importCurlCommand:', e);
+        }
+      }
+      if (!createdTab) {
+        createdTab = {
+          id: 'tab-' + nowMs,
+          method,
+          url,
+          headers,
+          params,
+          bodyType,
+          bodyContent,
+          extractRules: [],
+          orderIndex: get().tabs.length,
+          createdAtMs: nowMs,
+          updatedAtMs: nowMs,
+          executionCount: 0,
+        };
+      }
+
+      const populatedTab: RepeaterTab = {
+        ...createdTab,
+        method,
+        url,
+        headers,
+        params,
+        bodyType,
+        bodyContent,
+        updatedAtMs: nowMs,
+      };
+
+      if (isTauriAvailable()) {
+        await updateRepeaterTab(populatedTab);
+      }
+
+      set((state) => ({
+        tabs: [populatedTab, ...state.tabs.filter((t) => t.id !== populatedTab.id)],
+        requests: [populatedTab, ...state.tabs.filter((t) => t.id !== populatedTab.id)],
+        activeTabId: populatedTab.id,
+        isCurlModalOpen: false,
+      }));
+    } catch (err) {
+      console.error('Failed to import cURL command:', err);
+    }
+  },
 }));

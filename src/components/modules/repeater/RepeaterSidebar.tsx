@@ -43,6 +43,11 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
     return host.toLowerCase().includes(term) || path.toLowerCase().includes(term) || t.method.toLowerCase().includes(term);
   });
 
+  const handleCreateNew = () => {
+    setSearch('');
+    createNewRequest();
+  };
+
   return (
     <div
       className="bg-surface border-r border-border h-full flex flex-col overflow-hidden text-xs shrink-0 select-none"
@@ -60,7 +65,7 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
             variant="primary"
             sizeVariant="xs"
             icon="plus_line"
-            onClick={() => createNewRequest()}
+            onClick={handleCreateNew}
             title="Create New Repeater Request"
           >
             New
@@ -84,7 +89,7 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
             <MingCuteIcon name="folder_open_line" size={32} className="opacity-40" />
             <span>{search ? 'No matching requests' : 'No requests created'}</span>
             {!search && (
-              <Button variant="outline" sizeVariant="xs" icon="plus_line" onClick={() => createNewRequest()}>
+              <Button variant="outline" sizeVariant="xs" icon="plus_line" onClick={handleCreateNew}>
                 Create Request
               </Button>
             )}

@@ -138,7 +138,27 @@ pub fn get_repeater_tabs_db(db_path: &PathBuf) -> Result<Vec<RepeaterTab>, Strin
 }
 
 pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<(), String> {
+    if let Some(parent) = db_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS repeaters (
+            id TEXT PRIMARY KEY,
+            method TEXT NOT NULL DEFAULT 'GET',
+            url TEXT NOT NULL,
+            headers_json TEXT NOT NULL DEFAULT '[]',
+            params_json TEXT NOT NULL DEFAULT '[]',
+            body_type TEXT NOT NULL DEFAULT 'none',
+            body_content TEXT,
+            extract_rules_json TEXT NOT NULL DEFAULT '[]',
+            order_index INTEGER NOT NULL DEFAULT 0,
+            created_at_ms INTEGER NOT NULL,
+            updated_at_ms INTEGER NOT NULL
+        );"
+    ).map_err(|e| e.to_string())?;
+
     let headers_json = serde_json::to_string(&tab.headers).unwrap_or_else(|_| "[]".to_string());
     let params_json = serde_json::to_string(&tab.params).unwrap_or_else(|_| "[]".to_string());
     let extract_rules_json = serde_json::to_string(&tab.extract_rules).unwrap_or_else(|_| "[]".to_string());
