@@ -46,7 +46,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
   const [method, setMethod] = useState(request.method);
   const [url, setUrl] = useState(request.url);
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'extract_rules' | 'interpolation'>('params');
-  const [previewMode, setPreviewMode] = useState<'full' | 'curl'>('full');
+  const [previewMode, setPreviewMode] = useState<'full' | 'curl' | 'pretty'>('pretty');
   const [preview, setPreview] = useState<RequestPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -486,17 +486,21 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
             {/* Mode switcher + refresh */}
             <div className="flex items-center justify-between pb-2 shrink-0">
               <div className="flex items-center gap-1 bg-background border border-border rounded-lg p-0.5">
-                {(['full', 'curl'] as const).map(m => (
+                {([
+                  { id: 'pretty', label: '🔍 Pretty' },
+                  { id: 'full',   label: '📄 Full Request' },
+                  { id: 'curl',   label: '🖥️ cURL' },
+                ] as const).map(m => (
                   <button
-                    key={m}
-                    onClick={() => setPreviewMode(m)}
-                    className={`px-3 py-1 rounded text-[11px] font-semibold uppercase transition-colors cursor-pointer ${
-                      previewMode === m
+                    key={m.id}
+                    onClick={() => setPreviewMode(m.id)}
+                    className={`px-3 py-1 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                      previewMode === m.id
                         ? 'bg-primary text-primary-foreground shadow'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    {m === 'full' ? '📄 Full Request' : '🖥️ cURL'}
+                    {m.label}
                   </button>
                 ))}
               </div>
@@ -529,23 +533,92 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
                 {previewError}
               </div>
             ) : preview ? (
-              <div className="flex-1 border border-border rounded-lg overflow-hidden bg-background relative">
-                {/* Copy button */}
-                <button
-                  onClick={() => {
-                    const text = previewMode === 'full' ? preview.fullRequest : preview.curlCommand;
-                    navigator.clipboard.writeText(text);
-                  }}
-                  className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-surface border border-border text-muted-foreground hover:text-foreground hover:bg-neutral-subtle transition-colors cursor-pointer"
-                  title="Copy to clipboard"
-                >
-                  <MingCuteIcon name="copy_2_line" size={11} />
-                  Copy
-                </button>
-                <pre className="p-4 overflow-auto h-full text-[11px] leading-relaxed whitespace-pre-wrap break-all text-foreground">
-                  {previewMode === 'full' ? preview.fullRequest : preview.curlCommand}
-                </pre>
-              </div>
+              previewMode === 'pretty' ? (
+                // ---- Pretty structured view ----
+                <div className="flex-1 overflow-auto flex flex-col gap-3 pr-1">
+                  {/* Request line */}
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <div className="bg-header px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">Request</div>
+                    <div className="px-3 py-2 bg-background">
+                      <span className={`font-bold mr-2 ${
+                        preview.method === 'GET' ? 'text-emerald-400'
+                        : preview.method === 'POST' ? 'text-amber-400'
+                        : preview.method === 'PUT' ? 'text-blue-400'
+                        : preview.method === 'DELETE' ? 'text-red-400'
+                        : 'text-primary'
+                      }`}>{preview.method}</span>
+                      <span className="text-foreground break-all">{preview.url}</span>
+                    </div>
+                  </div>
+
+                  {/* Headers */}
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <div className="bg-header px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border flex items-center justify-between">
+                      <span>Headers</span>
+                      <span className="text-primary">{preview.headers.length + (preview.bodyType !== 'none' ? 1 : 0)}</span>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {/* Auto Host header */}
+                      <div className="px-3 py-1.5 flex gap-3 bg-background">
+                        <span className="text-muted-foreground w-32 shrink-0 truncate">Host</span>
+                        <span className="text-foreground break-all">{preview.host}</span>
+                      </div>
+                      {preview.headers.map(([k, v], i) => (
+                        <div key={i} className="px-3 py-1.5 flex gap-3 bg-background">
+                          <span className="text-muted-foreground w-32 shrink-0 truncate">{k}</span>
+                          <span className="text-foreground break-all">{v}</span>
+                        </div>
+                      ))}
+                      {/* Auto Content-Type if not present */}
+                      {!preview.headers.some(([k]) => k.toLowerCase() === 'content-type') && preview.bodyType === 'json' && (
+                        <div className="px-3 py-1.5 flex gap-3 bg-background opacity-60 italic">
+                          <span className="text-muted-foreground w-32 shrink-0 truncate">Content-Type</span>
+                          <span className="text-foreground">application/json <span className="text-[9px] text-amber-400">(auto)</span></span>
+                        </div>
+                      )}
+                      {!preview.headers.some(([k]) => k.toLowerCase() === 'content-type') && preview.bodyType === 'urlencoded' && (
+                        <div className="px-3 py-1.5 flex gap-3 bg-background opacity-60 italic">
+                          <span className="text-muted-foreground w-32 shrink-0 truncate">Content-Type</span>
+                          <span className="text-foreground">application/x-www-form-urlencoded <span className="text-[9px] text-amber-400">(auto)</span></span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Body */}
+                  {preview.body ? (
+                    <div className="border border-border rounded-lg overflow-hidden">
+                      <div className="bg-header px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border flex items-center justify-between">
+                        <span>Body</span>
+                        <span className="text-primary">{preview.bodyType}</span>
+                      </div>
+                      <pre className="px-3 py-2 bg-background text-foreground whitespace-pre-wrap break-all leading-relaxed">
+                        {preview.body}
+                      </pre>
+                    </div>
+                  ) : (
+                    <div className="border border-border rounded-lg px-3 py-2 bg-background text-muted-foreground italic">No body</div>
+                  )}
+                </div>
+              ) : (
+                // ---- Full Request / cURL raw text view ----
+                <div className="flex-1 border border-border rounded-lg overflow-hidden bg-background relative">
+                  <button
+                    onClick={() => {
+                      const text = previewMode === 'full' ? preview.fullRequest : preview.curlCommand;
+                      navigator.clipboard.writeText(text);
+                    }}
+                    className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-surface border border-border text-muted-foreground hover:text-foreground hover:bg-neutral-subtle transition-colors cursor-pointer"
+                    title="Copy to clipboard"
+                  >
+                    <MingCuteIcon name="copy_2_line" size={11} />
+                    Copy
+                  </button>
+                  <pre className="p-4 overflow-auto h-full text-[11px] leading-relaxed whitespace-pre-wrap break-all text-foreground">
+                    {previewMode === 'full' ? preview.fullRequest : preview.curlCommand}
+                  </pre>
+                </div>
+              )
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground italic gap-2">
                 <MingCuteIcon name="eye_2_line" size={32} className="opacity-30" />

@@ -563,6 +563,8 @@ export const readFileAsBase64 = async (
 export interface RequestPreview {
   method: string;
   url: string;
+  host: string;
+  path: string;
   headers: [string, string][];
   body?: string;
   bodyType: string;

@@ -155,6 +155,8 @@ pub async fn read_file_as_base64(file_path: String) -> Result<String, String> {
 pub struct RequestPreview {
     pub method: String,
     pub url: String,
+    pub host: String,
+    pub path: String,
     pub headers: Vec<(String, String)>,
     pub body: Option<String>,
     pub body_type: String,
@@ -257,13 +259,26 @@ pub async fn preview_collection_request(
     };
     let interpolated_body = raw_body.map(|b| interpolate_variables(db_path, &workspace_id, &b));
 
-    // ---- Build Full Request text ----
-    let mut full_request = format!("{} {} HTTP/1.1\r\n", method.to_uppercase(), final_url);
+    // ---- Build Full Request text (proper HTTP/1.1 format) ----
+    // Extract host and path from final_url
+    let (host_str, path_str) = {
+        let without_scheme = final_url
+            .trim_start_matches("https://")
+            .trim_start_matches("http://");
+        let slash_pos = without_scheme.find('/').unwrap_or(without_scheme.len());
+        let host = &without_scheme[..slash_pos];
+        let path = &without_scheme[slash_pos..];
+        (host.to_string(), if path.is_empty() { "/".to_string() } else { path.to_string() })
+    };
+
+    let has_content_type = interpolated_headers.iter().any(|(k, _)| k.to_lowercase() == "content-type");
+
+    let mut full_request = format!("{} {} HTTP/1.1\r\n", method.to_uppercase(), path_str);
+    full_request.push_str(&format!("Host: {}\r\n", host_str));
     for (k, v) in &interpolated_headers {
         full_request.push_str(&format!("{}: {}\r\n", k, v));
     }
     // Auto-add Content-Type for body types
-    let has_content_type = interpolated_headers.iter().any(|(k, _)| k.to_lowercase() == "content-type");
     if !has_content_type {
         match body_type.as_str() {
             "json" => full_request.push_str("Content-Type: application/json\r\n"),
@@ -303,6 +318,8 @@ pub async fn preview_collection_request(
     Ok(RequestPreview {
         method: method.to_uppercase(),
         url: final_url,
+        host: host_str,
+        path: path_str,
         headers: interpolated_headers,
         body: interpolated_body,
         body_type,
