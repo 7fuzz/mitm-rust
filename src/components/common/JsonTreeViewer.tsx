@@ -1,8 +1,52 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { detectBase64, saveBase64ToFile } from '../../utils/base64Helper';
 import { Base64PreviewModal } from './Base64PreviewModal';
 import { MingCuteIcon } from './MingCuteIcon';
 
+// ─── Serialize visible JSON tree state ────────────────────────────────────────
+// Produces a JSON string that matches the visual collapsed/truncated state of the tree.
+function serializeVisible(
+  value: unknown,
+  collapsed: Set<string>,
+  expandedArrays: Set<string>,
+  path: string,
+  indent: number
+): string {
+  const pad = '  '.repeat(indent);
+  const innerPad = '  '.repeat(indent + 1);
+
+  if (value === null) return 'null';
+  if (typeof value === 'boolean' || typeof value === 'number') return String(value);
+  if (typeof value === 'string') return JSON.stringify(value);
+
+  if (Array.isArray(value)) {
+    if (collapsed.has(path)) return `[...] // ${value.length} items`;
+    if (value.length === 0) return '[]';
+    const showAll = expandedArrays.has(path) || value.length <= 1;
+    const visible = showAll ? value : value.slice(0, 1);
+    const lines = visible.map((item, i) =>
+      `${innerPad}${serializeVisible(item, collapsed, expandedArrays, `${path}-${i}`, indent + 1)}`
+    );
+    if (!showAll && value.length > 1) {
+      lines.push(`${innerPad}// ... ${value.length - 1} more items`);
+    }
+    return `[\n${lines.join(',\n')}\n${pad}]`;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    if (collapsed.has(path)) return `{...} // ${Object.keys(value as object).length} keys`;
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) return '{}';
+    const lines = entries.map(([k, v]) =>
+      `${innerPad}${JSON.stringify(k)}: ${serializeVisible(v, collapsed, expandedArrays, `${path}-${encodeURIComponent(k)}`, indent + 1)}`
+    );
+    return `{\n${lines.join(',\n')}\n${pad}}`;
+  }
+
+  return String(value);
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface JsonTreeViewerProps {
   label?: string;
   value: unknown;
@@ -11,8 +55,12 @@ interface JsonTreeViewerProps {
   searchTerm?: string;
   filterMode?: boolean;
   forceShow?: boolean;
+  // Internal state tracking for copy
+  _collapsed?: React.MutableRefObject<Set<string>>;
+  _expandedArrays?: React.MutableRefObject<Set<string>>;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 const deepSearch = (obj: unknown, term: string): boolean => {
   if (!term) return false;
   if (obj === null || typeof obj !== 'object') {
@@ -44,10 +92,54 @@ const HighlightText: React.FC<{ text: string; query?: string }> = ({ text, query
   );
 };
 
+// ─── Double-click to select text without quotes ────────────────────────────────
+function selectTextOf(el: HTMLElement) {
+  const text = el.textContent || '';
+  // Strip surrounding quotes if present
+  const unquoted = text.startsWith('"') && text.endsWith('"')
+    ? text.slice(1, -1)
+    : text;
+  if (!unquoted) return;
+
+  const sel = window.getSelection();
+  if (!sel) return;
+  sel.removeAllRanges();
+
+  // Use a temporary text node to select just the unquoted content
+  const range = document.createRange();
+  const node = el.firstChild;
+  if (!node) return;
+
+  // Walk child nodes to find the quote-stripped range
+  // Strategy: select all children except leading/trailing quote text nodes
+  const children = Array.from(el.childNodes);
+  if (children.length === 0) return;
+
+  // If the element has exactly quote — text — quote structure, select the middle
+  // Otherwise select the whole element text
+  try {
+    if (children.length >= 3 &&
+      children[0].textContent === '"' &&
+      children[children.length - 1].textContent === '"') {
+      range.setStartBefore(children[1]);
+      range.setEndAfter(children[children.length - 2]);
+    } else if (children.length === 1) {
+      // plain text node, select all
+      range.selectNodeContents(el);
+    } else {
+      range.selectNodeContents(el);
+    }
+    sel.addRange(range);
+  } catch {
+    // fallback: copy to clipboard
+    navigator.clipboard.writeText(unquoted).catch(() => {});
+  }
+}
+
+// ─── Base64 leaf actions ───────────────────────────────────────────────────────
 function Base64LeafActions({ value, label }: { value: string; label?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [showInline, setShowInline] = useState(false);
-  // User directive: Base64 file preview for strings 200+ characters
   const info = useMemo(() => detectBase64(value, 200), [value]);
 
   if (!info) return null;
@@ -112,7 +204,6 @@ function Base64LeafActions({ value, label }: { value: string; label?: string }) 
         </button>
       </span>
 
-      {/* Inline Live Media Preview */}
       {showInline && isMedia && (
         <div className="my-1.5 ml-2 p-2 bg-background border border-border rounded-lg shadow-inner flex flex-col gap-2 max-w-md animate-in fade-in duration-150 font-mono text-[10px]">
           <div className="flex items-center justify-between text-muted-foreground border-b border-border pb-1">
@@ -162,6 +253,7 @@ function Base64LeafActions({ value, label }: { value: string; label?: string }) 
   );
 }
 
+// ─── Main recursive tree node ─────────────────────────────────────────────────
 export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
   label,
   value,
@@ -170,6 +262,8 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
   searchTerm = '',
   filterMode = false,
   forceShow = false,
+  _collapsed,
+  _expandedArrays,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isArrayExpanded, setIsArrayExpanded] = useState(false);
@@ -189,7 +283,20 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
   const openBracket = isArray ? '[' : '{';
   const closeBracket = isArray ? ']' : '}';
 
-  // Process items for objects & arrays
+  // Track collapse/expand state in parent refs for copy
+  const handleCollapse = useCallback((next: boolean) => {
+    setIsCollapsed(next);
+    if (_collapsed) {
+      if (next) _collapsed.current.add(path);
+      else _collapsed.current.delete(path);
+    }
+  }, [path, _collapsed]);
+
+  const handleArrayExpand = useCallback(() => {
+    setIsArrayExpanded(true);
+    if (_expandedArrays) _expandedArrays.current.add(path);
+  }, [path, _expandedArrays]);
+
   const processedItems = useMemo(() => {
     if (!filterMode || !searchTerm || shouldForceShow) return items;
 
@@ -208,7 +315,7 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
     });
   }, [items, searchTerm, filterMode, isArray, termLower, shouldForceShow]);
 
-  // Primitive Leaf Node
+  // ── Primitive Leaf Node ────────────────────────────────────────────────────
   if (isPrimitive) {
     if (filterMode && searchTerm && !shouldForceShow && !valueMatches && !labelMatches) {
       return null;
@@ -235,11 +342,23 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
       <div className="font-mono text-xs leading-relaxed flex items-start group py-0.5">
         <div className="flex-1 min-w-0 flex items-center flex-wrap">
           {label && (
-            <span className="text-primary mr-1 whitespace-nowrap font-semibold">
+            <span
+              className="text-primary mr-1 whitespace-nowrap font-semibold cursor-text"
+              onDoubleClick={(e) => {
+                e.preventDefault();
+                selectTextOf(e.currentTarget);
+              }}
+            >
               &quot;<HighlightText text={label} query={searchTerm} />&quot;:
             </span>
           )}
-          <span className={valueColor}>
+          <span
+            className={`${valueColor} cursor-text`}
+            onDoubleClick={(e) => {
+              e.preventDefault();
+              selectTextOf(e.currentTarget);
+            }}
+          >
             {isString && '"'}
             <HighlightText text={displayedText} query={searchTerm} />
             {isLongText && !shouldShowFullText && '...'}
@@ -263,13 +382,12 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
     );
   }
 
-  // Filter check for objects/arrays
+  // ── Filter check for objects/arrays ──────────────────────────────────────
   if (filterMode && searchTerm && !shouldForceShow && processedItems.length === 0) {
     return null;
   }
 
   const isEmpty = processedItems.length === 0;
-  // User directive: Array truncation (only show 1 item on array with "+ N more items" button)
   const isLongArray = isArray && processedItems.length > 1;
   const effectiveShowAll = isArrayExpanded || !!searchTerm;
   const visibleItems =
@@ -279,7 +397,7 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
     <div className="font-mono text-xs leading-relaxed py-0.5">
       <div className="flex items-start">
         <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
+          onClick={() => handleCollapse(!isCollapsed)}
           className="w-4 h-4 shrink-0 flex items-center justify-center cursor-pointer text-muted-foreground hover:text-foreground transition-colors mr-1"
           disabled={isEmpty}
         >
@@ -287,7 +405,13 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
         </button>
         <div className="flex-1 min-w-0 flex items-center flex-wrap">
           {label && (
-            <span className="text-primary mr-1 whitespace-nowrap font-semibold">
+            <span
+              className="text-primary mr-1 whitespace-nowrap font-semibold cursor-text"
+              onDoubleClick={(e) => {
+                e.preventDefault();
+                selectTextOf(e.currentTarget);
+              }}
+            >
               &quot;<HighlightText text={label} query={searchTerm} />&quot;:
             </span>
           )}
@@ -303,7 +427,7 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
           {isCollapsed && !isEmpty && (
             <>
               <span
-                onClick={() => setIsCollapsed(false)}
+                onClick={() => handleCollapse(false)}
                 className="cursor-pointer text-muted-foreground hover:text-foreground mx-1.5 bg-background border border-border px-1.5 py-0.5 rounded text-[10px]"
               >
                 ...
@@ -332,6 +456,8 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
                   searchTerm={searchTerm}
                   filterMode={filterMode}
                   forceShow={shouldForceShow}
+                  _collapsed={_collapsed}
+                  _expandedArrays={_expandedArrays}
                 />
               ))
             : (visibleItems as [string, unknown][]).map(([key, val], index: number) => (
@@ -344,13 +470,14 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
                   searchTerm={searchTerm}
                   filterMode={filterMode}
                   forceShow={shouldForceShow}
+                  _collapsed={_collapsed}
+                  _expandedArrays={_expandedArrays}
                 />
               ))}
 
-          {/* Show More items button for truncated arrays */}
           {isLongArray && !effectiveShowAll && (
             <div
-              onClick={() => setIsArrayExpanded(true)}
+              onClick={handleArrayExpand}
               className="text-amber-500 hover:text-amber-400 font-semibold text-[11px] py-1 cursor-pointer select-none pl-2 flex items-center gap-1.5"
             >
               <span className="bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded hover:bg-amber-500/20">
@@ -367,6 +494,55 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
           {!isLast ? ',' : ''}
         </div>
       )}
+    </div>
+  );
+};
+
+// ─── Root wrapper with copy button ────────────────────────────────────────────
+interface JsonTreeViewerRootProps {
+  value: unknown;
+  searchTerm?: string;
+  filterMode?: boolean;
+}
+
+export const JsonTreeViewerRoot: React.FC<JsonTreeViewerRootProps> = ({
+  value,
+  searchTerm,
+  filterMode,
+}) => {
+  const collapsedRef = useRef<Set<string>>(new Set());
+  const expandedArraysRef = useRef<Set<string>>(new Set());
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    const text = serializeVisible(value, collapsedRef.current, expandedArraysRef.current, 'root', 0);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [value]);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={handleCopy}
+        className={`absolute top-0 right-0 z-10 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] border transition-colors cursor-pointer font-sans ${
+          copied
+            ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+            : 'bg-surface border-border text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
+        }`}
+        title="Copy visible JSON"
+      >
+        <MingCuteIcon name={copied ? 'check_line' : 'copy_2_line'} size={11} />
+        {copied ? 'Copied!' : 'Copy'}
+      </button>
+      <JsonTreeViewer
+        value={value}
+        searchTerm={searchTerm}
+        filterMode={filterMode}
+        _collapsed={collapsedRef}
+        _expandedArrays={expandedArraysRef}
+      />
     </div>
   );
 };

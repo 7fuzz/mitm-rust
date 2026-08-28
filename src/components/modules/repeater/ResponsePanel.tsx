@@ -5,7 +5,7 @@ import { CodeEditor } from '../../common/CodeEditor';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { HexViewer } from '../../common/HexViewer';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
-import { JsonTreeViewer } from '../../common/JsonTreeViewer';
+import { JsonTreeViewerRoot } from '../../common/JsonTreeViewer';
 
 interface ResponsePanelProps {
   response: RepeaterHistoryItem | RepeaterExecutionResult | null;
@@ -119,7 +119,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
               </button>
             </div>
             <div className="flex-1 overflow-auto bg-background p-2 rounded border border-border font-mono">
-              <JsonTreeViewer value={parsed} searchTerm={treeSearch} filterMode={treeFilterMode} />
+              <JsonTreeViewerRoot value={parsed} searchTerm={treeSearch} filterMode={treeFilterMode} />
             </div>
           </div>
         );
