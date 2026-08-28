@@ -7,7 +7,8 @@ import { MultipartEditor } from '../../common/MultipartEditor';
 import { UrlEncodedEditor } from '../../common/UrlEncodedEditor';
 import { ExtractRulesEditor } from '../../common/ExtractRulesEditor';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
-import type { RequestItem, HeaderItem, ParamItem, ExtractRuleItem } from '../../../services/tauri/bridge';
+import type { RequestItem, HeaderItem, ParamItem, ExtractRuleItem, RequestPreview } from '../../../services/tauri/bridge';
+import { previewCollectionRequest } from '../../../services/tauri/bridge';
 import type { MultipartField, UrlEncodedParam } from '../../../types';
 import {
   convertJsonToFormData,
@@ -44,7 +45,11 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
 
   const [method, setMethod] = useState(request.method);
   const [url, setUrl] = useState(request.url);
-  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'extract_rules'>('params');
+  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'extract_rules' | 'interpolation'>('params');
+  const [previewMode, setPreviewMode] = useState<'full' | 'curl'>('full');
+  const [preview, setPreview] = useState<RequestPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [headers, setHeaders] = useState<HeaderItem[]>(request.headers || []);
   const [params, setParams] = useState<ParamItem[]>(request.params || []);
   const [extractRules, setExtractRules] = useState<ExtractRuleItem[]>(request.extractRules || []);
@@ -270,10 +275,20 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       {/* Request Config Tabs Bar */}
       <div className="bg-header border-b border-border px-3 py-1 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1">
-          {(['params', 'headers', 'body', 'extract_rules'] as const).map((tab) => (
+          {(['params', 'headers', 'body', 'extract_rules', 'interpolation'] as const).map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                setActiveTab(tab);
+                if (tab === 'interpolation') {
+                  setPreviewLoading(true);
+                  setPreviewError(null);
+                  previewCollectionRequest(request.id)
+                    .then(setPreview)
+                    .catch(e => setPreviewError(String(e)))
+                    .finally(() => setPreviewLoading(false));
+                }
+              }}
               className={`px-3 py-1 rounded text-xs font-medium uppercase transition-colors cursor-pointer ${
                 activeTab === tab
                   ? 'bg-surface text-primary border border-border shadow-2xs font-semibold'
@@ -284,6 +299,8 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
                 ? `Headers (${headers.length})`
                 : tab === 'extract_rules'
                 ? `Extract Rules (${extractRules.length})`
+                : tab === 'interpolation'
+                ? '⚡ Preview'
                 : tab}
             </button>
           ))}
@@ -459,6 +476,80 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
               <div className="h-full flex flex-col items-center justify-center text-muted-foreground italic text-xs">
                 <MingCuteIcon name="file_text_line" size={32} className="opacity-30 mb-1" />
                 This request does not have a body.
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'interpolation' && (
+          <div className="h-full flex flex-col gap-0 font-mono text-xs">
+            {/* Mode switcher + refresh */}
+            <div className="flex items-center justify-between pb-2 shrink-0">
+              <div className="flex items-center gap-1 bg-background border border-border rounded-lg p-0.5">
+                {(['full', 'curl'] as const).map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setPreviewMode(m)}
+                    className={`px-3 py-1 rounded text-[11px] font-semibold uppercase transition-colors cursor-pointer ${
+                      previewMode === m
+                        ? 'bg-primary text-primary-foreground shadow'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {m === 'full' ? '📄 Full Request' : '🖥️ cURL'}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => {
+                  setPreviewLoading(true);
+                  setPreviewError(null);
+                  previewCollectionRequest(request.id)
+                    .then(setPreview)
+                    .catch(e => setPreviewError(String(e)))
+                    .finally(() => setPreviewLoading(false));
+                }}
+                className="flex items-center gap-1 px-2 py-1 rounded text-[11px] border border-border bg-background hover:bg-neutral-subtle transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
+                title="Refresh preview"
+              >
+                <MingCuteIcon name="refresh_1_line" size={12} />
+                Refresh
+              </button>
+            </div>
+
+            {/* Content area */}
+            {previewLoading ? (
+              <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                <MingCuteIcon name="loading_3_line" size={20} className="animate-spin mr-2" />
+                Resolving variables...
+              </div>
+            ) : previewError ? (
+              <div className="flex-1 flex items-center justify-center text-red-400 text-xs">
+                <MingCuteIcon name="alert_circle_line" size={16} className="mr-2" />
+                {previewError}
+              </div>
+            ) : preview ? (
+              <div className="flex-1 border border-border rounded-lg overflow-hidden bg-background relative">
+                {/* Copy button */}
+                <button
+                  onClick={() => {
+                    const text = previewMode === 'full' ? preview.fullRequest : preview.curlCommand;
+                    navigator.clipboard.writeText(text);
+                  }}
+                  className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-surface border border-border text-muted-foreground hover:text-foreground hover:bg-neutral-subtle transition-colors cursor-pointer"
+                  title="Copy to clipboard"
+                >
+                  <MingCuteIcon name="copy_2_line" size={11} />
+                  Copy
+                </button>
+                <pre className="p-4 overflow-auto h-full text-[11px] leading-relaxed whitespace-pre-wrap break-all text-foreground">
+                  {previewMode === 'full' ? preview.fullRequest : preview.curlCommand}
+                </pre>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground italic gap-2">
+                <MingCuteIcon name="eye_2_line" size={32} className="opacity-30" />
+                <span className="text-xs">Click to load preview</span>
               </div>
             )}
           </div>

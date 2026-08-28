@@ -559,3 +559,19 @@ export const readFileAsBase64 = async (
 ): Promise<string> => {
   return await invoke<string>("read_file_as_base64", { filePath });
 };
+
+export interface RequestPreview {
+  method: string;
+  url: string;
+  headers: [string, string][];
+  body?: string;
+  bodyType: string;
+  fullRequest: string;
+  curlCommand: string;
+}
+
+export const previewCollectionRequest = async (
+  requestId: string
+): Promise<RequestPreview> => {
+  return await invoke<RequestPreview>("preview_collection_request", { requestId });
+};
