@@ -568,6 +568,7 @@ export interface RequestPreview {
   headers: [string, string][];
   body?: string;
   bodyType: string;
+  fullUrlRequest: string;
   fullRequest: string;
   curlCommand: string;
 }

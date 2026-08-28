@@ -160,6 +160,7 @@ pub struct RequestPreview {
     pub headers: Vec<(String, String)>,
     pub body: Option<String>,
     pub body_type: String,
+    pub full_url_request: String,
     pub full_request: String,
     pub curl_command: String,
 }
@@ -273,12 +274,29 @@ pub async fn preview_collection_request(
 
     let has_content_type = interpolated_headers.iter().any(|(k, _)| k.to_lowercase() == "content-type");
 
+    // ---- Build Full Request (Full URL format) ----
+    let mut full_url_request = format!("{} {} HTTP/1.1\r\n", method.to_uppercase(), final_url);
+    for (k, v) in &interpolated_headers {
+        full_url_request.push_str(&format!("{}: {}\r\n", k, v));
+    }
+    if !has_content_type {
+        match body_type.as_str() {
+            "json" => full_url_request.push_str("Content-Type: application/json\r\n"),
+            "urlencoded" | "x-www-form-urlencoded" => full_url_request.push_str("Content-Type: application/x-www-form-urlencoded\r\n"),
+            _ => {}
+        }
+    }
+    full_url_request.push_str("\r\n");
+    if let Some(ref body) = interpolated_body {
+        full_url_request.push_str(body);
+    }
+
+    // ---- Build Full Request (Wire format with Host header) ----
     let mut full_request = format!("{} {} HTTP/1.1\r\n", method.to_uppercase(), path_str);
     full_request.push_str(&format!("Host: {}\r\n", host_str));
     for (k, v) in &interpolated_headers {
         full_request.push_str(&format!("{}: {}\r\n", k, v));
     }
-    // Auto-add Content-Type for body types
     if !has_content_type {
         match body_type.as_str() {
             "json" => full_request.push_str("Content-Type: application/json\r\n"),
@@ -323,6 +341,7 @@ pub async fn preview_collection_request(
         headers: interpolated_headers,
         body: interpolated_body,
         body_type,
+        full_url_request,
         full_request,
         curl_command,
     })
