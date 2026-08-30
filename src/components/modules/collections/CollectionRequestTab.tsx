@@ -6,6 +6,7 @@ import { CodeEditor } from '../../common/CodeEditor';
 import { MultipartEditor } from '../../common/MultipartEditor';
 import { UrlEncodedEditor } from '../../common/UrlEncodedEditor';
 import { ExtractRulesEditor } from '../../common/ExtractRulesEditor';
+import { MarkdownViewer } from '../../common/MarkdownViewer';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import type { RequestItem, HeaderItem, ParamItem, ExtractRuleItem, RequestPreview } from '../../../services/tauri/bridge';
 import { previewCollectionRequest } from '../../../services/tauri/bridge';
@@ -45,7 +46,9 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
 
   const [method, setMethod] = useState(request.method);
   const [url, setUrl] = useState(request.url);
-  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'extract_rules' | 'interpolation'>('params');
+  const [activeTab, setActiveTab] = useState<'docs' | 'params' | 'headers' | 'body' | 'extract_rules' | 'interpolation'>('params');
+  const [docsMode, setDocsMode] = useState<'preview' | 'edit' | 'split'>('preview');
+  const [description, setDescription] = useState<string>(request.description || '');
   const [previewMode, setPreviewMode] = useState<'full_url' | 'host' | 'curl'>('host');
   const [preview, setPreview] = useState<RequestPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -69,6 +72,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     setHeaders(request.headers || []);
     setParams(request.params || []);
     setExtractRules(request.extractRules || []);
+    setDescription(request.description || '');
     setBodyType(normalizeBodyType(request.bodyType));
     setBodyJson(request.bodyJson || '');
     setBodyRaw(request.bodyRaw || '');
@@ -77,6 +81,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
   }, [
     request.id,
     request.updatedAtMs,
+    request.description,
     request.extractRules,
     request.headers,
     request.params,
@@ -158,6 +163,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       bodyRaw,
       bodyFormData,
       bodyUrlencoded,
+      description,
       updatedAtMs: Date.now(),
     };
     await updateRequestDetails(updated);
@@ -192,7 +198,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [method, url, headers, params, extractRules, bodyType, bodyJson, bodyRaw, bodyFormData, bodyUrlencoded, request]);
+  }, [method, url, headers, params, extractRules, bodyType, bodyJson, bodyRaw, bodyFormData, bodyUrlencoded, description, request]);
 
   const handleUpdateStore = (overrides?: Partial<RequestItem>) => {
     updateRequestDetails({
@@ -207,6 +213,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       bodyRaw: overrides?.bodyRaw ?? bodyRaw,
       bodyFormData: overrides?.bodyFormData ?? bodyFormData,
       bodyUrlencoded: overrides?.bodyUrlencoded ?? bodyUrlencoded,
+      description: overrides?.description ?? description,
       updatedAtMs: Date.now(),
     });
   };
@@ -302,7 +309,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       {/* Request Config Tabs Bar */}
       <div className="bg-header border-b border-border px-3 py-1 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1">
-          {(['params', 'headers', 'body', 'extract_rules', 'interpolation'] as const).map((tab) => (
+          {(['docs', 'params', 'headers', 'body', 'extract_rules', 'interpolation'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => {
@@ -322,7 +329,9 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {tab === 'headers'
+              {tab === 'docs'
+                ? `Docs${description ? ' •' : ''}`
+                : tab === 'headers'
                 ? `Headers (${headers.length})`
                 : tab === 'extract_rules'
                 ? `Extract Rules (${extractRules.length})`
@@ -336,6 +345,84 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
 
       {/* Tab Panels */}
       <div className="flex-1 p-3 overflow-auto">
+        {activeTab === 'docs' && (
+          <div className="h-full flex flex-col gap-2">
+            {/* Docs Toolbar */}
+            <div className="flex items-center justify-between font-mono text-xs text-muted-foreground pb-1 shrink-0">
+              <div className="flex items-center gap-1 bg-background p-0.5 rounded border border-border">
+                {(['preview', 'edit', 'split'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setDocsMode(mode)}
+                    className={`px-2.5 py-0.5 rounded text-[11px] font-semibold uppercase transition-colors cursor-pointer ${
+                      docsMode === mode
+                        ? 'bg-primary text-primary-foreground shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {description && (
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(description)}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-foreground text-[11px] cursor-pointer transition-colors"
+                    title="Copy Markdown"
+                  >
+                    <MingCuteIcon name="copy_line" size={12} />
+                    <span>Copy MD</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Docs Content */}
+            <div className="flex-1 min-h-0 border border-border rounded-lg overflow-hidden bg-background">
+              {docsMode === 'edit' ? (
+                <CodeEditor
+                  value={description}
+                  onChange={(val) => {
+                    setDescription(val);
+                    handleUpdateStore({ description: val });
+                  }}
+                  language="markdown"
+                />
+              ) : docsMode === 'split' ? (
+                <div className="h-full flex divide-x divide-border overflow-hidden">
+                  <div className="w-1/2 h-full overflow-hidden">
+                    <CodeEditor
+                      value={description}
+                      onChange={(val) => {
+                        setDescription(val);
+                        handleUpdateStore({ description: val });
+                      }}
+                      language="markdown"
+                    />
+                  </div>
+                  <div className="w-1/2 h-full overflow-y-auto bg-surface">
+                    <MarkdownViewer
+                      content={description}
+                      onEdit={() => setDocsMode('edit')}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full overflow-y-auto bg-surface">
+                  <MarkdownViewer
+                    content={description}
+                    onEdit={() => setDocsMode('edit')}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'params' && (
           <KeyValueEditor
             items={params}
