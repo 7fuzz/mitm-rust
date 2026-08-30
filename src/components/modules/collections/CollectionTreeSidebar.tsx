@@ -37,6 +37,24 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
     setSearchQuery,
   } = useCollectionStore();
 
+  const [localSearch, setLocalSearch] = useState(searchQuery);
+  const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
+
+  // Debounce search query updates by 250ms
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(localSearch);
+      setSearchQuery(localSearch);
+    }, 250);
+    return () => clearTimeout(handler);
+  }, [localSearch, setSearchQuery]);
+
+  // Keep local search in sync if external store changes
+  useEffect(() => {
+    setLocalSearch(searchQuery);
+    setDebouncedQuery(searchQuery);
+  }, [searchQuery]);
+
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [addingFolderParentId, setAddingFolderParentId] = useState<string | null | 'root'>(null);
   const [folderName, setFolderName] = useState('');
@@ -53,6 +71,43 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingType, setEditingType] = useState<'collection' | 'request' | null>(null);
   const [editingName, setEditingName] = useState('');
+
+  // Recursive tree filter
+  const filterTree = (items: CollectionTreeItem[], query: string): CollectionTreeItem[] => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+
+    return items
+      .map((item) => {
+        const matchingChildren = filterTree(item.children || [], query);
+        const matchingRequests = (item.requests || []).filter(
+          (r) =>
+            r.name.toLowerCase().includes(q) ||
+            r.url.toLowerCase().includes(q) ||
+            r.method.toLowerCase().includes(q)
+        );
+
+        const folderMatches = item.name.toLowerCase().includes(q);
+
+        if (folderMatches) {
+          return item;
+        }
+
+        if (matchingChildren.length > 0 || matchingRequests.length > 0) {
+          return {
+            ...item,
+            children: matchingChildren,
+            requests: matchingRequests,
+          };
+        }
+
+        return null;
+      })
+      .filter((item): item is CollectionTreeItem => item !== null);
+  };
+
+  const isSearching = !!debouncedQuery.trim();
+  const visibleTree = filterTree(collectionsTree, debouncedQuery);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -198,7 +253,7 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
   };
 
   const renderTreeItem = (item: CollectionTreeItem, depth: number = 0) => {
-    const isExpanded = expandedFolders[item.id] !== false; // Default expanded
+    const isExpanded = isSearching ? true : expandedFolders[item.id] !== false; // Auto-expand when searching, default expanded otherwise
     const isAddingSubfolder = addingFolderParentId === item.id;
     const isAddingSubReq = addingReqFolderId === item.id;
     const isDropTarget = dragTargetFolderId === item.id;
@@ -441,12 +496,16 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
         </div>
 
         <Input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search collections..."
+          value={localSearch}
+          onChange={(e) => setLocalSearch(e.target.value)}
+          placeholder="Search collections & requests..."
           leftIcon="search_line"
-          rightIcon={searchQuery ? 'close_line' : undefined}
-          onRightIconClick={() => setSearchQuery('')}
+          rightIcon={localSearch ? 'close_line' : undefined}
+          onRightIconClick={() => {
+            setLocalSearch('');
+            setDebouncedQuery('');
+            setSearchQuery('');
+          }}
         />
       </div>
 
@@ -485,7 +544,23 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
           </div>
         )}
 
-        {collectionsTree.length === 0 && addingFolderParentId !== 'root' ? (
+        {visibleTree.length === 0 && isSearching ? (
+          <div className="py-12 text-center text-muted-foreground italic flex flex-col items-center gap-2">
+            <MingCuteIcon name="search_line" size={32} className="opacity-30" />
+            <span>No collections or requests match &ldquo;{debouncedQuery}&rdquo;</span>
+            <button
+              type="button"
+              onClick={() => {
+                setLocalSearch('');
+                setDebouncedQuery('');
+                setSearchQuery('');
+              }}
+              className="text-xs text-primary hover:underline cursor-pointer"
+            >
+              Clear search
+            </button>
+          </div>
+        ) : collectionsTree.length === 0 && addingFolderParentId !== 'root' ? (
           <div className="py-12 text-center text-muted-foreground italic flex flex-col items-center gap-2">
             <MingCuteIcon name="folder_open_line" size={32} className="opacity-30" />
             <span>No collections created yet</span>
@@ -502,7 +577,7 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
             </Button>
           </div>
         ) : (
-          collectionsTree.map((item) => renderTreeItem(item, 0))
+          visibleTree.map((item) => renderTreeItem(item, 0))
         )}
       </div>
 
