@@ -30,6 +30,7 @@ export const QuickVariableModal: React.FC = () => {
     extraValue?: string;
   } | null>(null);
 
+  const modalRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -65,6 +66,10 @@ export const QuickVariableModal: React.FC = () => {
       setSearch('');
       setInlineEdit(null);
       setToast(null);
+      // Focus the modal container so keyboard navigation on the list works immediately
+      setTimeout(() => {
+        modalRef.current?.focus();
+      }, 30);
     }
   }, [isQuickVarModalOpen]);
 
@@ -74,10 +79,11 @@ export const QuickVariableModal: React.FC = () => {
     }
   }, [filteredVars.length, selectedIndex]);
 
+  // Instant scroll (behavior: 'auto') to prevent lag/queuing when holding down arrow keys
   useEffect(() => {
     if (listRef.current && listRef.current.children[selectedIndex]) {
       const selectedEl = listRef.current.children[selectedIndex] as HTMLElement;
-      selectedEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      selectedEl.scrollIntoView({ block: 'nearest', behavior: 'auto' });
     }
   }, [selectedIndex]);
 
@@ -306,13 +312,15 @@ export const QuickVariableModal: React.FC = () => {
         return;
       }
 
-      // 2. Inline Edit shortcuts: Enter saves, Esc cancels
+      // 2. Inline Edit shortcuts: Enter saves, Esc cancels (PREVENTS CLOSING DIALOG)
       if (inlineEdit || isInlineEditFocused) {
         if (e.key === 'Enter') {
           e.preventDefault();
+          e.stopPropagation();
           handleSaveInline();
         } else if (e.key === 'Escape') {
           e.preventDefault();
+          e.stopPropagation();
           setInlineEdit(null);
         }
         return;
@@ -327,7 +335,7 @@ export const QuickVariableModal: React.FC = () => {
         return;
       }
 
-      // Any other text input focused
+      // Any other text input focused: Esc blurs without closing modal
       if (
         activeEl?.tagName === 'INPUT' ||
         activeEl?.tagName === 'TEXTAREA' ||
@@ -342,7 +350,7 @@ export const QuickVariableModal: React.FC = () => {
 
       // 4. Modal Root Shortcuts:
 
-      // Esc: Close modal
+      // Esc: Close modal (only when not editing)
       if (e.key === 'Escape') {
         e.preventDefault();
         setQuickVarModalOpen(false);
@@ -357,15 +365,19 @@ export const QuickVariableModal: React.FC = () => {
         return;
       }
 
-      // Up / Down: Switch current selected variable
+      // Up / Down: Switch current selected variable with WRAP-AROUND
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.max(0, prev - 1));
+        if (filteredVars.length > 0) {
+          setSelectedIndex((prev) => (prev <= 0 ? filteredVars.length - 1 : prev - 1));
+        }
         return;
       }
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.min(filteredVars.length - 1, prev + 1));
+        if (filteredVars.length > 0) {
+          setSelectedIndex((prev) => (prev >= filteredVars.length - 1 ? 0 : prev + 1));
+        }
         return;
       }
 
@@ -540,8 +552,10 @@ export const QuickVariableModal: React.FC = () => {
       className="fixed inset-0 z-50 flex items-start justify-center pt-10 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 font-sans text-xs select-none cursor-pointer"
     >
       <div
+        ref={modalRef}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-surface border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-foreground cursor-default select-text"
+        className="w-full max-w-2xl bg-surface border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-foreground cursor-default select-text outline-none"
       >
         {/* Modal Header */}
         <div className="p-3 border-b border-border flex items-center justify-between bg-header">
@@ -625,7 +639,6 @@ export const QuickVariableModal: React.FC = () => {
             onChange={(e) => setSearch(e.target.value)}
             placeholder={`Type '/' to search variables in ${currentEnvName} (e.g. {{AUTH_TOKEN}})...`}
             className="w-full bg-transparent text-xs focus:outline-none text-foreground placeholder:text-muted-foreground font-mono"
-            autoFocus
           />
           {search && (
             <button
@@ -681,7 +694,17 @@ export const QuickVariableModal: React.FC = () => {
                             type="text"
                             value={inlineEdit.value}
                             onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSaveInline()}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleSaveInline();
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setInlineEdit(null);
+                              }
+                            }}
                             className="bg-background border border-primary rounded px-1.5 py-0.5 text-xs text-primary font-bold outline-none font-mono"
                           />
                         </div>
@@ -717,7 +740,17 @@ export const QuickVariableModal: React.FC = () => {
                             type="text"
                             value={inlineEdit.value}
                             onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSaveInline()}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleSaveInline();
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setInlineEdit(null);
+                              }
+                            }}
                             className="bg-background border border-amber-500 rounded px-1.5 py-0.5 text-xs text-amber-500 font-bold outline-none font-mono"
                           />
                         </div>
@@ -821,19 +854,32 @@ export const QuickVariableModal: React.FC = () => {
                           value={inlineEdit.value}
                           onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveInline();
-                            if (e.key === 'Escape') setInlineEdit(null);
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleSaveInline();
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setInlineEdit(null);
+                            }
                           }}
                           className="w-full bg-background border border-emerald-500 rounded px-2 py-1 text-xs text-foreground outline-none font-mono"
                         />
                         <button
-                          onClick={handleSaveInline}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSaveInline();
+                          }}
                           className="px-2 py-1 bg-emerald-500 text-white rounded font-sans text-xs font-semibold cursor-pointer shrink-0"
                         >
                           Save (Enter)
                         </button>
                         <button
-                          onClick={() => setInlineEdit(null)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInlineEdit(null);
+                          }}
                           className="px-2 py-1 bg-surface border border-border text-muted-foreground hover:text-foreground rounded font-sans text-xs cursor-pointer shrink-0"
                         >
                           Cancel (Esc)
@@ -860,8 +906,15 @@ export const QuickVariableModal: React.FC = () => {
                               value={inlineEdit.value}
                               onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveInline();
-                                if (e.key === 'Escape') setInlineEdit(null);
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleSaveInline();
+                                } else if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setInlineEdit(null);
+                                }
                               }}
                               className="w-1/2 bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground outline-none font-mono"
                             />
@@ -871,13 +924,23 @@ export const QuickVariableModal: React.FC = () => {
                               value={inlineEdit.extraValue || ''}
                               onChange={(e) => setInlineEdit({ ...inlineEdit, extraValue: e.target.value })}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveInline();
-                                if (e.key === 'Escape') setInlineEdit(null);
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleSaveInline();
+                                } else if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setInlineEdit(null);
+                                }
                               }}
                               className="w-1/2 bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground outline-none font-mono"
                             />
                             <button
-                              onClick={handleSaveInline}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSaveInline();
+                              }}
                               className="px-2.5 py-1 bg-amber-500 text-black font-bold rounded text-xs cursor-pointer shrink-0"
                             >
                               Add
