@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import type { TrafficItem } from '../../../types';
 import { MethodBadge } from '../../common/MethodBadge';
 import { StatusBadge } from '../../common/StatusBadge';
@@ -7,6 +7,8 @@ import { CodeEditor } from '../../common/CodeEditor';
 import { HexViewer } from '../../common/HexViewer';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { SegmentedControl } from '../../common/ui';
+import { MediaResponsePreview } from '../../common/MediaResponsePreview';
+import { detectMediaResponse } from '../../../utils/mediaDetector';
 
 const REQ_TABS = [
   { value: 'body', label: 'Body' },
@@ -19,19 +21,6 @@ const RES_TABS = [
   { value: 'body', label: 'Body' },
   { value: 'headers', label: 'Headers' },
   { value: 'cookies', label: 'Cookies' },
-] as const;
-
-const REQ_BODY_FORMATS = [
-  { value: 'pretty', label: 'Pretty' },
-  { value: 'raw', label: 'Raw' },
-  { value: 'hex', label: 'Hex' },
-] as const;
-
-const RES_BODY_FORMATS = [
-  { value: 'pretty', label: 'Pretty' },
-  { value: 'raw', label: 'Raw' },
-  { value: 'hex', label: 'Hex' },
-  { value: 'html', label: 'HTML' },
 ] as const;
 
 interface RequestResponseInspectorProps {
@@ -48,9 +37,63 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
   const [reqTab, setReqTab] = useState<'headers' | 'body' | 'params' | 'cookies'>('body');
   const [resTab, setResTab] = useState<'headers' | 'body' | 'cookies'>('body');
 
+  const reqMediaInfo = useMemo(() => {
+    if (!item) return null;
+    return detectMediaResponse(item.requestBody, item.requestHeaders);
+  }, [item?.requestBody, item?.requestHeaders]);
+
+  const resMediaInfo = useMemo(() => {
+    if (!item) return null;
+    return detectMediaResponse(item.responseBody, item.responseHeaders);
+  }, [item?.responseBody, item?.responseHeaders]);
+
   // Independent body format state for Request vs Response
-  const [reqBodyFormat, setReqBodyFormat] = useState<'pretty' | 'raw' | 'hex'>('pretty');
-  const [resBodyFormat, setResBodyFormat] = useState<'pretty' | 'raw' | 'hex' | 'html'>('pretty');
+  const [reqBodyFormat, setReqBodyFormat] = useState<string>('pretty');
+  const [resBodyFormat, setResBodyFormat] = useState<string>('pretty');
+
+  // Auto-switch to preview if media is detected on response
+  useEffect(() => {
+    if (resMediaInfo) {
+      setResBodyFormat('preview');
+    } else {
+      setResBodyFormat('pretty');
+    }
+  }, [resMediaInfo, item?.id]);
+
+  useEffect(() => {
+    if (reqMediaInfo) {
+      setReqBodyFormat('preview');
+    } else {
+      setReqBodyFormat('pretty');
+    }
+  }, [reqMediaInfo, item?.id]);
+
+  const reqBodyFormats = useMemo(() => {
+    const list: Array<{ value: string; label: string }> = [];
+    if (reqMediaInfo) {
+      list.push({ value: 'preview', label: `Preview (${reqMediaInfo.previewType.toUpperCase()})` });
+    }
+    list.push(
+      { value: 'pretty', label: 'Pretty' },
+      { value: 'raw', label: 'Raw' },
+      { value: 'hex', label: 'Hex' }
+    );
+    return list;
+  }, [reqMediaInfo]);
+
+  const resBodyFormats = useMemo(() => {
+    const list: Array<{ value: string; label: string }> = [];
+    if (resMediaInfo) {
+      list.push({ value: 'preview', label: `Preview (${resMediaInfo.previewType.toUpperCase()})` });
+    }
+    list.push(
+      { value: 'pretty', label: 'Pretty' },
+      { value: 'raw', label: 'Raw' },
+      { value: 'hex', label: 'Hex' },
+      { value: 'html', label: 'HTML' }
+    );
+    return list;
+  }, [resMediaInfo]);
 
   // Draggable width/height split between Request and Response panels
   const [reqWidthPercent, setReqWidthPercent] = useState<number>(50);
@@ -130,7 +173,15 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
     );
   }
 
-  const renderBodyContent = (bodyText: string, format: 'pretty' | 'raw' | 'hex' | 'html') => {
+  const renderBodyContent = (
+    bodyText: string,
+    format: string,
+    media: ReturnType<typeof detectMediaResponse>
+  ) => {
+    if (format === 'preview' && media) {
+      return <MediaResponsePreview media={media} title={item?.url} />;
+    }
+
     if (!bodyText) {
       return <div className="p-4 text-muted-foreground italic text-xs">No body content</div>;
     }
@@ -219,11 +270,11 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
                 <div className="flex items-center gap-1 mb-1">
                   <SegmentedControl
                     value={reqBodyFormat}
-                    onChange={(val) => setReqBodyFormat(val as any)}
-                    options={REQ_BODY_FORMATS}
+                    onChange={(val) => setReqBodyFormat(val)}
+                    options={reqBodyFormats}
                   />
                 </div>
-                <div className="flex-1 overflow-hidden">{renderBodyContent(item.requestBody, reqBodyFormat)}</div>
+                <div className="flex-1 overflow-hidden">{renderBodyContent(item.requestBody, reqBodyFormat, reqMediaInfo)}</div>
               </div>
             )}
             {reqTab === 'params' && (
@@ -283,11 +334,11 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
                 <div className="flex items-center gap-1 mb-1">
                   <SegmentedControl
                     value={resBodyFormat}
-                    onChange={(val) => setResBodyFormat(val as any)}
-                    options={RES_BODY_FORMATS}
+                    onChange={(val) => setResBodyFormat(val)}
+                    options={resBodyFormats}
                   />
                 </div>
-                <div className="flex-1 overflow-hidden">{renderBodyContent(item.responseBody, resBodyFormat)}</div>
+                <div className="flex-1 overflow-hidden">{renderBodyContent(item.responseBody, resBodyFormat, resMediaInfo)}</div>
               </div>
             )}
             {resTab === 'cookies' && (

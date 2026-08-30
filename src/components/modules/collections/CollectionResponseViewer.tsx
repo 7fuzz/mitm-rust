@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useCollectionStore } from '../../../stores/useCollectionStore';
 import { StatusBadge } from '../../common/StatusBadge';
 import { CodeEditor } from '../../common/CodeEditor';
@@ -6,6 +6,8 @@ import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { HexViewer } from '../../common/HexViewer';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { JsonTreeViewerRoot } from '../../common/JsonTreeViewer';
+import { MediaResponsePreview } from '../../common/MediaResponsePreview';
+import { detectMediaResponse } from '../../../utils/mediaDetector';
 import { getRequestHistories, isTauriAvailable, type RequestHistoryItem } from '../../../services/tauri/bridge';
 
 interface CollectionResponseViewerProps {
@@ -15,7 +17,7 @@ interface CollectionResponseViewerProps {
 export const CollectionResponseViewer: React.FC<CollectionResponseViewerProps> = ({ requestId }) => {
   const { executionResult, isExecuting } = useCollectionStore();
   const [activeTab, setActiveTab] = useState<'body' | 'headers'>('body');
-  const [bodyFormat, setBodyFormat] = useState<'pretty' | 'tree' | 'raw' | 'hex'>('pretty');
+  const [bodyFormat, setBodyFormat] = useState<string>('pretty');
   const [treeSearch, setTreeSearch] = useState('');
   const [treeFilterMode, setTreeFilterMode] = useState(false);
   const [historyList, setHistoryList] = useState<RequestHistoryItem[]>([]);
@@ -57,6 +59,34 @@ export const CollectionResponseViewer: React.FC<CollectionResponseViewerProps> =
   const currentResponseHeaders = activeHistoryItem?.responseHeaders ?? latestResult?.responseHeaders ?? [];
   const currentSize = activeHistoryItem?.responseBody ? activeHistoryItem.responseBody.length : (latestResult?.responseSize || 0);
 
+  const mediaInfo = useMemo(
+    () => detectMediaResponse(currentResponseBody, currentResponseHeaders),
+    [currentResponseBody, currentResponseHeaders]
+  );
+
+  // Auto-switch to preview when media is detected
+  useEffect(() => {
+    if (mediaInfo) {
+      setBodyFormat('preview');
+    } else {
+      setBodyFormat('pretty');
+    }
+  }, [mediaInfo, selectedHistoryId, latestResult]);
+
+  const availableFormats = useMemo(() => {
+    const list: Array<{ value: string; label: string }> = [];
+    if (mediaInfo) {
+      list.push({ value: 'preview', label: `Preview (${mediaInfo.previewType.toUpperCase()})` });
+    }
+    list.push(
+      { value: 'pretty', label: 'Pretty' },
+      { value: 'tree', label: 'Tree' },
+      { value: 'raw', label: 'Raw' },
+      { value: 'hex', label: 'Hex' }
+    );
+    return list;
+  }, [mediaInfo]);
+
   if (!latestResult && historyList.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-surface text-muted-foreground p-6 text-xs italic select-none">
@@ -79,6 +109,10 @@ export const CollectionResponseViewer: React.FC<CollectionResponseViewerProps> =
   };
 
   const renderBodyContent = () => {
+    if (bodyFormat === 'preview' && mediaInfo) {
+      return <MediaResponsePreview media={mediaInfo} title="collection-response" />;
+    }
+
     if (!currentResponseBody) {
       return (
         <div className="h-full flex items-center justify-center text-muted-foreground italic text-xs">
@@ -174,6 +208,7 @@ export const CollectionResponseViewer: React.FC<CollectionResponseViewerProps> =
         {/* Left Side: Body vs Headers Tabs */}
         <div className="flex items-center gap-1 bg-background p-0.5 rounded border border-border">
           <button
+            type="button"
             onClick={() => setActiveTab('body')}
             className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors cursor-pointer ${
               activeTab === 'body'
@@ -184,6 +219,7 @@ export const CollectionResponseViewer: React.FC<CollectionResponseViewerProps> =
             Body
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('headers')}
             className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors cursor-pointer ${
               activeTab === 'headers'
@@ -195,20 +231,21 @@ export const CollectionResponseViewer: React.FC<CollectionResponseViewerProps> =
           </button>
         </div>
 
-        {/* Right Side: Format Selector (Pretty / Tree / Raw / Hex) */}
+        {/* Right Side: Format Selector */}
         {activeTab === 'body' ? (
           <div className="flex items-center gap-1 bg-background p-0.5 rounded border border-border">
-            {(['pretty', 'tree', 'raw', 'hex'] as const).map((fmt) => (
+            {availableFormats.map((fmt) => (
               <button
-                key={fmt}
-                onClick={() => setBodyFormat(fmt)}
+                key={fmt.value}
+                type="button"
+                onClick={() => setBodyFormat(fmt.value)}
                 className={`px-2 py-0.5 rounded uppercase text-[10px] font-semibold transition-colors cursor-pointer ${
-                  bodyFormat === fmt
+                  bodyFormat === fmt.value
                     ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
                     : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
                 }`}
               >
-                {fmt}
+                {fmt.label}
               </button>
             ))}
           </div>

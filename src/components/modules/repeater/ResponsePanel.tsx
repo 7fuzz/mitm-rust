@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import type { RepeaterHistoryItem, RepeaterExecutionResult } from '../../../services/tauri/bridge';
 import { StatusBadge } from '../../common/StatusBadge';
 import { CodeEditor } from '../../common/CodeEditor';
@@ -6,6 +6,8 @@ import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { HexViewer } from '../../common/HexViewer';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { JsonTreeViewerRoot } from '../../common/JsonTreeViewer';
+import { MediaResponsePreview } from '../../common/MediaResponsePreview';
+import { detectMediaResponse } from '../../../utils/mediaDetector';
 
 interface ResponsePanelProps {
   response: RepeaterHistoryItem | RepeaterExecutionResult | null;
@@ -13,7 +15,7 @@ interface ResponsePanelProps {
 
 export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
   const [activeTab, setActiveTab] = useState<'body' | 'headers'>('body');
-  const [bodyFormat, setBodyFormat] = useState<'pretty' | 'tree' | 'raw' | 'hex' | 'html'>('pretty');
+  const [bodyFormat, setBodyFormat] = useState<string>('pretty');
   const [treeSearch, setTreeSearch] = useState('');
   const [treeFilterMode, setTreeFilterMode] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
@@ -44,6 +46,35 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
   const durationMs = response.durationMs || 0;
   const size = 'responseSize' in response ? response.responseSize : responseBody.length;
   const statusText = 'statusText' in response ? response.statusText : '';
+
+  const mediaInfo = useMemo(
+    () => detectMediaResponse(responseBody, responseHeaders),
+    [responseBody, responseHeaders]
+  );
+
+  // Auto-switch to preview when media is detected
+  useEffect(() => {
+    if (mediaInfo) {
+      setBodyFormat('preview');
+    } else {
+      setBodyFormat('pretty');
+    }
+  }, [mediaInfo, response]);
+
+  const availableFormats = useMemo(() => {
+    const list: Array<{ value: string; label: string }> = [];
+    if (mediaInfo) {
+      list.push({ value: 'preview', label: `Preview (${mediaInfo.previewType.toUpperCase()})` });
+    }
+    list.push(
+      { value: 'pretty', label: 'Pretty' },
+      { value: 'tree', label: 'Tree' },
+      { value: 'raw', label: 'Raw' },
+      { value: 'hex', label: 'Hex' },
+      { value: 'html', label: 'HTML' }
+    );
+    return list;
+  }, [mediaInfo]);
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -84,6 +115,10 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
   };
 
   const renderBodyContent = () => {
+    if (bodyFormat === 'preview' && mediaInfo) {
+      return <MediaResponsePreview media={mediaInfo} title="repeater-response" />;
+    }
+
     if (!responseBody) {
       return (
         <div className="h-full flex items-center justify-center text-muted-foreground italic text-xs">
@@ -195,17 +230,18 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
         {/* Format selectors (active in Body tab) */}
         {activeTab === 'body' ? (
           <div className="flex items-center gap-1 bg-background p-0.5 rounded border border-border">
-            {(['pretty', 'tree', 'raw', 'hex', 'html'] as const).map((fmt) => (
+            {availableFormats.map((fmt) => (
               <button
-                key={fmt}
-                onClick={() => setBodyFormat(fmt)}
+                key={fmt.value}
+                type="button"
+                onClick={() => setBodyFormat(fmt.value)}
                 className={`px-2 py-0.5 rounded uppercase text-[10px] font-semibold transition-colors cursor-pointer ${
-                  bodyFormat === fmt
+                  bodyFormat === fmt.value
                     ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
                     : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
                 }`}
               >
-                {fmt}
+                {fmt.label}
               </button>
             ))}
           </div>
