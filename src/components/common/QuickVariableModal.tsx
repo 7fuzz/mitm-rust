@@ -21,6 +21,7 @@ export const QuickVariableModal: React.FC = () => {
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
   const [isSecret, setIsSecret] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const [inlineEdit, setInlineEdit] = useState<{
     type: InlineEditType;
@@ -30,9 +31,13 @@ export const QuickVariableModal: React.FC = () => {
   } | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+  const newKeyInputRef = useRef<HTMLInputElement>(null);
+  const newValueInputRef = useRef<HTMLInputElement>(null);
 
-  const currentEnvFromList = environmentsList.find((e) => e.id === activeEnvironmentId || e.isActive) || environmentsList[0];
+  const currentEnvFromList =
+    environmentsList.find((e) => e.id === activeEnvironmentId || e.isActive) || environmentsList[0];
   const currentEnvFromLegacy = environments.find((e) => e.id === activeEnvironmentId);
   const currentEnvName = currentEnvFromList?.name || currentEnvFromLegacy?.name || 'Environment';
 
@@ -47,39 +52,40 @@ export const QuickVariableModal: React.FC = () => {
     );
   });
 
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => {
+      setToast((prev) => (prev === msg ? null : prev));
+    }, 2000);
+  };
+
   useEffect(() => {
     if (isQuickVarModalOpen) {
       setSelectedIndex(0);
       setSearch('');
       setInlineEdit(null);
+      setToast(null);
     }
   }, [isQuickVarModalOpen]);
+
+  useEffect(() => {
+    if (selectedIndex >= filteredVars.length && filteredVars.length > 0) {
+      setSelectedIndex(filteredVars.length - 1);
+    }
+  }, [filteredVars.length, selectedIndex]);
+
+  useEffect(() => {
+    if (listRef.current && listRef.current.children[selectedIndex]) {
+      const selectedEl = listRef.current.children[selectedIndex] as HTMLElement;
+      selectedEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selectedIndex]);
 
   useEffect(() => {
     if (inlineEdit) {
       setTimeout(() => editInputRef.current?.focus(), 20);
     }
   }, [inlineEdit]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setQuickVarModalOpen(!isQuickVarModalOpen);
-      }
-      if (e.key === 'Escape' && isQuickVarModalOpen) {
-        if (inlineEdit) {
-          setInlineEdit(null);
-        } else {
-          setQuickVarModalOpen(false);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isQuickVarModalOpen, inlineEdit, setQuickVarModalOpen]);
-
-  if (!isQuickVarModalOpen) return null;
 
   const handleSelectEnvironment = async (envId: string) => {
     const targetInList = environmentsList.find((e) => e.id === envId);
@@ -120,12 +126,14 @@ export const QuickVariableModal: React.FC = () => {
         value,
         variants: updatedVariants,
       };
+      showToast(`Updated value for {{${currentVar.key}}}`);
     } else if (type === 'rename-var') {
       if (value.trim()) {
         updatedVars[realIndex] = {
           ...currentVar,
           key: value.trim(),
         };
+        showToast(`Renamed variable to {{${value.trim()}}}`);
       }
     } else if (type === 'rename-variant') {
       if (value.trim()) {
@@ -136,6 +144,7 @@ export const QuickVariableModal: React.FC = () => {
           ...currentVar,
           variants: updatedVariants,
         };
+        showToast(`Renamed variant to "${value.trim()}"`);
       }
     } else if (type === 'new-variant') {
       if (value.trim()) {
@@ -149,6 +158,7 @@ export const QuickVariableModal: React.FC = () => {
           activeIndex: updatedVariants.length - 1,
           value: extraValue || '',
         };
+        showToast(`Added variant "${value.trim()}"`);
       }
     }
 
@@ -170,6 +180,7 @@ export const QuickVariableModal: React.FC = () => {
       variables: updatedVars,
       updatedAtMs: Date.now(),
     });
+    showToast(`Deleted variable {{${varKey}}}`);
   };
 
   const handleDeleteVariant = async (varIndex: number) => {
@@ -185,6 +196,7 @@ export const QuickVariableModal: React.FC = () => {
     if (variants.length <= 1) return;
 
     const activeIdx = currentVar.activeIndex || 0;
+    const targetVariantName = variants[activeIdx]?.name || 'variant';
     const updatedVariants = variants.filter((_, idx) => idx !== activeIdx);
     const newActiveIdx = Math.max(0, activeIdx - 1);
 
@@ -201,6 +213,7 @@ export const QuickVariableModal: React.FC = () => {
       variables: updatedVars,
       updatedAtMs: Date.now(),
     });
+    showToast(`Deleted variant "${targetVariantName}"`);
   };
 
   const handleCycleVariant = async (varIndex: number, direction: 'next' | 'prev' = 'next') => {
@@ -234,14 +247,16 @@ export const QuickVariableModal: React.FC = () => {
       variables: updatedVars,
       updatedAtMs: Date.now(),
     });
+    showToast(`Variant: ${nextVariant.name}`);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newKey.trim() || !currentEnvFromList) return;
     const initialVal = newValue;
+    const keyName = newKey.trim().toUpperCase();
     const newVar: EnvironmentVariable = {
-      key: newKey.trim().toUpperCase(),
+      key: keyName,
       value: initialVal,
       enabled: true,
       type: isSecret ? 'secret' : 'default',
@@ -256,7 +271,264 @@ export const QuickVariableModal: React.FC = () => {
     await saveEnvironmentVariables(updatedEnv);
     setNewKey('');
     setNewValue('');
+    showToast(`Created variable {{${keyName}}}`);
   };
+
+  // Keyboard shortcut controller for QuickVariableModal
+  useEffect(() => {
+    if (!isQuickVarModalOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Toggle modal with Ctrl+K / Cmd+K
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setQuickVarModalOpen(false);
+        return;
+      }
+
+      const activeEl = document.activeElement;
+      const isSearchFocused = activeEl === searchInputRef.current;
+      const isNewKeyFocused =
+        activeEl === newKeyInputRef.current || activeEl === newValueInputRef.current;
+      const isInlineEditFocused = activeEl === editInputRef.current;
+
+      // 1. Search bar shortcuts:
+      // Enter keeps the query and blurs back to list; Esc clears search and blurs back to list
+      if (isSearchFocused) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          searchInputRef.current?.blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setSearch('');
+          searchInputRef.current?.blur();
+        }
+        return;
+      }
+
+      // 2. Inline Edit shortcuts: Enter saves, Esc cancels
+      if (inlineEdit || isInlineEditFocused) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleSaveInline();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setInlineEdit(null);
+        }
+        return;
+      }
+
+      // 3. New variable inputs: Esc blurs
+      if (isNewKeyFocused) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          (activeEl as HTMLElement)?.blur();
+        }
+        return;
+      }
+
+      // Any other text input focused
+      if (
+        activeEl?.tagName === 'INPUT' ||
+        activeEl?.tagName === 'TEXTAREA' ||
+        activeEl?.getAttribute('contenteditable') === 'true'
+      ) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          (activeEl as HTMLElement)?.blur();
+        }
+        return;
+      }
+
+      // 4. Modal Root Shortcuts:
+
+      // Esc: Close modal
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setQuickVarModalOpen(false);
+        return;
+      }
+
+      // / : Activate search input
+      if (e.key === '/') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      // Up / Down: Switch current selected variable
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.max(0, prev - 1));
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.min(filteredVars.length - 1, prev + 1));
+        return;
+      }
+
+      // Left / Right: Switch variant of current selected variable
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (filteredVars.length > 0) {
+          handleCycleVariant(selectedIndex, 'prev');
+        }
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (filteredVars.length > 0) {
+          handleCycleVariant(selectedIndex, 'next');
+        }
+        return;
+      }
+
+      // e : Switch to next environment
+      if (e.key === 'e') {
+        e.preventDefault();
+        if (environmentsList.length > 1) {
+          const currentIdx = environmentsList.findIndex(
+            (env) => env.id === activeEnvironmentId || env.isActive
+          );
+          const nextIdx = (currentIdx + 1) % environmentsList.length;
+          handleSelectEnvironment(environmentsList[nextIdx].id);
+          showToast(`Switched Environment: ${environmentsList[nextIdx].name}`);
+        }
+        return;
+      }
+
+      // E (Shift+E) : Switch to previous environment
+      if (e.key === 'E') {
+        e.preventDefault();
+        if (environmentsList.length > 1) {
+          const currentIdx = environmentsList.findIndex(
+            (env) => env.id === activeEnvironmentId || env.isActive
+          );
+          const prevIdx = (currentIdx - 1 + environmentsList.length) % environmentsList.length;
+          handleSelectEnvironment(environmentsList[prevIdx].id);
+          showToast(`Switched Environment: ${environmentsList[prevIdx].name}`);
+        }
+        return;
+      }
+
+      const targetVar = filteredVars[selectedIndex];
+      if (!targetVar) {
+        if (e.key === 'N') {
+          e.preventDefault();
+          newKeyInputRef.current?.focus();
+        }
+        return;
+      }
+
+      const variants = getVariants(targetVar);
+      const activeVarIdx = targetVar.activeIndex || 0;
+      const activeVariant = variants[activeVarIdx] || variants[0] || { name: '(auto)', value: targetVar.value };
+
+      // n : New variant for current selected variable
+      if (e.key === 'n') {
+        e.preventDefault();
+        setInlineEdit({
+          type: 'new-variant',
+          varIndex: selectedIndex,
+          value: '',
+          extraValue: '',
+        });
+        return;
+      }
+
+      // N (Shift+N) : New variable
+      if (e.key === 'N') {
+        e.preventDefault();
+        newKeyInputRef.current?.focus();
+        return;
+      }
+
+      // r : Rename active variant
+      if (e.key === 'r') {
+        e.preventDefault();
+        setInlineEdit({
+          type: 'rename-variant',
+          varIndex: selectedIndex,
+          value: activeVariant.name,
+        });
+        return;
+      }
+
+      // R (Shift+R) : Rename variable key
+      if (e.key === 'R') {
+        e.preventDefault();
+        setInlineEdit({
+          type: 'rename-var',
+          varIndex: selectedIndex,
+          value: targetVar.key,
+        });
+        return;
+      }
+
+      // d : Delete current active variant
+      if (e.key === 'd') {
+        e.preventDefault();
+        if (variants.length > 1) {
+          handleDeleteVariant(selectedIndex);
+        } else {
+          showToast(`Cannot delete default (auto) variant`);
+        }
+        return;
+      }
+
+      // D (Shift+D) : Delete variable
+      if (e.key === 'D') {
+        e.preventDefault();
+        handleDeleteVariable(targetVar.key);
+        return;
+      }
+
+      // c : Copy variant value to clipboard
+      if (e.key === 'c') {
+        e.preventDefault();
+        const textToCopy = activeVariant.value || '';
+        navigator.clipboard.writeText(textToCopy);
+        showToast(`Copied variant value: "${textToCopy.slice(0, 24)}${textToCopy.length > 24 ? '...' : ''}"`);
+        return;
+      }
+
+      // C (Shift+C) : Copy variable tag {{KEY}} to clipboard
+      if (e.key === 'C') {
+        e.preventDefault();
+        const textToCopy = `{{${targetVar.key}}}`;
+        navigator.clipboard.writeText(textToCopy);
+        showToast(`Copied variable tag: ${textToCopy}`);
+        return;
+      }
+
+      // Enter : Edit active variant value
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        setInlineEdit({
+          type: 'value',
+          varIndex: selectedIndex,
+          value: activeVariant.value || '',
+        });
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isQuickVarModalOpen,
+    inlineEdit,
+    selectedIndex,
+    filteredVars,
+    activeEnvironmentId,
+    environmentsList,
+    activeVars,
+    currentEnvFromList,
+  ]);
+
+  if (!isQuickVarModalOpen) return null;
 
   return (
     <div
@@ -265,11 +537,11 @@ export const QuickVariableModal: React.FC = () => {
           setQuickVarModalOpen(false);
         }
       }}
-      className="fixed inset-0 z-50 flex items-start justify-center pt-12 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 font-sans text-xs select-none cursor-pointer"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-10 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 font-sans text-xs select-none cursor-pointer"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl bg-surface border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] text-foreground cursor-default select-text"
+        className="w-full max-w-2xl bg-surface border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-foreground cursor-default select-text"
       >
         {/* Modal Header */}
         <div className="p-3 border-b border-border flex items-center justify-between bg-header">
@@ -277,19 +549,24 @@ export const QuickVariableModal: React.FC = () => {
             <MingCuteIcon name="earth_line" size={18} className="text-primary" />
             <span>Quick Environment & Variable Switcher</span>
           </div>
-          <button
-            onClick={() => setQuickVarModalOpen(false)}
-            className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors cursor-pointer"
-          >
-            <MingCuteIcon name="close_line" size={16} />
-          </button>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono text-muted-foreground">Press <kbd className="px-1 py-0.5 rounded bg-background border border-border text-foreground font-bold">Esc</kbd> to close</span>
+            <button
+              onClick={() => setQuickVarModalOpen(false)}
+              className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors cursor-pointer"
+            >
+              <MingCuteIcon name="close_line" size={16} />
+            </button>
+          </div>
         </div>
 
         {/* Environment Selector Bar */}
-        <div className="p-3 bg-background border-b border-border flex flex-col gap-2">
-          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block font-mono">
-            Active Workspace Environments
-          </label>
+        <div className="p-2.5 bg-background border-b border-border flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block font-mono">
+              Active Workspace Environments (Press <kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">e</kbd>/<kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">E</kbd> to cycle)
+            </label>
+          </div>
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
             {environmentsList.length > 0
               ? environmentsList.map((env) => {
@@ -339,23 +616,37 @@ export const QuickVariableModal: React.FC = () => {
         </div>
 
         {/* Filter Input Bar */}
-        <div className="p-3 border-b border-border flex items-center gap-2 bg-header font-mono">
+        <div className="p-2.5 border-b border-border flex items-center gap-2 bg-header font-mono">
           <MingCuteIcon name="search_line" className="text-muted-foreground" size={16} />
           <input
+            ref={searchInputRef}
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Filter variables in ${currentEnvName} (e.g. {{AUTH_TOKEN}})...`}
+            placeholder={`Type '/' to search variables in ${currentEnvName} (e.g. {{AUTH_TOKEN}})...`}
             className="w-full bg-transparent text-xs focus:outline-none text-foreground placeholder:text-muted-foreground font-mono"
             autoFocus
           />
+          {search && (
+            <button
+              onClick={() => {
+                setSearch('');
+                searchInputRef.current?.focus();
+              }}
+              className="text-muted-foreground hover:text-foreground text-xs p-1"
+            >
+              <MingCuteIcon name="close_line" size={13} />
+            </button>
+          )}
         </div>
 
         {/* Variables List */}
-        <div ref={listRef} className="p-3 overflow-y-auto space-y-2 flex-1 custom-scrollbar">
+        <div ref={listRef} className="p-3 overflow-y-auto space-y-2 flex-1 custom-scrollbar min-h-[220px]">
           {filteredVars.length === 0 ? (
-            <div className="py-8 text-center text-xs text-muted-foreground italic font-sans">
-              No variables in "{currentEnvName}"
+            <div className="py-12 text-center text-xs text-muted-foreground italic font-sans flex flex-col items-center gap-2">
+              <MingCuteIcon name="earth_line" size={28} className="opacity-30" />
+              <span>No variables found in "{currentEnvName}"</span>
+              <span className="text-[11px] font-mono">Press <kbd className="px-1 py-0.5 rounded bg-surface border border-border text-foreground">Shift+N</kbd> to add a new variable</span>
             </div>
           ) : (
             filteredVars.map((v, idx) => {
@@ -375,7 +666,7 @@ export const QuickVariableModal: React.FC = () => {
                   onClick={() => setSelectedIndex(idx)}
                   className={`p-2.5 rounded-lg border transition-all flex flex-col gap-2 cursor-pointer ${
                     isSelected
-                      ? 'bg-primary/10 border-primary/50 shadow-2xs'
+                      ? 'bg-primary/10 border-primary/50 shadow-2xs ring-1 ring-primary/30'
                       : 'bg-background/50 border-border/60 hover:bg-neutral-subtle/50'
                   }`}
                 >
@@ -391,7 +682,7 @@ export const QuickVariableModal: React.FC = () => {
                             value={inlineEdit.value}
                             onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
                             onKeyDown={(e) => e.key === 'Enter' && handleSaveInline()}
-                            className="bg-background border border-primary rounded px-1.5 py-0.5 text-xs text-primary font-bold outline-none"
+                            className="bg-background border border-primary rounded px-1.5 py-0.5 text-xs text-primary font-bold outline-none font-mono"
                           />
                         </div>
                       ) : (
@@ -408,7 +699,7 @@ export const QuickVariableModal: React.FC = () => {
                               setInlineEdit({ type: 'rename-var', varIndex: idx, value: keyStr });
                             }}
                             className="p-0.5 text-muted-foreground hover:text-foreground opacity-60 hover:opacity-100 transition-opacity"
-                            title="Rename variable key"
+                            title="Rename variable key (R)"
                           >
                             <MingCuteIcon name="edit_line" size={12} />
                           </button>
@@ -420,14 +711,14 @@ export const QuickVariableModal: React.FC = () => {
                     <div className="flex items-center gap-1.5 shrink-0">
                       {isEditingThis && inlineEdit.type === 'rename-variant' ? (
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-amber-500 font-bold">Variant Name:</span>
+                          <span className="text-[10px] text-amber-500 font-bold">Variant:</span>
                           <input
                             ref={editInputRef}
                             type="text"
                             value={inlineEdit.value}
                             onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
                             onKeyDown={(e) => e.key === 'Enter' && handleSaveInline()}
-                            className="bg-background border border-amber-500 rounded px-1.5 py-0.5 text-xs text-amber-500 font-bold outline-none"
+                            className="bg-background border border-amber-500 rounded px-1.5 py-0.5 text-xs text-amber-500 font-bold outline-none font-mono"
                           />
                         </div>
                       ) : (
@@ -438,7 +729,7 @@ export const QuickVariableModal: React.FC = () => {
                               handleCycleVariant(idx, 'prev');
                             }}
                             className="text-amber-500 hover:text-amber-400 font-bold px-0.5 cursor-pointer"
-                            title="Previous variant"
+                            title="Previous variant (←)"
                           >
                             ‹
                           </button>
@@ -452,7 +743,7 @@ export const QuickVariableModal: React.FC = () => {
                               setInlineEdit({ type: 'rename-variant', varIndex: idx, value: activeVariant.name });
                             }}
                             className="text-[10px] uppercase font-mono font-bold text-amber-500 cursor-pointer"
-                            title="Click to cycle variant or double click to rename variant"
+                            title="Click or press ←/→ to cycle variant, 'r' to rename"
                           >
                             Variant: <span className="underline">{activeVariant.name}</span>
                           </span>
@@ -462,7 +753,7 @@ export const QuickVariableModal: React.FC = () => {
                               handleCycleVariant(idx, 'next');
                             }}
                             className="text-amber-500 hover:text-amber-400 font-bold px-0.5 cursor-pointer"
-                            title="Next variant"
+                            title="Next variant (→)"
                           >
                             ›
                           </button>
@@ -481,7 +772,7 @@ export const QuickVariableModal: React.FC = () => {
                           });
                         }}
                         className="px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-surface hover:bg-neutral-subtle border border-border rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-0.5"
-                        title="Add new variant"
+                        title="Add new variant (n)"
                       >
                         <MingCuteIcon name="add_line" size={11} />
                         <span>Variant</span>
@@ -497,7 +788,7 @@ export const QuickVariableModal: React.FC = () => {
                             }
                           }}
                           className="p-1 text-muted-foreground hover:text-rose-400 rounded transition-colors cursor-pointer"
-                          title={`Delete variant ${activeVariant.name}`}
+                          title={`Delete variant ${activeVariant.name} (d)`}
                         >
                           <MingCuteIcon name="delete_2_line" size={12} />
                         </button>
@@ -512,7 +803,7 @@ export const QuickVariableModal: React.FC = () => {
                           }
                         }}
                         className="p-1 text-muted-foreground hover:text-rose-500 rounded transition-colors cursor-pointer ml-1"
-                        title={`Delete variable ${keyStr}`}
+                        title={`Delete variable ${keyStr} (D)`}
                       >
                         <MingCuteIcon name="delete_fill" size={13} />
                       </button>
@@ -539,13 +830,13 @@ export const QuickVariableModal: React.FC = () => {
                           onClick={handleSaveInline}
                           className="px-2 py-1 bg-emerald-500 text-white rounded font-sans text-xs font-semibold cursor-pointer shrink-0"
                         >
-                          Save
+                          Save (Enter)
                         </button>
                         <button
                           onClick={() => setInlineEdit(null)}
                           className="px-2 py-1 bg-surface border border-border text-muted-foreground hover:text-foreground rounded font-sans text-xs cursor-pointer shrink-0"
                         >
-                          Cancel
+                          Cancel (Esc)
                         </button>
                       </div>
                     ) : isEditingThis && inlineEdit.type === 'new-variant' ? (
@@ -572,7 +863,7 @@ export const QuickVariableModal: React.FC = () => {
                                 if (e.key === 'Enter') handleSaveInline();
                                 if (e.key === 'Escape') setInlineEdit(null);
                               }}
-                              className="w-1/2 bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground outline-none"
+                              className="w-1/2 bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground outline-none font-mono"
                             />
                             <input
                               type="text"
@@ -606,12 +897,12 @@ export const QuickVariableModal: React.FC = () => {
                         onDoubleClick={() => setInlineEdit({ type: 'value', varIndex: idx, value: valStr })}
                         onClick={() => setInlineEdit({ type: 'value', varIndex: idx, value: valStr })}
                         className="w-full px-2 py-1 bg-background border border-border/80 rounded flex items-center justify-between text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors cursor-text"
-                        title="Click to edit value"
+                        title="Click or press Enter to edit value"
                       >
                         <span className="truncate max-w-[420px]">
                           {valStr ? (isSecretVal ? '••••••••' : valStr) : <span className="opacity-40 italic">&lt;empty&gt;</span>}
                         </span>
-                        <span className="text-[10px] text-muted-foreground/60 font-sans">Click to edit</span>
+                        <span className="text-[10px] text-muted-foreground/60 font-sans">Press Enter to edit</span>
                       </div>
                     )}
                   </div>
@@ -622,15 +913,17 @@ export const QuickVariableModal: React.FC = () => {
         </div>
 
         {/* Create Variable Form */}
-        <form onSubmit={handleCreate} className="p-3 border-t border-border bg-header flex items-center gap-2 font-mono">
+        <form onSubmit={handleCreate} className="p-2.5 border-t border-border bg-header flex items-center gap-2 font-mono">
           <input
+            ref={newKeyInputRef}
             type="text"
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}
-            placeholder="NEW_KEY"
+            placeholder="NEW_KEY (Shift+N)"
             className="w-1/3 bg-background border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
           />
           <input
+            ref={newValueInputRef}
             type="text"
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
@@ -653,6 +946,28 @@ export const QuickVariableModal: React.FC = () => {
             Add Variable
           </button>
         </form>
+
+        {/* Shortcut Cheat Sheet Footer */}
+        <div className="px-3 py-1.5 bg-background border-t border-border flex items-center justify-between text-[10px] font-mono text-muted-foreground select-none">
+          <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-0.5">
+            <span><kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">↑↓</kbd> Select</span>
+            <span><kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">←→</kbd> Variant</span>
+            <span><kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">Enter</kbd> Edit</span>
+            <span><kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">n</kbd>/<kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">N</kbd> New Variant/Var</span>
+            <span><kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">r</kbd>/<kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">R</kbd> Rename</span>
+            <span><kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">d</kbd>/<kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">D</kbd> Delete</span>
+            <span><kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">c</kbd>/<kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">C</kbd> Copy</span>
+            <span><kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">/</kbd> Search</span>
+            <span><kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">e</kbd>/<kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">E</kbd> Env</span>
+            <span><kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">Esc</kbd> Close</span>
+          </div>
+
+          {toast && (
+            <div className="bg-primary text-primary-foreground px-2 py-0.5 rounded font-sans text-[10px] font-semibold animate-fade-in shrink-0 ml-2 shadow-2xs">
+              {toast}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
