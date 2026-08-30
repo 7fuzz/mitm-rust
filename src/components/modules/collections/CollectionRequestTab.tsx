@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useCollectionStore } from '../../../stores/useCollectionStore';
+import { useSettingsStore } from '../../../stores/useSettingsStore';
 import { Select, Button } from '../../common/ui';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
@@ -178,24 +179,15 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        const activeEl = document.activeElement;
-        const isInputOrTextArea =
-          activeEl &&
-          (activeEl.tagName === 'INPUT' ||
-            activeEl.tagName === 'TEXTAREA' ||
-            (activeEl as HTMLElement).isContentEditable ||
-            activeEl.getAttribute('role') === 'textbox');
+      // Only Ctrl+Enter or Cmd+Enter triggers send globally
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        // Do not trigger if any modal/dialog overlay is open or active
+        const isModalOpen =
+          useSettingsStore.getState().isQuickVarModalOpen ||
+          document.querySelector('.fixed.z-50') !== null ||
+          document.activeElement?.closest('.fixed, [role="dialog"]') !== null;
 
-        // Ctrl+Enter or Cmd+Enter always sends request
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          handleSaveAndSend();
-          return;
-        }
-
-        // Plain Enter sends request if NOT focused inside an input/textarea
-        if (!isInputOrTextArea) {
+        if (!isModalOpen) {
           e.preventDefault();
           handleSaveAndSend();
         }
