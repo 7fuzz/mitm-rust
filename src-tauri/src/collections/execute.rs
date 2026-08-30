@@ -268,37 +268,111 @@ pub async fn execute_collection_request_db(
     })
 }
 
-fn evaluate_rust_extract_rule(
+fn evaluate_json_path(value: &serde_json::Value, expr: &str) -> Option<serde_json::Value> {
+    let clean_expr = expr.trim();
+    // Remove leading '$' or '$.' if present
+    let path = if clean_expr.starts_with("$.") {
+        &clean_expr[2..]
+    } else if clean_expr.starts_with('$') {
+        &clean_expr[1..]
+    } else {
+        clean_expr
+    };
+
+    if path.is_empty() {
+        return Some(value.clone());
+    }
+
+    // Tokenize path into segments (supporting 'a.b.c', 'a[0].b', 'a.0.b', 'a["b"]')
+    let mut normalized = String::new();
+    for ch in path.chars() {
+        match ch {
+            '[' => {
+                if !normalized.is_empty() && !normalized.ends_with('.') {
+                    normalized.push('.');
+                }
+            }
+            ']' => {}
+            '\'' | '"' => {}
+            _ => {
+                normalized.push(ch);
+            }
+        }
+    }
+
+    let segments: Vec<&str> = normalized
+        .split('.')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let mut current = value;
+
+    for seg in segments {
+        match current {
+            serde_json::Value::Object(map) => {
+                if let Some(v) = map.get(seg) {
+                    current = v;
+                } else if let Some((_, v)) = map.iter().find(|(k, _)| k.eq_ignore_ascii_case(seg)) {
+                    current = v;
+                } else if let Some((_, v)) = map.iter().find(|(k, _)| {
+                    k.replace('_', "").eq_ignore_ascii_case(&seg.replace('_', ""))
+                }) {
+                    current = v;
+                } else {
+                    return None;
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                if let Ok(idx) = seg.parse::<usize>() {
+                    current = arr.get(idx)?;
+                } else {
+                    return None;
+                }
+            }
+            _ => return None,
+        }
+    }
+
+    Some(current.clone())
+}
+
+fn json_value_to_string(val: &serde_json::Value) -> Option<String> {
+    match val {
+        serde_json::Value::String(s) => Some(s.clone()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Bool(b) => Some(b.to_string()),
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => Some(val.to_string()),
+        serde_json::Value::Null => None,
+    }
+}
+
+pub fn evaluate_rust_extract_rule(
     rule: &crate::repeater::ExtractRuleItem,
     response_body: &str,
     response_headers: &[HeaderItem],
 ) -> Option<String> {
-    let mode = rule.r#type.as_str();
+    let mode = rule.r#type.trim().to_lowercase();
 
-    match mode {
-        "json" => {
+    match mode.as_str() {
+        "json" | "jsonpath" | "json_path" | "body_json" => {
             let parsed: serde_json::Value = serde_json::from_str(response_body).ok()?;
-            let parts: Vec<&str> = rule.expression.trim().split('.').collect();
-            let mut current = &parsed;
-            for part in parts {
-                current = current.get(part)?;
-            }
-            if current.is_string() {
-                Some(current.as_str().unwrap_or("").to_string())
-            } else if !current.is_null() {
-                Some(current.to_string())
-            } else {
-                None
-            }
+            let val = evaluate_json_path(&parsed, &rule.expression)?;
+            json_value_to_string(&val)
         }
-        "header" => {
+        "header" | "headers" => {
             let target_k = rule.expression.trim().to_lowercase();
-            response_headers.iter().find(|h| h.key.trim().to_lowercase() == target_k).map(|h| h.value.clone())
+            response_headers
+                .iter()
+                .find(|h| h.key.trim().to_lowercase() == target_k)
+                .map(|h| h.value.clone())
         }
         "after_string" => {
             let parts: Vec<&str> = rule.expression.split("||").collect();
             let prefix = parts.get(0)?;
-            if prefix.is_empty() { return None; }
+            if prefix.is_empty() {
+                return None;
+            }
             let limit: usize = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(256);
             let idx = response_body.find(prefix)?;
             let start = idx + prefix.len();
@@ -311,7 +385,9 @@ fn evaluate_rust_extract_rule(
         "before_string" => {
             let parts: Vec<&str> = rule.expression.split("||").collect();
             let suffix = parts.get(0)?;
-            if suffix.is_empty() { return None; }
+            if suffix.is_empty() {
+                return None;
+            }
             let limit: usize = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(256);
             let idx = response_body.find(suffix)?;
             let start = if idx > limit { idx - limit } else { 0 };
@@ -323,7 +399,9 @@ fn evaluate_rust_extract_rule(
             let parts: Vec<&str> = rule.expression.split("||").collect();
             let start_delim = parts.get(0)?;
             let end_delim = parts.get(1)?;
-            if start_delim.is_empty() || end_delim.is_empty() { return None; }
+            if start_delim.is_empty() || end_delim.is_empty() {
+                return None;
+            }
             let start_idx = response_body.find(start_delim)?;
             let content_start = start_idx + start_delim.len();
             let end_idx = response_body[content_start..].find(end_delim)?;
@@ -335,7 +413,15 @@ fn evaluate_rust_extract_rule(
             let val = caps.get(1).or_else(|| caps.get(0))?;
             Some(val.as_str().to_string())
         }
-        _ => None,
+        _ => {
+            // Fallback: If type is unrecognized, try JSON extraction first, then regex
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(response_body) {
+                if let Some(val) = evaluate_json_path(&parsed, &rule.expression) {
+                    return json_value_to_string(&val);
+                }
+            }
+            None
+        }
     }
 }
 
@@ -376,7 +462,17 @@ pub fn perform_auto_extraction_db(
             continue;
         }
 
-        let target_var_name = rule.target_variable.trim();
+        // Clean target variable name (e.g. strip "{{access_token}}" -> "access_token")
+        let raw_target = rule.target_variable.trim();
+        let target_var_name = raw_target
+            .trim_start_matches("{{")
+            .trim_end_matches("}}")
+            .trim();
+
+        if target_var_name.is_empty() {
+            continue;
+        }
+
         let extracted_val = evaluate_rust_extract_rule(&rule, response_body, response_headers);
 
         if let Some(val_str) = extracted_val {
@@ -384,22 +480,37 @@ pub fn perform_auto_extraction_db(
                 continue;
             }
 
-            let var_entry = active_env.variables.iter_mut().find(|v| v.key.eq_ignore_ascii_case(target_var_name));
+            let var_entry = active_env
+                .variables
+                .iter_mut()
+                .find(|v| v.key.eq_ignore_ascii_case(target_var_name));
 
             match var_entry {
                 Some(v) => {
-                    if v.variants.is_empty() || v.variants[0].name != "(auto)" {
-                        let auto_var = crate::workspace::VariableVariant {
-                            name: "(auto)".to_string(),
-                            value: val_str.clone(),
-                        };
-                        v.variants.insert(0, auto_var);
-                    } else {
-                        v.variants[0].value = val_str.clone();
-                    }
+                    let auto_idx = v
+                        .variants
+                        .iter()
+                        .position(|variant| variant.name.eq_ignore_ascii_case("(auto)"));
 
-                    if v.active_index == 0 {
-                        v.value = val_str;
+                    match auto_idx {
+                        Some(idx) => {
+                            v.variants[idx].value = val_str.clone();
+                            if v.active_index == idx {
+                                v.value = val_str;
+                            }
+                        }
+                        None => {
+                            v.variants.insert(
+                                0,
+                                crate::workspace::VariableVariant {
+                                    name: "(auto)".to_string(),
+                                    value: val_str.clone(),
+                                },
+                            );
+                            if v.active_index == 0 {
+                                v.value = val_str;
+                            }
+                        }
                     }
                     modified = true;
                 }
@@ -426,3 +537,75 @@ pub fn perform_auto_extraction_db(
         let _ = crate::workspace::save_workspace_environment_db(db_path, active_env.clone());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::repeater::ExtractRuleItem;
+
+    #[test]
+    fn test_extract_json_path() {
+        let body = r#"{
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "access_token": "token_abc_123",
+            "data": {
+                "id": "278d9778-cce7-4d70",
+                "client_secret": "secret_xyz_789"
+            },
+            "items": [
+                {"id": "item_0"},
+                {"id": "item_1"}
+            ]
+        }"#;
+
+        let rule1 = ExtractRuleItem {
+            id: "1".to_string(),
+            r#type: "json".to_string(),
+            expression: "access_token".to_string(),
+            target_variable: "access_token".to_string(),
+            enabled: true,
+        };
+        assert_eq!(
+            evaluate_rust_extract_rule(&rule1, body, &[]),
+            Some("token_abc_123".to_string())
+        );
+
+        let rule2 = ExtractRuleItem {
+            id: "2".to_string(),
+            r#type: "json".to_string(),
+            expression: "data.client_secret".to_string(),
+            target_variable: "client_secret".to_string(),
+            enabled: true,
+        };
+        assert_eq!(
+            evaluate_rust_extract_rule(&rule2, body, &[]),
+            Some("secret_xyz_789".to_string())
+        );
+
+        let rule3 = ExtractRuleItem {
+            id: "3".to_string(),
+            r#type: "json".to_string(),
+            expression: "items.0.id".to_string(),
+            target_variable: "first_item".to_string(),
+            enabled: true,
+        };
+        assert_eq!(
+            evaluate_rust_extract_rule(&rule3, body, &[]),
+            Some("item_0".to_string())
+        );
+
+        let rule4 = ExtractRuleItem {
+            id: "4".to_string(),
+            r#type: "json".to_string(),
+            expression: "$.items[1].id".to_string(),
+            target_variable: "second_item".to_string(),
+            enabled: true,
+        };
+        assert_eq!(
+            evaluate_rust_extract_rule(&rule4, body, &[]),
+            Some("item_1".to_string())
+        );
+    }
+}
+

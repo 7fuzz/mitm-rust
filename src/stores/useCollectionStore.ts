@@ -249,6 +249,12 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
           executionResult: { ...state.executionResult, [requestId]: result },
           isExecuting: { ...state.isExecuting, [requestId]: false },
         }));
+        try {
+          const { activeWorkspaceId, loadEnvironments } = (await import('./useWorkspaceStore')).useWorkspaceStore.getState();
+          if (activeWorkspaceId) {
+            await loadEnvironments(activeWorkspaceId);
+          }
+        } catch {}
       } else {
         await new Promise((r) => setTimeout(r, 400));
         const mockResult: ExecutionResult = {
