@@ -102,7 +102,7 @@ impl Default for ProxyConfig {
         Self {
             proxy_enabled: true,
             intercept_enabled: false,
-            intercept_mode: "both".to_string(),
+            intercept_mode: "request".to_string(),
             proxy_mode: "on".to_string(),
             port: 8080,
             host: "127.0.0.1".to_string(),

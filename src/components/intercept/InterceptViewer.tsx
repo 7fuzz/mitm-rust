@@ -7,6 +7,7 @@ export const InterceptViewer: React.FC = () => {
   const {
     interceptEnabled,
     interceptMode,
+    focusOnIntercepted,
     pendingFlows,
     selectedFlowId,
     editedHeaders,
@@ -15,6 +16,7 @@ export const InterceptViewer: React.FC = () => {
     initInterceptStore,
     setInterceptEnabled,
     setInterceptMode,
+    setFocusOnIntercepted,
     selectFlow,
     setEditedHeaders,
     setEditedBodyText,
@@ -30,7 +32,7 @@ export const InterceptViewer: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"headers" | "body">("headers");
   const [rulesModalOpen, setRulesModalOpen] = useState(false);
 
-  const [newRulePhase, setNewRulePhase] = useState<"request" | "response" | "both">("both");
+  const [newRulePhase, setNewRulePhase] = useState<"request" | "response" | "both">("request");
   const [newRuleField, setNewRuleField] = useState<"url" | "host" | "path" | "method" | "header">("url");
   const [newRuleOperator, setNewRuleOperator] = useState<"contains" | "equals" | "regex">("contains");
   const [newRuleValue, setNewRuleValue] = useState("");
@@ -112,6 +114,20 @@ export const InterceptViewer: React.FC = () => {
               </button>
             ))}
           </div>
+
+          {/* Focus on Intercepted Toggle Option */}
+          <label
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-surface rounded-lg border border-border text-xs text-foreground cursor-pointer hover:bg-neutral-subtle transition-colors select-none"
+            title="Automatically bring MITM window to front and select intercepted request when traffic is paused"
+          >
+            <input
+              type="checkbox"
+              checked={focusOnIntercepted}
+              onChange={(e) => setFocusOnIntercepted(e.target.checked)}
+              className="rounded accent-primary text-primary cursor-pointer w-3.5 h-3.5"
+            />
+            <span className="font-medium text-[11px] whitespace-nowrap">Focus on Intercepted</span>
+          </label>
         </div>
 
         {/* Action Controls */}

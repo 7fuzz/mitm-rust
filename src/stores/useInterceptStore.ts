@@ -12,12 +12,15 @@ import {
   getPendingFlows,
   subscribeInterceptTriggered,
   getProxyState,
+  isTauriAvailable,
 } from "../services/tauri/bridge";
 import { UnlistenFn } from "@tauri-apps/api/event";
+import { useSettingsStore } from "./useSettingsStore";
 
 interface InterceptState {
   interceptEnabled: boolean;
   interceptMode: "request" | "response" | "both";
+  focusOnIntercepted: boolean;
   rules: InterceptRule[];
   pendingFlows: PendingFlowPayload[];
   selectedFlowId: string | null;
@@ -29,6 +32,7 @@ interface InterceptState {
   initInterceptStore: () => Promise<void>;
   setInterceptEnabled: (enabled: boolean) => Promise<void>;
   setInterceptMode: (mode: "request" | "response" | "both") => Promise<void>;
+  setFocusOnIntercepted: (val: boolean) => void;
   setRules: (rules: InterceptRule[]) => Promise<void>;
   addRule: (rule: Omit<InterceptRule, "id" | "createdAtMs">) => Promise<void>;
   toggleRule: (id: string) => Promise<void>;
@@ -44,7 +48,8 @@ interface InterceptState {
 
 export const useInterceptStore = create<InterceptState>((set, get) => ({
   interceptEnabled: false,
-  interceptMode: "both",
+  interceptMode: "request",
+  focusOnIntercepted: typeof window !== "undefined" ? localStorage.getItem("mitm_focus_on_intercepted") !== "false" : true,
   rules: [],
   pendingFlows: [],
   selectedFlowId: null,
@@ -77,27 +82,60 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
         currentUnsub();
       }
 
-      const unsub = await subscribeInterceptTriggered((flow) => {
-        set((state) => {
-          const exists = state.pendingFlows.some((f) => f.flowId === flow.flowId);
-          if (exists) return state;
+      const unsub = await subscribeInterceptTriggered(async (flow) => {
+        const state = get();
+        const exists = state.pendingFlows.some((f) => f.flowId === flow.flowId);
+        if (exists) return;
 
-          const updatedFlows = [...state.pendingFlows, flow];
+        const updatedFlows = [...state.pendingFlows, flow];
+        const focusEnabled = state.focusOnIntercepted;
+
+        if (focusEnabled) {
+          // Bring Tauri window to front & set focus
+          if (isTauriAvailable()) {
+            try {
+              const { getCurrentWindow } = await import("@tauri-apps/api/window");
+              const win = getCurrentWindow();
+              await win.unminimize();
+              await win.show();
+              await win.setFocus();
+            } catch (err) {
+              console.warn("Failed to focus window on intercepted traffic:", err);
+            }
+          }
+
+          // Switch active module to 'intercept'
+          useSettingsStore.getState().setActiveModule("intercept");
+
+          // Auto-select newly intercepted flow
+          set({
+            pendingFlows: updatedFlows,
+            selectedFlowId: flow.flowId,
+            editedHeaders: flow.headers || [],
+            editedBodyText: flow.bodyText || "",
+          });
+        } else {
           const shouldSelect = !state.selectedFlowId;
-
-          return {
+          set({
             pendingFlows: updatedFlows,
             selectedFlowId: shouldSelect ? flow.flowId : state.selectedFlowId,
             editedHeaders: shouldSelect ? flow.headers : state.editedHeaders,
             editedBodyText: shouldSelect ? flow.bodyText : state.editedBodyText,
-          };
-        });
+          });
+        }
       });
 
       set({ unsubFn: unsub });
     } catch (e) {
       console.error("Failed to initialize intercept store:", e);
     }
+  },
+
+  setFocusOnIntercepted: (val: boolean) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("mitm_focus_on_intercepted", String(val));
+    }
+    set({ focusOnIntercepted: val });
   },
 
   setInterceptEnabled: async (enabled: boolean) => {

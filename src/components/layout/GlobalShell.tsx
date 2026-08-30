@@ -14,6 +14,7 @@ import { WorkspaceView } from '../modules/workspace/WorkspaceView';
 import { UtilitiesView } from '../modules/utilities/UtilitiesView';
 import { SettingsView } from '../modules/settings/SettingsView';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
+import { useInterceptStore } from '../../stores/useInterceptStore';
 import type { NavModule } from '../../types';
 
 export const GlobalShell: React.FC = () => {
@@ -21,11 +22,13 @@ export const GlobalShell: React.FC = () => {
 
   const { isQuickVarModalOpen, setQuickVarModalOpen } = useSettingsStore();
   const initWorkspaceStore = useWorkspaceStore((state) => state.initStore);
+  const initInterceptStore = useInterceptStore((state) => state.initInterceptStore);
 
-  // Initialize workspace and active environment state on app startup
+  // Initialize workspace, active environment, and intercept listener on app startup
   useEffect(() => {
     initWorkspaceStore();
-  }, [initWorkspaceStore]);
+    initInterceptStore();
+  }, [initWorkspaceStore, initInterceptStore]);
 
   // Keyboard shortcut listener for tabs 1-9 and V key for Quick Env Switcher
   useEffect(() => {
