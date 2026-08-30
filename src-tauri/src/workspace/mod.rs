@@ -250,6 +250,64 @@ pub fn save_workspace_environment_db(
     Ok(())
 }
 
+pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
+    if !text.contains("{{") || !text.contains("}}") {
+        return text.to_string();
+    }
+
+    let mut var_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut lower_var_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+    for var in &env.variables {
+        if var.enabled && !var.key.trim().is_empty() {
+            let k = var.key.trim().to_string();
+            lower_var_map.insert(k.to_lowercase(), var.value.clone());
+            var_map.insert(k, var.value.clone());
+        }
+    }
+
+    if var_map.is_empty() {
+        return text.to_string();
+    }
+
+    let re = match regex::Regex::new(r"\{\{\s*([^\r\n{}]+?)\s*\}\}") {
+        Ok(r) => r,
+        Err(_) => return text.to_string(),
+    };
+
+    let mut result = text.to_string();
+    const MAX_DEPTH: usize = 15;
+
+    for _ in 0..MAX_DEPTH {
+        if !result.contains("{{") || !result.contains("}}") {
+            break;
+        }
+
+        let mut changed = false;
+        let next_result = re
+            .replace_all(&result, |caps: &regex::Captures| {
+                let key = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+                if let Some(val) = var_map.get(key) {
+                    changed = true;
+                    val.to_string()
+                } else if let Some(val) = lower_var_map.get(&key.to_lowercase()) {
+                    changed = true;
+                    val.to_string()
+                } else {
+                    caps.get(0).map(|m| m.as_str()).unwrap_or("").to_string()
+                }
+            })
+            .to_string();
+
+        if !changed || next_result == result {
+            break;
+        }
+        result = next_result;
+    }
+
+    result
+}
+
 pub fn interpolate_variables(db_path: &PathBuf, workspace_id: &str, text: &str) -> String {
     if !text.contains("{{") || !text.contains("}}") {
         return text.to_string();
@@ -259,15 +317,124 @@ pub fn interpolate_variables(db_path: &PathBuf, workspace_id: &str, text: &str) 
     let active_env = envs.into_iter().find(|e| e.is_active);
 
     if let Some(env) = active_env {
-        let mut result = text.to_string();
-        for var in env.variables {
-            if var.enabled && !var.key.trim().is_empty() {
-                let placeholder = format!("{{{{{}}}}}", var.key.trim());
-                result = result.replace(&placeholder, &var.value);
-            }
-        }
-        result
+        interpolate_variables_with_env(&env, text)
     } else {
         text.to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nested_double_interpolation() {
+        let env = Environment {
+            id: "env-1".to_string(),
+            workspace_id: "ws-1".to_string(),
+            name: "Test Env".to_string(),
+            is_active: true,
+            variables: vec![
+                EnvironmentVariable {
+                    key: "var_a".to_string(),
+                    value: "abc".to_string(),
+                    enabled: true,
+                    r#type: "default".to_string(),
+                    active_index: 0,
+                    variants: vec![],
+                },
+                EnvironmentVariable {
+                    key: "var_b".to_string(),
+                    value: "{{var_a}}def".to_string(),
+                    enabled: true,
+                    r#type: "default".to_string(),
+                    active_index: 0,
+                    variants: vec![],
+                },
+            ],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        };
+
+        let result = interpolate_variables_with_env(&env, "https://api.com/{{var_b}}");
+        assert_eq!(result, "https://api.com/abcdef");
+
+        let result_spaces = interpolate_variables_with_env(&env, "https://api.com/{{ var_b }}");
+        assert_eq!(result_spaces, "https://api.com/abcdef");
+    }
+
+    #[test]
+    fn test_deeply_nested_interpolation() {
+        let env = Environment {
+            id: "env-2".to_string(),
+            workspace_id: "ws-1".to_string(),
+            name: "Deep Env".to_string(),
+            is_active: true,
+            variables: vec![
+                EnvironmentVariable {
+                    key: "HOST".to_string(),
+                    value: "example.com".to_string(),
+                    enabled: true,
+                    r#type: "default".to_string(),
+                    active_index: 0,
+                    variants: vec![],
+                },
+                EnvironmentVariable {
+                    key: "BASE_URL".to_string(),
+                    value: "https://{{HOST}}/api".to_string(),
+                    enabled: true,
+                    r#type: "default".to_string(),
+                    active_index: 0,
+                    variants: vec![],
+                },
+                EnvironmentVariable {
+                    key: "USERS_ENDPOINT".to_string(),
+                    value: "{{BASE_URL}}/v1/users".to_string(),
+                    enabled: true,
+                    r#type: "default".to_string(),
+                    active_index: 0,
+                    variants: vec![],
+                },
+            ],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        };
+
+        let result = interpolate_variables_with_env(&env, "{{USERS_ENDPOINT}}?page=1");
+        assert_eq!(result, "https://example.com/api/v1/users?page=1");
+    }
+
+    #[test]
+    fn test_circular_reference_safety() {
+        let env = Environment {
+            id: "env-3".to_string(),
+            workspace_id: "ws-1".to_string(),
+            name: "Circular Env".to_string(),
+            is_active: true,
+            variables: vec![
+                EnvironmentVariable {
+                    key: "a".to_string(),
+                    value: "{{b}}".to_string(),
+                    enabled: true,
+                    r#type: "default".to_string(),
+                    active_index: 0,
+                    variants: vec![],
+                },
+                EnvironmentVariable {
+                    key: "b".to_string(),
+                    value: "{{a}}".to_string(),
+                    enabled: true,
+                    r#type: "default".to_string(),
+                    active_index: 0,
+                    variants: vec![],
+                },
+            ],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        };
+
+        // Should not loop infinitely or panic
+        let _ = interpolate_variables_with_env(&env, "{{a}}");
+    }
+}
+
