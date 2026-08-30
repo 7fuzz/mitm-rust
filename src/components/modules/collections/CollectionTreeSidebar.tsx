@@ -1,22 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useCollectionStore } from '../../../stores/useCollectionStore';
 import { useWorkspaceStore } from '../../../stores/useWorkspaceStore';
-import { MethodBadge } from '../../common/MethodBadge';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Input, Button } from '../../common/ui';
 import { CollectionExtractRulesModal } from './CollectionExtractRulesModal';
+import { CollectionFolderNode } from './tree/CollectionFolderNode';
+import { CollectionContextMenu, type ContextMenuState } from './tree/CollectionContextMenu';
 import type { CollectionTreeItem, RequestItem } from '../../../services/tauri/bridge';
 
 interface CollectionTreeSidebarProps {
   widthPx?: number;
-}
-
-interface ContextMenuState {
-  x: number;
-  y: number;
-  type: 'collection' | 'request' | 'root';
-  id?: string;
-  item?: any;
 }
 
 export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ widthPx = 280 }) => {
@@ -128,16 +121,15 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
   useEffect(() => {
     const handleOutsideClick = () => setContextMenu(null);
     window.addEventListener('click', handleOutsideClick);
-    window.addEventListener('contextmenu', handleOutsideClick);
-    return () => {
-      window.removeEventListener('click', handleOutsideClick);
-      window.removeEventListener('contextmenu', handleOutsideClick);
-    };
+    return () => window.removeEventListener('click', handleOutsideClick);
   }, []);
 
-  const toggleFolder = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setExpandedFolders((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggleFolder = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setExpandedFolders((prev) => ({
+      ...prev,
+      [id]: prev[id] === undefined ? false : !prev[id],
+    }));
   };
 
   const handleAddFolder = async (parentId: string | null) => {
@@ -315,228 +307,6 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
     }
   };
 
-  const renderTreeItem = (item: CollectionTreeItem, depth: number = 0) => {
-    const isExpanded = isSearching ? true : expandedFolders[item.id] !== false; // Auto-expand when searching, default expanded otherwise
-    const isAddingSubfolder = addingFolderParentId === item.id;
-    const isAddingSubReq = addingReqFolderId === item.id;
-    const isDropTarget = dragTargetFolderId === item.id;
-    const isRenaming = editingId === item.id && editingType === 'collection';
-
-    return (
-      <div key={item.id} className="flex flex-col select-none text-xs">
-        {/* Folder Node Header */}
-        <div
-          draggable
-          onDragStart={(e) => handleDragStartFolder(e, item)}
-          onDragOver={(e) => handleDragOverFolder(e, item.id)}
-          onDragLeave={(e) => handleDragLeaveFolder(e, item.id)}
-          onDrop={(e) => handleDropOnFolder(e, item.id)}
-          onClick={(e) => toggleFolder(item.id, e)}
-          onContextMenu={(e) => handleContextMenu(e, 'collection', item.id, item)}
-          className={`group flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-neutral-subtle/80 cursor-pointer font-sans transition-all ${
-            isDropTarget ? 'ring-2 ring-primary bg-primary/10' : ''
-          }`}
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        >
-          <div className="flex items-center gap-1.5 min-w-0 font-medium text-foreground flex-1">
-            <MingCuteIcon
-              name={isExpanded ? 'folder_open_line' : 'folder_line'}
-              size={15}
-              className="text-amber-500 shrink-0"
-            />
-            {isRenaming ? (
-              <input
-                type="text"
-                autoFocus
-                value={editingName}
-                onChange={(e) => setEditingName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveRename();
-                  if (e.key === 'Escape') setEditingId(null);
-                }}
-                onBlur={handleSaveRename}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-background border border-primary rounded px-1 py-0.5 text-xs text-foreground font-sans w-full focus:outline-none"
-              />
-            ) : (
-              <span className="truncate">{item.name}</span>
-            )}
-          </div>
-
-          {/* Actions: Add Subfolder / Add Request / Delete */}
-          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 shrink-0 transition-opacity">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setAddingFolderParentId(item.id);
-                setFolderName('');
-              }}
-              className="text-muted-foreground hover:text-primary p-0.5 rounded transition-colors"
-              title="Add Subfolder"
-            >
-              <MingCuteIcon name="folder_add_line" size={13} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setAddingReqFolderId(item.id);
-                setReqName('');
-              }}
-              className="text-muted-foreground hover:text-primary p-0.5 rounded transition-colors"
-              title="Add Request"
-            >
-              <MingCuteIcon name="plus_line" size={13} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (activeWorkspaceId) deleteCollectionById(item.id, activeWorkspaceId);
-              }}
-              className="text-muted-foreground hover:text-rose-500 p-0.5 rounded transition-colors"
-              title="Delete Folder"
-            >
-              <MingCuteIcon name="close_line" size={13} />
-            </button>
-          </div>
-        </div>
-
-        {/* Folder Children & Sub-Requests */}
-        {isExpanded && (
-          <div className="flex flex-col">
-            {/* Inline Subfolder Input */}
-            {isAddingSubfolder && (
-              <div className="px-2 py-1 flex items-center gap-1" style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}>
-                <input
-                  type="text"
-                  autoFocus
-                  placeholder="Subfolder name..."
-                  value={folderName}
-                  onChange={(e) => setFolderName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAddFolder(item.id);
-                    if (e.key === 'Escape') setAddingFolderParentId(null);
-                  }}
-                  className="bg-background border border-primary rounded px-1.5 py-0.5 text-xs text-foreground font-sans w-full focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleAddFolder(item.id)}
-                  className="p-1 text-emerald-400 hover:bg-emerald-500/10 rounded cursor-pointer shrink-0"
-                  title="Save Subfolder"
-                >
-                  <MingCuteIcon name="check_line" size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAddingFolderParentId(null)}
-                  className="p-1 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded cursor-pointer shrink-0"
-                  title="Cancel"
-                >
-                  <MingCuteIcon name="close_line" size={13} />
-                </button>
-              </div>
-            )}
-
-            {/* Inline Sub-Request Input */}
-            {isAddingSubReq && (
-              <div className="px-2 py-1 flex items-center gap-1" style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}>
-                <input
-                  type="text"
-                  autoFocus
-                  placeholder="Request name..."
-                  value={reqName}
-                  onChange={(e) => setReqName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAddRequest(item.id);
-                    if (e.key === 'Escape') setAddingReqFolderId(null);
-                  }}
-                  className="bg-background border border-primary rounded px-1.5 py-0.5 text-xs text-foreground font-sans w-full focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleAddRequest(item.id)}
-                  className="p-1 text-emerald-400 hover:bg-emerald-500/10 rounded cursor-pointer shrink-0"
-                  title="Save Request"
-                >
-                  <MingCuteIcon name="check_line" size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAddingReqFolderId(null)}
-                  className="p-1 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded cursor-pointer shrink-0"
-                  title="Cancel"
-                >
-                  <MingCuteIcon name="close_line" size={13} />
-                </button>
-              </div>
-            )}
-
-            {/* Subfolders */}
-            {item.children?.map((child) => renderTreeItem(child, depth + 1))}
-
-            {/* Folder Requests */}
-            {item.requests?.map((req) => renderRequestNode(req, depth + 1))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderRequestNode = (req: RequestItem, depth: number) => {
-    const isRenaming = editingId === req.id && editingType === 'request';
-
-    return (
-      <div
-        key={req.id}
-        draggable
-        onDragStart={(e) => handleDragStartRequest(e, req)}
-        onClick={() => openRequestTab(req)}
-        onContextMenu={(e) => handleContextMenu(e, 'request', req.id, req)}
-        className="group flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-neutral-subtle/80 cursor-pointer font-sans text-xs transition-colors"
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
-      >
-        <div className="flex items-center gap-2 truncate min-w-0 flex-1">
-          <MethodBadge method={req.method} />
-          {isRenaming ? (
-            <input
-              type="text"
-              autoFocus
-              value={editingName}
-              onChange={(e) => setEditingName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSaveRename();
-                if (e.key === 'Escape') setEditingId(null);
-              }}
-              onBlur={handleSaveRename}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-background border border-primary rounded px-1 py-0.5 text-xs text-foreground font-sans w-full focus:outline-none"
-            />
-          ) : (
-            <div className="flex flex-col min-w-0 truncate">
-              <span className="truncate text-foreground font-medium">{req.name}</span>
-              {isSearching && req.url && (
-                <span className="truncate text-[10px] text-muted-foreground font-mono" title={req.url}>
-                  {req.url}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (activeWorkspaceId) deleteRequestById(req.id, activeWorkspaceId);
-          }}
-          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-500 p-0.5 rounded transition-opacity shrink-0"
-          title="Delete Request"
-        >
-          <MingCuteIcon name="close_line" size={13} />
-        </button>
-      </div>
-    );
-  };
-
   return (
     <div
       onContextMenu={(e) => handleContextMenu(e, 'root')}
@@ -661,183 +431,100 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
             </Button>
           </div>
         ) : (
-          visibleTree.map((item) => renderTreeItem(item, 0))
+          visibleTree.map((item) => (
+            <CollectionFolderNode
+              key={item.id}
+              item={item}
+              depth={0}
+              isSearching={isSearching}
+              expandedFolders={expandedFolders}
+              addingFolderParentId={addingFolderParentId}
+              folderName={folderName}
+              addingReqFolderId={addingReqFolderId}
+              reqName={reqName}
+              dragTargetFolderId={dragTargetFolderId}
+              editingId={editingId}
+              editingType={editingType}
+              editingName={editingName}
+              onSetFolderName={setFolderName}
+              onSetReqName={setReqName}
+              onSetEditingName={setEditingName}
+              onSetAddingFolderParentId={setAddingFolderParentId}
+              onSetAddingReqFolderId={setAddingReqFolderId}
+              onToggleFolder={toggleFolder}
+              onAddFolder={handleAddFolder}
+              onAddRequest={handleAddRequest}
+              onSaveRename={handleSaveRename}
+              onCancelRename={() => setEditingId(null)}
+              onContextMenu={handleContextMenu}
+              onDragStartFolder={handleDragStartFolder}
+              onDragStartRequest={handleDragStartRequest}
+              onDragOverFolder={handleDragOverFolder}
+              onDragLeaveFolder={handleDragLeaveFolder}
+              onDropOnFolder={handleDropOnFolder}
+              onOpenRequestTab={openRequestTab}
+              onDeleteCollection={(id) => {
+                if (activeWorkspaceId) deleteCollectionById(id, activeWorkspaceId);
+              }}
+              onDeleteRequest={(id) => {
+                if (activeWorkspaceId) deleteRequestById(id, activeWorkspaceId);
+              }}
+            />
+          ))
         )}
       </div>
 
       {/* Floating Right-Click Context Menu */}
-      {contextMenu && (
-        <div
-          style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-          onClick={(e) => e.stopPropagation()}
-          className="fixed z-50 bg-surface border border-border rounded-lg shadow-xl py-1 text-xs min-w-[170px] text-foreground font-sans flex flex-col"
-        >
-          {contextMenu.type === 'collection' && (
-            <>
-              <button
-                onClick={() => {
-                  setAddingReqFolderId(contextMenu.id!);
-                  setReqName('');
-                  setContextMenu(null);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-subtle text-left transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="plus_line" size={14} className="text-primary" />
-                <span>Add Request</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setAddingFolderParentId(contextMenu.id!);
-                  setFolderName('');
-                  setContextMenu(null);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-subtle text-left transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="folder_add_line" size={14} className="text-amber-500" />
-                <span>Add Subfolder</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setExtractModalCol(contextMenu.item);
-                  setExtractModalReq(null);
-                  setIsExtractModalOpen(true);
-                  setContextMenu(null);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-subtle text-left transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="lightning_line" size={14} className="text-amber-500" />
-                <span>Auto-Extract Rules</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  if (contextMenu.id && activeWorkspaceId) {
-                    duplicateCollectionItem(contextMenu.id, activeWorkspaceId);
-                  }
-                  setContextMenu(null);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-subtle text-left transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="copy_line" size={14} className="text-muted-foreground" />
-                <span>Duplicate Folder</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setEditingId(contextMenu.id!);
-                  setEditingType('collection');
-                  setEditingName(contextMenu.item?.name || '');
-                  setContextMenu(null);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-subtle text-left transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="edit_line" size={14} className="text-muted-foreground" />
-                <span>Rename Folder</span>
-              </button>
-
-              <div className="my-1 border-t border-border" />
-
-              <button
-                onClick={() => {
-                  if (contextMenu.id && activeWorkspaceId) {
-                    deleteCollectionById(contextMenu.id, activeWorkspaceId);
-                  }
-                  setContextMenu(null);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-rose-500/10 text-rose-500 text-left transition-colors cursor-pointer font-medium"
-              >
-                <MingCuteIcon name="close_line" size={14} />
-                <span>Delete Folder</span>
-              </button>
-            </>
-          )}
-
-          {contextMenu.type === 'request' && (
-            <>
-              <button
-                onClick={() => {
-                  openRequestTab(contextMenu.item);
-                  setContextMenu(null);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-subtle text-left transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="eye_line" size={14} className="text-primary" />
-                <span>Open in Tab</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setExtractModalCol(null);
-                  setExtractModalReq(contextMenu.item);
-                  setIsExtractModalOpen(true);
-                  setContextMenu(null);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-subtle text-left transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="lightning_line" size={14} className="text-amber-500" />
-                <span>Auto-Extract Rules</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  if (contextMenu.id && activeWorkspaceId) {
-                    duplicateRequestItem(contextMenu.id, activeWorkspaceId);
-                  }
-                  setContextMenu(null);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-subtle text-left transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="copy_line" size={14} className="text-muted-foreground" />
-                <span>Duplicate Request</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setEditingId(contextMenu.id!);
-                  setEditingType('request');
-                  setEditingName(contextMenu.item?.name || '');
-                  setContextMenu(null);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-subtle text-left transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="edit_line" size={14} className="text-muted-foreground" />
-                <span>Rename Request</span>
-              </button>
-
-              <div className="my-1 border-t border-border" />
-
-              <button
-                onClick={() => {
-                  if (contextMenu.id && activeWorkspaceId) {
-                    deleteRequestById(contextMenu.id, activeWorkspaceId);
-                  }
-                  setContextMenu(null);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-rose-500/10 text-rose-500 text-left transition-colors cursor-pointer font-medium"
-              >
-                <MingCuteIcon name="close_line" size={14} />
-                <span>Delete Request</span>
-              </button>
-            </>
-          )}
-
-          {contextMenu.type === 'root' && (
-            <button
-              onClick={() => {
-                setAddingFolderParentId('root');
-                setFolderName('');
-                setContextMenu(null);
-              }}
-              className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-subtle text-left transition-colors cursor-pointer"
-            >
-              <MingCuteIcon name="folder_add_line" size={14} className="text-amber-500" />
-              <span>New Root Folder</span>
-            </button>
-          )}
-        </div>
-      )}
+      <CollectionContextMenu
+        contextMenu={contextMenu}
+        activeWorkspaceId={activeWorkspaceId}
+        onClose={() => setContextMenu(null)}
+        onAddRequest={(colId) => {
+          setAddingReqFolderId(colId);
+          setReqName('');
+        }}
+        onAddSubfolder={(colId) => {
+          setAddingFolderParentId(colId);
+          setFolderName('');
+        }}
+        onOpenAutoExtract={(type, item) => {
+          if (type === 'collection') {
+            setExtractModalCol(item);
+            setExtractModalReq(null);
+          } else {
+            setExtractModalCol(null);
+            setExtractModalReq(item);
+          }
+          setIsExtractModalOpen(true);
+        }}
+        onDuplicateFolder={(colId) => {
+          if (activeWorkspaceId) duplicateCollectionItem(colId, activeWorkspaceId);
+        }}
+        onRenameFolder={(colId, name) => {
+          setEditingId(colId);
+          setEditingType('collection');
+          setEditingName(name);
+        }}
+        onDeleteFolder={(colId) => {
+          if (activeWorkspaceId) deleteCollectionById(colId, activeWorkspaceId);
+        }}
+        onOpenRequestTab={openRequestTab}
+        onDuplicateRequest={(reqId) => {
+          if (activeWorkspaceId) duplicateRequestItem(reqId, activeWorkspaceId);
+        }}
+        onRenameRequest={(reqId, name) => {
+          setEditingId(reqId);
+          setEditingType('request');
+          setEditingName(name);
+        }}
+        onDeleteRequest={(reqId) => {
+          if (activeWorkspaceId) deleteRequestById(reqId, activeWorkspaceId);
+        }}
+        onAddRootFolder={() => {
+          setAddingFolderParentId('root');
+          setFolderName('');
+        }}
+      />
 
       {/* Auto-Extract Rules Modal */}
       <CollectionExtractRulesModal
