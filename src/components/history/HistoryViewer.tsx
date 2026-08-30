@@ -397,8 +397,17 @@ export const HistoryViewer: React.FC = () => {
 
       {/* History Log Rotation Limiter Settings Modal */}
       {settingsModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <form onSubmit={handleSaveSettings} className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full p-5 shadow-2xl flex flex-col space-y-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSettingsModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+        >
+          <form
+            onSubmit={handleSaveSettings}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full p-5 shadow-2xl flex flex-col space-y-4 cursor-default select-text"
+          >
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2">
                 <MingCuteIcon name="storage_line" size={18} className="text-indigo-400" />

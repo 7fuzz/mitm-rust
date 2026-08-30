@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useInterceptStore } from "../../stores/useInterceptStore";
 import { MingCuteIcon } from "../common/MingCuteIcon";
+import { Dialog } from "../common/ui/Dialog";
 
 export const InterceptViewer: React.FC = () => {
   const {
@@ -314,107 +315,100 @@ export const InterceptViewer: React.FC = () => {
       </div>
 
       {/* Intercept Rules Modal */}
-      {rulesModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-surface border border-border rounded-xl max-w-2xl w-full p-5 shadow-2xl flex flex-col max-h-[85vh]">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <div className="flex items-center gap-2">
-                <MingCuteIcon name="tool_line" size={18} className="text-amber-500" />
-                <h2 className="text-sm font-bold text-foreground">Intercept Rules Engine</h2>
-              </div>
-              <button onClick={() => setRulesModalOpen(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                <MingCuteIcon name="close_line" size={18} />
-              </button>
-            </div>
+      <Dialog
+        isOpen={rulesModalOpen}
+        onClose={() => setRulesModalOpen(false)}
+        title="Intercept Rules Engine"
+        description="Configure whitelist and blacklist criteria to selectively pause and inspect traffic."
+        size="xl"
+      >
+        {/* Add New Rule Form */}
+        <form onSubmit={handleCreateRule} className="pb-3 border-b border-border space-y-3">
+          <div className="text-xs font-semibold text-muted-foreground">Add New Matching Rule</div>
+          <div className="grid grid-cols-4 gap-2 text-xs">
+            <select
+              value={newRulePhase}
+              onChange={(e: any) => setNewRulePhase(e.target.value)}
+              className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none cursor-pointer"
+            >
+              <option value="both">Both Phases</option>
+              <option value="request">Request</option>
+              <option value="response">Response</option>
+            </select>
+            <select
+              value={newRuleField}
+              onChange={(e: any) => setNewRuleField(e.target.value)}
+              className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none cursor-pointer"
+            >
+              <option value="url">URL</option>
+              <option value="host">Host</option>
+              <option value="path">Path</option>
+              <option value="method">Method</option>
+              <option value="header">Header</option>
+            </select>
+            <select
+              value={newRuleOperator}
+              onChange={(e: any) => setNewRuleOperator(e.target.value)}
+              className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none cursor-pointer"
+            >
+              <option value="contains">Contains</option>
+              <option value="equals">Equals</option>
+              <option value="regex">Regex</option>
+            </select>
+            <button
+              type="submit"
+              className="flex items-center justify-center gap-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded px-3 py-1.5 transition-colors cursor-pointer"
+            >
+              <MingCuteIcon name="plus_line" size={14} /> Add Rule
+            </button>
+          </div>
+          <input
+            type="text"
+            placeholder="Match pattern value (e.g. api.example.com or /v1/auth)..."
+            value={newRuleValue}
+            onChange={(e) => setNewRuleValue(e.target.value)}
+            className="w-full bg-background border border-border focus:border-primary rounded px-3 py-1.5 text-xs text-foreground outline-none font-mono"
+          />
+        </form>
 
-            {/* Add New Rule Form */}
-            <form onSubmit={handleCreateRule} className="py-4 border-b border-border space-y-3">
-              <div className="text-xs font-semibold text-muted-foreground">Add New Matching Rule</div>
-              <div className="grid grid-cols-4 gap-2 text-xs">
-                <select
-                  value={newRulePhase}
-                  onChange={(e: any) => setNewRulePhase(e.target.value)}
-                  className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none"
-                >
-                  <option value="both">Both Phases</option>
-                  <option value="request">Request</option>
-                  <option value="response">Response</option>
-                </select>
-                <select
-                  value={newRuleField}
-                  onChange={(e: any) => setNewRuleField(e.target.value)}
-                  className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none"
-                >
-                  <option value="url">URL</option>
-                  <option value="host">Host</option>
-                  <option value="path">Path</option>
-                  <option value="method">Method</option>
-                  <option value="header">Header</option>
-                </select>
-                <select
-                  value={newRuleOperator}
-                  onChange={(e: any) => setNewRuleOperator(e.target.value)}
-                  className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none"
-                >
-                  <option value="contains">Contains</option>
-                  <option value="equals">Equals</option>
-                  <option value="regex">Regex</option>
-                </select>
+        {/* Existing Rules List */}
+        <div className="overflow-y-auto py-1 space-y-2 text-xs max-h-80">
+          {rules.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground italic">
+              No custom rules added. All traffic will be paused when interceptor is active.
+            </div>
+          ) : (
+            rules.map((rule) => (
+              <div
+                key={rule.id}
+                className="flex items-center justify-between p-2.5 bg-background rounded-lg border border-border"
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={rule.isEnabled}
+                    onChange={() => toggleRule(rule.id)}
+                    className="rounded accent-amber-500 cursor-pointer"
+                  />
+                  <span className="font-mono text-amber-500 font-bold uppercase text-[10px]">
+                    [{rule.targetPhase}]
+                  </span>
+                  <span className="font-mono text-foreground">
+                    {rule.matchField} {rule.operator} "{rule.matchValue}"
+                  </span>
+                </div>
                 <button
-                  type="submit"
-                  className="flex items-center justify-center gap-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded px-3 py-1.5 transition-colors cursor-pointer"
+                  type="button"
+                  onClick={() => deleteRule(rule.id)}
+                  className="text-muted-foreground hover:text-rose-500 transition-colors p-1 cursor-pointer"
                 >
-                  <MingCuteIcon name="plus_line" size={14} /> Add Rule
+                  <MingCuteIcon name="delete_2_line" size={14} />
                 </button>
               </div>
-              <input
-                type="text"
-                placeholder="Match pattern value (e.g. api.example.com or /v1/auth)..."
-                value={newRuleValue}
-                onChange={(e) => setNewRuleValue(e.target.value)}
-                className="w-full bg-background border border-border focus:border-primary rounded px-3 py-1.5 text-xs text-foreground outline-none font-mono"
-              />
-            </form>
-
-            {/* Existing Rules List */}
-            <div className="flex-1 overflow-y-auto py-3 space-y-2 text-xs">
-              {rules.length === 0 ? (
-                <div className="text-center py-6 text-muted-foreground italic">
-                  No custom rules added. All traffic will be paused when interceptor is active.
-                </div>
-              ) : (
-                rules.map((rule) => (
-                  <div
-                    key={rule.id}
-                    className="flex items-center justify-between p-2.5 bg-background rounded-lg border border-border"
-                  >
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={rule.isEnabled}
-                        onChange={() => toggleRule(rule.id)}
-                        className="rounded accent-amber-500 cursor-pointer"
-                      />
-                      <span className="font-mono text-amber-500 font-bold uppercase text-[10px]">
-                        [{rule.targetPhase}]
-                      </span>
-                      <span className="font-mono text-foreground">
-                        {rule.matchField} {rule.operator} "{rule.matchValue}"
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => deleteRule(rule.id)}
-                      className="text-muted-foreground hover:text-rose-500 transition-colors p-1 cursor-pointer"
-                    >
-                      <MingCuteIcon name="delete_2_line" size={14} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+            ))
+          )}
         </div>
-      )}
+      </Dialog>
     </div>
   );
 };

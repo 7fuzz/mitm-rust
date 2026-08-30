@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useWorkspaceStore } from '../../../stores/useWorkspaceStore';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
+import { Dialog, Button } from '../../common/ui';
 import type { Workspace } from '../../../services/tauri/bridge';
 
 interface ContextMenuState {
@@ -256,36 +257,27 @@ export const WorkspaceSelector: React.FC = () => {
       )}
 
       {/* Delete Confirmation Modal */}
-      {deletingWsId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-border rounded-xl shadow-2xl p-5 w-full max-w-md text-foreground flex flex-col gap-4">
-            <div className="flex items-center gap-2 text-rose-500 font-bold text-sm border-b border-border pb-3">
-              <MingCuteIcon name="alert_line" size={20} />
-              <span>Delete Workspace</span>
-            </div>
-
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Are you sure you want to delete workspace <strong className="text-foreground">"{deletingWorkspace?.name}"</strong>?
-              All collections, environment variables, and saved requests in this workspace will be permanently removed.
-            </p>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-              <button
-                onClick={() => setDeletingWsId(null)}
-                className="px-3.5 py-1.5 rounded bg-header hover:bg-neutral-subtle border border-border text-muted-foreground hover:text-foreground cursor-pointer font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                className="px-4 py-1.5 rounded bg-rose-600 hover:bg-rose-700 text-white font-semibold cursor-pointer shadow-2xs"
-              >
-                Delete Workspace
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog
+        isOpen={Boolean(deletingWsId)}
+        onClose={() => setDeletingWsId(null)}
+        title="Delete Workspace"
+        size="md"
+        footer={
+          <>
+            <Button variant="subtle" onClick={() => setDeletingWsId(null)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleConfirmDelete}>
+              Delete Workspace
+            </Button>
+          </>
+        }
+      >
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Are you sure you want to delete workspace <strong className="text-foreground">"{deletingWorkspace?.name}"</strong>?
+          All collections, environment variables, and saved requests in this workspace will be permanently removed.
+        </p>
+      </Dialog>
     </div>
   );
 };
