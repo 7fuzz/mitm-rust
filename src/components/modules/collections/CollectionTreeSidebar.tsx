@@ -72,22 +72,28 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
   const [editingType, setEditingType] = useState<'collection' | 'request' | null>(null);
   const [editingName, setEditingName] = useState('');
 
-  // Recursive tree filter
+  // Recursive tree filter supporting name, URL, method, and description
   const filterTree = (items: CollectionTreeItem[], query: string): CollectionTreeItem[] => {
     const q = query.trim().toLowerCase();
     if (!q) return items;
 
+    const terms = q.split(/\s+/).filter(Boolean);
+
+    const matchesAllTerms = (text: string) => {
+      const lower = text.toLowerCase();
+      return terms.every((t) => lower.includes(t));
+    };
+
     return items
       .map((item) => {
         const matchingChildren = filterTree(item.children || [], query);
-        const matchingRequests = (item.requests || []).filter(
-          (r) =>
-            r.name.toLowerCase().includes(q) ||
-            r.url.toLowerCase().includes(q) ||
-            r.method.toLowerCase().includes(q)
-        );
+        const matchingRequests = (item.requests || []).filter((r) => {
+          const combined = `${r.name} ${r.url || ''} ${r.method || ''} ${r.description || ''}`;
+          return matchesAllTerms(combined);
+        });
 
-        const folderMatches = item.name.toLowerCase().includes(q);
+        const folderCombined = `${item.name} ${item.description || ''}`;
+        const folderMatches = matchesAllTerms(folderCombined);
 
         if (folderMatches) {
           return item;
@@ -449,7 +455,14 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
               className="bg-background border border-primary rounded px-1 py-0.5 text-xs text-foreground font-sans w-full focus:outline-none"
             />
           ) : (
-            <span className="truncate text-foreground font-medium">{req.name}</span>
+            <div className="flex flex-col min-w-0 truncate">
+              <span className="truncate text-foreground font-medium">{req.name}</span>
+              {isSearching && req.url && (
+                <span className="truncate text-[10px] text-muted-foreground font-mono" title={req.url}>
+                  {req.url}
+                </span>
+              )}
+            </div>
           )}
         </div>
 
