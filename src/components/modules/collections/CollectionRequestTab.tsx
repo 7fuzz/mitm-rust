@@ -78,33 +78,37 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     setBodyRaw(request.bodyRaw || '');
     setBodyFormData(request.bodyFormData || '');
     setBodyUrlencoded(request.bodyUrlencoded || '');
-  }, [
-    request.id,
-    request.updatedAtMs,
-    request.description,
-    request.extractRules,
-    request.headers,
-    request.params,
-    request.method,
-    request.url,
-    request.bodyType,
-    request.bodyJson,
-    request.bodyRaw,
-    request.bodyFormData,
-    request.bodyUrlencoded,
-  ]);
+  }, [request.id]);
 
   // Auto-refresh preview when on Interpolation tab and inputs change
   useEffect(() => {
     if (activeTab === 'interpolation') {
-      handleUpdateStore();
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
         setPreviewLoading(true);
-        previewCollectionRequest(request.id)
-          .then(setPreview)
-          .catch((e) => setPreviewError(String(e)))
-          .finally(() => setPreviewLoading(false));
-      }, 150);
+        try {
+          await updateRequestDetails({
+            ...request,
+            method,
+            url,
+            headers,
+            params,
+            extractRules,
+            bodyType,
+            bodyJson,
+            bodyRaw,
+            bodyFormData,
+            bodyUrlencoded,
+            description,
+          });
+          const res = await previewCollectionRequest(request.id);
+          setPreview(res);
+          setPreviewError(null);
+        } catch (e) {
+          setPreviewError(String(e));
+        } finally {
+          setPreviewLoading(false);
+        }
+      }, 200);
       return () => clearTimeout(timer);
     }
   }, [
@@ -113,11 +117,13 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
     url,
     headers,
     params,
+    extractRules,
     bodyType,
     bodyJson,
     bodyRaw,
     bodyFormData,
     bodyUrlencoded,
+    description,
     request.id,
   ]);
 
