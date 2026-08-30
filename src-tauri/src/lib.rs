@@ -76,6 +76,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::ca_cmd::get_root_ca_pem,
+            commands::ca_cmd::export_root_ca,
+            commands::ca_cmd::regenerate_root_ca,
+
             commands::db_recovery_cmd::run_database_migrations,
             commands::db_recovery_cmd::backup_and_reset_database,
             commands::db_recovery_cmd::export_database_file,

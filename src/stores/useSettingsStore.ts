@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { NavModule, AppPreferences } from '../types';
-import { getRootCaPem, regenerateRootCa, updatePrefs } from '../services/tauri/ipc';
+import { getRootCaPem, exportRootCa, regenerateRootCa, updatePrefs } from '../services/tauri/ipc';
 
 interface SettingsState {
   activeModule: NavModule;
@@ -20,6 +20,7 @@ interface SettingsState {
   setFontSize: (size: 'sm' | 'md' | 'lg') => void;
   setQuickVarModalOpen: (open: boolean) => void;
   fetchCaCert: () => Promise<void>;
+  exportCaCert: (destinationPath: string) => Promise<void>;
   regenerateCaCert: () => Promise<void>;
   updatePreferences: (newPrefs: Partial<AppPreferences>) => Promise<void>;
 }
@@ -65,6 +66,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     } catch (err) {
       console.error('Failed to fetch Root CA:', err);
       set({ isCaLoading: false });
+    }
+  },
+
+  exportCaCert: async (destinationPath: string) => {
+    try {
+      await exportRootCa(destinationPath);
+    } catch (err) {
+      console.error('Failed to export Root CA:', err);
+      throw err;
     }
   },
 

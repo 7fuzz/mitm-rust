@@ -40,8 +40,12 @@ export async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>,
 }
 
 // CA Commands
-export async function getRootCaPem(): Promise<String> {
+export async function getRootCaPem(): Promise<string> {
   return safeInvoke<string>('get_root_ca_pem', undefined, '-----BEGIN CERTIFICATE-----\nMock Root CA Certificate for MITM Proxy\n-----END CERTIFICATE-----');
+}
+
+export async function exportRootCa(destinationPath: string): Promise<void> {
+  return safeInvoke<void>('export_root_ca', { destinationPath });
 }
 
 export async function regenerateRootCa(): Promise<string> {

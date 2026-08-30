@@ -151,6 +151,18 @@ export const exportDatabaseFile = async (destinationPath: string): Promise<void>
   return await invoke<void>("export_database_file", { destinationPath });
 };
 
+export const getRootCaPem = async (): Promise<string> => {
+  return await invoke<string>("get_root_ca_pem");
+};
+
+export const exportRootCa = async (destinationPath: string): Promise<void> => {
+  return await invoke<void>("export_root_ca", { destinationPath });
+};
+
+export const regenerateRootCa = async (): Promise<string> => {
+  return await invoke<string>("regenerate_root_ca");
+};
+
 export const quitApplication = async (): Promise<void> => {
   return await invoke<void>("quit_application");
 };
