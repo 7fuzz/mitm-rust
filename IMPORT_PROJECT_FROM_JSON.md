@@ -1,6 +1,6 @@
 # Import Project from JSON Specification
 
-This document provides a technical specification and operational guide for the **Import Project from JSON** functionality in MITM Rust. The backend logic is implemented in `src-tauri/src/repeater.rs`.
+This document provides a technical specification and operational guide for the **Import Project from JSON** functionality in MITM Rust. The backend logic is implemented in `src-tauri/src/workspace/import.rs`, `src-tauri/src/workspace/mod.rs`, and `src-tauri/src/collections/execute.rs`.
 
 ---
 
@@ -10,14 +10,63 @@ The import system allows importing complete projects—including environments, v
 
 ```mermaid
 flowchart TD
-    A[JSON Project File] -->|File API / JS Upload| B[Frontend: useRepeater / ImportModal]
-    B -->|Tauri IPC invoke: import_repeater_data| C[Rust Backend: repeater.rs]
+    A[JSON Project File] -->|File API / JS Upload| B[Frontend: useWorkspaceStore / ProjectImportModal]
+    B -->|Tauri IPC invoke: import_workspace_json| C[Rust Backend: workspace/import.rs]
     C -->|Selective Filtering| D[Rust Processing Engine]
-    D -->|Step 1: Insert Envs & Variables| E[(SQLite: environments, variables, variable_values)]
-    D -->|Step 2: Insert Repeater Collections| F[(SQLite: repeater_groups, repeater_requests)]
-    D -->|Step 3: Smart Link Relations| G[(SQLite: environment_groups)]
+    D -->|Step 1: Insert Envs & Variables| E[(SQLite: environments)]
+    D -->|Step 2: Insert Collection Folders| F[(SQLite: collections)]
+    D -->|Step 3: Insert Requests & Extract Rules| G[(SQLite: requests)]
     D -->|Step 4: PRAGMA optimize| H[Return Import Summary JSON]
 ```
+
+---
+
+## Dynamic & Built-in Variables (Postman Compatible)
+
+MITM Rust includes native support for dynamic, runtime-evaluated template variables in URLs, Request Headers, Query Parameters, and Bodies. Dynamic variables are resolved on the fly during request execution and cURL / Wire-format previews:
+
+### Supported Dynamic Variables
+
+| Variable | Description | Example Output |
+| :--- | :--- | :--- |
+| `{{$timestamp}}` | Current Unix timestamp in seconds | `1788073927` |
+| `{{$timestampMs}}` / `{{$timestamp_ms}}` | Current Unix timestamp in milliseconds | `1788073927580` |
+| `{{$isoTimestamp}}` / `{{$iso_timestamp}}` | ISO-8601 UTC timestamp string | `2026-08-30T07:44:23Z` |
+| `{{$currentDate}}` / `{{$date}}` | Current UTC date (`YYYY-MM-DD`) | `2026-08-30` |
+| `{{$currentTime}}` / `{{$time}}` | Current UTC time (`HH:MM:SS`) | `07:44:23` |
+| `{{$uuid}}` / `{{$guid}}` / `{{$randomUUID}}` | Random UUID version 4 (default) | `278d9778-cce7-4d70-938f-65746bda14bc` |
+| `{{$uuidv7}}` / `{{$randomUUIDv7}}` / `{{$guidv7}}` | Time-ordered UUID version 7 | `0191a3c6-6d55-7b3e-967a-1123456789ab` |
+| `{{$randomInt}}` / `{{$random_int}}` | Random integer between `1` and `1000` | `742` |
+| `{{$randomDigit}}` / `{{$random_digit}}` | Random single digit between `0` and `9` | `8` |
+| `{{$randomAlphaNumeric}}` | 8-character random alphanumeric string | `a7b9c2d1` |
+| `{{$randomHex}}` | 16-character random hexadecimal string | `e4d909c290d0fb1e` |
+| `{{$randomEmail}}` | Random fake email address | `user_f685c58f@example.com` |
+| `{{$randomPhoneNumber}}` / `{{$randomPhone}}` | Random Indonesian phone number (`+6281...`) | `+628189472619` |
+| `{{$randomUserName}}` | Random username string | `user_a1b2c3` |
+| `{{$randomCity}}` | Random city name | `Jakarta`, `Bandung`, `Surabaya` |
+| `{{$randomCountry}}` | Random country name | `Indonesia`, `Singapore`, `Japan` |
+| `{{$randomCountryCode}}` | Random ISO-2 country code | `ID`, `SG`, `US`, `JP` |
+| `{{$randomPrice}}` | Random monetary price | `49.99` |
+| `{{$randomIPv4}}` / `{{$randomIP}}` | Random IPv4 address | `192.168.1.42` |
+| `{{$randomBoolean}}` / `{{$randomBool}}` | Random boolean string | `true` or `false` |
+
+---
+
+## Recursive Variable Interpolation Engine
+
+Variable interpolation in MITM Rust is multi-pass and recursive (supporting up to 15 nested resolution cycles):
+
+1. **Nested Variable Resolution**:
+   - If `var_a = "api.example.com"`
+   - And `var_b = "https://{{var_a}}/v1"`
+   - And `endpoint = "{{var_b}}/users"`
+   - Resolving `{{endpoint}}` automatically expands to `https://api.example.com/v1/users`.
+2. **Whitespace Tolerance**:
+   - Both `{{var_name}}` and `{{ var_name }}` (with arbitrary spacing) are recognized and resolved identically.
+3. **Case-Insensitive Fallback**:
+   - If exact key matching fails, the engine falls back to case-insensitive key lookup.
+4. **Cycle & Infinite Loop Safety**:
+   - Guarded against circular references (e.g. `a = "{{b}}"`, `b = "{{a}}"`) without stack overflows or crashes.
 
 ---
 
@@ -399,36 +448,45 @@ Below is a production-grade sample project JSON file demonstrating best practice
 
 ### Auto-Extraction Specification (`extract` / `extract_rules`)
 
-The `extract` (or `extract_rules`) field on requests supports both **Shorthand Dictionary Format** and **Advanced Multi-Mode Array Format**:
+The `extract` (or `extract_rules`) field on requests supports both **Shorthand Dictionary Format** and **Advanced Multi-Mode Array Format**.
+
+When a request with extract rules completes execution, the extracted value is automatically assigned to the **`(auto)`** variant of the target environment variable in the active environment.
 
 #### 1. Shorthand Dictionary Format (Legacy / JSON Mode)
 Maps target variable names to JSON path expressions:
 ```json
 "extract": {
   "userId": "user.id",
-  "authToken": "data.token"
+  "authToken": "data.token",
+  "firstItemId": "data.0.id"
 }
 ```
 
 #### 2. Advanced Multi-Mode Array Format
-Supports 6 distinct extraction modes:
+Supports 6 distinct extraction modes with JSONPath array index support and case-insensitivity:
 
 | Mode (`type`) | Description | Expression Format (`expression`) | Example |
 | :--- | :--- | :--- | :--- |
-| `json` | JSON Path / Dot notation | Dot path | `"expression": "data.user.id"` |
-| `after_string` | Extract text after prefix string | `prefix||max_chars` | `"expression": "token=||64"` |
-| `before_string` | Extract text before suffix string | `suffix||max_chars` | `"expression": "&expires=||64"` |
-| `between_string` | Extract text between start & end delimiters | `start_delim||end_delim` | `"expression": "session=\"||\""` |
-| `header` | Extract from HTTP response header | Header name | `"expression": "Authorization"` |
-| `body_regex` | Extract using Regex capture group | Regex pattern | `"expression": "id=([0-9]+)"` |
+| `json` / `jsonpath` | JSON Path / Dot notation / Array Indexing | Dot path or bracket index | `"data.0.id"`, `"$.data[0].id"`, `"data.access_token"` |
+| `after_string` | Extract text after prefix string | `prefix\|\|max_chars` | `"token=\|\|64"` |
+| `before_string` | Extract text before suffix string | `suffix\|\|max_chars` | `"&expires=\|\|64"` |
+| `between_string` | Extract text between start & end delimiters | `start_delim\|\|end_delim` | `"session=\"\|\|\""` |
+| `header` | Extract from HTTP response header | Header name | `"Authorization"`, `"Set-Cookie"` |
+| `body_regex` / `regex` | Extract using Regex capture group | Regex pattern | `"id=([0-9]+)"` |
 
 ##### Multi-Mode Array Example:
 ```json
 "extract": [
   {
     "type": "json",
-    "targetVariable": "USER_ID",
-    "expression": "data.user.id",
+    "targetVariable": "account_id",
+    "expression": "data.0.id",
+    "enabled": true
+  },
+  {
+    "type": "json",
+    "targetVariable": "access_token",
+    "expression": "data.access_token",
     "enabled": true
   },
   {
@@ -451,6 +509,12 @@ Supports 6 distinct extraction modes:
   }
 ]
 ```
+
+##### Automatic `(auto)` Variant Population:
+- When a response is received, the extraction engine evaluates all enabled rules.
+- The extracted string is assigned to variant `0` (`name: "(auto)"`) of the target variable in the active environment.
+- If the variable currently has `(auto)` selected (`activeIndex: 0`), the variable's active `value` is also updated immediately.
+- The frontend store automatically syncs the newly extracted values across all views without requiring a manual refresh.
 
 ---
 
