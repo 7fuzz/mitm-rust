@@ -250,6 +250,143 @@ pub fn save_workspace_environment_db(
     Ok(())
 }
 
+pub fn resolve_dynamic_variable(key: &str) -> Option<String> {
+    let lower = key.trim().to_lowercase();
+    let norm = lower.trim_start_matches('$');
+
+    let now = SystemTime::now();
+    let duration = now.duration_since(UNIX_EPOCH).unwrap_or_default();
+    let secs = duration.as_secs();
+    let millis = duration.as_millis();
+
+    match norm {
+        "timestamp" => Some(secs.to_string()),
+        "timestampms" | "timestamp_ms" => Some(millis.to_string()),
+        "isotimestamp" | "iso_timestamp" => {
+            let offset_dt = time::OffsetDateTime::from_unix_timestamp(secs as i64)
+                .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
+            Some(
+                offset_dt
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_else(|_| format!("{}Z", secs)),
+            )
+        }
+        "currentdate" | "current_date" | "date" => {
+            let offset_dt = time::OffsetDateTime::from_unix_timestamp(secs as i64)
+                .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
+            Some(format!(
+                "{:04}-{:02}-{:02}",
+                offset_dt.year(),
+                offset_dt.month() as u8,
+                offset_dt.day()
+            ))
+        }
+        "currenttime" | "current_time" | "time" => {
+            let offset_dt = time::OffsetDateTime::from_unix_timestamp(secs as i64)
+                .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
+            Some(format!(
+                "{:02}:{:02}:{:02}",
+                offset_dt.hour(),
+                offset_dt.minute(),
+                offset_dt.second()
+            ))
+        }
+        "guid" | "uuid" | "randomuuid" | "random_uuid" | "randomguid" | "random_guid" => {
+            Some(Uuid::new_v4().to_string())
+        }
+        "randomint" | "random_int" | "randominteger" | "random_integer" => {
+            let u = Uuid::new_v4().as_u128();
+            let val = (u % 1000) + 1;
+            Some(val.to_string())
+        }
+        "randomdigit" | "random_digit" => {
+            let u = Uuid::new_v4().as_u128();
+            let val = u % 10;
+            Some(val.to_string())
+        }
+        "randomalphanumeric" | "random_alphanumeric" => {
+            let u = Uuid::new_v4().simple().to_string();
+            Some(u[..8].to_string())
+        }
+        "randomhex" | "random_hex" => {
+            let u = Uuid::new_v4().simple().to_string();
+            Some(u[..16].to_string())
+        }
+        "randomprice" | "random_price" => {
+            let u = Uuid::new_v4().as_u128();
+            let whole = (u % 100) + 1;
+            let cents = (u / 100) % 100;
+            Some(format!("{}.{:02}", whole, cents))
+        }
+        "randomport" | "random_port" => {
+            let u = Uuid::new_v4().as_u128();
+            let port = 1024 + (u % 64000);
+            Some(port.to_string())
+        }
+        "randomfirstname" | "random_first_name" => {
+            let names = ["Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Sam", "Chris", "Jamie", "Pat"];
+            let u = Uuid::new_v4().as_u128() as usize;
+            Some(names[u % names.len()].to_string())
+        }
+        "randomlastname" | "random_last_name" => {
+            let names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Wilson", "Moore", "Taylor"];
+            let u = Uuid::new_v4().as_u128() as usize;
+            Some(names[u % names.len()].to_string())
+        }
+        "randomfullname" | "random_full_name" | "randomname" | "random_name" => {
+            let firsts = ["Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Sam", "Chris", "Jamie", "Pat"];
+            let lasts = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Wilson", "Moore", "Taylor"];
+            let u = Uuid::new_v4().as_u128() as usize;
+            Some(format!("{} {}", firsts[u % firsts.len()], lasts[(u / 10) % lasts.len()]))
+        }
+        "randomemail" | "random_email" => {
+            let u = Uuid::new_v4().simple().to_string();
+            Some(format!("user_{}@example.com", &u[..8]))
+        }
+        "randomphonenumber" | "random_phone_number" | "randomphone" | "random_phone" => {
+            let u = Uuid::new_v4().as_u128();
+            let num = (u % 900000000) + 100000000;
+            Some(format!("+6281{}", num))
+        }
+        "randomusername" | "random_user_name" => {
+            let u = Uuid::new_v4().simple().to_string();
+            Some(format!("user_{}", &u[..6]))
+        }
+        "randompassword" | "random_password" => {
+            let u = Uuid::new_v4().simple().to_string();
+            Some(format!("Pass!{}", &u[..10]))
+        }
+        "randomcity" | "random_city" => {
+            let cities = ["Jakarta", "Bandung", "Surabaya", "Medan", "Semarang", "Yogyakarta", "Denpasar", "Makassar"];
+            let u = Uuid::new_v4().as_u128() as usize;
+            Some(cities[u % cities.len()].to_string())
+        }
+        "randomcountry" | "random_country" => {
+            let countries = ["Indonesia", "Singapore", "Malaysia", "Japan", "United States", "Germany", "Australia"];
+            let u = Uuid::new_v4().as_u128() as usize;
+            Some(countries[u % countries.len()].to_string())
+        }
+        "randomcountrycode" | "random_country_code" => {
+            let codes = ["ID", "SG", "MY", "JP", "US", "DE", "AU"];
+            let u = Uuid::new_v4().as_u128() as usize;
+            Some(codes[u % codes.len()].to_string())
+        }
+        "randomipv4" | "random_ipv4" | "randomip" | "random_ip" => {
+            let u = Uuid::new_v4().as_u128();
+            Some(format!("{}.{}.{}.{}", (u >> 24) & 0xFF, (u >> 16) & 0xFF, (u >> 8) & 0xFF, u & 0xFF))
+        }
+        "randomboolean" | "random_boolean" | "randombool" | "random_bool" => {
+            let u = Uuid::new_v4().as_u128();
+            if u % 2 == 0 {
+                Some("true".to_string())
+            } else {
+                Some("false".to_string())
+            }
+        }
+        _ => None,
+    }
+}
+
 pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
     if !text.contains("{{") || !text.contains("}}") {
         return text.to_string();
@@ -264,10 +401,6 @@ pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
             lower_var_map.insert(k.to_lowercase(), var.value.clone());
             var_map.insert(k, var.value.clone());
         }
-    }
-
-    if var_map.is_empty() {
-        return text.to_string();
     }
 
     let re = match regex::Regex::new(r"\{\{\s*([^\r\n{}]+?)\s*\}\}") {
@@ -287,12 +420,18 @@ pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
         let next_result = re
             .replace_all(&result, |caps: &regex::Captures| {
                 let key = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+                // 1. Try exact user variable match
                 if let Some(val) = var_map.get(key) {
                     changed = true;
                     val.to_string()
+                // 2. Try case-insensitive user variable match
                 } else if let Some(val) = lower_var_map.get(&key.to_lowercase()) {
                     changed = true;
                     val.to_string()
+                // 3. Try dynamic built-in variable match (e.g. {{$timestamp}}, {{$guid}}, {{$randomUUID}})
+                } else if let Some(val) = resolve_dynamic_variable(key) {
+                    changed = true;
+                    val
                 } else {
                     caps.get(0).map(|m| m.as_str()).unwrap_or("").to_string()
                 }
@@ -308,6 +447,27 @@ pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
     result
 }
 
+pub fn interpolate_dynamic_variables(text: &str) -> String {
+    if !text.contains("{{") || !text.contains("}}") {
+        return text.to_string();
+    }
+
+    let re = match regex::Regex::new(r"\{\{\s*([^\r\n{}]+?)\s*\}\}") {
+        Ok(r) => r,
+        Err(_) => return text.to_string(),
+    };
+
+    re.replace_all(text, |caps: &regex::Captures| {
+        let key = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+        if let Some(val) = resolve_dynamic_variable(key) {
+            val
+        } else {
+            caps.get(0).map(|m| m.as_str()).unwrap_or("").to_string()
+        }
+    })
+    .to_string()
+}
+
 pub fn interpolate_variables(db_path: &PathBuf, workspace_id: &str, text: &str) -> String {
     if !text.contains("{{") || !text.contains("}}") {
         return text.to_string();
@@ -319,13 +479,28 @@ pub fn interpolate_variables(db_path: &PathBuf, workspace_id: &str, text: &str) 
     if let Some(env) = active_env {
         interpolate_variables_with_env(&env, text)
     } else {
-        text.to_string()
+        interpolate_dynamic_variables(text)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_dynamic_timestamp_and_guid() {
+        let text = "postman-{{$timestamp}}";
+        let result = interpolate_dynamic_variables(text);
+        assert!(result.starts_with("postman-"));
+        let ts_str = result.trim_start_matches("postman-");
+        assert!(ts_str.parse::<u64>().is_ok());
+
+        let guid_text = "UUID: {{$guid}}";
+        let guid_result = interpolate_dynamic_variables(guid_text);
+        assert!(guid_result.starts_with("UUID: "));
+        let uuid_str = guid_result.trim_start_matches("UUID: ");
+        assert_eq!(uuid_str.len(), 36);
+    }
 
     #[test]
     fn test_nested_double_interpolation() {
@@ -361,6 +536,9 @@ mod tests {
 
         let result_spaces = interpolate_variables_with_env(&env, "https://api.com/{{ var_b }}");
         assert_eq!(result_spaces, "https://api.com/abcdef");
+
+        let result_dynamic = interpolate_variables_with_env(&env, "X-Key: {{var_a}}-{{$timestamp}}");
+        assert!(result_dynamic.starts_with("X-Key: abc-"));
     }
 
     #[test]
