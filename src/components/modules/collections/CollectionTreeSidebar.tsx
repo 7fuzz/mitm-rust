@@ -315,7 +315,7 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
         onDragOver={handleDragOverRoot}
         onDragLeave={handleDragLeaveRoot}
         onDrop={handleDropOnRoot}
-        className={`flex-1 p-2 overflow-y-auto space-y-1 no-scrollbar transition-colors ${
+        className={`flex-1 p-2 overflow-y-auto no-scrollbar transition-colors ${
           isDragOverRoot ? 'bg-primary/10 ring-2 ring-dashed ring-primary/60 rounded-lg m-1' : ''
         }`}
       >

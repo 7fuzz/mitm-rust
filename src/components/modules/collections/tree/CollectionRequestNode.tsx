@@ -1,11 +1,14 @@
 import React from 'react';
 import { MethodBadge } from '../../../common/MethodBadge';
 import { MingCuteIcon } from '../../../common/MingCuteIcon';
+import { TreeGuideLines } from './TreeGuideLines';
 import type { RequestItem } from '../../../../services/tauri/bridge';
 
 interface CollectionRequestNodeProps {
   request: RequestItem;
   depth: number;
+  isLast?: boolean;
+  ancestorIsLast?: boolean[];
   isSearching: boolean;
   editingId: string | null;
   editingType: 'collection' | 'request' | null;
@@ -22,6 +25,8 @@ interface CollectionRequestNodeProps {
 export const CollectionRequestNode: React.FC<CollectionRequestNodeProps> = ({
   request,
   depth,
+  isLast = false,
+  ancestorIsLast = [],
   isSearching,
   editingId,
   editingType,
@@ -42,11 +47,14 @@ export const CollectionRequestNode: React.FC<CollectionRequestNodeProps> = ({
       onDragStart={(e) => onDragStart(e, request)}
       onClick={() => onOpenRequestTab(request)}
       onContextMenu={(e) => onContextMenu(e, 'request', request.id, request)}
-      className="group flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-neutral-subtle/80 cursor-pointer font-sans text-xs transition-colors select-none"
-      style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      className="group flex items-center justify-between pr-2 rounded-md hover:bg-neutral-subtle/80 cursor-pointer font-sans text-xs transition-colors select-none h-7"
+      style={{ paddingLeft: depth === 0 ? '6px' : '0px' }}
     >
-      <div className="flex items-center gap-2 truncate min-w-0 flex-1">
-        <MethodBadge method={request.method} />
+      <div className="flex items-center gap-1.5 truncate min-w-0 flex-1 self-stretch h-full">
+        {/* Tree Structure Guide Lines */}
+        <TreeGuideLines depth={depth} isLast={isLast} ancestorIsLast={ancestorIsLast} />
+
+        <MethodBadge method={request.method} className="ml-0.5 shrink-0" />
         {isRenaming ? (
           <input
             type="text"

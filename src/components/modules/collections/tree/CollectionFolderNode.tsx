@@ -1,11 +1,14 @@
 import React from 'react';
 import { MingCuteIcon } from '../../../common/MingCuteIcon';
 import { CollectionRequestNode } from './CollectionRequestNode';
+import { TreeGuideLines } from './TreeGuideLines';
 import type { CollectionTreeItem, RequestItem } from '../../../../services/tauri/bridge';
 
 interface CollectionFolderNodeProps {
   item: CollectionTreeItem;
   depth: number;
+  isLast?: boolean;
+  ancestorIsLast?: boolean[];
   isSearching: boolean;
   expandedFolders: Record<string, boolean>;
   addingFolderParentId: string | null | 'root';
@@ -40,6 +43,8 @@ interface CollectionFolderNodeProps {
 export const CollectionFolderNode: React.FC<CollectionFolderNodeProps> = ({
   item,
   depth,
+  isLast = false,
+  ancestorIsLast = [],
   isSearching,
   expandedFolders,
   addingFolderParentId,
@@ -76,6 +81,10 @@ export const CollectionFolderNode: React.FC<CollectionFolderNodeProps> = ({
   const isDropTarget = dragTargetFolderId === item.id;
   const isRenaming = editingId === item.id && editingType === 'collection';
 
+  const childrenCount = item.children?.length || 0;
+  const requestsCount = item.requests?.length || 0;
+  const nextAncestorIsLast = depth === 0 ? [] : [...ancestorIsLast, isLast];
+
   return (
     <div key={item.id} className="flex flex-col select-none text-xs">
       {/* Folder Node Header */}
@@ -87,16 +96,19 @@ export const CollectionFolderNode: React.FC<CollectionFolderNodeProps> = ({
         onDrop={(e) => onDropOnFolder(e, item.id)}
         onClick={(e) => onToggleFolder(item.id, e)}
         onContextMenu={(e) => onContextMenu(e, 'collection', item.id, item)}
-        className={`group flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-neutral-subtle/80 cursor-pointer font-sans transition-all ${
+        className={`group flex items-center justify-between pr-2 rounded-md hover:bg-neutral-subtle/80 cursor-pointer font-sans transition-all h-7 ${
           isDropTarget ? 'ring-2 ring-primary bg-primary/10' : ''
         }`}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        style={{ paddingLeft: depth === 0 ? '6px' : '0px' }}
       >
-        <div className="flex items-center gap-1.5 min-w-0 font-medium text-foreground flex-1">
+        <div className="flex items-center gap-1.5 min-w-0 font-medium text-foreground flex-1 self-stretch h-full">
+          {/* Tree Structure Guide Lines */}
+          <TreeGuideLines depth={depth} isLast={isLast} ancestorIsLast={ancestorIsLast} />
+
           <MingCuteIcon
             name={isExpanded ? 'folder_open_line' : 'folder_line'}
             size={15}
-            className="text-amber-500 shrink-0"
+            className="text-amber-500 shrink-0 ml-0.5"
           />
           {isRenaming ? (
             <input
@@ -162,7 +174,12 @@ export const CollectionFolderNode: React.FC<CollectionFolderNodeProps> = ({
         <div className="flex flex-col">
           {/* Inline Subfolder Input */}
           {isAddingSubfolder && (
-            <div className="px-2 py-1 flex items-center gap-1" style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}>
+            <div className="pr-2 flex items-center gap-1 h-7">
+              <TreeGuideLines
+                depth={depth + 1}
+                isLast={childrenCount === 0 && requestsCount === 0}
+                ancestorIsLast={nextAncestorIsLast}
+              />
               <input
                 type="text"
                 autoFocus
@@ -196,7 +213,12 @@ export const CollectionFolderNode: React.FC<CollectionFolderNodeProps> = ({
 
           {/* Inline Sub-Request Input */}
           {isAddingSubReq && (
-            <div className="px-2 py-1 flex items-center gap-1" style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}>
+            <div className="pr-2 flex items-center gap-1 h-7">
+              <TreeGuideLines
+                depth={depth + 1}
+                isLast={requestsCount === 0}
+                ancestorIsLast={nextAncestorIsLast}
+              />
               <input
                 type="text"
                 autoFocus
@@ -229,62 +251,73 @@ export const CollectionFolderNode: React.FC<CollectionFolderNodeProps> = ({
           )}
 
           {/* Subfolders (Recursive) */}
-          {item.children?.map((child) => (
-            <CollectionFolderNode
-              key={child.id}
-              item={child}
-              depth={depth + 1}
-              isSearching={isSearching}
-              expandedFolders={expandedFolders}
-              addingFolderParentId={addingFolderParentId}
-              folderName={folderName}
-              addingReqFolderId={addingReqFolderId}
-              reqName={reqName}
-              dragTargetFolderId={dragTargetFolderId}
-              editingId={editingId}
-              editingType={editingType}
-              editingName={editingName}
-              onSetFolderName={onSetFolderName}
-              onSetReqName={onSetReqName}
-              onSetEditingName={onSetEditingName}
-              onSetAddingFolderParentId={onSetAddingFolderParentId}
-              onSetAddingReqFolderId={onSetAddingReqFolderId}
-              onToggleFolder={onToggleFolder}
-              onAddFolder={onAddFolder}
-              onAddRequest={onAddRequest}
-              onSaveRename={onSaveRename}
-              onCancelRename={onCancelRename}
-              onContextMenu={onContextMenu}
-              onDragStartFolder={onDragStartFolder}
-              onDragStartRequest={onDragStartRequest}
-              onDragOverFolder={onDragOverFolder}
-              onDragLeaveFolder={onDragLeaveFolder}
-              onDropOnFolder={onDropOnFolder}
-              onOpenRequestTab={onOpenRequestTab}
-              onDeleteCollection={onDeleteCollection}
-              onDeleteRequest={onDeleteRequest}
-            />
-          ))}
+          {item.children?.map((child, idx) => {
+            const hasRequests = requestsCount > 0;
+            const isChildLast = idx === childrenCount - 1 && !hasRequests;
+            return (
+              <CollectionFolderNode
+                key={child.id}
+                item={child}
+                depth={depth + 1}
+                isLast={isChildLast}
+                ancestorIsLast={nextAncestorIsLast}
+                isSearching={isSearching}
+                expandedFolders={expandedFolders}
+                addingFolderParentId={addingFolderParentId}
+                folderName={folderName}
+                addingReqFolderId={addingReqFolderId}
+                reqName={reqName}
+                dragTargetFolderId={dragTargetFolderId}
+                editingId={editingId}
+                editingType={editingType}
+                editingName={editingName}
+                onSetFolderName={onSetFolderName}
+                onSetReqName={onSetReqName}
+                onSetEditingName={onSetEditingName}
+                onSetAddingFolderParentId={onSetAddingFolderParentId}
+                onSetAddingReqFolderId={onSetAddingReqFolderId}
+                onToggleFolder={onToggleFolder}
+                onAddFolder={onAddFolder}
+                onAddRequest={onAddRequest}
+                onSaveRename={onSaveRename}
+                onCancelRename={onCancelRename}
+                onContextMenu={onContextMenu}
+                onDragStartFolder={onDragStartFolder}
+                onDragStartRequest={onDragStartRequest}
+                onDragOverFolder={onDragOverFolder}
+                onDragLeaveFolder={onDragLeaveFolder}
+                onDropOnFolder={onDropOnFolder}
+                onOpenRequestTab={onOpenRequestTab}
+                onDeleteCollection={onDeleteCollection}
+                onDeleteRequest={onDeleteRequest}
+              />
+            );
+          })}
 
           {/* Folder Requests */}
-          {item.requests?.map((req) => (
-            <CollectionRequestNode
-              key={req.id}
-              request={req}
-              depth={depth + 1}
-              isSearching={isSearching}
-              editingId={editingId}
-              editingType={editingType}
-              editingName={editingName}
-              onSetEditingName={onSetEditingName}
-              onSaveRename={onSaveRename}
-              onCancelRename={onCancelRename}
-              onOpenRequestTab={onOpenRequestTab}
-              onContextMenu={onContextMenu}
-              onDragStart={onDragStartRequest}
-              onDeleteRequest={onDeleteRequest}
-            />
-          ))}
+          {item.requests?.map((req, idx) => {
+            const isReqLast = idx === requestsCount - 1;
+            return (
+              <CollectionRequestNode
+                key={req.id}
+                request={req}
+                depth={depth + 1}
+                isLast={isReqLast}
+                ancestorIsLast={nextAncestorIsLast}
+                isSearching={isSearching}
+                editingId={editingId}
+                editingType={editingType}
+                editingName={editingName}
+                onSetEditingName={onSetEditingName}
+                onSaveRename={onSaveRename}
+                onCancelRename={onCancelRename}
+                onOpenRequestTab={onOpenRequestTab}
+                onContextMenu={onContextMenu}
+                onDragStart={onDragStartRequest}
+                onDeleteRequest={onDeleteRequest}
+              />
+            );
+          })}
         </div>
       )}
     </div>
