@@ -4,6 +4,7 @@ import { useWorkspaceStore } from '../../../stores/useWorkspaceStore';
 import { MethodBadge } from '../../common/MethodBadge';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Input, Button } from '../../common/ui';
+import { CollectionExtractRulesModal } from './CollectionExtractRulesModal';
 import type { CollectionTreeItem, RequestItem } from '../../../services/tauri/bridge';
 
 interface CollectionTreeSidebarProps {
@@ -39,6 +40,14 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
 
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
+
+  // Extract Rules Modal state
+  const [isExtractModalOpen, setIsExtractModalOpen] = useState(false);
+  const [extractModalCol, setExtractModalCol] = useState<CollectionTreeItem | null>(null);
+  const [extractModalReq, setExtractModalReq] = useState<RequestItem | null>(null);
+
+  // Drag over root indicator
+  const [isDragOverRoot, setIsDragOverRoot] = useState(false);
 
   // Debounce search query updates by 250ms
   useEffect(() => {
@@ -255,6 +264,54 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
       }
     } catch (err) {
       console.error('Failed to parse drag drop payload:', err);
+    }
+  };
+
+  const handleDragOverRoot = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (!isDragOverRoot) {
+      setIsDragOverRoot(true);
+    }
+  };
+
+  const handleDragLeaveRoot = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isDragOverRoot) {
+      setIsDragOverRoot(false);
+    }
+  };
+
+  const handleDropOnRoot = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverRoot(false);
+    setDragTargetFolderId(null);
+
+    const rawData = e.dataTransfer.getData('application/json');
+    if (!rawData || !activeWorkspaceId) return;
+
+    try {
+      const payload = JSON.parse(rawData);
+      if (payload.type === 'collection' && payload.id) {
+        // Move collection folder to root
+        await moveCollectionItem(payload.id, null, activeWorkspaceId);
+      } else if (payload.type === 'request' && payload.id) {
+        // Move request to root / unassigned folder
+        let targetColId = collectionsTree.find((c) => !c.parentId)?.id;
+        if (!targetColId) {
+          const created = await createNewCollection(activeWorkspaceId, null, 'Unassigned Requests');
+          targetColId = created?.id;
+        }
+        if (targetColId && targetColId !== payload.collectionId) {
+          await moveRequestItem(payload.id, targetColId, activeWorkspaceId);
+          setExpandedFolders((prev) => ({ ...prev, [targetColId]: true }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to drop on root:', err);
     }
   };
 
@@ -523,7 +580,21 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
       </div>
 
       {/* Root Collection Tree */}
-      <div className="flex-1 p-2 overflow-y-auto space-y-1 no-scrollbar">
+      <div
+        onDragOver={handleDragOverRoot}
+        onDragLeave={handleDragLeaveRoot}
+        onDrop={handleDropOnRoot}
+        className={`flex-1 p-2 overflow-y-auto space-y-1 no-scrollbar transition-colors ${
+          isDragOverRoot ? 'bg-primary/10 ring-2 ring-dashed ring-primary/60 rounded-lg m-1' : ''
+        }`}
+      >
+        {isDragOverRoot && (
+          <div className="p-2 mb-2 rounded border border-dashed border-primary bg-primary/20 text-center text-xs text-primary font-semibold flex items-center justify-center gap-1.5 animate-pulse">
+            <MingCuteIcon name="folder_line" size={14} />
+            <span>Drop here to move to Root Level / Unassigned</span>
+          </div>
+        )}
+
         {addingFolderParentId === 'root' && (
           <div className="p-1 flex items-center gap-1">
             <input
@@ -599,7 +670,7 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
         <div
           style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
           onClick={(e) => e.stopPropagation()}
-          className="fixed z-50 bg-surface border border-border rounded-lg shadow-xl py-1 text-xs min-w-[160px] text-foreground font-sans flex flex-col"
+          className="fixed z-50 bg-surface border border-border rounded-lg shadow-xl py-1 text-xs min-w-[170px] text-foreground font-sans flex flex-col"
         >
           {contextMenu.type === 'collection' && (
             <>
@@ -625,6 +696,19 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
               >
                 <MingCuteIcon name="folder_add_line" size={14} className="text-amber-500" />
                 <span>Add Subfolder</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setExtractModalCol(contextMenu.item);
+                  setExtractModalReq(null);
+                  setIsExtractModalOpen(true);
+                  setContextMenu(null);
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-subtle text-left transition-colors cursor-pointer"
+              >
+                <MingCuteIcon name="lightning_line" size={14} className="text-amber-500" />
+                <span>Auto-Extract Rules</span>
               </button>
 
               <button
@@ -685,6 +769,19 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
 
               <button
                 onClick={() => {
+                  setExtractModalCol(null);
+                  setExtractModalReq(contextMenu.item);
+                  setIsExtractModalOpen(true);
+                  setContextMenu(null);
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-subtle text-left transition-colors cursor-pointer"
+              >
+                <MingCuteIcon name="lightning_line" size={14} className="text-amber-500" />
+                <span>Auto-Extract Rules</span>
+              </button>
+
+              <button
+                onClick={() => {
                   if (contextMenu.id && activeWorkspaceId) {
                     duplicateRequestItem(contextMenu.id, activeWorkspaceId);
                   }
@@ -741,6 +838,18 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
           )}
         </div>
       )}
+
+      {/* Auto-Extract Rules Modal */}
+      <CollectionExtractRulesModal
+        isOpen={isExtractModalOpen}
+        onClose={() => {
+          setIsExtractModalOpen(false);
+          setExtractModalCol(null);
+          setExtractModalReq(null);
+        }}
+        collection={extractModalCol}
+        request={extractModalReq}
+      />
     </div>
   );
 };
