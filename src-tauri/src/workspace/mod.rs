@@ -291,8 +291,11 @@ pub fn resolve_dynamic_variable(key: &str) -> Option<String> {
                 offset_dt.second()
             ))
         }
-        "guid" | "uuid" | "randomuuid" | "random_uuid" | "randomguid" | "random_guid" => {
+        "guid" | "uuid" | "uuidv4" | "uuid_v4" | "randomuuid" | "random_uuid" | "randomguid" | "random_guid" | "randomuuidv4" | "random_uuid_v4" => {
             Some(Uuid::new_v4().to_string())
+        }
+        "uuidv7" | "uuid_v7" | "guidv7" | "guid_v7" | "randomuuidv7" | "random_uuid_v7" => {
+            Some(Uuid::now_v7().to_string())
         }
         "randomint" | "random_int" | "randominteger" | "random_integer" => {
             let u = Uuid::new_v4().as_u128();
@@ -500,6 +503,19 @@ mod tests {
         assert!(guid_result.starts_with("UUID: "));
         let uuid_str = guid_result.trim_start_matches("UUID: ");
         assert_eq!(uuid_str.len(), 36);
+    }
+
+    #[test]
+    fn test_uuidv4_and_uuidv7() {
+        let v4 = interpolate_dynamic_variables("{{$uuid}}");
+        assert_eq!(v4.len(), 36);
+        let parsed_v4 = Uuid::parse_str(&v4).expect("valid uuid");
+        assert_eq!(parsed_v4.get_version_num(), 4);
+
+        let v7 = interpolate_dynamic_variables("{{$uuidv7}}");
+        assert_eq!(v7.len(), 36);
+        let parsed_v7 = Uuid::parse_str(&v7).expect("valid uuid v7");
+        assert_eq!(parsed_v7.get_version_num(), 7);
     }
 
     #[test]
