@@ -222,14 +222,15 @@ export async function getWebhookEndpoints(): Promise<WebhookEndpoint[]> {
 }
 
 export async function createWebhookEndpoint(endpoint: Partial<WebhookEndpoint>): Promise<WebhookEndpoint> {
-  return safeInvoke<WebhookEndpoint>('create_webhook_endpoint', { endpoint }, {
-    id: 'wh-ep-' + Date.now(),
+  const payload: WebhookEndpoint = {
+    id: endpoint.id || 'wh-ep-' + Date.now(),
     path: endpoint.path || '/webhook/test',
     name: endpoint.name || 'Test Endpoint',
     secretKey: endpoint.secretKey || 'whsec_secret123',
-    createdAt: Date.now(),
-    hitCount: 0,
-  });
+    createdAt: endpoint.createdAt || Date.now(),
+    hitCount: endpoint.hitCount || 0,
+  };
+  return safeInvoke<WebhookEndpoint>('create_webhook_endpoint', { endpoint: payload }, payload);
 }
 
 export async function deleteWebhookEndpoint(id: string): Promise<void> {

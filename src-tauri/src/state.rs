@@ -165,23 +165,33 @@ pub struct RewriteCapturedEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebhookEndpoint {
+    #[serde(default)]
     pub id: String,
     pub name: String,
     pub path: String,
+    #[serde(default)]
     pub secret_key: String,
+    #[serde(default)]
     pub created_at: i64,
+    #[serde(default)]
     pub hit_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebhookDelivery {
+    #[serde(default)]
     pub id: String,
+    #[serde(default)]
     pub endpoint_id: String,
     pub endpoint_path: String,
+    #[serde(default)]
     pub timestamp: i64,
+    #[serde(default)]
     pub headers: Vec<(String, String)>,
+    #[serde(default)]
     pub payload: String,
+    #[serde(default)]
     pub signature_status: String,
     pub computed_hmac: Option<String>,
     pub provided_hmac: Option<String>,
