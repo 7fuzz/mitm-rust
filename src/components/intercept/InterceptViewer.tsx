@@ -2,6 +2,18 @@ import React, { useEffect, useState } from "react";
 import { useInterceptStore } from "../../stores/useInterceptStore";
 import { MingCuteIcon } from "../common/MingCuteIcon";
 import { Dialog } from "../common/ui/Dialog";
+import { Select } from "../common/ui";
+import { KeyValueEditor } from "../common/KeyValueEditor";
+
+const METHOD_OPTIONS = [
+  { value: "GET", label: "GET" },
+  { value: "POST", label: "POST" },
+  { value: "PUT", label: "PUT" },
+  { value: "DELETE", label: "DELETE" },
+  { value: "PATCH", label: "PATCH" },
+  { value: "OPTIONS", label: "OPTIONS" },
+  { value: "HEAD", label: "HEAD" },
+] as const;
 
 export const InterceptViewer: React.FC = () => {
   const {
@@ -10,6 +22,9 @@ export const InterceptViewer: React.FC = () => {
     focusOnIntercepted,
     pendingFlows,
     selectedFlowId,
+    editedMethod,
+    editedUrl,
+    editedParams,
     editedHeaders,
     editedBodyText,
     rules,
@@ -18,6 +33,9 @@ export const InterceptViewer: React.FC = () => {
     setInterceptMode,
     setFocusOnIntercepted,
     selectFlow,
+    setEditedMethod,
+    setEditedUrl,
+    setEditedParams,
     setEditedHeaders,
     setEditedBodyText,
     forwardCurrentFlow,
@@ -29,7 +47,7 @@ export const InterceptViewer: React.FC = () => {
     deleteRule,
   } = useInterceptStore();
 
-  const [activeTab, setActiveTab] = useState<"headers" | "body">("headers");
+  const [activeTab, setActiveTab] = useState<"params" | "headers" | "body">("params");
   const [rulesModalOpen, setRulesModalOpen] = useState(false);
 
   const [newRulePhase, setNewRulePhase] = useState<"request" | "response" | "both">("request");
@@ -38,10 +56,32 @@ export const InterceptViewer: React.FC = () => {
   const [newRuleValue, setNewRuleValue] = useState("");
 
   const selectedFlow = pendingFlows.find((f) => f.flowId === selectedFlowId);
+  const isRequestPhase = selectedFlow?.phase === "request";
 
   useEffect(() => {
     initInterceptStore();
   }, []);
+
+  // When switching between request and response, ensure valid active tab
+  useEffect(() => {
+    if (!isRequestPhase && activeTab === "params") {
+      setActiveTab("headers");
+    }
+  }, [isRequestPhase, activeTab]);
+
+  // Keyboard shortcut: Cmd/Ctrl + Enter to forward
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        if (!rulesModalOpen && selectedFlow) {
+          e.preventDefault();
+          forwardCurrentFlow();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [rulesModalOpen, selectedFlow, forwardCurrentFlow]);
 
   const handleHeaderChange = (index: number, key: string, value: string) => {
     const updated: [string, string][] = [...editedHeaders];
@@ -70,6 +110,8 @@ export const InterceptViewer: React.FC = () => {
     });
     setNewRuleValue("");
   };
+
+  const activeParamsCount = editedParams.filter((p) => p.enabled && p.key.trim()).length;
 
   return (
     <div className="flex flex-col h-full w-full bg-background text-foreground font-sans antialiased overflow-hidden select-none">
@@ -145,14 +187,16 @@ export const InterceptViewer: React.FC = () => {
             disabled={!selectedFlow}
             onClick={forwardCurrentFlow}
             className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-xs rounded-lg transition-colors font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            title="Forward modified flow (⌘↵)"
           >
-            <MingCuteIcon name="play_line" size={14} /> Forward
+            <MingCuteIcon name="play_line" size={14} /> Forward (⌘↵)
           </button>
 
           <button
             disabled={!selectedFlow}
             onClick={dropCurrentFlow}
             className="flex items-center gap-1.5 px-3 py-1 bg-rose-500/15 border border-rose-500/30 hover:bg-rose-500/25 text-rose-600 dark:text-rose-400 text-xs rounded-lg transition-colors font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            title="Drop flow and return 502"
           >
             <MingCuteIcon name="close_line" size={14} /> Drop
           </button>
@@ -210,13 +254,15 @@ export const InterceptViewer: React.FC = () => {
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="px-1.5 py-0.5 rounded bg-header border border-border text-amber-600 dark:text-amber-400 font-mono text-[10px] font-bold">
-                        {flow.method}
+                        {isSelected ? editedMethod : flow.method}
                       </span>
                       <span className="text-[10px] font-mono uppercase text-muted-foreground">
                         {flow.phase}
                       </span>
                     </div>
-                    <div className="text-xs font-mono text-foreground truncate">{flow.url}</div>
+                    <div className="text-xs font-mono text-foreground truncate">
+                      {isSelected ? editedUrl : flow.url}
+                    </div>
                   </div>
                 );
               })
@@ -224,25 +270,64 @@ export const InterceptViewer: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Pane: Headers & Body Payload Editor */}
+        {/* Right Pane: Editable Method/URL Bar, Params, Headers & Body */}
         <div className="flex-1 flex flex-col bg-background min-w-0">
           {selectedFlow ? (
             <div className="flex flex-col h-full">
-              {/* Flow Detail Bar */}
-              <div className="px-4 py-2 bg-header border-b border-border flex items-center justify-between text-xs font-mono">
-                <div className="flex items-center gap-2 truncate">
-                  <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-300 font-bold">
-                    {selectedFlow.method}
-                  </span>
-                  <span className="text-foreground truncate font-semibold">{selectedFlow.url}</span>
-                </div>
-                <div className="text-muted-foreground shrink-0 text-[11px]">
-                  Phase: <span className="uppercase text-amber-500 font-bold">{selectedFlow.phase}</span>
-                </div>
+              {/* Editable Address Bar for Intercepted Flow */}
+              <div className="p-2.5 bg-header border-b border-border flex items-center gap-2 shrink-0 font-mono">
+                {isRequestPhase ? (
+                  <>
+                    <div className="w-28 shrink-0 font-bold">
+                      <Select
+                        value={editedMethod}
+                        onChange={(e) => setEditedMethod(e.target.value)}
+                        options={METHOD_OPTIONS}
+                        sizeVariant="sm"
+                      />
+                    </div>
+                    <div className="flex-1 relative flex items-center">
+                      <input
+                        type="text"
+                        value={editedUrl}
+                        onChange={(e) => setEditedUrl(e.target.value)}
+                        placeholder="https://api.example.com/endpoint?param=value"
+                        className="w-full bg-background border border-border rounded px-3 py-1.5 font-mono text-xs text-foreground focus:outline-none focus:border-primary shadow-2xs"
+                      />
+                    </div>
+                    <span className="px-2 py-1 rounded bg-amber-500/20 text-amber-600 dark:text-amber-300 font-bold text-[10px] uppercase shrink-0">
+                      REQUEST
+                    </span>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-between w-full text-xs">
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-600 dark:text-purple-300 font-bold">
+                        {selectedFlow.method}
+                      </span>
+                      <span className="text-foreground truncate font-semibold">{selectedFlow.url}</span>
+                    </div>
+                    <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-600 dark:text-purple-300 font-bold text-[10px] uppercase shrink-0">
+                      RESPONSE
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Payload Editor Tabs */}
-              <div className="flex items-center gap-2 px-4 py-1.5 bg-surface border-b border-border font-mono">
+              <div className="flex items-center gap-2 px-4 py-1.5 bg-surface border-b border-border font-mono text-xs">
+                {isRequestPhase && (
+                  <button
+                    onClick={() => setActiveTab("params")}
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                      activeTab === "params"
+                        ? "bg-primary text-primary-foreground font-bold shadow-2xs"
+                        : "text-muted-foreground hover:text-foreground hover:bg-neutral-subtle"
+                    }`}
+                  >
+                    Params {activeParamsCount > 0 ? `(${activeParamsCount})` : ""}
+                  </button>
+                )}
                 <button
                   onClick={() => setActiveTab("headers")}
                   className={`px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
@@ -267,7 +352,21 @@ export const InterceptViewer: React.FC = () => {
 
               {/* Editor Workspace */}
               <div className="flex-1 overflow-y-auto p-4 font-mono text-xs">
-                {activeTab === "headers" ? (
+                {activeTab === "params" && isRequestPhase ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground font-sans text-xs font-semibold">
+                        Query Parameters (Synced with URL)
+                      </span>
+                    </div>
+                    <KeyValueEditor
+                      items={editedParams}
+                      onChange={(params) => setEditedParams(params)}
+                      keyPlaceholder="Parameter Key"
+                      valuePlaceholder="Parameter Value"
+                    />
+                  </div>
+                ) : activeTab === "headers" ? (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-muted-foreground font-sans text-xs font-semibold">

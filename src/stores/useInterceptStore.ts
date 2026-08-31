@@ -17,6 +17,68 @@ import {
 import { UnlistenFn } from "@tauri-apps/api/event";
 import { useSettingsStore } from "./useSettingsStore";
 
+export interface InterceptParam {
+  id: string;
+  key: string;
+  value: string;
+  enabled: boolean;
+}
+
+export const parseParamsFromUrl = (urlStr: string): InterceptParam[] => {
+  if (!urlStr) return [];
+  try {
+    const urlObj = new URL(urlStr);
+    const result: InterceptParam[] = [];
+    urlObj.searchParams.forEach((val, key) => {
+      result.push({
+        id: `param-${Math.random().toString(36).substring(2, 9)}`,
+        key,
+        value: val,
+        enabled: true,
+      });
+    });
+    return result;
+  } catch {
+    const qIdx = urlStr.indexOf("?");
+    if (qIdx === -1) return [];
+    const query = urlStr.substring(qIdx + 1);
+    const searchParams = new URLSearchParams(query);
+    const result: InterceptParam[] = [];
+    searchParams.forEach((val, key) => {
+      result.push({
+        id: `param-${Math.random().toString(36).substring(2, 9)}`,
+        key,
+        value: val,
+        enabled: true,
+      });
+    });
+    return result;
+  }
+};
+
+export const rebuildUrlWithParams = (baseUrlOrFullUrl: string, params: InterceptParam[]): string => {
+  try {
+    const urlObj = new URL(baseUrlOrFullUrl);
+    const newSearchParams = new URLSearchParams();
+    params.forEach((p) => {
+      if (p.enabled && p.key.trim()) {
+        newSearchParams.append(p.key.trim(), p.value);
+      }
+    });
+    const searchStr = newSearchParams.toString();
+    urlObj.search = searchStr ? `?${searchStr}` : "";
+    return urlObj.toString();
+  } catch {
+    const qIdx = baseUrlOrFullUrl.indexOf("?");
+    const base = qIdx !== -1 ? baseUrlOrFullUrl.substring(0, qIdx) : baseUrlOrFullUrl;
+    const activeParams = params
+      .filter((p) => p.enabled && p.key.trim())
+      .map((p) => `${encodeURIComponent(p.key.trim())}=${encodeURIComponent(p.value)}`)
+      .join("&");
+    return activeParams ? `${base}?${activeParams}` : base;
+  }
+};
+
 interface InterceptState {
   interceptEnabled: boolean;
   interceptMode: "request" | "response" | "both";
@@ -24,6 +86,9 @@ interface InterceptState {
   rules: InterceptRule[];
   pendingFlows: PendingFlowPayload[];
   selectedFlowId: string | null;
+  editedMethod: string;
+  editedUrl: string;
+  editedParams: InterceptParam[];
   editedHeaders: [string, string][];
   editedBodyText: string;
   unsubFn: UnlistenFn | null;
@@ -38,6 +103,9 @@ interface InterceptState {
   toggleRule: (id: string) => Promise<void>;
   deleteRule: (id: string) => Promise<void>;
   selectFlow: (flowId: string) => void;
+  setEditedMethod: (method: string) => void;
+  setEditedUrl: (url: string) => void;
+  setEditedParams: (params: InterceptParam[]) => void;
   setEditedHeaders: (headers: [string, string][]) => void;
   setEditedBodyText: (bodyText: string) => void;
   forwardCurrentFlow: () => Promise<void>;
@@ -53,6 +121,9 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
   rules: [],
   pendingFlows: [],
   selectedFlowId: null,
+  editedMethod: "GET",
+  editedUrl: "",
+  editedParams: [],
   editedHeaders: [],
   editedBodyText: "",
   unsubFn: null,
@@ -64,6 +135,9 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
       const pending = await getPendingFlows();
 
       const selectedId = pending.length > 0 ? pending[0].flowId : null;
+      const initialMethod = pending.length > 0 ? pending[0].method : "GET";
+      const initialUrl = pending.length > 0 ? pending[0].url : "";
+      const initialParams = pending.length > 0 ? parseParamsFromUrl(pending[0].url) : [];
       const initialHeaders = pending.length > 0 ? pending[0].headers : [];
       const initialBody = pending.length > 0 ? pending[0].bodyText : "";
 
@@ -73,6 +147,9 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
         rules,
         pendingFlows: pending,
         selectedFlowId: selectedId,
+        editedMethod: initialMethod,
+        editedUrl: initialUrl,
+        editedParams: initialParams,
         editedHeaders: initialHeaders,
         editedBodyText: initialBody,
       });
@@ -111,6 +188,9 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
           set({
             pendingFlows: updatedFlows,
             selectedFlowId: flow.flowId,
+            editedMethod: flow.method || "GET",
+            editedUrl: flow.url || "",
+            editedParams: parseParamsFromUrl(flow.url || ""),
             editedHeaders: flow.headers || [],
             editedBodyText: flow.bodyText || "",
           });
@@ -119,6 +199,9 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
           set({
             pendingFlows: updatedFlows,
             selectedFlowId: shouldSelect ? flow.flowId : state.selectedFlowId,
+            editedMethod: shouldSelect ? flow.method || "GET" : state.editedMethod,
+            editedUrl: shouldSelect ? flow.url || "" : state.editedUrl,
+            editedParams: shouldSelect ? parseParamsFromUrl(flow.url || "") : state.editedParams,
             editedHeaders: shouldSelect ? flow.headers : state.editedHeaders,
             editedBodyText: shouldSelect ? flow.bodyText : state.editedBodyText,
           });
@@ -195,10 +278,33 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
     if (flow) {
       set({
         selectedFlowId: flowId,
+        editedMethod: flow.method || "GET",
+        editedUrl: flow.url || "",
+        editedParams: parseParamsFromUrl(flow.url || ""),
         editedHeaders: [...flow.headers],
         editedBodyText: flow.bodyText,
       });
     }
+  },
+
+  setEditedMethod: (method: string) => {
+    set({ editedMethod: method });
+  },
+
+  setEditedUrl: (url: string) => {
+    set({
+      editedUrl: url,
+      editedParams: parseParamsFromUrl(url),
+    });
+  },
+
+  setEditedParams: (params: InterceptParam[]) => {
+    const currentUrl = get().editedUrl;
+    const newUrl = rebuildUrlWithParams(currentUrl, params);
+    set({
+      editedParams: params,
+      editedUrl: newUrl,
+    });
   },
 
   setEditedHeaders: (headers: [string, string][]) => {
@@ -210,7 +316,7 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
   },
 
   forwardCurrentFlow: async () => {
-    const { selectedFlowId, editedHeaders, editedBodyText, pendingFlows } = get();
+    const { selectedFlowId, editedUrl, editedMethod, editedHeaders, editedBodyText, pendingFlows } = get();
     if (!selectedFlowId) return;
 
     try {
@@ -218,7 +324,7 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
       const encoder = new TextEncoder();
       const bodyBytes = Array.from(encoder.encode(editedBodyText));
 
-      await forwardInterceptedFlow(selectedFlowId, headersJson, bodyBytes);
+      await forwardInterceptedFlow(selectedFlowId, editedUrl, editedMethod, headersJson, bodyBytes);
 
       const remaining = pendingFlows.filter((f) => f.flowId !== selectedFlowId);
       const nextFlow = remaining.length > 0 ? remaining[0] : null;
@@ -226,6 +332,9 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
       set({
         pendingFlows: remaining,
         selectedFlowId: nextFlow ? nextFlow.flowId : null,
+        editedMethod: nextFlow ? nextFlow.method || "GET" : "GET",
+        editedUrl: nextFlow ? nextFlow.url || "" : "",
+        editedParams: nextFlow ? parseParamsFromUrl(nextFlow.url || "") : [],
         editedHeaders: nextFlow ? nextFlow.headers : [],
         editedBodyText: nextFlow ? nextFlow.bodyText : "",
       });
@@ -247,6 +356,9 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
       set({
         pendingFlows: remaining,
         selectedFlowId: nextFlow ? nextFlow.flowId : null,
+        editedMethod: nextFlow ? nextFlow.method || "GET" : "GET",
+        editedUrl: nextFlow ? nextFlow.url || "" : "",
+        editedParams: nextFlow ? parseParamsFromUrl(nextFlow.url || "") : [],
         editedHeaders: nextFlow ? nextFlow.headers : [],
         editedBodyText: nextFlow ? nextFlow.bodyText : "",
       });

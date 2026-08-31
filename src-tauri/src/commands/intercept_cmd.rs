@@ -48,6 +48,8 @@ pub async fn get_intercept_rules(
 pub async fn forward_intercepted_flow(
     state: State<'_, AppState>,
     flow_id: String,
+    modified_url: Option<String>,
+    modified_method: Option<String>,
     modified_headers_json: Option<String>,
     modified_body: Option<Vec<u8>>,
 ) -> Result<(), String> {
@@ -59,6 +61,8 @@ pub async fn forward_intercepted_flow(
         };
 
         let action = InterceptAction::Forward {
+            modified_url,
+            modified_method,
             modified_headers,
             modified_body,
         };
@@ -91,6 +95,8 @@ pub async fn forward_all_intercepted_flows(
     for key in keys {
         if let Some((_, pending)) = state.pending_flows.remove(&key) {
             let _ = pending.tx.send(InterceptAction::Forward {
+                modified_url: None,
+                modified_method: None,
                 modified_headers: None,
                 modified_body: None,
             });
