@@ -162,11 +162,56 @@ pub struct RewriteCapturedEvent {
     pub entry: RewriteHistoryEntry,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebhookEndpoint {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub secret_key: String,
+    pub created_at: i64,
+    pub hit_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebhookDelivery {
+    pub id: String,
+    pub endpoint_id: String,
+    pub endpoint_path: String,
+    pub timestamp: i64,
+    pub headers: Vec<(String, String)>,
+    pub payload: String,
+    pub signature_status: String,
+    pub computed_hmac: Option<String>,
+    pub provided_hmac: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebhookListenerConfig {
+    pub port: u16,
+    pub is_running: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebhookSignatureResult {
+    pub header_name: String,
+    pub header_value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebhookDeliveryCapturedEvent {
+    pub delivery: WebhookDelivery,
+    pub endpoint_hit_count: u64,
+}
+
+#[derive(Clone)]
 pub struct AppState {
     pub db_path: PathBuf,
     pub history_tx: tokio::sync::mpsc::Sender<HistoryEntry>,
     pub rewrite_tx: tokio::sync::mpsc::Sender<RewriteHistoryEntry>,
-    pub proxy_active: AtomicBool,
+    pub proxy_active: Arc<AtomicBool>,
     pub broadcast_tx: broadcast::Sender<TrafficCapturedEvent>,
     pub proxy_config: Arc<RwLock<ProxyConfig>>,
     pub history_settings: Arc<RwLock<HistorySettings>>,
@@ -175,6 +220,9 @@ pub struct AppState {
     pub rules: Arc<RwLock<Vec<InterceptRule>>>,
     pub rewrite_rules: Arc<RwLock<Vec<RewriteRule>>>,
     pub rewrite_enabled: Arc<AtomicBool>,
+    pub webhook_running: Arc<AtomicBool>,
+    pub webhook_port: Arc<RwLock<u16>>,
+    pub webhook_stop_signal: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
 impl AppState {
@@ -205,6 +253,10 @@ impl AppState {
             .and_then(|v| v.parse::<u16>().ok())
             .unwrap_or(8080);
 
+        let initial_webhook_port = crate::db::get_preference(&db_path, "webhook_port")
+            .and_then(|v| v.parse::<u16>().ok())
+            .unwrap_or(9000);
+
         let limiter_enabled = crate::db::get_preference(&db_path, "history_limiter_enabled")
             .map(|v| v == "true")
             .unwrap_or(true);
@@ -233,7 +285,7 @@ impl AppState {
             db_path,
             history_tx,
             rewrite_tx,
-            proxy_active: AtomicBool::new(initial_proxy_enabled),
+            proxy_active: Arc::new(AtomicBool::new(initial_proxy_enabled)),
             broadcast_tx,
             proxy_config: Arc::new(RwLock::new(proxy_config)),
             history_settings: Arc::new(RwLock::new(history_settings)),
@@ -242,6 +294,9 @@ impl AppState {
             rules: Arc::new(RwLock::new(initial_rules)),
             rewrite_rules: Arc::new(RwLock::new(initial_rewrite_rules)),
             rewrite_enabled: Arc::new(AtomicBool::new(initial_rewrite_enabled)),
+            webhook_running: Arc::new(AtomicBool::new(false)),
+            webhook_port: Arc::new(RwLock::new(initial_webhook_port)),
+            webhook_stop_signal: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -259,5 +314,13 @@ impl AppState {
 
     pub fn is_rewrite_enabled(&self) -> bool {
         self.rewrite_enabled.load(Ordering::SeqCst)
+    }
+
+    pub fn is_webhook_running(&self) -> bool {
+        self.webhook_running.load(Ordering::SeqCst)
+    }
+
+    pub fn set_webhook_running(&self, running: bool) {
+        self.webhook_running.store(running, Ordering::SeqCst);
     }
 }

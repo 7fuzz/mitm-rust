@@ -54,21 +54,7 @@ pub async fn set_proxy_mode(
 
             state.set_proxy_active(true);
 
-            let state_arc = Arc::new(AppState {
-                db_path: state.db_path.clone(),
-                history_tx: state.history_tx.clone(),
-                rewrite_tx: state.rewrite_tx.clone(),
-                proxy_active: std::sync::atomic::AtomicBool::new(true),
-                broadcast_tx: state.broadcast_tx.clone(),
-                proxy_config: Arc::clone(&state.proxy_config),
-                history_settings: Arc::clone(&state.history_settings),
-                stop_signal: Arc::clone(&state.stop_signal),
-
-                pending_flows: Arc::clone(&state.pending_flows),
-                rules: Arc::clone(&state.rules),
-                rewrite_rules: Arc::clone(&state.rewrite_rules),
-                rewrite_enabled: Arc::clone(&state.rewrite_enabled),
-            });
+            let state_arc = Arc::new((*state).clone());
 
             tauri::async_runtime::spawn(async move {
                 let _ = start_proxy_server(app_handle, state_arc, ca, addr_str, stop_rx).await;
@@ -199,20 +185,7 @@ pub async fn update_network_settings(
             *stop_guard = Some(stop_tx);
         }
 
-        let state_arc = Arc::new(AppState {
-            db_path: state.db_path.clone(),
-            history_tx: state.history_tx.clone(),
-            rewrite_tx: state.rewrite_tx.clone(),
-            proxy_active: std::sync::atomic::AtomicBool::new(true),
-            broadcast_tx: state.broadcast_tx.clone(),
-            proxy_config: Arc::clone(&state.proxy_config),
-            history_settings: Arc::clone(&state.history_settings),
-            stop_signal: Arc::clone(&state.stop_signal),
-            pending_flows: Arc::clone(&state.pending_flows),
-            rules: Arc::clone(&state.rules),
-            rewrite_rules: Arc::clone(&state.rewrite_rules),
-            rewrite_enabled: Arc::clone(&state.rewrite_enabled),
-        });
+        let state_arc = Arc::new((*state).clone());
 
         let app_handle_clone = app_handle.clone();
         tauri::async_runtime::spawn(async move {

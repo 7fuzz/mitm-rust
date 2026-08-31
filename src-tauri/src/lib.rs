@@ -6,6 +6,7 @@ pub mod encoding;
 pub mod proxy;
 pub mod repeater;
 pub mod state;
+pub mod webhook;
 pub mod workspace;
 
 use std::sync::Arc;
@@ -52,22 +53,12 @@ pub fn run() {
                             (cfg.host.clone(), cfg.port)
                         };
                         let addr_str = format!("{}:{}", proxy_host, proxy_port);
+                        {
+                            let mut stop_guard = app_state.stop_signal.blocking_lock();
+                            *stop_guard = Some(stop_tx);
+                        }
 
-                        let state_arc = Arc::new(AppState {
-                            db_path: app_state.db_path.clone(),
-                            history_tx: app_state.history_tx.clone(),
-                            rewrite_tx: app_state.rewrite_tx.clone(),
-                            proxy_active: std::sync::atomic::AtomicBool::new(true),
-                            broadcast_tx: app_state.broadcast_tx.clone(),
-                            proxy_config: Arc::clone(&app_state.proxy_config),
-                            history_settings: Arc::clone(&app_state.history_settings),
-                            stop_signal: Arc::new(tokio::sync::Mutex::new(Some(stop_tx))),
-
-                            pending_flows: Arc::clone(&app_state.pending_flows),
-                            rules: Arc::clone(&app_state.rules),
-                            rewrite_rules: Arc::clone(&app_state.rewrite_rules),
-                            rewrite_enabled: Arc::clone(&app_state.rewrite_enabled),
-                        });
+                        let state_arc = Arc::new(app_state.clone());
 
                         tauri::async_runtime::spawn(async move {
                             let _ = start_proxy_server(app_handle_clone, state_arc, ca, addr_str, stop_rx).await;
@@ -158,6 +149,17 @@ pub fn run() {
             commands::collection_cmd::clear_request_histories,
             commands::collection_cmd::read_file_as_base64,
             commands::collection_cmd::preview_collection_request,
+
+            commands::webhook_cmd::get_webhook_endpoints,
+            commands::webhook_cmd::create_webhook_endpoint,
+            commands::webhook_cmd::delete_webhook_endpoint,
+            commands::webhook_cmd::get_webhook_deliveries,
+            commands::webhook_cmd::clear_webhook_deliveries,
+            commands::webhook_cmd::get_webhook_listener_status,
+            commands::webhook_cmd::start_webhook_listener,
+            commands::webhook_cmd::stop_webhook_listener,
+            commands::webhook_cmd::calculate_webhook_signature,
+            commands::webhook_cmd::replay_webhook_delivery,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
