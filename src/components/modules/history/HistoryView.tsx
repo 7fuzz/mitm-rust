@@ -8,6 +8,7 @@ import { MethodBadge } from '../../common/MethodBadge';
 import { StatusBadge } from '../../common/StatusBadge';
 import { ContextMenu, ContextMenuItem } from '../../common/ContextMenu';
 import type { TrafficItem } from '../../../types';
+import { formatReqAndRes } from '../../../utils/reqResFormatter';
 
 export const HistoryView: React.FC = () => {
   const {
@@ -144,11 +145,17 @@ export const HistoryView: React.FC = () => {
     navigator.clipboard.writeText(curl);
   };
 
+  const handleCopyReqAndRes = (item: TrafficItem) => {
+    const formatted = formatReqAndRes(item);
+    navigator.clipboard.writeText(formatted);
+  };
+
   const getContextMenuItems = (item: TrafficItem): ContextMenuItem[] => [
     { label: 'Send to Repeater', icon: 'send_plane_line', action: () => handleSendToRepeater(item) },
     { label: 'Add to Collection', icon: 'folder_line', action: () => handleAddToCollection(item) },
     { label: 'Add to Intercept Rules', icon: 'shield_line', action: () => handleAddInterceptRule(item) },
     { label: 'Copy as cURL', icon: 'copy_line', action: () => handleCopyAsCurl(item) },
+    { label: 'Copy req and res', icon: 'transfer_line', action: () => handleCopyReqAndRes(item) },
     { label: 'Delete Item', icon: 'delete_2_line', action: () => deleteTrafficItem(item.id), danger: true },
   ];
 

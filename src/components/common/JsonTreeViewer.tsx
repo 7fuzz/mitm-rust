@@ -3,7 +3,7 @@ import { MingCuteIcon } from './MingCuteIcon';
 import { serializeVisible, deepSearch, selectTextOf } from './json-tree/jsonTreeSerializer';
 import { JsonTreeLeaf, HighlightText } from './json-tree/JsonTreeLeaf';
 
-export { serializeVisible, deepSearch, selectTextOf } from './json-tree/jsonTreeSerializer';
+export { serializeVisible, serializeTruncatedTree, deepSearch, selectTextOf } from './json-tree/jsonTreeSerializer';
 
 interface JsonTreeViewerProps {
   label?: string;

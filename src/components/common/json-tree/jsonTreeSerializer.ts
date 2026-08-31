@@ -41,6 +41,49 @@ export function serializeVisible(
   return String(value);
 }
 
+// ─── Serialize JSON tree in truncated default state ───────────────────────────
+// Truncates long arrays (only first item shown + count comment) and long strings (> 200 chars to 100 chars + ...)
+export function serializeTruncatedTree(
+  value: unknown,
+  indent: number = 0,
+  maxStringLength: number = 200,
+  previewStringLength: number = 100
+): string {
+  const pad = '  '.repeat(indent);
+  const innerPad = '  '.repeat(indent + 1);
+
+  if (value === null) return 'null';
+  if (typeof value === 'boolean' || typeof value === 'number') return String(value);
+  if (typeof value === 'string') {
+    if (value.length > maxStringLength) {
+      return JSON.stringify(value.substring(0, previewStringLength) + '...');
+    }
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    const lines = [
+      `${innerPad}${serializeTruncatedTree(value[0], indent + 1, maxStringLength, previewStringLength)}`,
+    ];
+    if (value.length > 1) {
+      lines.push(`${innerPad}// ... ${value.length - 1} more items`);
+    }
+    return `[\n${lines.join(',\n')}\n${pad}]`;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) return '{}';
+    const lines = entries.map(([k, v]) =>
+      `${innerPad}${JSON.stringify(k)}: ${serializeTruncatedTree(v, indent + 1, maxStringLength, previewStringLength)}`
+    );
+    return `{\n${lines.join(',\n')}\n${pad}}`;
+  }
+
+  return String(value);
+}
+
 // ─── Deep search helper ───────────────────────────────────────────────────────
 export const deepSearch = (obj: unknown, term: string): boolean => {
   if (!term) return false;
