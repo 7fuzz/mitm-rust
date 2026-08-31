@@ -1,6 +1,12 @@
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { isTauriAvailable } from './ipc';
-import type { TrafficItem, PendingFlow, WebSocketMessage, WebhookDeliveryCapturedPayload } from '../../types';
+import type {
+  TrafficItem,
+  PendingFlow,
+  WebhookDeliveryCapturedPayload,
+  WebSocketMessageCapturedPayload,
+  WebSocketConnectionPayload,
+} from '../../types';
 
 export async function listenTrafficCaptured(callback: (item: TrafficItem) => void): Promise<UnlistenFn> {
   if (isTauriAvailable()) {
@@ -16,9 +22,24 @@ export async function listenInterceptPending(callback: (flow: PendingFlow) => vo
   return () => {};
 }
 
-export async function listenWsMessageCaptured(callback: (msg: WebSocketMessage) => void): Promise<UnlistenFn> {
+export async function listenWsMessageCaptured(
+  callback: (payload: WebSocketMessageCapturedPayload) => void,
+): Promise<UnlistenFn> {
   if (isTauriAvailable()) {
-    return await listen<WebSocketMessage>('ws_message_captured', (event) => callback(event.payload));
+    return await listen<WebSocketMessageCapturedPayload>('websocket_message_event', (event) =>
+      callback(event.payload),
+    );
+  }
+  return () => {};
+}
+
+export async function listenWsConnectionEvent(
+  callback: (payload: WebSocketConnectionPayload) => void,
+): Promise<UnlistenFn> {
+  if (isTauriAvailable()) {
+    return await listen<WebSocketConnectionPayload>('websocket_connection_event', (event) =>
+      callback(event.payload),
+    );
   }
   return () => {};
 }

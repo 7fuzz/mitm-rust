@@ -155,7 +155,11 @@ export interface WebSocketConn {
   url: string;
   status: 'connected' | 'disconnected' | 'connecting';
   handshakeTime: number;
+  closedAt?: number;
   protocol?: string;
+  clientAddr?: string;
+  isClientSession?: boolean;
+  messageCount?: number;
 }
 
 export interface WebSocketMessage {
@@ -165,7 +169,18 @@ export interface WebSocketMessage {
   msg_type: 'text' | 'json' | 'binary';
   payload: string;
   timestamp: number;
-  is_intercepted?: boolean;
+  length?: number;
+  is_injected?: boolean;
+}
+
+export interface WebSocketMessageCapturedPayload {
+  message: WebSocketMessage;
+  messageCount: number;
+}
+
+export interface WebSocketConnectionPayload {
+  connection: WebSocketConn;
+  eventType: 'opened' | 'closed';
 }
 
 export interface WebhookEndpoint {

@@ -10,6 +10,7 @@ import type {
   VariableItem,
   EnvironmentItem,
   ReplacementRule,
+  WebSocketConn,
   WebSocketMessage,
   WebhookEndpoint,
   WebhookDelivery,
@@ -208,12 +209,53 @@ export async function deleteReplacement(id: string): Promise<void> {
 }
 
 // WebSockets
-export async function getWebsocketMessages(connectionId: string): Promise<WebSocketMessage[]> {
-  return safeInvoke<WebSocketMessage[]>('get_websocket_messages', { connectionId }, []);
+export async function getWsConnections(): Promise<WebSocketConn[]> {
+  return safeInvoke<WebSocketConn[]>('get_ws_connections', undefined, []);
 }
 
-export async function sendWebsocketMessage(connectionId: string, direction: string, payload: string): Promise<void> {
-  return safeInvoke<void>('send_websocket_message', { connectionId, direction, payload });
+export async function getWsMessages(connectionId: string, limit?: number): Promise<WebSocketMessage[]> {
+  return safeInvoke<WebSocketMessage[]>('get_ws_messages', { connectionId, limit }, []);
+}
+
+export async function connectWsClient(url: string, headers?: [string, string][]): Promise<WebSocketConn> {
+  return safeInvoke<WebSocketConn>('connect_ws_client', { url, headers }, {
+    connectionId: 'ws-cli-' + Date.now(),
+    url,
+    status: 'connected',
+    handshakeTime: Date.now(),
+    isClientSession: true,
+    messageCount: 0,
+  });
+}
+
+export async function disconnectWsClient(connectionId: string): Promise<void> {
+  return safeInvoke<void>('disconnect_ws_client', { connectionId });
+}
+
+export async function sendWsMessage(
+  connectionId: string,
+  direction: 'to_server' | 'to_client',
+  msgType: 'text' | 'json' | 'binary',
+  payload: string,
+): Promise<WebSocketMessage> {
+  return safeInvoke<WebSocketMessage>('send_ws_message', { connectionId, direction, msgType, payload }, {
+    id: 'ws-msg-' + Date.now(),
+    connection_id: connectionId,
+    direction,
+    msg_type: msgType,
+    payload,
+    timestamp: Date.now(),
+    length: payload.length,
+    is_injected: true,
+  });
+}
+
+export async function clearWsMessages(connectionId?: string): Promise<void> {
+  return safeInvoke<void>('clear_ws_messages', { connectionId });
+}
+
+export async function deleteWsConnection(connectionId: string): Promise<void> {
+  return safeInvoke<void>('delete_ws_connection', { connectionId });
 }
 
 // Webhooks
