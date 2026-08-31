@@ -21,6 +21,7 @@ pub fn run() {
         .expect("Failed to install rustls crypto provider");
 
     let (history_tx, history_rx) = mpsc::channel::<HistoryEntry>(2000);
+    let (rewrite_tx, rewrite_rx) = mpsc::channel::<state::RewriteHistoryEntry>(2000);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -34,7 +35,8 @@ pub fn run() {
             match db::init_database(&app_handle) {
                 Ok(db_path) => {
                     db::actor::start_history_actor(db_path.clone(), history_rx);
-                    let app_state = AppState::new(db_path, history_tx);
+                    db::actor::start_rewrite_history_actor(db_path.clone(), rewrite_rx);
+                    let app_state = AppState::new(db_path, history_tx.clone(), rewrite_tx.clone());
 
                     // Auto-start proxy server if initial mode is ON (default)
                     if app_state.is_proxy_active() {
@@ -54,6 +56,7 @@ pub fn run() {
                         let state_arc = Arc::new(AppState {
                             db_path: app_state.db_path.clone(),
                             history_tx: app_state.history_tx.clone(),
+                            rewrite_tx: app_state.rewrite_tx.clone(),
                             proxy_active: std::sync::atomic::AtomicBool::new(true),
                             broadcast_tx: app_state.broadcast_tx.clone(),
                             proxy_config: Arc::clone(&app_state.proxy_config),
@@ -62,6 +65,8 @@ pub fn run() {
 
                             pending_flows: Arc::clone(&app_state.pending_flows),
                             rules: Arc::clone(&app_state.rules),
+                            rewrite_rules: Arc::clone(&app_state.rewrite_rules),
+                            rewrite_enabled: Arc::clone(&app_state.rewrite_enabled),
                         });
 
                         tauri::async_runtime::spawn(async move {
@@ -74,7 +79,7 @@ pub fn run() {
                     eprintln!("[DB Startup Warning] Database init deferred due to error: {}", err);
                     // Minimal app state fallback so commands can still be invoked
                     let fallback_path = db::get_db_path(&app_handle);
-                    let app_state = AppState::new(fallback_path, history_tx);
+                    let app_state = AppState::new(fallback_path, history_tx, rewrite_tx);
                     app.manage(app_state);
                 }
             }
@@ -112,6 +117,13 @@ pub fn run() {
             commands::intercept_cmd::forward_all_intercepted_flows,
             commands::intercept_cmd::drop_all_intercepted_flows,
             commands::intercept_cmd::get_pending_flows,
+
+            commands::rewrite_cmd::get_rewrite_rules,
+            commands::rewrite_cmd::save_rewrite_rules,
+            commands::rewrite_cmd::toggle_rewrite_enabled,
+            commands::rewrite_cmd::get_rewrite_enabled,
+            commands::rewrite_cmd::get_rewrite_history,
+            commands::rewrite_cmd::clear_rewrite_history,
 
             commands::repeater_cmd::get_repeater_tabs,
             commands::repeater_cmd::create_repeater_tab,
