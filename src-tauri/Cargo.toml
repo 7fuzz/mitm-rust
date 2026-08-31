@@ -41,3 +41,5 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls", "gzip", "brotli"
 ring = "0.17"
 dashmap = "6"
 regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+url = "2"

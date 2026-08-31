@@ -57,6 +57,7 @@ pub async fn set_proxy_mode(
             let state_arc = Arc::new(AppState {
                 db_path: state.db_path.clone(),
                 history_tx: state.history_tx.clone(),
+                rewrite_tx: state.rewrite_tx.clone(),
                 proxy_active: std::sync::atomic::AtomicBool::new(true),
                 broadcast_tx: state.broadcast_tx.clone(),
                 proxy_config: Arc::clone(&state.proxy_config),
@@ -65,6 +66,8 @@ pub async fn set_proxy_mode(
 
                 pending_flows: Arc::clone(&state.pending_flows),
                 rules: Arc::clone(&state.rules),
+                rewrite_rules: Arc::clone(&state.rewrite_rules),
+                rewrite_enabled: Arc::clone(&state.rewrite_enabled),
             });
 
             tauri::async_runtime::spawn(async move {
@@ -199,6 +202,7 @@ pub async fn update_network_settings(
         let state_arc = Arc::new(AppState {
             db_path: state.db_path.clone(),
             history_tx: state.history_tx.clone(),
+            rewrite_tx: state.rewrite_tx.clone(),
             proxy_active: std::sync::atomic::AtomicBool::new(true),
             broadcast_tx: state.broadcast_tx.clone(),
             proxy_config: Arc::clone(&state.proxy_config),
@@ -206,6 +210,8 @@ pub async fn update_network_settings(
             stop_signal: Arc::clone(&state.stop_signal),
             pending_flows: Arc::clone(&state.pending_flows),
             rules: Arc::clone(&state.rules),
+            rewrite_rules: Arc::clone(&state.rewrite_rules),
+            rewrite_enabled: Arc::clone(&state.rewrite_enabled),
         });
 
         let app_handle_clone = app_handle.clone();

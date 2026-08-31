@@ -1,6 +1,7 @@
 pub mod mitm;
 pub mod intercept;
 pub mod rules;
+pub mod rewrite;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -228,16 +229,55 @@ async fn handle_http(
             .unwrap());
     }
 
-    // 1. Request Intercept Hook
-    let (final_req_headers, final_req_body) = match handle_intercept_hook(
+    // 1. Request Rewrite Engine (Auto background transformation & Mocking)
+    let mut req_method_str = method.to_string();
+    let mut req_url_str = url.clone();
+    let mut req_host_str = host.clone();
+    let mut req_headers = request_headers.clone();
+    let mut req_body_bytes = request_body_bytes.to_vec();
+
+    if let Some(mock_res) = rewrite::apply_request_rewrite_pipeline(
+        &app_handle,
+        &state,
+        &mut req_method_str,
+        &mut req_url_str,
+        &mut req_host_str,
+        &mut req_headers,
+        &mut req_body_bytes,
+    ).await {
+        let final_path = parse_path_from_url(&req_url_str);
+        log_and_emit_history(
+            &app_handle,
+            &state,
+            &req_method_str,
+            &req_url_str,
+            &req_host_str,
+            &final_path,
+            mock_res.status,
+            req_headers,
+            mock_res.headers.clone(),
+            req_body_bytes,
+            mock_res.body.clone(),
+            0,
+        ).await;
+
+        let mut builder = Response::builder().status(mock_res.status);
+        for (k, v) in mock_res.headers.iter() {
+            builder = builder.header(k, v);
+        }
+        return Ok(builder.body(Full::new(Bytes::from(mock_res.body))).unwrap());
+    }
+
+    // 2. Request Intercept Hook (Manual pause)
+    let (final_req_url, final_req_method, final_req_headers, final_req_body) = match handle_intercept_hook(
         &app_handle,
         &state,
         InterceptPhase::Request,
-        &method.to_string(),
-        &url,
-        &host,
-        request_headers.clone(),
-        request_body_bytes.to_vec(),
+        &req_method_str,
+        &req_url_str,
+        &req_host_str,
+        req_headers.clone(),
+        req_body_bytes.clone(),
     ).await {
         Some(InterceptAction::Drop) => {
             return Ok(Response::builder()
@@ -245,16 +285,27 @@ async fn handle_http(
                 .body(Full::new(Bytes::from("[MITM] Request dropped by Interceptor")))
                 .unwrap());
         }
-        Some(InterceptAction::Forward { modified_headers, modified_body }) => (
-            modified_headers.unwrap_or(request_headers),
-            modified_body.unwrap_or(request_body_bytes.to_vec()),
-        ),
-        None => (request_headers, request_body_bytes.to_vec()),
+        Some(InterceptAction::Forward { modified_url, modified_method, modified_headers, modified_body }) => {
+            let u = modified_url.unwrap_or(req_url_str);
+            let m = modified_method
+                .and_then(|s| s.parse::<Method>().ok())
+                .unwrap_or_else(|| Method::from_bytes(req_method_str.as_bytes()).unwrap_or(Method::GET));
+            let h = modified_headers.unwrap_or(req_headers);
+            let b = modified_body.unwrap_or(req_body_bytes);
+            (u, m, h, b)
+        }
+        None => (req_url_str, Method::from_bytes(req_method_str.as_bytes()).unwrap_or(Method::GET), req_headers, req_body_bytes),
     };
 
+    let final_host = match final_req_url.parse::<hyper::Uri>() {
+        Ok(u) => u.host().unwrap_or(&host).to_string(),
+        Err(_) => host.clone(),
+    };
+    let final_path = parse_path_from_url(&final_req_url);
+
     let mut new_req = Request::builder()
-        .method(method.clone())
-        .uri(url.clone());
+        .method(final_req_method.clone())
+        .uri(final_req_url.clone());
 
     let mut headers_cleaned = final_req_headers.clone();
     headers_cleaned.retain(|(k, _)| !k.eq_ignore_ascii_case("content-length") && !k.eq_ignore_ascii_case("transfer-encoding"));
@@ -263,7 +314,15 @@ async fn handle_http(
         new_req = new_req.header(k, v);
     }
 
-    let new_req = new_req.body(Full::new(Bytes::from(final_req_body.clone()))).unwrap();
+    let new_req = match new_req.body(Full::new(Bytes::from(final_req_body.clone()))) {
+        Ok(r) => r,
+        Err(e) => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Full::new(Bytes::from(format!("Invalid modified request: {}", e))))
+                .unwrap());
+        }
+    };
 
     let start_time = Instant::now();
     match client.request(new_req).await {
@@ -275,16 +334,32 @@ async fn handle_http(
             let collected_res_body = body.collect().await?.to_bytes();
             let response_body_bytes = collected_res_body;
 
-            // 2. Response Intercept Hook
+            // 3. Response Rewrite Engine
+            let mut res_status = status;
+            let mut res_headers = response_headers;
+            let mut res_body = response_body_bytes.to_vec();
+
+            rewrite::apply_response_rewrite_pipeline(
+                &app_handle,
+                &state,
+                &final_req_method.to_string(),
+                &final_req_url,
+                &final_host,
+                &mut res_status,
+                &mut res_headers,
+                &mut res_body,
+            ).await;
+
+            // 4. Response Intercept Hook (Manual pause)
             let (final_res_headers, final_res_body) = match handle_intercept_hook(
                 &app_handle,
                 &state,
                 InterceptPhase::Response,
-                &method.to_string(),
-                &url,
-                &host,
-                response_headers.clone(),
-                response_body_bytes.to_vec(),
+                &final_req_method.to_string(),
+                &final_req_url,
+                &final_host,
+                res_headers.clone(),
+                res_body.clone(),
             ).await {
                 Some(InterceptAction::Drop) => {
                     return Ok(Response::builder()
@@ -292,21 +367,21 @@ async fn handle_http(
                         .body(Full::new(Bytes::from("[MITM] Response dropped by Interceptor")))
                         .unwrap());
                 }
-                Some(InterceptAction::Forward { modified_headers, modified_body }) => (
-                    modified_headers.unwrap_or(response_headers),
-                    modified_body.unwrap_or(response_body_bytes.to_vec()),
+                Some(InterceptAction::Forward { modified_headers, modified_body, .. }) => (
+                    modified_headers.unwrap_or(res_headers),
+                    modified_body.unwrap_or(res_body),
                 ),
-                None => (response_headers, response_body_bytes.to_vec()),
+                None => (res_headers, res_body),
             };
 
             log_and_emit_history(
                 &app_handle,
                 &state,
-                &method.to_string(),
-                &url,
-                &host,
-                &path,
-                status,
+                &final_req_method.to_string(),
+                &final_req_url,
+                &final_host,
+                &final_path,
+                res_status,
                 final_req_headers,
                 final_res_headers.clone(),
                 final_req_body,
@@ -325,7 +400,7 @@ async fn handle_http(
             let mut response_headers_cleaned = final_res_headers.clone();
             response_headers_cleaned.retain(|(k, _)| !k.eq_ignore_ascii_case("content-length") && !k.eq_ignore_ascii_case("transfer-encoding"));
 
-            let mut builder = Response::builder().status(status);
+            let mut builder = Response::builder().status(res_status);
             for (k, v) in response_headers_cleaned.iter() {
                 builder = builder.header(k, v);
             }
@@ -337,10 +412,10 @@ async fn handle_http(
             log_and_emit_history(
                 &app_handle,
                 &state,
-                &method.to_string(),
-                &url,
-                &host,
-                &path,
+                &final_req_method.to_string(),
+                &final_req_url,
+                &final_host,
+                &final_path,
                 502,
                 final_req_headers,
                 vec![("Content-Type".to_string(), "text/plain".to_string())],
