@@ -45,6 +45,11 @@ export const WebSocketsView: React.FC = () => {
   const streamAreaRef = React.useRef<HTMLDivElement>(null);
   const isResizingTable = React.useRef(false);
 
+  // Resizable Frame Injector Dock
+  const [injectorHeightPx, setInjectorHeightPx] = useState<number>(140);
+  const mainConsoleRef = React.useRef<HTMLDivElement>(null);
+  const isResizingInjector = React.useRef(false);
+
   const handleMouseDownSidebar = (e: React.MouseEvent) => {
     e.preventDefault();
     isResizingSidebar.current = true;
@@ -80,6 +85,27 @@ export const WebSocketsView: React.FC = () => {
 
     const handleMouseUp = () => {
       isResizingTable.current = false;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleMouseDownInjectorSplit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingInjector.current = true;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingInjector.current || !mainConsoleRef.current) return;
+      const rect = mainConsoleRef.current.getBoundingClientRect();
+      const newHeight = rect.bottom - moveEvent.clientY;
+      setInjectorHeightPx(Math.min(Math.max(newHeight, 80), 500));
+    };
+
+    const handleMouseUp = () => {
+      isResizingInjector.current = false;
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
@@ -357,7 +383,7 @@ export const WebSocketsView: React.FC = () => {
       </div>
 
       {/* Right Panel: Live Stream Console & Payload Inspector */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-[300px]">
+      <div ref={mainConsoleRef} className="flex-1 flex flex-col overflow-hidden min-w-[300px]">
         {activeConnection ? (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Stream Top Action & Filter Toolbar */}
@@ -601,9 +627,21 @@ export const WebSocketsView: React.FC = () => {
               </div>
             </div>
 
+            {/* Draggable Resizer Bar between Stream Inspector and Frame Injector */}
+            <div
+              onMouseDown={handleMouseDownInjectorSplit}
+              className="h-1.5 bg-border hover:bg-primary/60 active:bg-primary cursor-row-resize flex items-center justify-center transition-colors select-none group z-20 shrink-0"
+              title="Drag to resize frame injector dock"
+            >
+              <div className="w-8 h-0.5 rounded bg-muted-foreground/40 group-hover:bg-primary" />
+            </div>
+
             {/* Bottom Dock: Interactive Frame Injector */}
-            <div className="p-3 bg-header border-t border-border flex flex-col gap-2 shrink-0">
-              <div className="flex items-center justify-between font-mono">
+            <div
+              style={{ height: `${injectorHeightPx}px` }}
+              className="p-3 bg-header border-t border-border flex flex-col gap-2 shrink-0 overflow-hidden min-h-[80px]"
+            >
+              <div className="flex items-center justify-between font-mono shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1 font-semibold text-foreground font-sans">
                     <MingCuteIcon name="send_plane_line" size={14} className="text-primary" />
@@ -674,11 +712,10 @@ export const WebSocketsView: React.FC = () => {
               </div>
 
               <textarea
-                rows={2}
                 value={messageBuilderContent}
                 onChange={(e) => setMessageBuilderContent(e.target.value)}
                 placeholder="Type raw text, JSON payload, or hex string for binary frames..."
-                className="w-full bg-background border border-border rounded p-2 text-xs font-mono text-foreground focus:outline-none focus:border-primary"
+                className="flex-1 w-full bg-background border border-border rounded p-2 text-xs font-mono text-foreground focus:outline-none focus:border-primary resize-none overflow-y-auto"
               />
             </div>
           </div>

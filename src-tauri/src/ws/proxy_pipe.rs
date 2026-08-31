@@ -68,26 +68,10 @@ pub async fn bridge_proxied_websocket<C, S>(
             tokio::select! {
                 // Injected message from user interface to server
                 Some(injected_msg) = to_server_rx.recv() => {
-                    let len = injected_msg.len();
-                    let (msg_type, payload_str) = extract_message_info(&injected_msg);
                     if let Err(e) = server_write.send(injected_msg).await {
                         eprintln!("[WS Proxy {}] Failed to send injected frame to server: {}", conn_id_c2s, e);
                         break;
                     }
-
-                    let msg_record = WebSocketMessage {
-                        id: format!("ws-msg-{}", Uuid::new_v4()),
-                        connection_id: conn_id_c2s.clone(),
-                        direction: "to_server".to_string(),
-                        msg_type: msg_type.to_string(),
-                        payload: payload_str,
-                        timestamp: chrono::Local::now().timestamp_millis(),
-                        length: len,
-                        is_injected: true,
-                    };
-                    let _ = crate::db::ws_db::save_ws_message(&db_path_c2s, &msg_record);
-                    let count = crate::db::ws_db::increment_ws_message_count(&db_path_c2s, &conn_id_c2s).unwrap_or(1);
-                    let _ = app_c2s.emit("websocket_message_event", WebSocketMessageCapturedEvent { message: msg_record, message_count: count });
                 }
                 // Regular frame from downstream client to server
                 msg_opt = client_read.next() => {
@@ -140,26 +124,10 @@ pub async fn bridge_proxied_websocket<C, S>(
             tokio::select! {
                 // Injected message from user interface to client
                 Some(injected_msg) = to_client_rx.recv() => {
-                    let len = injected_msg.len();
-                    let (msg_type, payload_str) = extract_message_info(&injected_msg);
                     if let Err(e) = client_write.send(injected_msg).await {
                         eprintln!("[WS Proxy {}] Failed to send injected frame to client: {}", conn_id_s2c, e);
                         break;
                     }
-
-                    let msg_record = WebSocketMessage {
-                        id: format!("ws-msg-{}", Uuid::new_v4()),
-                        connection_id: conn_id_s2c.clone(),
-                        direction: "to_client".to_string(),
-                        msg_type: msg_type.to_string(),
-                        payload: payload_str,
-                        timestamp: chrono::Local::now().timestamp_millis(),
-                        length: len,
-                        is_injected: true,
-                    };
-                    let _ = crate::db::ws_db::save_ws_message(&db_path_s2c, &msg_record);
-                    let count = crate::db::ws_db::increment_ws_message_count(&db_path_s2c, &conn_id_s2c).unwrap_or(1);
-                    let _ = app_s2c.emit("websocket_message_event", WebSocketMessageCapturedEvent { message: msg_record, message_count: count });
                 }
                 // Regular frame from upstream server to client
                 msg_opt = server_read.next() => {

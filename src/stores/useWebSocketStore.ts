@@ -227,6 +227,9 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
 
       set((state) => {
         const current = state.messages[selectedConnectionId] || [];
+        if (current.some((m) => m.id === sentMsg.id)) {
+          return { selectedMessageId: sentMsg.id };
+        }
         return {
           messages: {
             ...state.messages,
