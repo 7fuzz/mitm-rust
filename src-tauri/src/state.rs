@@ -4,6 +4,7 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
 use serde::{Deserialize, Serialize};
+use tungstenite::Message;
 use crate::db::InterceptRule;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -207,6 +208,13 @@ pub struct WebhookListenerConfig {
 pub struct WebhookSignatureResult {
     pub header_name: String,
     pub header_value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebhookDeliveryCapturedEvent {
+    pub delivery: WebhookDelivery,
+    pub endpoint_hit_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

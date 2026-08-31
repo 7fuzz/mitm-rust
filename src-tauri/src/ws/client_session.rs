@@ -98,6 +98,8 @@ pub async fn connect_client_session(
         }
     });
 
+    let conn_info_task = conn_info.clone();
+
     // Reader Task (incoming from remote server)
     tauri::async_runtime::spawn(async move {
         tokio::select! {
@@ -105,13 +107,13 @@ pub async fn connect_client_session(
                 while let Some(msg_result) = read_half.next().await {
                     match msg_result {
                         Ok(msg) => {
-                            let (msg_type, payload_str) = match msg {
-                                Message::Text(text) => ("text", text),
+                            let (msg_type, payload_str) = match &msg {
+                                Message::Text(text) => ("text", text.to_string()),
                                 Message::Binary(bin) => {
-                                    ("binary", format!("[Binary Frame: {} bytes] {}", bin.len(), hex::encode(&bin)))
+                                    ("binary", format!("[Binary Frame: {} bytes] {}", bin.len(), hex::encode(bin)))
                                 }
-                                Message::Ping(p) => ("text", format!("[Ping Frame] {}", String::from_utf8_lossy(&p))),
-                                Message::Pong(p) => ("text", format!("[Pong Frame] {}", String::from_utf8_lossy(&p))),
+                                Message::Ping(p) => ("text", format!("[Ping Frame] {}", String::from_utf8_lossy(p))),
+                                Message::Pong(p) => ("text", format!("[Pong Frame] {}", String::from_utf8_lossy(p))),
                                 Message::Close(_) => {
                                     break;
                                 }
@@ -157,7 +159,7 @@ pub async fn connect_client_session(
         state_clone.ws_client_senders.remove(&conn_id_clone);
         state_clone.ws_client_stops.remove(&conn_id_clone);
 
-        let mut closed_conn = conn_info.clone();
+        let mut closed_conn = conn_info_task;
         closed_conn.status = "disconnected".to_string();
         closed_conn.closed_at = Some(close_time);
 
