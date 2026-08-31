@@ -203,6 +203,7 @@ async fn handle_http(
         .https_or_http()
         .enable_http1()
         .build();
+    let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new()).build(https);
     let ws_mitm_enabled = { state.proxy_config.read().await.ws_mitm_enabled };
 
     if is_websocket_upgrade(req.headers()) {
