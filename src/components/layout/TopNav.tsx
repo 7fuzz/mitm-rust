@@ -16,13 +16,14 @@ interface NavTabItem {
 const NAV_TABS: NavTabItem[] = [
   { id: 'http-history', label: 'HTTP History', shortcut: '1', icon: 'history_line' },
   { id: 'intercept', label: 'Intercept', shortcut: '2', icon: 'shield_line' },
-  { id: 'repeater', label: 'Repeater', shortcut: '3', icon: 'repeat_line' },
-  { id: 'collections', label: 'Collections', shortcut: '4', icon: 'folder_line' },
-  { id: 'websockets', label: 'WebSockets', shortcut: '5', icon: 'websocket_line' },
-  { id: 'webhooks', label: 'Webhooks', shortcut: '6', icon: 'link_line' },
-  { id: 'workspace', label: 'Workspace', shortcut: '7', icon: 'grid_line' },
-  { id: 'utilities', label: 'Utilities', shortcut: '8', icon: 'tool_line' },
-  { id: 'settings', label: 'Settings', shortcut: '9', icon: 'settings_3_line' },
+  { id: 'rewrite', label: 'Rewrite', shortcut: '3', icon: 'transfer_line' },
+  { id: 'repeater', label: 'Repeater', shortcut: '4', icon: 'repeat_line' },
+  { id: 'collections', label: 'Collections', shortcut: '5', icon: 'folder_line' },
+  { id: 'websockets', label: 'WebSockets', shortcut: '6', icon: 'websocket_line' },
+  { id: 'webhooks', label: 'Webhooks', shortcut: '7', icon: 'link_line' },
+  { id: 'workspace', label: 'Workspace', shortcut: '8', icon: 'grid_line' },
+  { id: 'utilities', label: 'Utilities', shortcut: '9', icon: 'tool_line' },
+  { id: 'settings', label: 'Settings', shortcut: '0', icon: 'settings_3_line' },
 ];
 
 export const TopNav: React.FC = () => {

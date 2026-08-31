@@ -6,6 +6,7 @@ import { QuickVariableModal } from '../common/QuickVariableModal';
 
 import { HistoryView } from '../modules/history/HistoryView';
 import { InterceptView } from '../modules/intercept/InterceptView';
+import { RewriteView } from '../modules/rewrite/RewriteView';
 import { RepeaterView } from '../modules/repeater/RepeaterView';
 import { CollectionsView } from '../modules/collections/CollectionsView';
 import { WebSocketsView } from '../modules/websockets/WebSocketsView';
@@ -30,7 +31,7 @@ export const GlobalShell: React.FC = () => {
     initInterceptStore();
   }, [initWorkspaceStore, initInterceptStore]);
 
-  // Keyboard shortcut listener for tabs 1-9 and V key for Quick Env Switcher
+  // Keyboard shortcut listener for tabs 1-9, 0 and V key for Quick Env Switcher
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger when inside inputs or textareas
@@ -49,13 +50,14 @@ export const GlobalShell: React.FC = () => {
         const keyMap: Record<string, NavModule> = {
           '1': 'http-history',
           '2': 'intercept',
-          '3': 'repeater',
-          '4': 'collections',
-          '5': 'websockets',
-          '6': 'webhooks',
-          '7': 'workspace',
-          '8': 'utilities',
-          '9': 'settings',
+          '3': 'rewrite',
+          '4': 'repeater',
+          '5': 'collections',
+          '6': 'websockets',
+          '7': 'webhooks',
+          '8': 'workspace',
+          '9': 'utilities',
+          '0': 'settings',
         };
         if (keyMap[e.key]) {
           setActiveModule(keyMap[e.key]);
@@ -82,6 +84,8 @@ export const GlobalShell: React.FC = () => {
         return <HistoryView />;
       case 'intercept':
         return <InterceptView />;
+      case 'rewrite':
+        return <RewriteView />;
       case 'repeater':
         return <RepeaterView />;
       case 'collections':
