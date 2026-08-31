@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
-use crate::state::HistoryEntry;
+use crate::state::{HistoryEntry, RewriteHistoryEntry};
 use crate::db::prune_history_logs_conn;
 
 pub fn start_history_actor(
@@ -36,6 +36,92 @@ pub fn start_history_actor(
             }
         }
     });
+}
+
+pub fn start_rewrite_history_actor(
+    db_path: PathBuf,
+    mut rx: mpsc::Receiver<RewriteHistoryEntry>,
+) {
+    tauri::async_runtime::spawn(async move {
+        let mut buffer: Vec<RewriteHistoryEntry> = Vec::with_capacity(50);
+        let mut flush_timer = interval(Duration::from_millis(50));
+
+        loop {
+            tokio::select! {
+                maybe_entry = rx.recv() => {
+                    match maybe_entry {
+                        Some(entry) => {
+                            buffer.push(entry);
+                            flush_rewrite_history_batch(&db_path, &mut buffer);
+                        }
+                        None => {
+                            if !buffer.is_empty() {
+                                flush_rewrite_history_batch(&db_path, &mut buffer);
+                            }
+                            break;
+                        }
+                    }
+                }
+                _ = flush_timer.tick() => {
+                    if !buffer.is_empty() {
+                        flush_rewrite_history_batch(&db_path, &mut buffer);
+                    }
+                }
+            }
+        }
+    });
+}
+
+fn flush_rewrite_history_batch(db_path: &PathBuf, buffer: &mut Vec<RewriteHistoryEntry>) {
+    if buffer.is_empty() {
+        return;
+    }
+
+    match rusqlite::Connection::open(db_path) {
+        Ok(mut conn) => {
+            match conn.transaction() {
+                Ok(tx) => {
+                    for entry in buffer.iter() {
+                        let req_headers = serde_json::to_string(&entry.original_headers).unwrap_or_else(|_| "[]".to_string());
+                        let res_headers = serde_json::to_string(&entry.rewritten_headers).unwrap_or_else(|_| "[]".to_string());
+
+                        let res = tx.execute(
+                            "INSERT OR REPLACE INTO rewrite_history (id, rule_id, rule_name, action_type, method, original_url, rewritten_url, original_headers, rewritten_headers, original_body, rewritten_body, status_code, duration_ms) 
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            rusqlite::params![
+                                entry.id,
+                                entry.rule_id,
+                                entry.rule_name,
+                                entry.action_type,
+                                entry.method,
+                                entry.original_url,
+                                entry.rewritten_url,
+                                req_headers,
+                                res_headers,
+                                entry.original_body,
+                                entry.rewritten_body,
+                                entry.status_code,
+                                entry.duration_ms,
+                            ],
+                        );
+                        if let Err(e) = res {
+                            eprintln!("[DB Actor] Error inserting rewrite history entry (id: {}): {}", entry.id, e);
+                        }
+                    }
+                    if let Err(e) = tx.commit() {
+                        eprintln!("[DB Actor] Failed to commit rewrite history batch transaction: {}", e);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[DB Actor] Failed to begin rewrite transaction: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("[DB Actor] Failed to open SQLite connection for rewrite history to {:?}: {}", db_path, e);
+        }
+    }
+    buffer.clear();
 }
 
 fn flush_history_batch(db_path: &PathBuf, buffer: &mut Vec<HistoryEntry>) {

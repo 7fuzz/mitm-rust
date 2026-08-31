@@ -132,3 +132,120 @@ pub fn save_intercept_rules(db_path: &PathBuf, rules: &[InterceptRule]) -> Resul
     tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
+
+pub fn load_rewrite_rules(db_path: &PathBuf) -> Result<Vec<crate::state::RewriteRule>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT id, name, enabled, action_type, match_field, match_operator, match_value, target_part, target_header, match_pattern, replacement_value, is_regex, mock_status_code, mock_headers_json, mock_body, order_index, created_at_ms FROM rewrite_rules ORDER BY order_index ASC")
+        .map_err(|e| e.to_string())?;
+
+    let rules = stmt
+        .query_map([], |row| {
+            let enabled_int: i32 = row.get(2)?;
+            let is_regex_int: i32 = row.get(11)?;
+            Ok(crate::state::RewriteRule {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                enabled: enabled_int != 0,
+                action_type: row.get(3)?,
+                match_field: row.get(4)?,
+                match_operator: row.get(5)?,
+                match_value: row.get(6)?,
+                target_part: row.get(7)?,
+                target_header: row.get(8)?,
+                match_pattern: row.get(9)?,
+                replacement_value: row.get(10)?,
+                is_regex: is_regex_int != 0,
+                mock_status_code: row.get(12)?,
+                mock_headers_json: row.get(13)?,
+                mock_body: row.get(14)?,
+                order_index: row.get(15)?,
+                created_at_ms: row.get(16)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(rules)
+}
+
+pub fn save_rewrite_rules(db_path: &PathBuf, rules: &[crate::state::RewriteRule]) -> Result<(), String> {
+    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    tx.execute("DELETE FROM rewrite_rules", []).map_err(|e| e.to_string())?;
+
+    for rule in rules {
+        tx.execute(
+            "INSERT INTO rewrite_rules (id, name, enabled, action_type, match_field, match_operator, match_value, target_part, target_header, match_pattern, replacement_value, is_regex, mock_status_code, mock_headers_json, mock_body, order_index, created_at_ms)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![
+                rule.id,
+                rule.name,
+                if rule.enabled { 1 } else { 0 },
+                rule.action_type,
+                rule.match_field,
+                rule.match_operator,
+                rule.match_value,
+                rule.target_part,
+                rule.target_header,
+                rule.match_pattern,
+                rule.replacement_value,
+                if rule.is_regex { 1 } else { 0 },
+                rule.mock_status_code,
+                rule.mock_headers_json,
+                rule.mock_body,
+                rule.order_index,
+                rule.created_at_ms,
+            ],
+        ).map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn get_rewrite_history_logs(db_path: &PathBuf, limit: u32) -> Result<Vec<crate::state::RewriteHistoryEntry>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT id, rule_id, rule_name, action_type, method, original_url, rewritten_url, original_headers, rewritten_headers, original_body, rewritten_body, status_code, duration_ms, created_at FROM rewrite_history ORDER BY created_at DESC, rowid DESC LIMIT ?")
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map(params![limit], |row| {
+            let orig_headers_str: String = row.get(7).unwrap_or_else(|_| "[]".to_string());
+            let rewr_headers_str: String = row.get(8).unwrap_or_else(|_| "[]".to_string());
+
+            let original_headers = serde_json::from_str::<Vec<(String, String)>>(&orig_headers_str).unwrap_or_default();
+            let rewritten_headers = serde_json::from_str::<Vec<(String, String)>>(&rewr_headers_str).unwrap_or_default();
+
+            Ok(crate::state::RewriteHistoryEntry {
+                id: row.get(0)?,
+                rule_id: row.get(1)?,
+                rule_name: row.get(2)?,
+                action_type: row.get(3)?,
+                method: row.get(4)?,
+                original_url: row.get(5)?,
+                rewritten_url: row.get(6)?,
+                original_headers,
+                rewritten_headers,
+                original_body: row.get(9).unwrap_or_default(),
+                rewritten_body: row.get(10).unwrap_or_default(),
+                status_code: row.get(11)?,
+                duration_ms: row.get(12)?,
+                created_at: row.get(13)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(rows)
+}
+
+pub fn clear_rewrite_history_logs(db_path: &PathBuf) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM rewrite_history", []).map_err(|e| e.to_string())?;
+    Ok(())
+}

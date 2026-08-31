@@ -44,6 +44,11 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         name: "20260827_0007_drop_body_content",
         sql: include_str!("../../migrations/20260827_0007_drop_body_content.sql"),
     },
+    MigrationSpec {
+        version: 8,
+        name: "20260831_0008_rewrite_rules",
+        sql: include_str!("../../migrations/20260831_0008_rewrite_rules.sql"),
+    },
 ];
 
 #[derive(Clone, Serialize, Debug)]
