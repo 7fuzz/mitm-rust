@@ -181,6 +181,18 @@ async fn handle_connect(
     Ok(())
 }
 
+pub fn is_websocket_upgrade(headers: &hyper::HeaderMap) -> bool {
+    let connection_upgrade = headers.get(hyper::header::CONNECTION)
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_lowercase().contains("upgrade"))
+        .unwrap_or(false);
+    let upgrade_websocket = headers.get(hyper::header::UPGRADE)
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_lowercase().contains("websocket"))
+        .unwrap_or(false);
+    connection_upgrade && upgrade_websocket
+}
+
 async fn handle_http(
     req: Request<Incoming>,
     state: Arc<AppState>,
@@ -192,6 +204,107 @@ async fn handle_http(
         .enable_http1()
         .build();
     let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new()).build(https);
+
+    if is_websocket_upgrade(req.headers()) {
+        let method = req.method().clone();
+        let url = req.uri().to_string();
+        let host = req.uri().host().unwrap_or_default().to_string();
+        let path = parse_path_from_url(&url);
+        let request_headers = headers_to_vec(req.headers());
+        let subprotocol = req.headers().get("sec-websocket-protocol").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
+        let entry_id = Uuid::new_v4().to_string();
+
+        let mut new_req = Request::builder()
+            .method(method.clone())
+            .uri(url.clone());
+
+        let mut headers_cleaned = request_headers.clone();
+        headers_cleaned.retain(|(k, _)| k != "content-length" && k != "transfer-encoding");
+        for (k, v) in headers_cleaned.iter() {
+            new_req = new_req.header(k, v);
+        }
+        let new_req = new_req.body(Full::new(Bytes::new())).unwrap();
+
+        match client.request(new_req).await {
+            Ok(res) => {
+                let status = res.status().as_u16();
+                if status == 101 {
+                    let response_headers = headers_to_vec(res.headers());
+                    let mut client_res_builder = Response::builder().status(StatusCode::SWITCHING_PROTOCOLS);
+                    for (k, v) in response_headers.iter() {
+                        client_res_builder = client_res_builder.header(k, v);
+                    }
+                    let client_res = client_res_builder.body(Full::new(Bytes::new())).unwrap();
+
+                    log_and_emit_history(
+                        &entry_id,
+                        &app_handle,
+                        &state,
+                        method.as_str(),
+                        &url,
+                        &host,
+                        &path,
+                        101,
+                        request_headers,
+                        response_headers,
+                        vec![],
+                        "WebSocket Connection Established".to_string().into_bytes(),
+                        0,
+                        false,
+                        false,
+                        false,
+                    ).await;
+
+                    let state_clone = Arc::clone(&state);
+                    let app_handle_clone = app_handle.clone();
+                    let url_clone = url.clone();
+                    let subprotocol_clone = subprotocol.clone();
+
+                    tokio::spawn(async move {
+                        let client_upgraded = match hyper::upgrade::on(req).await {
+                            Ok(up) => up,
+                            Err(e) => {
+                                eprintln!("[WS MITM] Error upgrading client connection {}: {}", url_clone, e);
+                                return;
+                            }
+                        };
+                        let server_upgraded = match hyper::upgrade::on(res).await {
+                            Ok(up) => up,
+                            Err(e) => {
+                                eprintln!("[WS MITM] Error upgrading server connection {}: {}", url_clone, e);
+                                return;
+                            }
+                        };
+
+                        crate::ws::proxy_pipe::bridge_proxied_websocket(
+                            TokioIo::new(client_upgraded),
+                            TokioIo::new(server_upgraded),
+                            url_clone,
+                            None,
+                            subprotocol_clone,
+                            app_handle_clone,
+                            state_clone,
+                        ).await;
+                    });
+
+                    return Ok(client_res);
+                } else {
+                    let mut client_res_builder = Response::builder().status(status);
+                    for (k, v) in headers_to_vec(res.headers()).iter() {
+                        client_res_builder = client_res_builder.header(k, v);
+                    }
+                    let collected = res.into_body().collect().await?.to_bytes();
+                    return Ok(client_res_builder.body(Full::new(collected)).unwrap());
+                }
+            }
+            Err(e) => {
+                return Ok(Response::builder()
+                    .status(StatusCode::BAD_GATEWAY)
+                    .body(Full::new(Bytes::from(format!("WebSocket handshake failed: {}", e))))
+                    .unwrap());
+            }
+        }
+    }
 
     let method = req.method().clone();
     let url = req.uri().to_string();

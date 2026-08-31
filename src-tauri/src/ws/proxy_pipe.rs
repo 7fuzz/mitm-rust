@@ -93,6 +93,10 @@ pub async fn bridge_proxied_websocket<C, S>(
                 msg_opt = client_read.next() => {
                     match msg_opt {
                         Some(Ok(msg)) => {
+                            if msg.is_ping() || msg.is_pong() {
+                                let _ = server_write.send(msg).await;
+                                continue;
+                            }
                             if msg.is_close() {
                                 let _ = server_write.send(msg).await;
                                 break;
@@ -161,6 +165,10 @@ pub async fn bridge_proxied_websocket<C, S>(
                 msg_opt = server_read.next() => {
                     match msg_opt {
                         Some(Ok(msg)) => {
+                            if msg.is_ping() || msg.is_pong() {
+                                let _ = client_write.send(msg).await;
+                                continue;
+                            }
                             if msg.is_close() {
                                 let _ = client_write.send(msg).await;
                                 break;
