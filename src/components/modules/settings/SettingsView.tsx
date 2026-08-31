@@ -4,7 +4,8 @@ import { useSettingsStore } from '../../../stores/useSettingsStore';
 import { useProxyStore } from '../../../stores/useProxyStore';
 import { useWebhookStore } from '../../../stores/useWebhookStore';
 import { SqliteBrowser } from './SqliteBrowser';
-import { updateNetworkSettings, purgeAllData, purgeSelectiveData, getRootCaPem, isTauriAvailable } from '../../../services/tauri/ipc';
+import { purgeAllData, purgeSelectiveData, getRootCaPem, isTauriAvailable } from '../../../services/tauri/ipc';
+import { getProxyState } from '../../../services/tauri/bridge';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 
 export const SettingsView: React.FC = () => {
@@ -21,10 +22,13 @@ export const SettingsView: React.FC = () => {
     exportCaCert,
     regenerateCaCert,
   } = useSettingsStore();
-  const { proxyStatus, clearTraffic } = useProxyStore();
+  const { proxyStatus, updateProxyBindings, clearTraffic } = useProxyStore();
   const { clearDeliveries } = useWebhookStore();
 
-  const [bindingIp, setBindingIp] = useState(proxyStatus.bindings[0] || '127.0.0.1:8080');
+  const [bindingIp, setBindingIp] = useState(proxyStatus.bindings[0] || '0.0.0.0:8080');
+  const [isUpdatingBinding, setIsUpdatingBinding] = useState(false);
+  const [bindingFeedback, setBindingFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   const [caSuccessMsg, setCaSuccessMsg] = useState<string | null>(null);
   const [copiedPem, setCopiedPem] = useState(false);
   const [showPemPreview, setShowPemPreview] = useState(false);
@@ -33,16 +37,44 @@ export const SettingsView: React.FC = () => {
 
   useEffect(() => {
     fetchCaCert();
+    if (isTauriAvailable()) {
+      getProxyState()
+        .then((cfg) => {
+          if (cfg) {
+            const addr = `${cfg.host || '0.0.0.0'}:${cfg.port || 8080}`;
+            setBindingIp(addr);
+          }
+        })
+        .catch((err) => console.warn('Failed to load proxy state:', err));
+    }
   }, [fetchCaCert]);
 
   const handleUpdateBindings = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!bindingIp.trim()) return;
+
+    setIsUpdatingBinding(true);
+    setBindingFeedback(null);
     try {
-      await updateNetworkSettings([bindingIp]);
-      alert(`Proxy network binding updated to ${bindingIp}`);
-    } catch (err) {
+      await updateProxyBindings([bindingIp.trim()]);
+      setBindingFeedback({
+        type: 'success',
+        message: `Proxy listener successfully updated to ${bindingIp.trim()}`,
+      });
+      setTimeout(() => setBindingFeedback(null), 5000);
+    } catch (err: any) {
       console.error('Failed to update bindings:', err);
+      setBindingFeedback({
+        type: 'error',
+        message: `Failed to update listener binding: ${err?.message || err}`,
+      });
+    } finally {
+      setIsUpdatingBinding(false);
     }
+  };
+
+  const handleApplyPreset = (preset: string) => {
+    setBindingIp(preset);
   };
 
   const handleSaveCa = async () => {
@@ -127,30 +159,109 @@ export const SettingsView: React.FC = () => {
       {/* Network Settings & Root CA */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Proxy Binding Settings */}
-        <div className="bg-surface border border-border rounded-lg p-3 space-y-3 shadow-2xs">
-          <div className="flex items-center gap-2">
-            <MingCuteIcon name="settings_3_line" size={16} className="text-primary" />
-            <span className="font-semibold text-foreground text-sm">Network & Proxy Listener Settings</span>
-          </div>
-
-          <form onSubmit={handleUpdateBindings} className="space-y-3">
-            <div>
-              <label className="block text-muted-foreground mb-1 font-medium">Proxy Listener Address / Port:</label>
-              <input
-                type="text"
-                value={bindingIp}
-                onChange={(e) => setBindingIp(e.target.value)}
-                placeholder="127.0.0.1:8080 or 8080"
-                className="w-full bg-background border border-border rounded px-3 py-1.5 font-mono text-xs text-foreground focus:outline-none focus:border-primary"
-              />
+        <div className="bg-surface border border-border rounded-lg p-3 space-y-3 shadow-2xs flex flex-col justify-between">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MingCuteIcon name="settings_3_line" size={16} className="text-primary" />
+                <span className="font-semibold text-foreground text-sm">Network & Proxy Listener Settings</span>
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary border border-primary/20 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Active: {proxyStatus.bindings[0] || '0.0.0.0:8080'}
+              </span>
             </div>
-            <button
-              type="submit"
-              className="px-4 py-1.5 bg-primary text-primary-foreground font-semibold rounded hover:bg-primary-hover transition-colors shadow-xs cursor-pointer"
-            >
-              Update Listener Bindings
-            </button>
-          </form>
+
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Configure the network interface and port where the MITM proxy listens for incoming HTTP/HTTPS traffic.
+              <br />
+              <span className="text-[11px] text-foreground/80 font-mono">
+                <strong className="text-primary">0.0.0.0</strong> = All network interfaces (allows mobile/LAN devices to proxy), <strong className="text-primary">127.0.0.1</strong> = Localhost only.
+              </span>
+            </p>
+
+            <form onSubmit={handleUpdateBindings} className="space-y-3">
+              <div>
+                <label className="block text-muted-foreground mb-1 font-medium text-xs">Proxy Listener Address / Port:</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={bindingIp}
+                    onChange={(e) => setBindingIp(e.target.value)}
+                    placeholder="0.0.0.0:8080 or 8080"
+                    className="flex-1 bg-background border border-border rounded px-3 py-1.5 font-mono text-xs text-foreground focus:outline-none focus:border-primary"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isUpdatingBinding}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground font-semibold rounded hover:bg-primary-hover transition-colors shadow-xs cursor-pointer disabled:opacity-50 text-xs shrink-0"
+                  >
+                    <MingCuteIcon name={isUpdatingBinding ? "loading_line" : "check_line"} size={13} className={isUpdatingBinding ? "animate-spin" : ""} />
+                    <span>{isUpdatingBinding ? 'Updating...' : 'Update Listener'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                <span className="text-[10px] text-muted-foreground font-mono mr-1">Presets:</span>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('0.0.0.0:8080')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-colors cursor-pointer ${
+                    bindingIp === '0.0.0.0:8080'
+                      ? 'bg-primary/20 text-primary border-primary/40 font-bold'
+                      : 'bg-background hover:bg-neutral-subtle border-border text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Listen on all interfaces (port 8080) - Recommended"
+                >
+                  0.0.0.0:8080 (All Interfaces)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('127.0.0.1:8080')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-colors cursor-pointer ${
+                    bindingIp === '127.0.0.1:8080'
+                      ? 'bg-primary/20 text-primary border-primary/40 font-bold'
+                      : 'bg-background hover:bg-neutral-subtle border-border text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Listen on localhost only (port 8080)"
+                >
+                  127.0.0.1:8080 (Localhost)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('0.0.0.0:8888')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-colors cursor-pointer ${
+                    bindingIp === '0.0.0.0:8888'
+                      ? 'bg-primary/20 text-primary border-primary/40 font-bold'
+                      : 'bg-background hover:bg-neutral-subtle border-border text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Listen on all interfaces (port 8888)"
+                >
+                  0.0.0.0:8888
+                </button>
+              </div>
+
+              {/* Status Feedback Banner */}
+              {bindingFeedback && (
+                <div
+                  className={`flex items-center gap-2 p-2.5 rounded-lg border font-mono text-[11px] animate-fade-in ${
+                    bindingFeedback.type === 'success'
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                  }`}
+                >
+                  <MingCuteIcon
+                    name={bindingFeedback.type === 'success' ? 'check_line' : 'alert_line'}
+                    size={14}
+                    className="shrink-0"
+                  />
+                  <span className="truncate">{bindingFeedback.message}</span>
+                </div>
+              )}
+            </form>
+          </div>
         </div>
 
         {/* Root CA Certificate Manager */}

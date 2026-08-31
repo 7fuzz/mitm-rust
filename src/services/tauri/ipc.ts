@@ -56,7 +56,7 @@ export async function regenerateRootCa(): Promise<string> {
 export async function getProxyStatus(): Promise<ProxyStatus> {
   return safeInvoke<ProxyStatus>('get_proxy_status', undefined, {
     mode: 'normal',
-    bindings: ['127.0.0.1:8080'],
+    bindings: ['0.0.0.0:8080'],
     activeCount: 1,
   });
 }

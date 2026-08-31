@@ -13,6 +13,8 @@ import {
   clearHistoryLogs,
   getHistorySettings,
   updateHistorySettings,
+  getProxyState,
+  updateNetworkSettings,
   HistorySettings,
 } from '../services/tauri/bridge';
 
@@ -123,6 +125,7 @@ interface ProxyState {
   fetchHistorySettings: () => Promise<void>;
   updateHistorySettings: (limiterEnabled: boolean, maxRows: number) => Promise<void>;
   setProxyMode: (mode: 'normal' | 'intercept' | 'off') => Promise<void>;
+  updateProxyBindings: (bindings: string[]) => Promise<void>;
   addTrafficItem: (item: TrafficItem) => void;
   selectTrafficItem: (id: string | null) => void;
   clearTraffic: () => Promise<void>;
@@ -147,7 +150,7 @@ interface ProxyState {
 export const useProxyStore = create<ProxyState>((set, get) => ({
   proxyStatus: {
     mode: 'normal',
-    bindings: ['127.0.0.1:8080'],
+    bindings: ['0.0.0.0:8080'],
     activeCount: 1,
   },
   traffic: SAMPLE_TRAFFIC,
@@ -185,6 +188,16 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
         if (historyLogs && historyLogs.length > 0) {
           const mapped = historyLogs.map(mapHistoryEntryToTrafficItem);
           set({ traffic: mapped, selectedTrafficId: mapped[0]?.id || null });
+        }
+
+        const proxyConfig = await getProxyState();
+        if (proxyConfig) {
+          set((state) => ({
+            proxyStatus: {
+              ...state.proxyStatus,
+              bindings: [`${proxyConfig.host || '0.0.0.0'}:${proxyConfig.port || 8080}`],
+            },
+          }));
         }
       } catch (e) {
         console.warn('Failed to fetch initial HTTP history via IPC:', e);
@@ -243,6 +256,30 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
       }));
     } catch (err) {
       console.error('Failed to set proxy mode:', err);
+    }
+  },
+
+  updateProxyBindings: async (bindings: string[]) => {
+    if (!bindings || bindings.length === 0) return;
+    set((state) => ({
+      proxyStatus: { ...state.proxyStatus, bindings },
+    }));
+
+    if (isTauriAvailable()) {
+      try {
+        const updated = await updateNetworkSettings(bindings);
+        if (updated) {
+          set((state) => ({
+            proxyStatus: {
+              ...state.proxyStatus,
+              bindings: [`${updated.host}:${updated.port}`],
+            },
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to update network settings via IPC:', err);
+        throw err;
+      }
     }
   },
 

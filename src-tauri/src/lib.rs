@@ -45,6 +45,12 @@ pub fn run() {
 
                         let (stop_tx, stop_rx) = oneshot::channel::<()>();
                         
+                        let (proxy_host, proxy_port) = {
+                            let cfg = app_state.proxy_config.blocking_read();
+                            (cfg.host.clone(), cfg.port)
+                        };
+                        let addr_str = format!("{}:{}", proxy_host, proxy_port);
+
                         let state_arc = Arc::new(AppState {
                             db_path: app_state.db_path.clone(),
                             history_tx: app_state.history_tx.clone(),
@@ -59,7 +65,7 @@ pub fn run() {
                         });
 
                         tauri::async_runtime::spawn(async move {
-                            let _ = start_proxy_server(app_handle_clone, state_arc, ca, "127.0.0.1:8080".to_string(), stop_rx).await;
+                            let _ = start_proxy_server(app_handle_clone, state_arc, ca, addr_str, stop_rx).await;
                         });
                     }
                     app.manage(app_state);
@@ -97,6 +103,7 @@ pub fn run() {
             commands::proxy_cmd::stop_proxy,
             commands::proxy_cmd::toggle_proxy_legacy,
             commands::proxy_cmd::get_proxy_status,
+            commands::proxy_cmd::update_network_settings,
             commands::intercept_cmd::toggle_interceptor,
             commands::intercept_cmd::update_intercept_rules,
             commands::intercept_cmd::get_intercept_rules,

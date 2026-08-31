@@ -105,7 +105,7 @@ impl Default for ProxyConfig {
             intercept_mode: "request".to_string(),
             proxy_mode: "on".to_string(),
             port: 8080,
-            host: "127.0.0.1".to_string(),
+            host: "0.0.0.0".to_string(),
         }
     }
 }
@@ -139,6 +139,12 @@ impl AppState {
         let initial_intercept_mode = crate::db::get_preference(&db_path, "intercept_mode")
             .unwrap_or_else(|| "both".to_string());
 
+        let initial_host = crate::db::get_preference(&db_path, "proxy_host")
+            .unwrap_or_else(|| "0.0.0.0".to_string());
+        let initial_port = crate::db::get_preference(&db_path, "proxy_port")
+            .and_then(|v| v.parse::<u16>().ok())
+            .unwrap_or(8080);
+
         let limiter_enabled = crate::db::get_preference(&db_path, "history_limiter_enabled")
             .map(|v| v == "true")
             .unwrap_or(true);
@@ -153,8 +159,8 @@ impl AppState {
             intercept_enabled: initial_intercept_enabled,
             intercept_mode: initial_intercept_mode,
             proxy_mode: initial_proxy_mode,
-            port: 8080,
-            host: "127.0.0.1".to_string(),
+            port: initial_port,
+            host: initial_host,
         };
 
         let history_settings = HistorySettings {

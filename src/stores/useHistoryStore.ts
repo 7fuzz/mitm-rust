@@ -59,7 +59,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     interceptMode: "both",
     proxyMode: "on",
     port: 8080,
-    host: "127.0.0.1",
+    host: "0.0.0.0",
   },
   limiterEnabled: true,
   maxRows: 500,
