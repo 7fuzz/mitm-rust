@@ -32,24 +32,15 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  if (!response) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-surface text-muted-foreground p-6 text-xs italic select-none">
-        <MingCuteIcon name="send_plane_line" size={36} className="mb-2 opacity-30" />
-        Click "Send" above to execute the request and view response headers & payload here.
-      </div>
-    );
-  }
-
-  const responseBody = response.responseBody || '';
-  const responseHeaders = response.responseHeaders || [];
-  const durationMs = response.durationMs || 0;
-  const size = 'responseSize' in response ? response.responseSize : responseBody.length;
-  const statusText = 'statusText' in response ? response.statusText : '';
+  const responseBody = response?.responseBody || '';
+  const responseHeaders = response?.responseHeaders || [];
+  const durationMs = response?.durationMs || 0;
+  const size = response && 'responseSize' in response ? response.responseSize : responseBody.length;
+  const statusText = response && 'statusText' in response ? response.statusText : '';
 
   const mediaInfo = useMemo(
-    () => detectMediaResponse(responseBody, responseHeaders),
-    [responseBody, responseHeaders]
+    () => (response ? detectMediaResponse(responseBody, responseHeaders) : null),
+    [response, responseBody, responseHeaders]
   );
 
   // Auto-switch to preview when media is detected
@@ -75,6 +66,15 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
     );
     return list;
   }, [mediaInfo]);
+
+  if (!response) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-surface text-muted-foreground p-6 text-xs italic select-none">
+        <MingCuteIcon name="send_plane_line" size={36} className="mb-2 opacity-30" />
+        Click "Send" above to execute the request and view response headers & payload here.
+      </div>
+    );
+  }
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';

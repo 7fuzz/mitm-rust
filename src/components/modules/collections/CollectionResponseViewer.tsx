@@ -41,15 +41,6 @@ export const CollectionResponseViewer: React.FC<CollectionResponseViewerProps> =
     }
   }, [requestId, latestResult]);
 
-  if (isLoading) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-surface text-muted-foreground p-6 text-xs select-none">
-        <MingCuteIcon name="loading_line" size={32} className="animate-spin text-primary mb-2" />
-        <span>Executing request...</span>
-      </div>
-    );
-  }
-
   const activeHistoryItem = historyList.find((h) => h.id === selectedHistoryId);
 
   const currentStatus = activeHistoryItem?.statusCode ?? latestResult?.statusCode;
@@ -86,6 +77,15 @@ export const CollectionResponseViewer: React.FC<CollectionResponseViewerProps> =
     );
     return list;
   }, [mediaInfo]);
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-surface text-muted-foreground p-6 text-xs select-none">
+        <MingCuteIcon name="loading_line" size={32} className="animate-spin text-primary mb-2" />
+        <span>Executing request...</span>
+      </div>
+    );
+  }
 
   if (!latestResult && historyList.length === 0) {
     return (
