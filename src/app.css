@@ -1,0 +1,250 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* High-Contrast Sharp Light Mode Palette */
+  --background: #f8fafc;
+  --foreground: #09090b;
+
+  --surface: #ffffff;
+  --header: #f1f5f9;
+
+  --border: #cbd5e1;
+  --ring: #0284c7;
+
+  --muted-foreground: #475569;
+
+  --primary: #0369a1;
+  --primary-foreground: #ffffff;
+  --primary-hover: #075985;
+
+  --secondary: #e0f2fe;
+  --accent: #e0f2fe;
+  --accent-foreground: #0369a1;
+
+  --chart-from: #0284c7;
+  --chart-to: #0369a1;
+
+  /* Test status badges & alert colors */
+  --success: #15803d;
+  --success-subtle: #bbf7d0;
+  --success-foreground: #14532d;
+  --warning: #b45309;
+  --warning-subtle: #fef08a;
+  --warning-foreground: #713f12;
+  --danger: #b91c1c;
+  --danger-subtle: #fecaca;
+  --danger-foreground: #7f1d1d;
+  --critical: #881337;
+  --critical-subtle: #fecdd3;
+  --critical-foreground: #881337;
+  --info: #0369a1;
+  --info-subtle: #bae6fd;
+  --info-foreground: #0c4a6e;
+  --neutral: #334155;
+  --neutral-subtle: #e2e8f0;
+  --neutral-foreground: #1e293b;
+  --purple: #6b21a8;
+  --purple-subtle: #e9d5ff;
+  --purple-foreground: #581c87;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
+
+  /* Table font sizing */
+  --text-table-header: 0.6875rem; /* 11px */
+  --text-table-cell: 0.8125rem; /* 13px */
+}
+
+.dark {
+  /* Developer Dark System - Deep Black & Sleek Gray Palette */
+  --background: #09090b;
+  --foreground: #f4f4f5;
+
+  --surface: #121214;
+  --header: #09090b;
+
+  --border: #27272a;
+  --ring: #71717a;
+
+  --muted-foreground: #a1a1aa;
+
+  --primary: #f4f4f5;
+  --primary-foreground: #09090b;
+  --primary-hover: #ffffff;
+
+  --secondary: #27272a;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+
+  --chart-from: #a1a1aa;
+  --chart-to: #71717a;
+
+  --success: #4ade80;
+  --success-subtle: #142e1d;
+  --success-foreground: #4ade80;
+  --warning: #fbbf24;
+  --warning-subtle: #312108;
+  --warning-foreground: #fbbf24;
+  --danger: #f87171;
+  --danger-subtle: #331111;
+  --danger-foreground: #f87171;
+  --critical: #fecdd3;
+  --critical-subtle: #4c1d24;
+  --critical-foreground: #fecdd3;
+  --info: #a1a1aa;
+  --info-subtle: #27272a;
+  --info-foreground: #f4f4f5;
+  --neutral: #a1a1aa;
+  --neutral-subtle: #27272a;
+  --neutral-foreground: #a1a1aa;
+  --purple: #a1a1aa;
+  --purple-subtle: #27272a;
+  --purple-foreground: #a1a1aa;
+}
+
+@theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-header: var(--header);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-chart-from: var(--chart-from);
+  --color-chart-to: var(--chart-to);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-critical: var(--critical);
+  --color-critical-foreground: var(--critical-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-neutral: var(--neutral);
+  --color-neutral-foreground: var(--neutral-foreground);
+  --color-purple: var(--purple);
+  --color-purple-foreground: var(--purple-foreground);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+}
+
+.text-table-header {
+  font-size: var(--text-table-header);
+}
+
+.text-table-cell {
+  font-size: var(--text-table-cell);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+select,
+select.bg-background,
+select.bg-surface,
+select.bg-header,
+select.bg-neutral-subtle {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-color: #ffffff !important;
+  color: #09090b !important;
+  border: 1px solid #cbd5e1 !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.5rem center !important;
+  background-size: 1em !important;
+  padding-right: 1.75rem !important;
+}
+
+select option,
+option {
+  background-color: #ffffff !important;
+  color: #09090b !important;
+}
+
+.dark select,
+.dark select.bg-background,
+.dark select.bg-surface,
+.dark select.bg-header,
+.dark select.bg-neutral-subtle {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-color: #18181b !important;
+  color: #ffffff !important;
+  border: 1px solid #3f3f46 !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.5rem center !important;
+  background-size: 1em !important;
+  padding-right: 1.75rem !important;
+}
+
+.dark select option,
+.dark option {
+  background-color: #18181b !important;
+  color: #ffffff !important;
+}
+
+html,
+body {
+  @apply bg-background text-foreground;
+  /* The app shell (_app.tsx) owns all scrolling internally via its own
+     h-screen + overflow-hidden root and main's overflow-y-auto - without this,
+     the outer document can independently become scrollable too (some browsers
+     compute documentElement.scrollHeight from fixed-position descendants like
+     the sidebar even though they're visually viewport-clamped), producing two
+     stacked, separately-scrollable regions for the same content. */
+  height: 100%;
+  overflow: hidden;
+}
+
+@keyframes notification-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,127 @@
+import React, { useEffect } from 'react';
+import { useSettingsStore } from '../../stores/useSettingsStore';
+import { TopNav } from './TopNav';
+import { StatusBar } from './StatusBar';
+import { QuickVariableModal } from '../common/QuickVariableModal';
+
+import { HistoryView } from '../modules/history/HistoryView';
+import { InterceptView } from '../modules/intercept/InterceptView';
+import { RewriteView } from '../modules/rewrite/RewriteView';
+import { RepeaterView } from '../modules/repeater/RepeaterView';
+import { CollectionsView } from '../modules/collections/CollectionsView';
+import { WebSocketsView } from '../modules/websockets/WebSocketsView';
+import { WebhooksView } from '../modules/webhooks/WebhooksView';
+import { WorkspaceView } from '../modules/workspace/WorkspaceView';
+import { UtilitiesView } from '../modules/utilities/UtilitiesView';
+import { SettingsView } from '../modules/settings/SettingsView';
+import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
+import { useInterceptStore } from '../../stores/useInterceptStore';
+import type { NavModule } from '../../types';
+
+export const GlobalShell: React.FC = () => {
+  const { activeModule, setActiveModule, theme, fontSize } = useSettingsStore();
+
+  const { isQuickVarModalOpen, setQuickVarModalOpen } = useSettingsStore();
+  const initWorkspaceStore = useWorkspaceStore((state) => state.initStore);
+  const initInterceptStore = useInterceptStore((state) => state.initInterceptStore);
+
+  // Initialize workspace, active environment, and intercept listener on app startup
+  useEffect(() => {
+    initWorkspaceStore();
+    initInterceptStore();
+  }, [initWorkspaceStore, initInterceptStore]);
+
+  // Keyboard shortcut listener for tabs 1-9, 0 and V key for Quick Env Switcher
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger when inside inputs or textareas
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (e.key === 'v' || e.key === 'V') {
+          e.preventDefault();
+          setQuickVarModalOpen(!isQuickVarModalOpen);
+          return;
+        }
+
+        const keyMap: Record<string, NavModule> = {
+          '1': 'http-history',
+          '2': 'intercept',
+          '3': 'rewrite',
+          '4': 'repeater',
+          '5': 'collections',
+          '6': 'websockets',
+          '7': 'webhooks',
+          '8': 'workspace',
+          '9': 'utilities',
+          '0': 'settings',
+        };
+        if (keyMap[e.key]) {
+          setActiveModule(keyMap[e.key]);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setActiveModule, isQuickVarModalOpen, setQuickVarModalOpen]);
+
+  // Ensure theme class applied on root HTML
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
+  const renderActiveModuleView = () => {
+    switch (activeModule) {
+      case 'http-history':
+        return <HistoryView />;
+      case 'intercept':
+        return <InterceptView />;
+      case 'rewrite':
+        return <RewriteView />;
+      case 'repeater':
+        return <RepeaterView />;
+      case 'collections':
+        return <CollectionsView />;
+      case 'websockets':
+        return <WebSocketsView />;
+      case 'webhooks':
+        return <WebhooksView />;
+      case 'workspace':
+        return <WorkspaceView />;
+      case 'utilities':
+        return <UtilitiesView />;
+      case 'settings':
+        return <SettingsView />;
+      default:
+        return <HistoryView />;
+    }
+  };
+
+  return (
+    <div
+      className={`h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground font-sans ${
+        fontSize === 'lg' ? 'text-sm' : fontSize === 'md' ? 'text-xs' : 'text-[11px]'
+      }`}
+    >
+      {/* Top Navigation Bar */}
+      <TopNav />
+
+      {/* Main Module View */}
+      <main className="flex-1 overflow-hidden relative bg-background">{renderActiveModuleView()}</main>
+
+      {/* Bottom Status Bar */}
+      <StatusBar />
+
+      {/* Quick Variable Switcher Modal (Cmd+K) */}
+      <QuickVariableModal />
+    </div>
+  );
+};
