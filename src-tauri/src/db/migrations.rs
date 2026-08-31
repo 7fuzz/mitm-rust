@@ -49,6 +49,11 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         name: "20260831_0008_rewrite_rules",
         sql: include_str!("../../migrations/20260831_0008_rewrite_rules.sql"),
     },
+    MigrationSpec {
+        version: 9,
+        name: "20260831_0009_history_flags",
+        sql: include_str!("../../migrations/20260831_0009_history_flags.sql"),
+    },
 ];
 
 #[derive(Clone, Serialize, Debug)]

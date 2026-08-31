@@ -32,6 +32,10 @@ export const TrafficFilterBar: React.FC = () => {
     setStatusCodeRange,
     onlyIntercepted,
     setOnlyIntercepted,
+    onlyRewritten,
+    setOnlyRewritten,
+    onlyFailed,
+    setOnlyFailed,
     clearTraffic,
     historySettings,
     updateHistorySettings,
@@ -120,9 +124,27 @@ export const TrafficFilterBar: React.FC = () => {
         {/* Intercepted Only Checkbox */}
         <div className="px-2 py-1 bg-surface border border-border rounded shadow-2xs">
           <Checkbox
-            label="Intercepted Only"
+            label="Intercepted"
             checked={onlyIntercepted}
             onChange={(e) => setOnlyIntercepted(e.target.checked)}
+          />
+        </div>
+
+        {/* Rewritten Only Checkbox */}
+        <div className="px-2 py-1 bg-surface border border-border rounded shadow-2xs">
+          <Checkbox
+            label="Rewritten"
+            checked={onlyRewritten}
+            onChange={(e) => setOnlyRewritten(e.target.checked)}
+          />
+        </div>
+
+        {/* Failed Only Checkbox */}
+        <div className="px-2 py-1 bg-surface border border-border rounded shadow-2xs">
+          <Checkbox
+            label="Failed"
+            checked={onlyFailed}
+            onChange={(e) => setOnlyFailed(e.target.checked)}
           />
         </div>
       </div>

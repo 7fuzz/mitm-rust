@@ -300,9 +300,9 @@ pub async fn apply_response_rewrite_pipeline(
     status: &mut u16,
     headers: &mut Vec<(String, String)>,
     body: &mut Vec<u8>,
-) {
+) -> bool {
     if !state.is_rewrite_enabled() {
-        return;
+        return false;
     }
 
     let rules = {
@@ -310,6 +310,7 @@ pub async fn apply_response_rewrite_pipeline(
         r.clone()
     };
 
+    let mut any_changed = false;
     let path = parse_path_from_url(url);
 
     for rule in rules.iter().filter(|r| r.enabled) {
@@ -400,6 +401,7 @@ pub async fn apply_response_rewrite_pipeline(
         }
 
         if changed {
+            any_changed = true;
             let rewr_body_text = String::from_utf8_lossy(body).to_string();
             let entry = RewriteHistoryEntry {
                 id: format!("rw-{}", uuid::Uuid::new_v4()),
@@ -422,4 +424,6 @@ pub async fn apply_response_rewrite_pipeline(
             let _ = app_handle.emit("rewrite_captured", RewriteCapturedEvent { entry });
         }
     }
+
+    any_changed
 }

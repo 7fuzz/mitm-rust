@@ -37,6 +37,14 @@ const mapHeaders = (headers: any): { key: string; value: string }[] => {
 export const mapHistoryEntryToTrafficItem = (item: any): TrafficItem => {
   const reqHeaders = mapHeaders(item.requestHeaders || item.request_headers);
   const resHeaders = mapHeaders(item.responseHeaders || item.response_headers);
+  const status = item.statusCode ?? item.status_code ?? 200;
+  const resBody = item.responseBody ?? item.response_body ?? '';
+  const isFailed = Boolean(
+    item.isFailed ||
+    item.is_failed ||
+    status === 0 ||
+    (status === 502 && resBody.includes('[MITM]'))
+  );
 
   return {
     id: String(item.id),
@@ -44,7 +52,7 @@ export const mapHistoryEntryToTrafficItem = (item: any): TrafficItem => {
     host: item.host || '',
     path: item.path || item.url || '/',
     url: item.url || '',
-    statusCode: item.statusCode ?? item.status_code ?? 200,
+    statusCode: status,
     contentType: item.contentType || item.content_type || 'text/plain',
     size: item.responseSize ?? item.size ?? 0,
     durationMs: item.durationMs ?? item.duration_ms ?? 0,
@@ -52,8 +60,10 @@ export const mapHistoryEntryToTrafficItem = (item: any): TrafficItem => {
     requestHeaders: reqHeaders,
     responseHeaders: resHeaders,
     requestBody: item.requestBody ?? item.request_body ?? '',
-    responseBody: item.responseBody ?? item.response_body ?? '',
-    isIntercepted: item.isIntercepted || item.is_intercepted || false,
+    responseBody: resBody,
+    isIntercepted: Boolean(item.isIntercepted || item.is_intercepted),
+    isRewritten: Boolean(item.isRewritten || item.is_rewritten),
+    isFailed,
   };
 };
 
@@ -114,6 +124,8 @@ interface ProxyState {
   methodFilters: Record<string, 'include' | 'exclude' | 'neutral'>;
   statusCodeRange: 'all' | '2xx' | '3xx' | '4xx' | '5xx';
   onlyIntercepted: boolean;
+  onlyRewritten: boolean;
+  onlyFailed: boolean;
 
   // Intercept
   interceptConfig: InterceptConfig;
@@ -135,6 +147,8 @@ interface ProxyState {
   setMethodFilter: (method: string, state: 'include' | 'exclude' | 'neutral') => void;
   setStatusCodeRange: (range: 'all' | '2xx' | '3xx' | '4xx' | '5xx') => void;
   setOnlyIntercepted: (val: boolean) => void;
+  setOnlyRewritten: (val: boolean) => void;
+  setOnlyFailed: (val: boolean) => void;
 
   // Intercept actions
   toggleIntercept: (enabled?: boolean) => Promise<void>;
@@ -165,6 +179,8 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   methodFilters: {},
   statusCodeRange: 'all',
   onlyIntercepted: false,
+  onlyRewritten: false,
+  onlyFailed: false,
 
   interceptConfig: {
     enabled: false,
@@ -327,6 +343,8 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
   },
   setStatusCodeRange: (statusCodeRange) => set({ statusCodeRange }),
   setOnlyIntercepted: (val) => set({ onlyIntercepted: val }),
+  setOnlyRewritten: (val) => set({ onlyRewritten: val }),
+  setOnlyFailed: (val) => set({ onlyFailed: val }),
 
   toggleIntercept: async (enabled) => {
     const nextEnabled = enabled !== undefined ? enabled : !get().interceptConfig.enabled;

@@ -40,6 +40,8 @@ export interface TrafficItem {
   responseBody: string;
   ip?: string;
   isIntercepted?: boolean;
+  isRewritten?: boolean;
+  isFailed?: boolean;
 }
 
 export interface InterceptRule {

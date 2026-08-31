@@ -21,6 +21,8 @@ export const HistoryView: React.FC = () => {
     methodFilters,
     statusCodeRange,
     onlyIntercepted,
+    onlyRewritten,
+    onlyFailed,
     addInterceptRule,
     initStore,
   } = useProxyStore();
@@ -100,12 +102,14 @@ export const HistoryView: React.FC = () => {
         if (statusCodeRange === '5xx' && code < 500) return false;
       }
 
-      // Intercepted only filter
+      // Flag filters
       if (onlyIntercepted && !item.isIntercepted) return false;
+      if (onlyRewritten && !item.isRewritten) return false;
+      if (onlyFailed && !item.isFailed) return false;
 
       return true;
     });
-  }, [traffic, searchQuery, selectedMethods, methodFilters, statusCodeRange, onlyIntercepted]);
+  }, [traffic, searchQuery, selectedMethods, methodFilters, statusCodeRange, onlyIntercepted, onlyRewritten, onlyFailed]);
 
   const selectedItem = traffic.find((t) => t.id === selectedTrafficId) || null;
 
@@ -177,7 +181,7 @@ export const HistoryView: React.FC = () => {
               <thead className="bg-header sticky top-0 border-b border-border text-[11px] font-medium text-muted-foreground select-none z-10 shadow-sm">
                 <tr>
                   <th className="py-2 px-2 w-10 text-center text-muted-foreground">#</th>
-                  <th className="py-2 px-2 w-16">Method</th>
+                  <th className="py-2 px-2 w-24">Method</th>
                   <th className="py-2 px-2 w-48">Host</th>
                   <th className="py-2 px-2">Path</th>
                   <th className="py-2 px-2 w-16 text-center">Status</th>
@@ -196,21 +200,48 @@ export const HistoryView: React.FC = () => {
                 ) : (
                   filteredTraffic.map((item, index) => {
                     const isSelected = selectedTrafficId === item.id;
+                    const isFailed = item.isFailed;
+                    const isIntercepted = item.isIntercepted;
+                    const isRewritten = item.isRewritten;
+
+                    const rowClass = isSelected
+                      ? 'bg-primary/15 text-foreground font-semibold border-l-2 border-primary'
+                      : isFailed
+                      ? 'bg-rose-500/5 hover:bg-rose-500/10 text-foreground border-l-2 border-rose-500'
+                      : isIntercepted
+                      ? 'bg-amber-500/5 hover:bg-amber-500/10 text-foreground border-l-2 border-amber-500'
+                      : isRewritten
+                      ? 'bg-sky-500/5 hover:bg-sky-500/10 text-foreground border-l-2 border-sky-500'
+                      : 'text-foreground hover:bg-neutral-subtle border-l-2 border-transparent';
 
                     return (
                       <tr
                         key={item.id}
                         onClick={() => selectTrafficItem(item.id)}
                         onContextMenu={(e) => handleContextMenu(e, item)}
-                        className={`cursor-pointer transition-colors hover:bg-neutral-subtle ${
-                          isSelected
-                            ? 'bg-primary/15 text-foreground font-semibold border-l-2 border-primary'
-                            : 'text-foreground'
-                        }`}
+                        className={`cursor-pointer transition-colors ${rowClass}`}
                       >
                         <td className="py-1.5 px-2 text-center text-muted-foreground text-[10px]">{filteredTraffic.length - index}</td>
                         <td className="py-1.5 px-2">
-                          <MethodBadge method={item.method} />
+                          <div className="flex items-center gap-1">
+                            <MethodBadge method={item.method} />
+                            {item.isIntercepted && (
+                              <span
+                                className="px-1 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 select-none"
+                                title="Intercepted manually"
+                              >
+                                INT
+                              </span>
+                            )}
+                            {item.isRewritten && (
+                              <span
+                                className="px-1 py-0.2 rounded text-[9px] font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 shrink-0 select-none"
+                                title="Rewritten automatically"
+                              >
+                                RW
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-1.5 px-2 text-foreground font-medium overflow-hidden">
                           <div className="truncate" title={item.host}>{item.host}</div>
@@ -219,7 +250,7 @@ export const HistoryView: React.FC = () => {
                           <div className="truncate" title={item.path}>{item.path}</div>
                         </td>
                         <td className="py-1.5 px-2 text-center">
-                          <StatusBadge code={item.statusCode} />
+                          <StatusBadge code={item.statusCode} isFailed={item.isFailed} />
                         </td>
                         <td className="py-1.5 px-2 text-muted-foreground text-[11px] overflow-hidden">
                           <div className="truncate" title={item.contentType}>{item.contentType || '-'}</div>

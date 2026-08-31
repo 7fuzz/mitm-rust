@@ -52,7 +52,7 @@ pub async fn get_history_logs(
 
     let offset = (page.saturating_sub(1)) * limit;
     let mut query = String::from(
-        "SELECT id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at FROM history WHERE 1=1"
+        "SELECT id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0) FROM history WHERE 1=1"
     );
     let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
@@ -95,6 +95,10 @@ pub async fn get_history_logs(
             let request_headers: Vec<(String, String)> = serde_json::from_str(&req_headers_json).unwrap_or_default();
             let response_headers: Vec<(String, String)> = serde_json::from_str(&res_headers_json).unwrap_or_default();
 
+            let is_intercepted_int: i32 = row.get(15)?;
+            let is_rewritten_int: i32 = row.get(16)?;
+            let is_failed_int: i32 = row.get(17)?;
+
             Ok(HistoryEntry {
                 id: row.get(0)?,
                 method: row.get(1)?,
@@ -111,6 +115,9 @@ pub async fn get_history_logs(
                 phase: row.get(12)?,
                 duration_ms: row.get(13)?,
                 created_at: row.get(14)?,
+                is_intercepted: is_intercepted_int != 0,
+                is_rewritten: is_rewritten_int != 0,
+                is_failed: is_failed_int != 0,
             })
         })
         .map_err(|e| e.to_string())?

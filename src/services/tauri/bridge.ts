@@ -17,6 +17,9 @@ export interface HistoryEntry {
   phase: string;
   durationMs?: number;
   createdAt: string;
+  isIntercepted: boolean;
+  isRewritten: boolean;
+  isFailed: boolean;
 }
 
 export interface TrafficCapturedEvent {

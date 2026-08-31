@@ -210,16 +210,19 @@ async fn handle_http(
         log_and_emit_history(
             &app_handle,
             &state,
-            &method.to_string(),
+            method.as_str(),
             &url,
             &host,
             &path,
-            502,
+            0,
             request_headers,
             vec![("Content-Type".to_string(), "text/plain".to_string())],
             request_body_bytes.to_vec(),
             "[MITM] Request blocked by proxy (Block mode)".to_string().into_bytes(),
             0,
+            false,
+            false,
+            true,
         ).await;
 
         return Ok(Response::builder()
@@ -228,6 +231,9 @@ async fn handle_http(
             .body(Full::new(Bytes::from("Request blocked by MITM proxy (Proxy mode: Block)")))
             .unwrap());
     }
+
+    let mut was_rewritten = false;
+    let mut was_intercepted = false;
 
     // 1. Request Rewrite Engine (Auto background transformation & Mocking)
     let mut req_method_str = method.to_string();
@@ -259,6 +265,9 @@ async fn handle_http(
             req_body_bytes,
             mock_res.body.clone(),
             0,
+            false,
+            true,
+            false,
         ).await;
 
         let mut builder = Response::builder().status(mock_res.status);
@@ -266,6 +275,10 @@ async fn handle_http(
             builder = builder.header(k, v);
         }
         return Ok(builder.body(Full::new(Bytes::from(mock_res.body))).unwrap());
+    }
+
+    if req_method_str != method.to_string() || req_url_str != url || req_headers != request_headers || req_body_bytes != request_body_bytes {
+        was_rewritten = true;
     }
 
     // 2. Request Intercept Hook (Manual pause)
@@ -280,12 +293,32 @@ async fn handle_http(
         req_body_bytes.clone(),
     ).await {
         Some(InterceptAction::Drop) => {
+            let final_path = parse_path_from_url(&req_url_str);
+            log_and_emit_history(
+                &app_handle,
+                &state,
+                &req_method_str,
+                &req_url_str,
+                &req_host_str,
+                &final_path,
+                0,
+                req_headers,
+                vec![],
+                req_body_bytes,
+                "[MITM] Request dropped by Interceptor".as_bytes().to_vec(),
+                0,
+                true,
+                was_rewritten,
+                true,
+            ).await;
+
             return Ok(Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
                 .body(Full::new(Bytes::from("[MITM] Request dropped by Interceptor")))
                 .unwrap());
         }
         Some(InterceptAction::Forward { modified_url, modified_method, modified_headers, modified_body }) => {
+            was_intercepted = true;
             let u = modified_url.unwrap_or(req_url_str);
             let m = modified_method
                 .and_then(|s| s.parse::<Method>().ok())
@@ -339,7 +372,7 @@ async fn handle_http(
             let mut res_headers = response_headers;
             let mut res_body = response_body_bytes.to_vec();
 
-            rewrite::apply_response_rewrite_pipeline(
+            if rewrite::apply_response_rewrite_pipeline(
                 &app_handle,
                 &state,
                 &final_req_method.to_string(),
@@ -348,7 +381,9 @@ async fn handle_http(
                 &mut res_status,
                 &mut res_headers,
                 &mut res_body,
-            ).await;
+            ).await {
+                was_rewritten = true;
+            }
 
             // 4. Response Intercept Hook (Manual pause)
             let (final_res_headers, final_res_body) = match handle_intercept_hook(
@@ -362,15 +397,36 @@ async fn handle_http(
                 res_body.clone(),
             ).await {
                 Some(InterceptAction::Drop) => {
+                    log_and_emit_history(
+                        &app_handle,
+                        &state,
+                        &final_req_method.to_string(),
+                        &final_req_url,
+                        &final_host,
+                        &final_path,
+                        0,
+                        final_req_headers,
+                        vec![],
+                        final_req_body,
+                        "[MITM] Response dropped by Interceptor".as_bytes().to_vec(),
+                        duration_ms,
+                        true,
+                        was_rewritten,
+                        true,
+                    ).await;
+
                     return Ok(Response::builder()
                         .status(StatusCode::BAD_GATEWAY)
                         .body(Full::new(Bytes::from("[MITM] Response dropped by Interceptor")))
                         .unwrap());
                 }
-                Some(InterceptAction::Forward { modified_headers, modified_body, .. }) => (
-                    modified_headers.unwrap_or(res_headers),
-                    modified_body.unwrap_or(res_body),
-                ),
+                Some(InterceptAction::Forward { modified_headers, modified_body, .. }) => {
+                    was_intercepted = true;
+                    (
+                        modified_headers.unwrap_or(res_headers),
+                        modified_body.unwrap_or(res_body),
+                    )
+                }
                 None => (res_headers, res_body),
             };
 
@@ -387,6 +443,9 @@ async fn handle_http(
                 final_req_body,
                 final_res_body.clone(),
                 duration_ms,
+                was_intercepted,
+                was_rewritten,
+                false,
             ).await;
 
             if proxy_mode == "block_client" {
@@ -416,12 +475,15 @@ async fn handle_http(
                 &final_req_url,
                 &final_host,
                 &final_path,
-                502,
+                0,
                 final_req_headers,
                 vec![("Content-Type".to_string(), "text/plain".to_string())],
                 final_req_body,
                 err_msg.as_bytes().to_vec(),
                 duration_ms,
+                was_intercepted,
+                was_rewritten,
+                true,
             ).await;
 
             Ok(Response::builder()
@@ -445,6 +507,9 @@ async fn log_and_emit_history(
     req_body: Vec<u8>,
     res_body: Vec<u8>,
     duration_ms: u64,
+    is_intercepted: bool,
+    is_rewritten: bool,
+    is_failed: bool,
 ) {
     let content_encoding = res_headers
         .iter()
@@ -491,6 +556,9 @@ async fn log_and_emit_history(
         phase: "response".to_string(),
         duration_ms: Some(duration_ms),
         created_at: now,
+        is_intercepted,
+        is_rewritten,
+        is_failed,
     };
 
     let _ = state.history_tx.send(history_entry.clone()).await;

@@ -64,6 +64,9 @@ pub struct HistoryEntry {
     pub phase: String,
     pub duration_ms: Option<u64>,
     pub created_at: String,
+    pub is_intercepted: bool,
+    pub is_rewritten: bool,
+    pub is_failed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
