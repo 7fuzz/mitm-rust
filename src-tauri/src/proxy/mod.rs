@@ -204,10 +204,13 @@ async fn handle_http(
 
     let path = parse_path_from_url(&url);
 
+    let entry_id = Uuid::new_v4().to_string();
+
     let proxy_mode = { state.proxy_config.read().await.proxy_mode.clone() };
 
     if proxy_mode == "block" {
         log_and_emit_history(
+            &entry_id,
             &app_handle,
             &state,
             method.as_str(),
@@ -253,6 +256,7 @@ async fn handle_http(
     ).await {
         let final_path = parse_path_from_url(&req_url_str);
         log_and_emit_history(
+            &entry_id,
             &app_handle,
             &state,
             &req_method_str,
@@ -281,8 +285,37 @@ async fn handle_http(
         was_rewritten = true;
     }
 
+    // Emit initial in-flight request to history list immediately
+    {
+        let now = time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default();
+        let initial_entry = HistoryEntry {
+            id: entry_id.clone(),
+            method: req_method_str.clone(),
+            url: req_url_str.clone(),
+            host: req_host_str.clone(),
+            path: parse_path_from_url(&req_url_str),
+            content_type: "-".to_string(),
+            response_size: 0,
+            status_code: 0,
+            request_headers: req_headers.clone(),
+            response_headers: vec![],
+            request_body: encode_body_for_ui(&req_body_bytes, "", ""),
+            response_body: "".to_string(),
+            phase: "request".to_string(),
+            duration_ms: None,
+            created_at: now,
+            is_intercepted: false,
+            is_rewritten: was_rewritten,
+            is_failed: false,
+        };
+        let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: initial_entry });
+    }
+
     // 2. Request Intercept Hook (Manual pause)
     let (final_req_url, final_req_method, final_req_headers, final_req_body) = match handle_intercept_hook(
+        Some(&entry_id),
         &app_handle,
         &state,
         InterceptPhase::Request,
@@ -295,6 +328,7 @@ async fn handle_http(
         Some(InterceptAction::Drop) => {
             let final_path = parse_path_from_url(&req_url_str);
             log_and_emit_history(
+                &entry_id,
                 &app_handle,
                 &state,
                 &req_method_str,
@@ -325,6 +359,33 @@ async fn handle_http(
                 .unwrap_or_else(|| Method::from_bytes(req_method_str.as_bytes()).unwrap_or(Method::GET));
             let h = modified_headers.unwrap_or(req_headers);
             let b = modified_body.unwrap_or(req_body_bytes);
+
+            // Re-emit in-flight request as waiting for upstream response
+            let now = time::OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default();
+            let in_flight_entry = HistoryEntry {
+                id: entry_id.clone(),
+                method: m.to_string(),
+                url: u.clone(),
+                host: u.parse::<hyper::Uri>().ok().and_then(|uri| uri.host().map(|h| h.to_string())).unwrap_or_else(|| host.clone()),
+                path: parse_path_from_url(&u),
+                content_type: "-".to_string(),
+                response_size: 0,
+                status_code: 0,
+                request_headers: h.clone(),
+                response_headers: vec![],
+                request_body: encode_body_for_ui(&b, "", ""),
+                response_body: "".to_string(),
+                phase: "request".to_string(),
+                duration_ms: None,
+                created_at: now,
+                is_intercepted: true,
+                is_rewritten: was_rewritten,
+                is_failed: false,
+            };
+            let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: in_flight_entry });
+
             (u, m, h, b)
         }
         None => (req_url_str, Method::from_bytes(req_method_str.as_bytes()).unwrap_or(Method::GET), req_headers, req_body_bytes),
@@ -387,6 +448,7 @@ async fn handle_http(
 
             // 4. Response Intercept Hook (Manual pause)
             let (final_res_headers, final_res_body) = match handle_intercept_hook(
+                Some(&entry_id),
                 &app_handle,
                 &state,
                 InterceptPhase::Response,
@@ -398,6 +460,7 @@ async fn handle_http(
             ).await {
                 Some(InterceptAction::Drop) => {
                     log_and_emit_history(
+                        &entry_id,
                         &app_handle,
                         &state,
                         &final_req_method.to_string(),
@@ -431,6 +494,7 @@ async fn handle_http(
             };
 
             log_and_emit_history(
+                &entry_id,
                 &app_handle,
                 &state,
                 &final_req_method.to_string(),
@@ -469,6 +533,7 @@ async fn handle_http(
             let duration_ms = start_time.elapsed().as_millis() as u64;
             let err_msg = format!("Proxy error: {}", e);
             log_and_emit_history(
+                &entry_id,
                 &app_handle,
                 &state,
                 &final_req_method.to_string(),
@@ -495,6 +560,7 @@ async fn handle_http(
 }
 
 async fn log_and_emit_history(
+    entry_id: &str,
     app_handle: &AppHandle,
     state: &Arc<AppState>,
     method: &str,
@@ -535,13 +601,12 @@ async fn log_and_emit_history(
     let res_body_str = encode_body_for_ui(&decompressed_res_body, &content_type, content_encoding);
     let response_size = decompressed_res_body.len() as u64;
 
-    let entry_id = Uuid::new_v4().to_string();
     let now = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_default();
 
     let history_entry = HistoryEntry {
-        id: entry_id,
+        id: entry_id.to_string(),
         method: method.to_string(),
         url: full_url.to_string(),
         host: host.to_string(),
@@ -578,7 +643,7 @@ fn headers_to_vec(headers: &hyper::HeaderMap) -> Vec<(String, String)> {
 
 use crate::encoding::{decompress_body, format_body_for_ui as encode_body_for_ui};
 
-fn parse_path_from_url(url_str: &str) -> String {
+pub(crate) fn parse_path_from_url(url_str: &str) -> String {
     if let Some(pos) = url_str.find("://") {
         let rest = &url_str[pos + 3..];
         if let Some(slash_pos) = rest.find('/') {
