@@ -1,6 +1,7 @@
 export type NavModule =
   | 'http-history'
   | 'intercept'
+  | 'rewrite'
   | 'repeater'
   | 'collections'
   | 'websockets'
