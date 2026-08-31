@@ -1,87 +1,114 @@
 import { create } from 'zustand';
-import type { WebhookEndpoint, WebhookDelivery, WebhookListenerConfig } from '../types';
-import { getWebhookEndpoints, createWebhookEndpoint, deleteWebhookEndpoint, getWebhookDeliveries, clearWebhookDeliveries, getWebhookListenerStatus, startWebhookListener, stopWebhookListener, calculateWebhookSignature } from '../services/tauri/ipc';
-
-const SAMPLE_ENDPOINTS: WebhookEndpoint[] = [
-  { id: 'ep-1', path: '/api/v1/github-webhook', name: 'GitHub Repo Push Event', secretKey: 'whsec_github_secret_9921', createdAt: Date.now() - 86400000, hitCount: 14 },
-  { id: 'ep-2', path: '/v1/stripe/invoice', name: 'Stripe Invoice Payment Success', secretKey: 'whsec_stripe_key_882', createdAt: Date.now() - 43200000, hitCount: 5 },
-];
-
-const SAMPLE_DELIVERIES: WebhookDelivery[] = [
-  {
-    id: 'del-1',
-    endpointId: 'ep-1',
-    endpointPath: '/api/v1/github-webhook',
-    timestamp: Date.now() - 15000,
-    headers: [
-      { key: 'Host', value: 'localhost:9000' },
-      { key: 'User-Agent', value: 'GitHub-Hookshot/384910' },
-      { key: 'X-GitHub-Event', value: 'push' },
-      { key: 'X-Hub-Signature-256', value: 'sha256=d3b07384d113edec49eaa6238ad5ff00' },
-    ],
-    payload: JSON.stringify({ ref: 'refs/heads/main', repository: { full_name: 'mitm-rust/server' }, commits: [{ id: 'a982f1', message: 'feat: add tauri v2 proxy bindings' }] }, null, 2),
-    signatureStatus: 'valid',
-    computedHmac: 'sha256=d3b07384d113edec49eaa6238ad5ff00',
-    providedHmac: 'sha256=d3b07384d113edec49eaa6238ad5ff00',
-  },
-  {
-    id: 'del-2',
-    endpointId: 'ep-2',
-    endpointPath: '/v1/stripe/invoice',
-    timestamp: Date.now() - 45000,
-    headers: [
-      { key: 'Host', value: 'localhost:9000' },
-      { key: 'Stripe-Signature', value: 't=1672531199,v1=bad_signature_string_value' },
-    ],
-    payload: JSON.stringify({ id: 'in_1M492049281', object: 'invoice', amount_paid: 2500, paid: true }, null, 2),
-    signatureStatus: 'invalid',
-    computedHmac: 't=1672531199,v1=f82a1738c1...',
-    providedHmac: 't=1672531199,v1=bad_signature_string_value',
-  },
-];
+import type { WebhookEndpoint, WebhookDelivery, WebhookListenerConfig, WebhookReplayResult } from '../types';
+import {
+  getWebhookEndpoints,
+  createWebhookEndpoint,
+  deleteWebhookEndpoint,
+  getWebhookDeliveries,
+  clearWebhookDeliveries,
+  getWebhookListenerStatus,
+  startWebhookListener,
+  stopWebhookListener,
+  calculateWebhookSignature,
+  replayWebhookDelivery,
+  isTauriAvailable,
+} from '../services/tauri/ipc';
+import { listenWebhookCaptured } from '../services/tauri/events';
 
 interface WebhookState {
   listenerConfig: WebhookListenerConfig;
   endpoints: WebhookEndpoint[];
   deliveries: WebhookDelivery[];
   selectedDeliveryId: string | null;
+  isLoading: boolean;
+  isInitialized: boolean;
+
+  // Replay
+  isReplaying: boolean;
+  replayResult: WebhookReplayResult | null;
 
   // HMAC calculator
   hmacSecret: string;
   hmacBody: string;
-  hmacProvider: 'github' | 'stripe' | 'raw_sha256' | 'raw_sha1' | 'raw_md5';
+  hmacProvider: 'github' | 'stripe' | 'shopify' | 'raw_sha256' | 'raw_sha1' | 'raw_sha512';
   computedSignature: { header_name: string; header_value: string } | null;
 
   // Actions
+  initialize: () => Promise<void>;
   fetchStatus: () => Promise<void>;
   toggleServer: () => Promise<void>;
   setPort: (port: number) => void;
 
   fetchEndpoints: () => Promise<void>;
-  addEndpoint: (endpoint: Partial<WebhookEndpoint>) => Promise<void>;
+  addEndpoint: (endpoint: Partial<WebhookEndpoint>) => Promise<WebhookEndpoint | undefined>;
   deleteEndpoint: (id: string) => Promise<void>;
 
   fetchDeliveries: () => Promise<void>;
   clearDeliveries: () => Promise<void>;
   selectDelivery: (id: string | null) => void;
-  replayDelivery: (id: string, targetUrl: string) => Promise<void>;
+  replayDelivery: (id: string, targetUrl: string) => Promise<WebhookReplayResult | null>;
 
   setHmacSecret: (s: string) => void;
   setHmacBody: (b: string) => void;
-  setHmacProvider: (p: 'github' | 'stripe' | 'raw_sha256' | 'raw_sha1' | 'raw_md5') => void;
+  setHmacProvider: (p: 'github' | 'stripe' | 'shopify' | 'raw_sha256' | 'raw_sha1' | 'raw_sha512') => void;
   calculateHmac: () => Promise<void>;
 }
 
 export const useWebhookStore = create<WebhookState>((set, get) => ({
-  listenerConfig: { port: 9000, is_running: true },
-  endpoints: SAMPLE_ENDPOINTS,
-  deliveries: SAMPLE_DELIVERIES,
-  selectedDeliveryId: 'del-1',
+  listenerConfig: { port: 9000, is_running: false },
+  endpoints: [],
+  deliveries: [],
+  selectedDeliveryId: null,
+  isLoading: false,
+  isInitialized: false,
+
+  isReplaying: false,
+  replayResult: null,
 
   hmacSecret: 'whsec_secret_key_123',
   hmacBody: JSON.stringify({ event: 'ping', payload: 'test' }, null, 2),
   hmacProvider: 'github',
   computedSignature: null,
+
+  initialize: async () => {
+    if (get().isInitialized) return;
+    set({ isInitialized: true, isLoading: true });
+
+    try {
+      if (isTauriAvailable()) {
+        await listenWebhookCaptured((payload: any) => {
+          const delivery: WebhookDelivery = payload.delivery || payload;
+          const hitCount: number = payload.endpointHitCount;
+
+          set((state) => {
+            const updatedDeliveries = [delivery, ...state.deliveries.filter((d) => d.id !== delivery.id)];
+            const updatedEndpoints = state.endpoints.map((ep) => {
+              if (ep.id === delivery.endpointId || ep.path === delivery.endpointPath) {
+                return { ...ep, hitCount: hitCount ?? (ep.hitCount + 1) };
+              }
+              return ep;
+            });
+
+            return {
+              deliveries: updatedDeliveries,
+              endpoints: updatedEndpoints,
+              selectedDeliveryId: state.selectedDeliveryId || delivery.id,
+            };
+          });
+        });
+      }
+
+      await Promise.all([
+        get().fetchStatus(),
+        get().fetchEndpoints(),
+        get().fetchDeliveries(),
+      ]);
+    } catch (err) {
+      console.error('Failed to initialize Webhook store:', err);
+    } finally {
+      set({ isLoading: false });
+    }
+  },
 
   fetchStatus: async () => {
     try {
@@ -114,7 +141,7 @@ export const useWebhookStore = create<WebhookState>((set, get) => ({
   fetchEndpoints: async () => {
     try {
       const eps = await getWebhookEndpoints();
-      if (eps && eps.length > 0) set({ endpoints: eps });
+      set({ endpoints: eps || [] });
     } catch (err) {
       console.error('Failed to fetch webhook endpoints:', err);
     }
@@ -123,14 +150,21 @@ export const useWebhookStore = create<WebhookState>((set, get) => ({
   addEndpoint: async (ep) => {
     try {
       const created = await createWebhookEndpoint(ep);
-      set((state) => ({ endpoints: [...state.endpoints, created] }));
+      set((state) => ({
+        endpoints: [...state.endpoints.filter((e) => e.id !== created.id), created],
+      }));
+      return created;
     } catch (err) {
       console.error('Failed to add webhook endpoint:', err);
+      return undefined;
     }
   },
 
   deleteEndpoint: async (id) => {
-    set((state) => ({ endpoints: state.endpoints.filter((e) => e.id !== id) }));
+    set((state) => ({
+      endpoints: state.endpoints.filter((e) => e.id !== id),
+      deliveries: state.deliveries.filter((d) => d.endpointId !== id),
+    }));
     try {
       await deleteWebhookEndpoint(id);
     } catch (err) {
@@ -140,15 +174,18 @@ export const useWebhookStore = create<WebhookState>((set, get) => ({
 
   fetchDeliveries: async () => {
     try {
-      const dels = await getWebhookDeliveries();
-      if (dels && dels.length > 0) set({ deliveries: dels });
+      const dels = await getWebhookDeliveries(500);
+      set((state) => ({
+        deliveries: dels || [],
+        selectedDeliveryId: state.selectedDeliveryId || (dels && dels.length > 0 ? dels[0].id : null),
+      }));
     } catch (err) {
       console.error('Failed to fetch deliveries:', err);
     }
   },
 
   clearDeliveries: async () => {
-    set({ deliveries: [], selectedDeliveryId: null });
+    set({ deliveries: [], selectedDeliveryId: null, replayResult: null });
     try {
       await clearWebhookDeliveries();
     } catch (err) {
@@ -156,10 +193,27 @@ export const useWebhookStore = create<WebhookState>((set, get) => ({
     }
   },
 
-  selectDelivery: (id) => set({ selectedDeliveryId: id }),
+  selectDelivery: (id) => set({ selectedDeliveryId: id, replayResult: null }),
 
   replayDelivery: async (id, targetUrl) => {
-    console.log(`Replaying webhook delivery ${id} to target ${targetUrl}`);
+    set({ isReplaying: true, replayResult: null });
+    try {
+      const result = await replayWebhookDelivery(id, targetUrl);
+      set({ replayResult: result });
+      return result;
+    } catch (err) {
+      console.error(`Failed to replay webhook delivery ${id}:`, err);
+      const errorResult: WebhookReplayResult = {
+        success: false,
+        statusCode: 0,
+        responseBody: String(err),
+        durationMs: 0,
+      };
+      set({ replayResult: errorResult });
+      return errorResult;
+    } finally {
+      set({ isReplaying: false });
+    }
   },
 
   setHmacSecret: (hmacSecret) => set({ hmacSecret }),

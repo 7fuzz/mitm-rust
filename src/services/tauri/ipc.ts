@@ -14,6 +14,7 @@ import type {
   WebhookEndpoint,
   WebhookDelivery,
   WebhookListenerConfig,
+  WebhookReplayResult,
   AppPreferences,
 } from '../../types';
 
@@ -259,6 +260,15 @@ export async function calculateWebhookSignature(secret: string, body: string, pr
   return safeInvoke<{ header_name: string; header_value: string }>('calculate_webhook_signature', { secret, body, provider }, {
     header_name: 'X-Hub-Signature-256',
     header_value: 'sha256=mocked_hmac_signature_hex_value',
+  });
+}
+
+export async function replayWebhookDelivery(id: string, targetUrl: string): Promise<WebhookReplayResult> {
+  return safeInvoke<WebhookReplayResult>('replay_webhook_delivery', { id, targetUrl }, {
+    success: true,
+    statusCode: 200,
+    responseBody: '{"status":"ok"}',
+    durationMs: 45,
   });
 }
 

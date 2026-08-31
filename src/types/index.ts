@@ -194,6 +194,18 @@ export interface WebhookListenerConfig {
   is_running: boolean;
 }
 
+export interface WebhookReplayResult {
+  success: boolean;
+  statusCode: number;
+  responseBody: string;
+  durationMs: number;
+}
+
+export interface WebhookDeliveryCapturedPayload {
+  delivery: WebhookDelivery;
+  endpointHitCount: number;
+}
+
 export interface ProxyStatus {
   mode: 'normal' | 'intercept' | 'off';
   bindings: string[];
