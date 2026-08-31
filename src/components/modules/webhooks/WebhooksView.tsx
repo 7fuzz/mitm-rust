@@ -49,6 +49,33 @@ export const WebhooksView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'payload' | 'headers' | 'hmac' | 'replay'>('payload');
   const [replayUrl, setReplayUrl] = useState('https://httpbin.org/post');
 
+  // Resizable delivery list & inspector
+  const [deliveryListPercent, setDeliveryListPercent] = useState<number>(42);
+  const deliveryAreaRef = React.useRef<HTMLDivElement>(null);
+  const isResizingDelivery = React.useRef(false);
+
+  const handleMouseDownDeliverySplit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingDelivery.current = true;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingDelivery.current || !deliveryAreaRef.current) return;
+      const rect = deliveryAreaRef.current.getBoundingClientRect();
+      const relativeX = moveEvent.clientX - rect.left;
+      const newPercent = (relativeX / rect.width) * 100;
+      setDeliveryListPercent(Math.min(Math.max(newPercent, 20), 80));
+    };
+
+    const handleMouseUp = () => {
+      isResizingDelivery.current = false;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
   useEffect(() => {
     initialize();
   }, [initialize]);
@@ -311,9 +338,12 @@ export const WebhooksView: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[380px]">
-          {/* Delivery Hits Table (5 cols) */}
-          <div className="lg:col-span-5 border border-border rounded overflow-y-auto bg-background">
+        <div ref={deliveryAreaRef} className="flex h-[420px] overflow-hidden border border-border rounded">
+          {/* Delivery Hits Table */}
+          <div
+            style={{ width: `${deliveryListPercent}%` }}
+            className="border-r border-border overflow-y-auto bg-background shrink-0 min-w-[200px]"
+          >
             <table className="w-full text-left font-mono text-xs">
               <thead className="bg-header border-b border-border text-muted-foreground text-[11px] sticky top-0 z-10">
                 <tr>
@@ -371,8 +401,17 @@ export const WebhooksView: React.FC = () => {
             </table>
           </div>
 
-          {/* Delivery Inspector & Replayer (7 cols) */}
-          <div className="lg:col-span-7 border border-border rounded p-3 flex flex-col bg-background overflow-hidden">
+          {/* Draggable Resizer Handle */}
+          <div
+            onMouseDown={handleMouseDownDeliverySplit}
+            className="w-1.5 bg-border hover:bg-primary/60 active:bg-primary cursor-col-resize flex items-center justify-center transition-colors select-none group z-20 shrink-0"
+            title="Drag to resize panels"
+          >
+            <div className="w-0.5 h-6 rounded bg-muted-foreground/40 group-hover:bg-primary" />
+          </div>
+
+          {/* Delivery Inspector & Replayer */}
+          <div className="flex-1 p-3 flex flex-col bg-background overflow-hidden min-w-[250px]">
             {selectedDelivery ? (
               <div className="flex-1 flex flex-col gap-3 overflow-hidden">
                 {/* Inspector Header & Navigation Tabs */}

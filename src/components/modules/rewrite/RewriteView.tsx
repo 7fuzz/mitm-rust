@@ -24,6 +24,31 @@ export const RewriteView: React.FC = () => {
   } = useRewriteStore();
 
   const [activeTab, setActiveTab] = useState<"rules" | "history">("rules");
+  const [historyListPercent, setHistoryListPercent] = useState<number>(45);
+  const historyContainerRef = React.useRef<HTMLDivElement>(null);
+  const isResizingHistory = React.useRef(false);
+
+  const handleMouseDownHistorySplit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingHistory.current = true;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingHistory.current || !historyContainerRef.current) return;
+      const rect = historyContainerRef.current.getBoundingClientRect();
+      const relativeX = moveEvent.clientX - rect.left;
+      const newPercent = (relativeX / rect.width) * 100;
+      setHistoryListPercent(Math.min(Math.max(newPercent, 20), 80));
+    };
+
+    const handleMouseUp = () => {
+      isResizingHistory.current = false;
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
 
   useEffect(() => {
     initStore();
@@ -378,9 +403,12 @@ export const RewriteView: React.FC = () => {
           </div>
         ) : (
           /* Execution History View (Split Table & Diff Inspector) */
-          <div className="h-full flex overflow-hidden">
+          <div ref={historyContainerRef} className="h-full flex overflow-hidden">
             {/* Left Pane: Log List */}
-            <div className="w-1/2 flex flex-col border-r border-border bg-surface shrink-0">
+            <div
+              style={{ width: `${historyListPercent}%` }}
+              className="flex flex-col border-r border-border bg-surface shrink-0 min-w-[200px]"
+            >
               <div className="px-3 py-2 bg-header border-b border-border flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase font-mono">
                 <span>Captured Rewrites</span>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">
@@ -406,7 +434,7 @@ export const RewriteView: React.FC = () => {
                         onClick={() => selectLog(log.id)}
                         className={`p-3 cursor-pointer transition-colors border-l-2 font-mono text-xs ${
                           isSelected
-                            ? "bg-emerald-500/10 border-emerald-500"
+                            ? "bg-emerald-500/10 border-emerald-500 font-semibold"
                             : "border-transparent hover:bg-neutral-subtle"
                         }`}
                       >
@@ -438,8 +466,17 @@ export const RewriteView: React.FC = () => {
               </div>
             </div>
 
+            {/* Draggable Resizer Handle */}
+            <div
+              onMouseDown={handleMouseDownHistorySplit}
+              className="w-1.5 bg-border hover:bg-primary/60 active:bg-primary cursor-col-resize flex items-center justify-center transition-colors select-none group z-20 shrink-0"
+              title="Drag to resize panels"
+            >
+              <div className="w-0.5 h-6 rounded bg-muted-foreground/40 group-hover:bg-primary" />
+            </div>
+
             {/* Right Pane: Diff Inspector */}
-            <div className="flex-1 flex flex-col bg-background min-w-0 overflow-y-auto p-4 font-mono text-xs space-y-4">
+            <div className="flex-1 flex flex-col bg-background min-w-[250px] overflow-y-auto p-4 font-mono text-xs space-y-4">
               {selectedLog ? (
                 <>
                   {/* Top Details */}

@@ -34,6 +34,58 @@ export const WebSocketsView: React.FC = () => {
   const [streamScope, setStreamScope] = useState<'all' | 'proxy' | 'client'>('all');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  // Resizable sidebar and stream split states
+  const [sidebarWidthPx, setSidebarWidthPx] = useState<number>(288);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const isResizingSidebar = React.useRef(false);
+
+  const [tableHeightPercent, setTableHeightPercent] = useState<number>(50);
+  const streamAreaRef = React.useRef<HTMLDivElement>(null);
+  const isResizingTable = React.useRef(false);
+
+  const handleMouseDownSidebar = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingSidebar.current = true;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingSidebar.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const newWidth = moveEvent.clientX - rect.left;
+      setSidebarWidthPx(Math.min(Math.max(newWidth, 200), 550));
+    };
+
+    const handleMouseUp = () => {
+      isResizingSidebar.current = false;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleMouseDownTableSplit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingTable.current = true;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingTable.current || !streamAreaRef.current) return;
+      const rect = streamAreaRef.current.getBoundingClientRect();
+      const relativeY = moveEvent.clientY - rect.top;
+      const newPercent = (relativeY / rect.height) * 100;
+      setTableHeightPercent(Math.min(Math.max(newPercent, 15), 85));
+    };
+
+    const handleMouseUp = () => {
+      isResizingTable.current = false;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
   // New Client Connection Modal state
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [connectUrl, setConnectUrl] = useState('wss://echo.websocket.events');
@@ -126,9 +178,12 @@ export const WebSocketsView: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex bg-background overflow-hidden text-xs font-sans">
-      {/* Left Panel: Stream Navigator & Sessions (w-72) */}
-      <div className="w-72 border-r border-border bg-surface flex flex-col overflow-hidden shrink-0 select-none">
+    <div ref={containerRef} className="h-full flex bg-background overflow-hidden text-xs font-sans">
+      {/* Left Panel: Stream Navigator & Sessions */}
+      <div
+        style={{ width: `${sidebarWidthPx}px` }}
+        className="border-r border-border bg-surface flex flex-col overflow-hidden shrink-0 select-none min-w-[200px]"
+      >
         {/* Header with Title & + Connect button */}
         <div className="p-3 bg-header border-b border-border flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
@@ -259,8 +314,17 @@ export const WebSocketsView: React.FC = () => {
         </div>
       </div>
 
+      {/* Draggable Resizer Handle for Sidebar */}
+      <div
+        onMouseDown={handleMouseDownSidebar}
+        className="w-1.5 bg-border hover:bg-primary/60 active:bg-primary cursor-col-resize flex items-center justify-center transition-colors select-none group z-20 shrink-0"
+        title="Drag to resize sidebar"
+      >
+        <div className="w-0.5 h-6 rounded bg-muted-foreground/40 group-hover:bg-primary" />
+      </div>
+
       {/* Right Panel: Live Stream Console & Payload Inspector */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-[300px]">
         {activeConnection ? (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Stream Top Action & Filter Toolbar */}
@@ -319,10 +383,13 @@ export const WebSocketsView: React.FC = () => {
               </div>
             </div>
 
-            {/* Split Stream: Top 50% Stream Table, Bottom 50% Payload Inspector */}
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Message Frames Stream Table (Top 50%) */}
-              <div className="h-1/2 border-b border-border bg-surface flex flex-col overflow-hidden">
+            {/* Split Stream: Top Stream Table, Bottom Payload Inspector */}
+            <div ref={streamAreaRef} className="flex-1 flex flex-col overflow-hidden">
+              {/* Message Frames Stream Table */}
+              <div
+                style={{ height: `${tableHeightPercent}%` }}
+                className="border-b border-border bg-surface flex flex-col overflow-hidden min-h-[100px]"
+              >
                 <div className="bg-header border-b border-border flex items-center text-[11px] font-medium text-muted-foreground select-none shrink-0 font-mono px-3 py-1.5">
                   <span className="w-16 text-center font-sans">Direction</span>
                   <span className="w-16 font-sans">Type</span>
@@ -395,8 +462,20 @@ export const WebSocketsView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Selected Frame Payload Inspector (Bottom 50%) */}
-              <div className="h-1/2 flex flex-col bg-background overflow-hidden">
+              {/* Draggable Resizer Bar between Table and Inspector */}
+              <div
+                onMouseDown={handleMouseDownTableSplit}
+                className="h-1.5 bg-border hover:bg-primary/60 active:bg-primary cursor-row-resize flex items-center justify-center transition-colors select-none group z-20 shrink-0"
+                title="Drag to resize message table / payload inspector"
+              >
+                <div className="w-8 h-0.5 rounded bg-muted-foreground/40 group-hover:bg-primary" />
+              </div>
+
+              {/* Selected Frame Payload Inspector */}
+              <div
+                style={{ height: `${100 - tableHeightPercent}%` }}
+                className="flex flex-col bg-background overflow-hidden min-h-[100px]"
+              >
                 <div className="p-2 bg-header border-b border-border flex items-center justify-between shrink-0 font-mono">
                   <div className="flex items-center gap-1 bg-surface border border-border rounded p-0.5">
                     {(['pretty', 'raw', 'hex', 'info'] as const).map((tab) => (
