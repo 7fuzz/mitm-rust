@@ -37,12 +37,13 @@ const mapHeaders = (headers: any): { key: string; value: string }[] => {
 export const mapHistoryEntryToTrafficItem = (item: any): TrafficItem => {
   const reqHeaders = mapHeaders(item.requestHeaders || item.request_headers);
   const resHeaders = mapHeaders(item.responseHeaders || item.response_headers);
-  const status = item.statusCode ?? item.status_code ?? 200;
+  const status = item.statusCode ?? item.status_code ?? 0;
   const resBody = item.responseBody ?? item.response_body ?? '';
+  const phase = item.phase || 'response';
   const isFailed = Boolean(
     item.isFailed ||
     item.is_failed ||
-    status === 0 ||
+    (phase === 'response' && status === 0) ||
     (status === 502 && resBody.includes('[MITM]'))
   );
 
@@ -55,12 +56,13 @@ export const mapHistoryEntryToTrafficItem = (item: any): TrafficItem => {
     statusCode: status,
     contentType: item.contentType || item.content_type || 'text/plain',
     size: item.responseSize ?? item.size ?? 0,
-    durationMs: item.durationMs ?? item.duration_ms ?? 0,
+    durationMs: item.durationMs ?? item.duration_ms ?? null,
     timestamp: item.createdAt ? Date.parse(item.createdAt) : item.timestamp || Date.now(),
     requestHeaders: reqHeaders,
     responseHeaders: resHeaders,
     requestBody: item.requestBody ?? item.request_body ?? '',
     responseBody: resBody,
+    phase,
     isIntercepted: Boolean(item.isIntercepted || item.is_intercepted),
     isRewritten: Boolean(item.isRewritten || item.is_rewritten),
     isFailed,
@@ -303,9 +305,14 @@ export const useProxyStore = create<ProxyState>((set, get) => ({
     set((state) => {
       const settings = state.historySettings;
       const maxLimit = settings.limiterEnabled ? settings.maxRows : 10000;
-      const filtered = state.traffic.filter((t) => t.id !== item.id);
+      const existingIndex = state.traffic.findIndex((t) => t.id === item.id);
+      if (existingIndex >= 0) {
+        const updated = [...state.traffic];
+        updated[existingIndex] = item;
+        return { traffic: updated };
+      }
       return {
-        traffic: [item, ...filtered].slice(0, maxLimit),
+        traffic: [item, ...state.traffic].slice(0, maxLimit),
       };
     });
   },

@@ -32,12 +32,13 @@ export interface TrafficItem {
   statusCode: number;
   contentType: string;
   size: number;
-  durationMs: number;
+  durationMs: number | null;
   timestamp: number;
   requestHeaders: HeaderPair[];
   requestBody: string;
   responseHeaders: HeaderPair[];
   responseBody: string;
+  phase?: string;
   ip?: string;
   isIntercepted?: boolean;
   isRewritten?: boolean;

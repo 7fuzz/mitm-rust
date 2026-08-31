@@ -208,7 +208,7 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
       updatedAtMs: nowMs,
       executionCount: 1,
       lastStatusCode: item.statusCode,
-      lastDurationMs: item.durationMs,
+      lastDurationMs: item.durationMs ?? undefined,
     };
 
     // Store tab in backend DB & state

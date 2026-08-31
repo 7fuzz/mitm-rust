@@ -200,19 +200,25 @@ export const HistoryView: React.FC = () => {
                 ) : (
                   filteredTraffic.map((item, index) => {
                     const isSelected = selectedTrafficId === item.id;
-                    const isFailed = item.isFailed;
-                    const isIntercepted = item.isIntercepted;
+                    const isPendingResponse = item.phase === 'request';
+                    const isPendingIntercept = item.phase === 'intercepted_request' || item.phase === 'intercepted_response';
+                    const isFailed = item.isFailed && !isPendingResponse && !isPendingIntercept;
+                    const isIntercepted = item.isIntercepted && !isPendingIntercept;
                     const isRewritten = item.isRewritten;
 
                     const rowClass = isSelected
-                      ? 'bg-primary/15 text-foreground font-semibold border-l-2 border-primary'
+                      ? 'bg-primary/15 text-foreground font-semibold ring-1 ring-inset ring-primary'
+                      : isPendingIntercept
+                      ? 'animate-pulse bg-amber-500/15 hover:bg-amber-500/25 text-foreground'
+                      : isPendingResponse
+                      ? 'animate-pulse bg-rose-500/10 hover:bg-rose-500/20 text-foreground'
                       : isFailed
-                      ? 'bg-rose-500/5 hover:bg-rose-500/10 text-foreground border-l-2 border-rose-500'
+                      ? 'bg-rose-500/5 hover:bg-rose-500/10 text-foreground'
                       : isIntercepted
-                      ? 'bg-amber-500/5 hover:bg-amber-500/10 text-foreground border-l-2 border-amber-500'
+                      ? 'bg-amber-500/5 hover:bg-amber-500/10 text-foreground'
                       : isRewritten
-                      ? 'bg-sky-500/5 hover:bg-sky-500/10 text-foreground border-l-2 border-sky-500'
-                      : 'text-foreground hover:bg-neutral-subtle border-l-2 border-transparent';
+                      ? 'bg-sky-500/5 hover:bg-sky-500/10 text-foreground'
+                      : 'text-foreground hover:bg-neutral-subtle';
 
                     return (
                       <tr
@@ -225,15 +231,17 @@ export const HistoryView: React.FC = () => {
                         <td className="py-1.5 px-2">
                           <div className="flex items-center gap-1">
                             <MethodBadge method={item.method} />
-                            {item.isIntercepted && (
+                            {(isIntercepted || isPendingIntercept) && (
                               <span
-                                className="px-1 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 select-none"
-                                title="Intercepted manually"
+                                className={`px-1 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 select-none ${
+                                  isPendingIntercept ? 'animate-pulse' : ''
+                                }`}
+                                title={isPendingIntercept ? 'Paused in Interceptor' : 'Intercepted manually'}
                               >
                                 INT
                               </span>
                             )}
-                            {item.isRewritten && (
+                            {isRewritten && (
                               <span
                                 className="px-1 py-0.2 rounded text-[9px] font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 shrink-0 select-none"
                                 title="Rewritten automatically"
@@ -250,13 +258,30 @@ export const HistoryView: React.FC = () => {
                           <div className="truncate" title={item.path}>{item.path}</div>
                         </td>
                         <td className="py-1.5 px-2 text-center">
-                          <StatusBadge code={item.statusCode} isFailed={item.isFailed} />
+                          <StatusBadge
+                            code={item.statusCode}
+                            isFailed={isFailed}
+                            isPending={isPendingResponse}
+                            isInterceptedPending={isPendingIntercept}
+                          />
                         </td>
                         <td className="py-1.5 px-2 text-muted-foreground text-[11px] overflow-hidden">
                           <div className="truncate" title={item.contentType}>{item.contentType || '-'}</div>
                         </td>
-                        <td className="py-1.5 px-2 text-right text-muted-foreground text-[11px]">{item.size}</td>
-                        <td className="py-1.5 px-2 text-right text-muted-foreground text-[11px]">{item.durationMs != null ? `${item.durationMs}ms` : '-'}</td>
+                        <td className="py-1.5 px-2 text-right text-muted-foreground text-[11px]">
+                          {isPendingResponse || isPendingIntercept ? '-' : item.size}
+                        </td>
+                        <td className="py-1.5 px-2 text-right text-muted-foreground text-[11px]">
+                          {isPendingResponse ? (
+                            <span className="text-rose-500 dark:text-rose-400 font-mono animate-pulse">...</span>
+                          ) : isPendingIntercept ? (
+                            <span className="text-amber-500 dark:text-amber-400 font-mono animate-pulse">...</span>
+                          ) : item.durationMs != null ? (
+                            `${item.durationMs}ms`
+                          ) : (
+                            '-'
+                          )}
+                        </td>
                       </tr>
                     );
                   })

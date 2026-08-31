@@ -278,14 +278,33 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
     return <CodeEditor value={bodyText} language="plaintext" readOnly />;
   };
 
+  const isPendingResponse = item.phase === 'request';
+  const isPendingIntercept = item.phase === 'intercepted_request' || item.phase === 'intercepted_response';
+  const isFailed = item.isFailed && !isPendingResponse && !isPendingIntercept;
+
   return (
     <div className="h-full flex flex-col bg-surface border-t border-border overflow-hidden text-xs">
       {/* Top Banner Header */}
       <div className="p-2 bg-header border-b border-border flex items-center justify-between gap-2 shrink-0 font-mono">
         <div className="flex items-center gap-2 overflow-hidden truncate">
           <MethodBadge method={item.method} />
-          <StatusBadge code={item.statusCode} isFailed={item.isFailed} />
-          {item.isIntercepted && (
+          <StatusBadge
+            code={item.statusCode}
+            isFailed={isFailed}
+            isPending={isPendingResponse}
+            isInterceptedPending={isPendingIntercept}
+          />
+          {isPendingIntercept && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 shrink-0 animate-pulse">
+              PAUSED IN INTERCEPTOR
+            </span>
+          )}
+          {isPendingResponse && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/40 shrink-0 animate-pulse">
+              WAITING FOR RESPONSE...
+            </span>
+          )}
+          {item.isIntercepted && !isPendingIntercept && (
             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0">
               INTERCEPTED
             </span>
@@ -295,7 +314,7 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
               REWRITTEN
             </span>
           )}
-          {item.isFailed && (
+          {isFailed && (
             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 shrink-0">
               FAILED (NO RESPONSE)
             </span>
@@ -304,8 +323,12 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-muted-foreground text-[11px]">{item.durationMs}ms</span>
-          <span className="text-muted-foreground text-[11px]">{item.size} bytes</span>
+          <span className="text-muted-foreground text-[11px]">
+            {isPendingResponse || isPendingIntercept ? '...' : item.durationMs != null ? `${item.durationMs}ms` : '-'}
+          </span>
+          <span className="text-muted-foreground text-[11px]">
+            {isPendingResponse || isPendingIntercept ? '-' : `${item.size} bytes`}
+          </span>
 
           {/* Layout Split Mode Switcher */}
           <button
