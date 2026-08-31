@@ -7,6 +7,23 @@ function generateId(): string {
 }
 
 /**
+ * Checks if a string is a valid JSON object or array.
+ */
+export function isJsonString(str?: string | null): boolean {
+  if (!str || !str.trim()) return false;
+  const trimmed = str.trim();
+  if (!((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']')))) {
+    return false;
+  }
+  try {
+    JSON.parse(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Converts JSON string into Multipart (form-data) JSON string.
  */
 export function convertJsonToFormData(jsonStr: string): string {

@@ -8,6 +8,7 @@ import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { JsonTreeViewerRoot } from '../../common/JsonTreeViewer';
 import { MediaResponsePreview } from '../../common/MediaResponsePreview';
 import { detectMediaResponse } from '../../../utils/mediaDetector';
+import { isJsonString } from '../../../utils/bodyConverters';
 import { getRequestHistories, isTauriAvailable, type RequestHistoryItem } from '../../../services/tauri/bridge';
 
 interface CollectionResponseViewerProps {
@@ -55,28 +56,39 @@ export const CollectionResponseViewer: React.FC<CollectionResponseViewerProps> =
     [currentResponseBody, currentResponseHeaders]
   );
 
+  const isJson = useMemo(() => {
+    if (!currentResponseBody) return false;
+    const hasJsonHeader = (currentResponseHeaders || []).some(
+      (h) => h.key?.toLowerCase() === 'content-type' && h.value?.toLowerCase().includes('json')
+    );
+    if (hasJsonHeader) return true;
+    return isJsonString(currentResponseBody);
+  }, [currentResponseBody, currentResponseHeaders]);
+
   // Auto-switch to preview when media is detected
   useEffect(() => {
     if (mediaInfo) {
       setBodyFormat('preview');
-    } else {
+    } else if (bodyFormat === 'tree' && !isJson) {
       setBodyFormat('pretty');
     }
-  }, [mediaInfo, selectedHistoryId, latestResult]);
+  }, [mediaInfo, isJson, selectedHistoryId, latestResult]);
 
   const availableFormats = useMemo(() => {
     const list: Array<{ value: string; label: string }> = [];
     if (mediaInfo) {
       list.push({ value: 'preview', label: `Preview (${mediaInfo.previewType.toUpperCase()})` });
     }
+    list.push({ value: 'pretty', label: 'Pretty' });
+    if (isJson) {
+      list.push({ value: 'tree', label: 'Tree' });
+    }
     list.push(
-      { value: 'pretty', label: 'Pretty' },
-      { value: 'tree', label: 'Tree' },
       { value: 'raw', label: 'Raw' },
       { value: 'hex', label: 'Hex' }
     );
     return list;
-  }, [mediaInfo]);
+  }, [mediaInfo, isJson]);
 
   if (isLoading) {
     return (

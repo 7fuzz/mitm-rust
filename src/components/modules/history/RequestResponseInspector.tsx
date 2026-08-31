@@ -8,7 +8,9 @@ import { HexViewer } from '../../common/HexViewer';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { SegmentedControl } from '../../common/ui';
 import { MediaResponsePreview } from '../../common/MediaResponsePreview';
+import { JsonTreeViewerRoot } from '../../common/JsonTreeViewer';
 import { detectMediaResponse } from '../../../utils/mediaDetector';
+import { isJsonString } from '../../../utils/bodyConverters';
 
 const REQ_TABS = [
   { value: 'body', label: 'Body' },
@@ -37,6 +39,11 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
   const [reqTab, setReqTab] = useState<'headers' | 'body' | 'params' | 'cookies'>('body');
   const [resTab, setResTab] = useState<'headers' | 'body' | 'cookies'>('body');
 
+  const [reqTreeSearch, setReqTreeSearch] = useState('');
+  const [reqTreeFilterMode, setReqTreeFilterMode] = useState(false);
+  const [resTreeSearch, setResTreeSearch] = useState('');
+  const [resTreeFilterMode, setResTreeFilterMode] = useState(false);
+
   const reqMediaInfo = useMemo(() => {
     if (!item) return null;
     return detectMediaResponse(item.requestBody, item.requestHeaders);
@@ -47,6 +54,24 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
     return detectMediaResponse(item.responseBody, item.responseHeaders);
   }, [item?.responseBody, item?.responseHeaders]);
 
+  const isReqJson = useMemo(() => {
+    if (!item?.requestBody) return false;
+    const hasJsonHeader = (item.requestHeaders || []).some(
+      (h) => h.key?.toLowerCase() === 'content-type' && h.value?.toLowerCase().includes('json')
+    );
+    if (hasJsonHeader) return true;
+    return isJsonString(item.requestBody);
+  }, [item?.requestBody, item?.requestHeaders]);
+
+  const isResJson = useMemo(() => {
+    if (!item?.responseBody) return false;
+    const hasJsonHeader = (item.responseHeaders || []).some(
+      (h) => h.key?.toLowerCase() === 'content-type' && h.value?.toLowerCase().includes('json')
+    );
+    if (hasJsonHeader) return true;
+    return isJsonString(item.responseBody);
+  }, [item?.responseBody, item?.responseHeaders]);
+
   // Independent body format state for Request vs Response
   const [reqBodyFormat, setReqBodyFormat] = useState<string>('pretty');
   const [resBodyFormat, setResBodyFormat] = useState<string>('pretty');
@@ -55,45 +80,51 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
   useEffect(() => {
     if (resMediaInfo) {
       setResBodyFormat('preview');
-    } else {
+    } else if (resBodyFormat === 'tree' && !isResJson) {
       setResBodyFormat('pretty');
     }
-  }, [resMediaInfo, item?.id]);
+  }, [resMediaInfo, isResJson, item?.id]);
 
   useEffect(() => {
     if (reqMediaInfo) {
       setReqBodyFormat('preview');
-    } else {
+    } else if (reqBodyFormat === 'tree' && !isReqJson) {
       setReqBodyFormat('pretty');
     }
-  }, [reqMediaInfo, item?.id]);
+  }, [reqMediaInfo, isReqJson, item?.id]);
 
   const reqBodyFormats = useMemo(() => {
     const list: Array<{ value: string; label: string }> = [];
     if (reqMediaInfo) {
       list.push({ value: 'preview', label: `Preview (${reqMediaInfo.previewType.toUpperCase()})` });
     }
+    list.push({ value: 'pretty', label: 'Pretty' });
+    if (isReqJson) {
+      list.push({ value: 'tree', label: 'Tree' });
+    }
     list.push(
-      { value: 'pretty', label: 'Pretty' },
       { value: 'raw', label: 'Raw' },
       { value: 'hex', label: 'Hex' }
     );
     return list;
-  }, [reqMediaInfo]);
+  }, [reqMediaInfo, isReqJson]);
 
   const resBodyFormats = useMemo(() => {
     const list: Array<{ value: string; label: string }> = [];
     if (resMediaInfo) {
       list.push({ value: 'preview', label: `Preview (${resMediaInfo.previewType.toUpperCase()})` });
     }
+    list.push({ value: 'pretty', label: 'Pretty' });
+    if (isResJson) {
+      list.push({ value: 'tree', label: 'Tree' });
+    }
     list.push(
-      { value: 'pretty', label: 'Pretty' },
       { value: 'raw', label: 'Raw' },
       { value: 'hex', label: 'Hex' },
       { value: 'html', label: 'HTML' }
     );
     return list;
-  }, [resMediaInfo]);
+  }, [resMediaInfo, isResJson]);
 
   // Draggable width/height split between Request and Response panels
   const [reqWidthPercent, setReqWidthPercent] = useState<number>(50);
@@ -186,7 +217,47 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
       return <div className="p-4 text-muted-foreground italic text-xs">No body content</div>;
     }
 
-    if (format === 'pretty') {
+    if (format === 'tree') {
+      const isReq = bodyText === item?.requestBody;
+      const search = isReq ? reqTreeSearch : resTreeSearch;
+      const setSearch = isReq ? setReqTreeSearch : setResTreeSearch;
+      const filterMode = isReq ? reqTreeFilterMode : resTreeFilterMode;
+      const setFilterMode = isReq ? setReqTreeFilterMode : setResTreeFilterMode;
+
+      try {
+        const parsed = JSON.parse(bodyText);
+        return (
+          <div className="h-full flex flex-col gap-2 overflow-hidden p-1">
+            <div className="flex items-center gap-2 font-mono text-xs">
+              <input
+                type="text"
+                placeholder="Search JSON tree..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground focus:outline-none focus:border-primary w-48"
+              />
+              <button
+                type="button"
+                onClick={() => setFilterMode(!filterMode)}
+                className={`px-2 py-0.5 text-[10px] font-bold rounded border cursor-pointer ${
+                  filterMode
+                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                    : 'bg-background text-muted-foreground border-border hover:text-foreground'
+                }`}
+                title="Filter mode: show matching nodes only"
+              >
+                {filterMode ? 'Filter On' : 'Filter Off'}
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto bg-background p-2 rounded border border-border font-mono">
+              <JsonTreeViewerRoot value={parsed} searchTerm={search} filterMode={filterMode} />
+            </div>
+          </div>
+        );
+      } catch {
+        return <CodeEditor value={bodyText} language="plaintext" readOnly />;
+      }
+    } else if (format === 'pretty') {
       try {
         const parsed = JSON.parse(bodyText);
         const prettyJson = JSON.stringify(parsed, null, 2);

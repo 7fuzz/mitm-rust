@@ -8,6 +8,7 @@ import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { JsonTreeViewerRoot } from '../../common/JsonTreeViewer';
 import { MediaResponsePreview } from '../../common/MediaResponsePreview';
 import { detectMediaResponse } from '../../../utils/mediaDetector';
+import { isJsonString } from '../../../utils/bodyConverters';
 
 interface ResponsePanelProps {
   response: RepeaterHistoryItem | RepeaterExecutionResult | null;
@@ -43,29 +44,40 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
     [response, responseBody, responseHeaders]
   );
 
+  const isJson = useMemo(() => {
+    if (!responseBody) return false;
+    const hasJsonHeader = (responseHeaders || []).some(
+      (h) => h.key?.toLowerCase() === 'content-type' && h.value?.toLowerCase().includes('json')
+    );
+    if (hasJsonHeader) return true;
+    return isJsonString(responseBody);
+  }, [responseBody, responseHeaders]);
+
   // Auto-switch to preview when media is detected
   useEffect(() => {
     if (mediaInfo) {
       setBodyFormat('preview');
-    } else {
+    } else if (bodyFormat === 'tree' && !isJson) {
       setBodyFormat('pretty');
     }
-  }, [mediaInfo, response]);
+  }, [mediaInfo, isJson, response]);
 
   const availableFormats = useMemo(() => {
     const list: Array<{ value: string; label: string }> = [];
     if (mediaInfo) {
       list.push({ value: 'preview', label: `Preview (${mediaInfo.previewType.toUpperCase()})` });
     }
+    list.push({ value: 'pretty', label: 'Pretty' });
+    if (isJson) {
+      list.push({ value: 'tree', label: 'Tree' });
+    }
     list.push(
-      { value: 'pretty', label: 'Pretty' },
-      { value: 'tree', label: 'Tree' },
       { value: 'raw', label: 'Raw' },
       { value: 'hex', label: 'Hex' },
       { value: 'html', label: 'HTML' }
     );
     return list;
-  }, [mediaInfo]);
+  }, [mediaInfo, isJson]);
 
   if (!response) {
     return (
