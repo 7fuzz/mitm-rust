@@ -100,6 +100,8 @@ pub struct ProxyConfig {
     pub proxy_mode: String,     // 'on', 'off', 'block_client', 'block'
     pub port: u16,
     pub host: String,
+    #[serde(default)]
+    pub ws_mitm_enabled: bool,
 }
 
 impl Default for ProxyConfig {
@@ -111,6 +113,7 @@ impl Default for ProxyConfig {
             proxy_mode: "on".to_string(),
             port: 8080,
             host: "0.0.0.0".to_string(),
+            ws_mitm_enabled: false,
         }
     }
 }
@@ -324,6 +327,10 @@ impl AppState {
             .and_then(|v| v.parse::<u32>().ok())
             .unwrap_or(500);
 
+        let initial_ws_mitm_enabled = crate::db::get_preference(&db_path, "ws_mitm_enabled")
+            .map(|v| v == "true")
+            .unwrap_or(false);
+
         let initial_rules = crate::db::load_intercept_rules(&db_path).unwrap_or_default();
         let initial_rewrite_rules = crate::db::load_rewrite_rules(&db_path).unwrap_or_default();
 
@@ -334,6 +341,7 @@ impl AppState {
             proxy_mode: initial_proxy_mode,
             port: initial_port,
             host: initial_host,
+            ws_mitm_enabled: initial_ws_mitm_enabled,
         };
 
         let history_settings = HistorySettings {

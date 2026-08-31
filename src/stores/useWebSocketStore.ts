@@ -8,6 +8,8 @@ import {
   sendWsMessage,
   clearWsMessages,
   deleteWsConnection,
+  getProxyState,
+  setWsMitmEnabled,
   isTauriAvailable,
 } from '../services/tauri/ipc';
 import { listenWsMessageCaptured, listenWsConnectionEvent } from '../services/tauri/events';
@@ -15,6 +17,7 @@ import { listenWsMessageCaptured, listenWsConnectionEvent } from '../services/ta
 interface WebSocketState {
   isInitialized: boolean;
   isLoading: boolean;
+  wsMitmEnabled: boolean;
   connections: WebSocketConn[];
   selectedConnectionId: string | null;
   messages: Record<string, WebSocketMessage[]>;
@@ -27,6 +30,7 @@ interface WebSocketState {
 
   initialize: () => Promise<void>;
   fetchConnections: () => Promise<void>;
+  toggleWsMitm: (enabled?: boolean) => Promise<void>;
   selectConnection: (id: string | null) => Promise<void>;
   createClientConnection: (url: string, headers?: [string, string][]) => Promise<WebSocketConn | undefined>;
   disconnectConnection: (id: string) => Promise<void>;
@@ -43,6 +47,7 @@ interface WebSocketState {
 export const useWebSocketStore = create<WebSocketState>((set, get) => ({
   isInitialized: false,
   isLoading: false,
+  wsMitmEnabled: false,
   connections: [],
   selectedConnectionId: null,
   messages: {},
@@ -53,11 +58,24 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
   selectedMessageId: null,
   isConnecting: false,
 
+  toggleWsMitm: async (enabled) => {
+    const nextVal = enabled !== undefined ? enabled : !get().wsMitmEnabled;
+    try {
+      const cfg = await setWsMitmEnabled(nextVal);
+      set({ wsMitmEnabled: Boolean(cfg.wsMitmEnabled) });
+    } catch (err) {
+      console.error('Failed to toggle WS MITM:', err);
+      set({ wsMitmEnabled: nextVal });
+    }
+  },
+
   initialize: async () => {
     if (get().isInitialized) return;
     set({ isInitialized: true, isLoading: true });
 
     try {
+      const proxyCfg = await getProxyState();
+      set({ wsMitmEnabled: Boolean(proxyCfg.wsMitmEnabled) });
       if (isTauriAvailable()) {
         await listenWsMessageCaptured((payload: WebSocketMessageCapturedPayload) => {
           const msg = payload.message;

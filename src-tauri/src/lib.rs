@@ -101,6 +101,7 @@ pub fn run() {
             commands::proxy_cmd::toggle_proxy_legacy,
             commands::proxy_cmd::get_proxy_status,
             commands::proxy_cmd::update_network_settings,
+            commands::proxy_cmd::set_ws_mitm_enabled,
             commands::intercept_cmd::toggle_interceptor,
             commands::intercept_cmd::update_intercept_rules,
             commands::intercept_cmd::get_intercept_rules,

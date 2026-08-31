@@ -203,7 +203,7 @@ async fn handle_http(
         .https_or_http()
         .enable_http1()
         .build();
-    let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new()).build(https);
+    let ws_mitm_enabled = { state.proxy_config.read().await.ws_mitm_enabled };
 
     if is_websocket_upgrade(req.headers()) {
         let method = req.method().clone();
@@ -264,27 +264,33 @@ async fn handle_http(
                         let client_upgraded = match hyper::upgrade::on(req).await {
                             Ok(up) => up,
                             Err(e) => {
-                                eprintln!("[WS MITM] Error upgrading client connection {}: {}", url_clone, e);
+                                eprintln!("[WS Proxy] Error upgrading client connection {}: {}", url_clone, e);
                                 return;
                             }
                         };
                         let server_upgraded = match hyper::upgrade::on(res).await {
                             Ok(up) => up,
                             Err(e) => {
-                                eprintln!("[WS MITM] Error upgrading server connection {}: {}", url_clone, e);
+                                eprintln!("[WS Proxy] Error upgrading server connection {}: {}", url_clone, e);
                                 return;
                             }
                         };
 
-                        crate::ws::proxy_pipe::bridge_proxied_websocket(
-                            TokioIo::new(client_upgraded),
-                            TokioIo::new(server_upgraded),
-                            url_clone,
-                            None,
-                            subprotocol_clone,
-                            app_handle_clone,
-                            state_clone,
-                        ).await;
+                        if ws_mitm_enabled {
+                            crate::ws::proxy_pipe::bridge_proxied_websocket(
+                                TokioIo::new(client_upgraded),
+                                TokioIo::new(server_upgraded),
+                                url_clone,
+                                None,
+                                subprotocol_clone,
+                                app_handle_clone,
+                                state_clone,
+                            ).await;
+                        } else {
+                            let mut c_io = TokioIo::new(client_upgraded);
+                            let mut s_io = TokioIo::new(server_upgraded);
+                            let _ = tokio::io::copy_bidirectional(&mut c_io, &mut s_io).await;
+                        }
                     });
 
                     return Ok(client_res);

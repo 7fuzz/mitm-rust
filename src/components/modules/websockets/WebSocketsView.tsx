@@ -28,6 +28,8 @@ export const WebSocketsView: React.FC = () => {
     disconnectConnection,
     deleteConnection,
     isConnecting,
+    wsMitmEnabled,
+    toggleWsMitm,
   } = useWebSocketStore();
 
   const [activeTab, setActiveTab] = useState<'pretty' | 'raw' | 'hex' | 'info'>('pretty');
@@ -223,6 +225,35 @@ export const WebSocketsView: React.FC = () => {
           ))}
         </div>
 
+        {/* WS Proxy MITM Interception Toggle Banner */}
+        <div className="px-3 py-2 bg-neutral-subtle/40 border-b border-border/70 flex items-center justify-between">
+          <div className="flex items-center gap-1.5 overflow-hidden">
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                wsMitmEnabled ? 'bg-cyan-500 animate-pulse' : 'bg-slate-400'
+              }`}
+            />
+            <span className="text-[11px] font-medium text-foreground">Proxy MITM:</span>
+            <span
+              className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase border ${
+                wsMitmEnabled
+                  ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/30'
+                  : 'bg-neutral-subtle text-muted-foreground border-border'
+              }`}
+            >
+              {wsMitmEnabled ? 'Active' : 'Disabled'}
+            </span>
+          </div>
+
+          <Button
+            variant={wsMitmEnabled ? 'destructive' : 'primary'}
+            size="xs"
+            onClick={() => toggleWsMitm()}
+          >
+            {wsMitmEnabled ? 'Disable' : 'Enable'}
+          </Button>
+        </div>
+
         {/* Stream List */}
         <div className="flex-1 overflow-y-auto divide-y divide-border/60">
           {filteredConnections.length === 0 ? (
@@ -230,7 +261,9 @@ export const WebSocketsView: React.FC = () => {
               <MingCuteIcon name="websocket_line" size={24} className="opacity-40 mx-auto" />
               <p>No WebSocket streams available.</p>
               <p className="text-[10px]">
-                Proxy WebSocket traffic through MITM or click "+ Connect" to establish a direct client connection.
+                {wsMitmEnabled
+                  ? 'Proxy WebSocket traffic through MITM or click "+ Connect" to establish a direct client connection.'
+                  : 'Enable Proxy MITM above to intercept proxied WebSocket frames, or click "+ Connect" for client studio.'}
               </p>
             </div>
           ) : (

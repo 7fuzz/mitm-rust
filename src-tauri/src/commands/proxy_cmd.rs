@@ -196,3 +196,17 @@ pub async fn update_network_settings(
     let cfg = state.proxy_config.read().await;
     Ok(cfg.clone())
 }
+
+#[tauri::command]
+pub async fn set_ws_mitm_enabled(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<ProxyConfig, String> {
+    {
+        let mut cfg = state.proxy_config.write().await;
+        cfg.ws_mitm_enabled = enabled;
+    }
+    let _ = set_preference(&state.db_path, "ws_mitm_enabled", if enabled { "true" } else { "false" });
+    let cfg = state.proxy_config.read().await;
+    Ok(cfg.clone())
+}

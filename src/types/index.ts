@@ -221,10 +221,21 @@ export interface WebhookDeliveryCapturedPayload {
   endpointHitCount: number;
 }
 
+export interface ProxyConfig {
+  proxyEnabled: boolean;
+  interceptEnabled: boolean;
+  interceptMode: string;
+  proxyMode: string;
+  port: number;
+  host: string;
+  wsMitmEnabled?: boolean;
+}
+
 export interface ProxyStatus {
   mode: 'normal' | 'intercept' | 'off';
   bindings: string[];
   activeCount?: number;
+  wsMitmEnabled?: boolean;
 }
 
 export interface AppPreferences {

@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
   TrafficItem,
+  ProxyConfig,
   ProxyStatus,
   InterceptConfig,
   InterceptRule,
@@ -256,6 +257,30 @@ export async function clearWsMessages(connectionId?: string): Promise<void> {
 
 export async function deleteWsConnection(connectionId: string): Promise<void> {
   return safeInvoke<void>('delete_ws_connection', { connectionId });
+}
+
+export async function setWsMitmEnabled(enabled: boolean): Promise<ProxyConfig> {
+  return safeInvoke<ProxyConfig>('set_ws_mitm_enabled', { enabled }, {
+    proxyEnabled: true,
+    interceptEnabled: false,
+    interceptMode: 'request',
+    proxyMode: 'on',
+    port: 8080,
+    host: '0.0.0.0',
+    wsMitmEnabled: enabled,
+  });
+}
+
+export async function getProxyState(): Promise<ProxyConfig> {
+  return safeInvoke<ProxyConfig>('get_proxy_state', undefined, {
+    proxyEnabled: true,
+    interceptEnabled: false,
+    interceptMode: 'request',
+    proxyMode: 'on',
+    port: 8080,
+    host: '0.0.0.0',
+    wsMitmEnabled: false,
+  });
 }
 
 // Webhooks
