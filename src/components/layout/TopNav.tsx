@@ -14,7 +14,7 @@ interface NavTabItem {
 }
 
 const NAV_TABS: NavTabItem[] = [
-  { id: 'http-history', label: 'HTTP History', shortcut: '1', icon: 'history_line' },
+  { id: 'http-history', label: 'History', shortcut: '1', icon: 'history_line' },
   { id: 'intercept', label: 'Intercept', shortcut: '2', icon: 'shield_line' },
   { id: 'rewrite', label: 'Rewrite', shortcut: '3', icon: 'transfer_line' },
   { id: 'repeater', label: 'Repeater', shortcut: '4', icon: 'repeat_line' },
