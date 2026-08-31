@@ -119,15 +119,32 @@ export const WebhooksView: React.FC = () => {
                 <span className="text-[11px] text-muted-foreground">Embedded HTTP Listener</span>
               </div>
             </div>
-            <Button
-              variant={listenerConfig.is_running ? 'success' : 'secondary'}
-              size="xs"
-              onClick={toggleServer}
-              className="font-bold tracking-wide"
-              icon="power_line"
-            >
-              {listenerConfig.is_running ? 'LISTENING' : 'STOPPED'}
-            </Button>
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                  listenerConfig.is_running
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                    : 'bg-neutral-subtle text-muted-foreground border-border'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    listenerConfig.is_running ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                  }`}
+                />
+                <span>{listenerConfig.is_running ? 'Listening' : 'Stopped'}</span>
+              </span>
+
+              <Button
+                variant={listenerConfig.is_running ? 'secondary' : 'primary'}
+                size="xs"
+                onClick={toggleServer}
+                className="font-medium"
+                icon={listenerConfig.is_running ? 'power_line' : 'play_line'}
+              >
+                {listenerConfig.is_running ? 'Disable' : 'Enable'}
+              </Button>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 font-mono bg-background/50 border border-border/60 rounded px-2.5 py-1.5">
