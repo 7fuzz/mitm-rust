@@ -1,5 +1,6 @@
 pub mod actor;
 pub mod migrations;
+pub mod webhook_db;
 
 use tauri::AppHandle;
 use tauri::Manager;

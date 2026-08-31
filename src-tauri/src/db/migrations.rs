@@ -54,6 +54,11 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         name: "20260831_0009_history_flags",
         sql: include_str!("../../migrations/20260831_0009_history_flags.sql"),
     },
+    MigrationSpec {
+        version: 10,
+        name: "20260831_0010_webhooks",
+        sql: include_str!("../../migrations/20260831_0010_webhooks.sql"),
+    },
 ];
 
 #[derive(Clone, Serialize, Debug)]
