@@ -4,7 +4,6 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
 use serde::{Deserialize, Serialize};
-use tungstenite::Message;
 use crate::db::InterceptRule;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
