@@ -43,3 +43,6 @@ dashmap = "6"
 regex = "1"
 chrono = { version = "0.4", features = ["serde"] }
 url = "2"
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots", "connect", "handshake"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std", "async-await"] }
+

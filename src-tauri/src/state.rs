@@ -211,9 +211,49 @@ pub struct WebhookSignatureResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WebhookDeliveryCapturedEvent {
-    pub delivery: WebhookDelivery,
-    pub endpoint_hit_count: u64,
+pub struct WebSocketConn {
+    pub connection_id: String,
+    pub url: String,
+    pub status: String,
+    pub handshake_time: i64,
+    #[serde(default)]
+    pub closed_at: Option<i64>,
+    #[serde(default)]
+    pub protocol: Option<String>,
+    #[serde(default)]
+    pub client_addr: Option<String>,
+    #[serde(default)]
+    pub is_client_session: bool,
+    #[serde(default)]
+    pub message_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebSocketMessage {
+    pub id: String,
+    pub connection_id: String,
+    pub direction: String, // "to_client" | "to_server"
+    pub msg_type: String,  // "text" | "json" | "binary"
+    pub payload: String,
+    pub timestamp: i64,
+    #[serde(default)]
+    pub length: usize,
+    #[serde(default)]
+    pub is_injected: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebSocketMessageCapturedEvent {
+    pub message: WebSocketMessage,
+    pub message_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebSocketConnectionEvent {
+    pub connection: WebSocketConn,
+    pub event_type: String, // "opened" | "closed"
 }
 
 #[derive(Clone)]
@@ -233,6 +273,9 @@ pub struct AppState {
     pub webhook_running: Arc<AtomicBool>,
     pub webhook_port: Arc<RwLock<u16>>,
     pub webhook_stop_signal: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub ws_stream_senders: Arc<DashMap<String, (tokio::sync::mpsc::UnboundedSender<tungstenite::Message>, tokio::sync::mpsc::UnboundedSender<tungstenite::Message>)>>,
+    pub ws_client_senders: Arc<DashMap<String, tokio::sync::mpsc::UnboundedSender<tungstenite::Message>>>,
+    pub ws_client_stops: Arc<DashMap<String, Arc<Mutex<Option<oneshot::Sender<()>>>>>>,
 }
 
 impl AppState {
@@ -307,6 +350,9 @@ impl AppState {
             webhook_running: Arc::new(AtomicBool::new(false)),
             webhook_port: Arc::new(RwLock::new(initial_webhook_port)),
             webhook_stop_signal: Arc::new(Mutex::new(None)),
+            ws_stream_senders: Arc::new(DashMap::new()),
+            ws_client_senders: Arc::new(DashMap::new()),
+            ws_client_stops: Arc::new(DashMap::new()),
         }
     }
 

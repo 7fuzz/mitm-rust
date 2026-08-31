@@ -8,6 +8,7 @@ pub mod repeater;
 pub mod state;
 pub mod webhook;
 pub mod workspace;
+pub mod ws;
 
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
@@ -160,6 +161,14 @@ pub fn run() {
             commands::webhook_cmd::stop_webhook_listener,
             commands::webhook_cmd::calculate_webhook_signature,
             commands::webhook_cmd::replay_webhook_delivery,
+
+            commands::ws_cmd::get_ws_connections,
+            commands::ws_cmd::get_ws_messages,
+            commands::ws_cmd::connect_ws_client,
+            commands::ws_cmd::disconnect_ws_client,
+            commands::ws_cmd::send_ws_message,
+            commands::ws_cmd::clear_ws_messages,
+            commands::ws_cmd::delete_ws_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
