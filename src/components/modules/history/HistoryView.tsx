@@ -8,7 +8,8 @@ import { MethodBadge } from '../../common/MethodBadge';
 import { StatusBadge } from '../../common/StatusBadge';
 import { ContextMenu, ContextMenuItem } from '../../common/ContextMenu';
 import type { TrafficItem } from '../../../types';
-import { formatReqAndRes } from '../../../utils/reqResFormatter';
+import { formatReqAndRes, formatRawCurl, formatUrlBodyAndRes } from '../../../utils/reqResFormatter';
+import { CopyCustomModal } from './CopyCustomModal';
 
 export const HistoryView: React.FC = () => {
   const {
@@ -30,6 +31,7 @@ export const HistoryView: React.FC = () => {
   const { layoutMode, setLayoutMode, setActiveModule } = useSettingsStore();
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: TrafficItem } | null>(null);
+  const [customCopyItem, setCustomCopyItem] = useState<TrafficItem | null>(null);
 
   // Initialize store with backend history and live event listeners
   React.useEffect(() => {
@@ -111,7 +113,7 @@ export const HistoryView: React.FC = () => {
     });
   }, [traffic, searchQuery, selectedMethods, methodFilters, statusCodeRange, onlyIntercepted, onlyRewritten, onlyFailed]);
 
-  const selectedItem = traffic.find((t) => t.id === selectedTrafficId) || null;
+  const selectedItem = traffic.find((i) => i.id === selectedTrafficId) || null;
 
   const handleContextMenu = (e: React.MouseEvent, item: TrafficItem) => {
     e.preventDefault();
@@ -139,13 +141,7 @@ export const HistoryView: React.FC = () => {
   };
 
   const handleCopyAsCurl = (item: TrafficItem) => {
-    let curl = `curl -X ${item.method} "${item.url}"`;
-    item.requestHeaders.forEach((h) => {
-      curl += ` \\\n  -H "${h.key}: ${h.value}"`;
-    });
-    if (item.requestBody) {
-      curl += ` \\\n  --data '${item.requestBody.replace(/'/g, "'\\''")}'`;
-    }
+    const curl = formatRawCurl(item);
     navigator.clipboard.writeText(curl);
   };
 
@@ -154,12 +150,29 @@ export const HistoryView: React.FC = () => {
     navigator.clipboard.writeText(formatted);
   };
 
+  const handleCopyUrlBodyAndRes = (item: TrafficItem) => {
+    const formatted = formatUrlBodyAndRes(item);
+    navigator.clipboard.writeText(formatted);
+  };
+
   const getContextMenuItems = (item: TrafficItem): ContextMenuItem[] => [
     { label: 'Send to Repeater', icon: 'send_plane_line', action: () => handleSendToRepeater(item) },
     { label: 'Add to Collection', icon: 'folder_line', action: () => handleAddToCollection(item) },
     { label: 'Add to Intercept Rules', icon: 'shield_line', action: () => handleAddInterceptRule(item) },
-    { label: 'Copy as cURL', icon: 'copy_line', action: () => handleCopyAsCurl(item) },
-    { label: 'Copy req and res', icon: 'transfer_line', action: () => handleCopyReqAndRes(item) },
+    {
+      label: 'Copy',
+      icon: 'copy_line',
+      children: [
+        { label: 'Copy Curl', icon: 'terminal_line', action: () => handleCopyAsCurl(item) },
+        { label: 'Copy Curl and Res', icon: 'transfer_line', action: () => handleCopyReqAndRes(item) },
+        {
+          label: 'Copy URL, Body, and Response',
+          icon: 'file_code_line',
+          action: () => handleCopyUrlBodyAndRes(item),
+        },
+        { label: 'Copy custom', icon: 'settings_3_line', action: () => setCustomCopyItem(item) },
+      ],
+    },
     { label: 'Delete Item', icon: 'delete_2_line', action: () => deleteTrafficItem(item.id), danger: true },
   ];
 
@@ -322,6 +335,13 @@ export const HistoryView: React.FC = () => {
           onClose={() => setContextMenu(null)}
         />
       )}
+
+      {/* Copy Custom Modal */}
+      <CopyCustomModal
+        isOpen={!!customCopyItem}
+        item={customCopyItem}
+        onClose={() => setCustomCopyItem(null)}
+      />
     </div>
   );
 };
