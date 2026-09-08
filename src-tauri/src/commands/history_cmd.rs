@@ -1,7 +1,7 @@
 use tauri::State;
 use rusqlite::Connection;
 use crate::db::{prune_history_logs, set_preference};
-use crate::state::{AppState, HistoryEntry, HistorySettings};
+use crate::state::{AppState, HistoryDetail, HistoryEntry, HistorySettings};
 
 #[tauri::command]
 pub async fn get_history_settings(
@@ -47,13 +47,24 @@ pub async fn get_history_logs(
     search_term: Option<String>,
     method_filter: Option<String>,
     status_filter: Option<u16>,
+    status_range: Option<String>,
+    only_intercepted: Option<bool>,
+    only_rewritten: Option<bool>,
+    only_failed: Option<bool>,
+    include_bodies: Option<bool>,
 ) -> Result<Vec<HistoryEntry>, String> {
     let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
 
     let offset = (page.saturating_sub(1)) * limit;
-    let mut query = String::from(
-        "SELECT id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0) FROM history WHERE 1=1"
-    );
+    let should_include_bodies = include_bodies.unwrap_or(false);
+
+    let select_fields = if should_include_bodies {
+        "id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0)"
+    } else {
+        "id, method, url, host, path, content_type, response_size, status_code, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0)"
+    };
+
+    let mut query = format!("SELECT {} FROM history WHERE 1=1", select_fields);
     let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
     if let Some(ref search) = search_term {
@@ -78,6 +89,28 @@ pub async fn get_history_logs(
         params.push(Box::new(status));
     }
 
+    if let Some(ref range) = status_range {
+        match range.as_str() {
+            "2xx" => query.push_str(" AND (status_code >= 200 AND status_code < 300)"),
+            "3xx" => query.push_str(" AND (status_code >= 300 AND status_code < 400)"),
+            "4xx" => query.push_str(" AND (status_code >= 400 AND status_code < 500)"),
+            "5xx" => query.push_str(" AND (status_code >= 500)"),
+            _ => {}
+        }
+    }
+
+    if let Some(true) = only_intercepted {
+        query.push_str(" AND COALESCE(is_intercepted, 0) = 1");
+    }
+
+    if let Some(true) = only_rewritten {
+        query.push_str(" AND COALESCE(is_rewritten, 0) = 1");
+    }
+
+    if let Some(true) = only_failed {
+        query.push_str(" AND COALESCE(is_failed, 0) = 1");
+    }
+
     query.push_str(" ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?");
     params.push(Box::new(limit));
     params.push(Box::new(offset));
@@ -85,8 +118,8 @@ pub async fn get_history_logs(
     let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
     let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
 
-    let logs = stmt
-        .query_map(&param_refs[..], |row| {
+    let logs = if should_include_bodies {
+        stmt.query_map(&param_refs[..], |row| {
             let req_headers_json: String = row.get(8)?;
             let res_headers_json: String = row.get(9)?;
             let request_body: String = row.get(10)?;
@@ -122,9 +155,143 @@ pub async fn get_history_logs(
         })
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
-        .collect();
+        .collect()
+    } else {
+        stmt.query_map(&param_refs[..], |row| {
+            let is_intercepted_int: i32 = row.get(11)?;
+            let is_rewritten_int: i32 = row.get(12)?;
+            let is_failed_int: i32 = row.get(13)?;
+
+            Ok(HistoryEntry {
+                id: row.get(0)?,
+                method: row.get(1)?,
+                url: row.get(2)?,
+                host: row.get(3)?,
+                path: row.get(4)?,
+                content_type: row.get(5)?,
+                response_size: row.get(6)?,
+                status_code: row.get(7)?,
+                request_headers: Vec::new(),
+                response_headers: Vec::new(),
+                request_body: String::new(),
+                response_body: String::new(),
+                phase: row.get(8)?,
+                duration_ms: row.get(9)?,
+                created_at: row.get(10)?,
+                is_intercepted: is_intercepted_int != 0,
+                is_rewritten: is_rewritten_int != 0,
+                is_failed: is_failed_int != 0,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect()
+    };
 
     Ok(logs)
+}
+
+#[tauri::command]
+pub async fn get_history_detail(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Option<crate::state::HistoryDetail>, String> {
+    let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT id, request_headers, response_headers, request_body, response_body FROM history WHERE id = ?")
+        .map_err(|e| e.to_string())?;
+
+    let mut rows = stmt
+        .query_map([&id], |row| {
+            let req_headers_json: String = row.get(1)?;
+            let res_headers_json: String = row.get(2)?;
+            let request_body: String = row.get(3)?;
+            let response_body: String = row.get(4)?;
+
+            let request_headers: Vec<(String, String)> = serde_json::from_str(&req_headers_json).unwrap_or_default();
+            let response_headers: Vec<(String, String)> = serde_json::from_str(&res_headers_json).unwrap_or_default();
+
+            Ok(crate::state::HistoryDetail {
+                id: row.get(0)?,
+                request_headers,
+                response_headers,
+                request_body,
+                response_body,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    if let Some(res) = rows.next() {
+        let detail = res.map_err(|e| e.to_string())?;
+        Ok(Some(detail))
+    } else {
+        Ok(None)
+    }
+}
+
+#[tauri::command]
+pub async fn get_history_count(
+    state: State<'_, AppState>,
+    search_term: Option<String>,
+    method_filter: Option<String>,
+    status_filter: Option<u16>,
+    status_range: Option<String>,
+    only_intercepted: Option<bool>,
+    only_rewritten: Option<bool>,
+    only_failed: Option<bool>,
+) -> Result<u64, String> {
+    let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
+    let mut query = String::from("SELECT COUNT(*) FROM history WHERE 1=1");
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+    if let Some(ref search) = search_term {
+        if !search.trim().is_empty() {
+            query.push_str(" AND (url LIKE ? OR host LIKE ? OR method LIKE ?)");
+            let pattern = format!("%{}%", search.trim());
+            params.push(Box::new(pattern.clone()));
+            params.push(Box::new(pattern.clone()));
+            params.push(Box::new(pattern));
+        }
+    }
+
+    if let Some(ref method) = method_filter {
+        if !method.trim().is_empty() && method.to_uppercase() != "ALL" {
+            query.push_str(" AND method = ?");
+            params.push(Box::new(method.to_uppercase()));
+        }
+    }
+
+    if let Some(status) = status_filter {
+        query.push_str(" AND status_code = ?");
+        params.push(Box::new(status));
+    }
+
+    if let Some(ref range) = status_range {
+        match range.as_str() {
+            "2xx" => query.push_str(" AND (status_code >= 200 AND status_code < 300)"),
+            "3xx" => query.push_str(" AND (status_code >= 300 AND status_code < 400)"),
+            "4xx" => query.push_str(" AND (status_code >= 400 AND status_code < 500)"),
+            "5xx" => query.push_str(" AND (status_code >= 500)"),
+            _ => {}
+        }
+    }
+
+    if let Some(true) = only_intercepted {
+        query.push_str(" AND COALESCE(is_intercepted, 0) = 1");
+    }
+
+    if let Some(true) = only_rewritten {
+        query.push_str(" AND COALESCE(is_rewritten, 0) = 1");
+    }
+
+    if let Some(true) = only_failed {
+        query.push_str(" AND COALESCE(is_failed, 0) = 1");
+    }
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    let count: u64 = stmt.query_row(&param_refs[..], |row| row.get(0)).map_err(|e| e.to_string())?;
+    Ok(count)
 }
 
 #[tauri::command]

@@ -71,6 +71,16 @@ pub struct HistoryEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct HistoryDetail {
+    pub id: String,
+    pub request_headers: Vec<(String, String)>,
+    pub response_headers: Vec<(String, String)>,
+    pub request_body: String,
+    pub response_body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistorySettings {
     pub limiter_enabled: bool,
     pub max_rows: u32,

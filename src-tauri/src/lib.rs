@@ -89,6 +89,8 @@ pub fn run() {
             commands::db_recovery_cmd::quit_application,
 
             commands::history_cmd::get_history_logs,
+            commands::history_cmd::get_history_detail,
+            commands::history_cmd::get_history_count,
             commands::history_cmd::clear_history_logs,
             commands::history_cmd::get_history_settings,
             commands::history_cmd::update_history_settings,

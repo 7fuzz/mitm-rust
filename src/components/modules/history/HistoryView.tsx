@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useProxyStore } from '../../../stores/useProxyStore';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
 import { useSettingsStore } from '../../../stores/useSettingsStore';
@@ -10,6 +10,9 @@ import { ContextMenu, ContextMenuItem } from '../../common/ContextMenu';
 import type { TrafficItem } from '../../../types';
 import { formatReqAndRes, formatRawCurl, formatUrlBodyAndRes } from '../../../utils/reqResFormatter';
 import { CopyCustomModal } from './CopyCustomModal';
+
+const ROW_HEIGHT = 29;
+const OVERSCAN = 10;
 
 export const HistoryView: React.FC = () => {
   const {
@@ -26,6 +29,12 @@ export const HistoryView: React.FC = () => {
     onlyFailed,
     addInterceptRule,
     initStore,
+    loadNextPage,
+    hasMore,
+    isLoadingMore,
+    fetchTrafficDetail,
+    trafficDetails,
+    deloadInactiveTraffic,
   } = useProxyStore();
   const { sendToRepeater } = useRepeaterStore();
   const { layoutMode, setLayoutMode, setActiveModule } = useSettingsStore();
@@ -113,20 +122,138 @@ export const HistoryView: React.FC = () => {
     });
   }, [traffic, searchQuery, selectedMethods, methodFilters, statusCodeRange, onlyIntercepted, onlyRewritten, onlyFailed]);
 
-  const selectedItem = traffic.find((i) => i.id === selectedTrafficId) || null;
+  // Virtualization state & refs
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(400);
+
+  // ResizeObserver for table viewport height
+  useEffect(() => {
+    const el = tableContainerRef.current;
+    if (!el) return;
+
+    const updateHeight = () => {
+      if (el.clientHeight > 0) {
+        setViewportHeight(el.clientHeight);
+      }
+    };
+    updateHeight();
+
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Optimized smooth scroll handler with requestAnimationFrame & infinite scroll trigger
+  const scrollRaf = useRef<number | null>(null);
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    const currentScrollTop = target.scrollTop;
+
+    if (scrollRaf.current) {
+      cancelAnimationFrame(scrollRaf.current);
+    }
+
+    scrollRaf.current = requestAnimationFrame(() => {
+      setScrollTop(currentScrollTop);
+
+      // Infinite scroll trigger: when user scrolls within 15 rows of the end
+      const totalVirtualHeight = filteredTraffic.length * ROW_HEIGHT;
+      const scrollBottom = currentScrollTop + target.clientHeight;
+      if (totalVirtualHeight - scrollBottom < 15 * ROW_HEIGHT) {
+        if (hasMore && !isLoadingMore) {
+          loadNextPage();
+        }
+      }
+    });
+  }, [filteredTraffic.length, hasMore, isLoadingMore, loadNextPage]);
+
+  // Inactivity Deloader: prune in-memory buffer after 60s of idle if user is at top of table or window is hidden
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const resetInactivityTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        const currentScroll = tableContainerRef.current?.scrollTop || 0;
+        if (currentScroll < 100 || document.visibilityState === 'hidden') {
+          deloadInactiveTraffic();
+        }
+      }, 60000);
+    };
+
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach((ev) => window.addEventListener(ev, resetInactivityTimer, { passive: true }));
+    document.addEventListener('visibilitychange', resetInactivityTimer);
+    resetInactivityTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      events.forEach((ev) => window.removeEventListener(ev, resetInactivityTimer));
+      document.removeEventListener('visibilitychange', resetInactivityTimer);
+    };
+  }, [deloadInactiveTraffic]);
+
+  // Compute virtual slice
+  const totalRows = filteredTraffic.length;
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+  const endIndex = Math.min(totalRows, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN);
+
+  const topSpacer = startIndex * ROW_HEIGHT;
+  const bottomSpacer = Math.max(0, (totalRows - endIndex) * ROW_HEIGHT);
+  const visibleRows = useMemo(() => {
+    return filteredTraffic.slice(startIndex, endIndex);
+  }, [filteredTraffic, startIndex, endIndex]);
+
+  // Build full item with lazy detail for Inspector
+  const selectedBaseItem = useMemo(() => {
+    return traffic.find((i) => i.id === selectedTrafficId) || null;
+  }, [traffic, selectedTrafficId]);
+
+  const selectedDetail = selectedTrafficId ? trafficDetails[selectedTrafficId] : null;
+
+  const selectedItemWithDetail = useMemo(() => {
+    if (!selectedBaseItem) return null;
+    if (!selectedDetail) return selectedBaseItem;
+    return {
+      ...selectedBaseItem,
+      requestHeaders: selectedDetail.requestHeaders.map(([k, v]) => ({ key: k, value: v })),
+      responseHeaders: selectedDetail.responseHeaders.map(([k, v]) => ({ key: k, value: v })),
+      requestBody: selectedDetail.requestBody,
+      responseBody: selectedDetail.responseBody,
+    };
+  }, [selectedBaseItem, selectedDetail]);
 
   const handleContextMenu = (e: React.MouseEvent, item: TrafficItem) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, item });
   };
 
+  // Helper to ensure item detail is loaded before copying or sending to repeater
+  const ensureFullItem = async (item: TrafficItem): Promise<TrafficItem> => {
+    if (item.requestBody || item.responseBody || item.requestHeaders.length > 0) {
+      return item;
+    }
+    const detail = await fetchTrafficDetail(item.id);
+    if (!detail) return item;
+    return {
+      ...item,
+      requestHeaders: detail.requestHeaders.map(([k, v]) => ({ key: k, value: v })),
+      responseHeaders: detail.responseHeaders.map(([k, v]) => ({ key: k, value: v })),
+      requestBody: detail.requestBody,
+      responseBody: detail.responseBody,
+    };
+  };
+
   const handleSendToRepeater = async (item: TrafficItem) => {
-    await sendToRepeater(item);
+    const full = await ensureFullItem(item);
+    await sendToRepeater(full);
     setActiveModule('repeater');
   };
 
   const handleAddToCollection = async (item: TrafficItem) => {
-    await sendToRepeater(item);
+    const full = await ensureFullItem(item);
+    await sendToRepeater(full);
     setActiveModule('collections');
   };
 
@@ -140,19 +267,27 @@ export const HistoryView: React.FC = () => {
     setActiveModule('intercept');
   };
 
-  const handleCopyAsCurl = (item: TrafficItem) => {
-    const curl = formatRawCurl(item);
+  const handleCopyAsCurl = async (item: TrafficItem) => {
+    const full = await ensureFullItem(item);
+    const curl = formatRawCurl(full);
     navigator.clipboard.writeText(curl);
   };
 
-  const handleCopyReqAndRes = (item: TrafficItem) => {
-    const formatted = formatReqAndRes(item);
+  const handleCopyReqAndRes = async (item: TrafficItem) => {
+    const full = await ensureFullItem(item);
+    const formatted = formatReqAndRes(full);
     navigator.clipboard.writeText(formatted);
   };
 
-  const handleCopyUrlBodyAndRes = (item: TrafficItem) => {
-    const formatted = formatUrlBodyAndRes(item);
+  const handleCopyUrlBodyAndRes = async (item: TrafficItem) => {
+    const full = await ensureFullItem(item);
+    const formatted = formatUrlBodyAndRes(full);
     navigator.clipboard.writeText(formatted);
+  };
+
+  const handleCustomCopy = async (item: TrafficItem) => {
+    const full = await ensureFullItem(item);
+    setCustomCopyItem(full);
   };
 
   const getContextMenuItems = (item: TrafficItem): ContextMenuItem[] => [
@@ -170,7 +305,7 @@ export const HistoryView: React.FC = () => {
           icon: 'file_code_line',
           action: () => handleCopyUrlBodyAndRes(item),
         },
-        { label: 'Copy custom', icon: 'settings_3_line', action: () => setCustomCopyItem(item) },
+        { label: 'Copy custom', icon: 'settings_3_line', action: () => handleCustomCopy(item) },
       ],
     },
     { label: 'Delete Item', icon: 'delete_2_line', action: () => deleteTrafficItem(item.id), danger: true },
@@ -188,8 +323,8 @@ export const HistoryView: React.FC = () => {
           className="flex flex-col border-b border-border bg-surface overflow-hidden min-h-[100px]"
           style={{ height: `${topHeightPercent}%` }}
         >
-          {/* Table Container */}
-          <div className="flex-1 overflow-auto">
+          {/* Virtualized Table Container */}
+          <div ref={tableContainerRef} onScroll={handleScroll} className="flex-1 overflow-auto">
             <table className="w-full text-left text-xs border-collapse table-fixed font-mono">
               <thead className="bg-header sticky top-0 border-b border-border text-[11px] font-medium text-muted-foreground select-none z-10 shadow-sm">
                 <tr>
@@ -204,100 +339,128 @@ export const HistoryView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
-                {filteredTraffic.length === 0 ? (
+                {totalRows === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-muted-foreground italic text-xs">
-                      No traffic items match the current filters
+                      {isLoadingMore ? 'Loading traffic logs...' : 'No traffic items match the current filters'}
                     </td>
                   </tr>
                 ) : (
-                  filteredTraffic.map((item, index) => {
-                    const isSelected = selectedTrafficId === item.id;
-                    const isPendingResponse = item.phase === 'request';
-                    const isPendingIntercept = item.phase === 'intercepted_request' || item.phase === 'intercepted_response';
-                    const isFailed = item.isFailed && !isPendingResponse && !isPendingIntercept;
-                    const isIntercepted = item.isIntercepted && !isPendingIntercept;
-                    const isRewritten = item.isRewritten;
+                  <>
+                    {/* Top Spacer Row */}
+                    {topSpacer > 0 && (
+                      <tr style={{ height: `${topSpacer}px`, pointerEvents: 'none' }}>
+                        <td colSpan={8} className="p-0 border-0" />
+                      </tr>
+                    )}
 
-                    const rowClass = isSelected
-                      ? 'bg-primary/15 text-foreground font-semibold ring-1 ring-inset ring-primary'
-                      : isPendingIntercept
-                      ? 'animate-pulse bg-amber-500/15 hover:bg-amber-500/25 text-foreground'
-                      : isPendingResponse
-                      ? 'animate-pulse bg-rose-500/10 hover:bg-rose-500/20 text-foreground'
-                      : isFailed
-                      ? 'bg-rose-500/5 hover:bg-rose-500/10 text-foreground'
-                      : isIntercepted
-                      ? 'bg-amber-500/5 hover:bg-amber-500/10 text-foreground'
-                      : isRewritten
-                      ? 'bg-sky-500/5 hover:bg-sky-500/10 text-foreground'
-                      : 'text-foreground hover:bg-neutral-subtle';
+                    {/* Rendered Visible Rows */}
+                    {visibleRows.map((item, relIndex) => {
+                      const index = startIndex + relIndex;
+                      const isSelected = selectedTrafficId === item.id;
+                      const isPendingResponse = item.phase === 'request';
+                      const isPendingIntercept = item.phase === 'intercepted_request' || item.phase === 'intercepted_response';
+                      const isFailed = item.isFailed && !isPendingResponse && !isPendingIntercept;
+                      const isIntercepted = item.isIntercepted && !isPendingIntercept;
+                      const isRewritten = item.isRewritten;
 
-                    return (
-                      <tr
-                        key={item.id}
-                        onClick={() => selectTrafficItem(item.id)}
-                        onContextMenu={(e) => handleContextMenu(e, item)}
-                        className={`cursor-pointer transition-colors ${rowClass}`}
-                      >
-                        <td className="py-1.5 px-2 text-center text-muted-foreground text-[10px]">{filteredTraffic.length - index}</td>
-                        <td className="py-1.5 px-2">
-                          <div className="flex items-center gap-1">
-                            <MethodBadge method={item.method} />
-                            {(isIntercepted || isPendingIntercept) && (
-                              <span
-                                className={`px-1 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 select-none ${
-                                  isPendingIntercept ? 'animate-pulse' : ''
-                                }`}
-                                title={isPendingIntercept ? 'Paused in Interceptor' : 'Intercepted manually'}
-                              >
-                                INT
-                              </span>
+                      const rowClass = isSelected
+                        ? 'bg-primary/15 text-foreground font-semibold ring-1 ring-inset ring-primary'
+                        : isPendingIntercept
+                        ? 'animate-pulse bg-amber-500/15 hover:bg-amber-500/25 text-foreground'
+                        : isPendingResponse
+                        ? 'animate-pulse bg-rose-500/10 hover:bg-rose-500/20 text-foreground'
+                        : isFailed
+                        ? 'bg-rose-500/5 hover:bg-rose-500/10 text-foreground'
+                        : isIntercepted
+                        ? 'bg-amber-500/5 hover:bg-amber-500/10 text-foreground'
+                        : isRewritten
+                        ? 'bg-sky-500/5 hover:bg-sky-500/10 text-foreground'
+                        : 'text-foreground hover:bg-neutral-subtle';
+
+                      return (
+                        <tr
+                          key={item.id}
+                          style={{ height: `${ROW_HEIGHT}px` }}
+                          onClick={() => selectTrafficItem(item.id)}
+                          onContextMenu={(e) => handleContextMenu(e, item)}
+                          className={`cursor-pointer transition-colors ${rowClass}`}
+                        >
+                          <td className="py-1 px-2 text-center text-muted-foreground text-[10px]">{totalRows - index}</td>
+                          <td className="py-1 px-2">
+                            <div className="flex items-center gap-1">
+                              <MethodBadge method={item.method} />
+                              {(isIntercepted || isPendingIntercept) && (
+                                <span
+                                  className={`px-1 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 select-none ${
+                                    isPendingIntercept ? 'animate-pulse' : ''
+                                  }`}
+                                  title={isPendingIntercept ? 'Paused in Interceptor' : 'Intercepted manually'}
+                                >
+                                  INT
+                                </span>
+                              )}
+                              {isRewritten && (
+                                <span
+                                  className="px-1 py-0.2 rounded text-[9px] font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 shrink-0 select-none"
+                                  title="Rewritten automatically"
+                                >
+                                  RW
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-1 px-2 text-foreground font-medium overflow-hidden">
+                            <div className="truncate" title={item.host}>{item.host}</div>
+                          </td>
+                          <td className="py-1 px-2 text-muted-foreground overflow-hidden">
+                            <div className="truncate" title={item.path}>{item.path}</div>
+                          </td>
+                          <td className="py-1 px-2 text-center">
+                            <StatusBadge
+                              code={item.statusCode}
+                              isFailed={isFailed}
+                              isPending={isPendingResponse}
+                              isInterceptedPending={isPendingIntercept}
+                            />
+                          </td>
+                          <td className="py-1 px-2 text-muted-foreground text-[11px] overflow-hidden">
+                            <div className="truncate" title={item.contentType}>{item.contentType || '-'}</div>
+                          </td>
+                          <td className="py-1 px-2 text-right text-muted-foreground text-[11px]">
+                            {isPendingResponse || isPendingIntercept ? '-' : item.size}
+                          </td>
+                          <td className="py-1 px-2 text-right text-muted-foreground text-[11px]">
+                            {isPendingResponse ? (
+                              <span className="text-rose-500 dark:text-rose-400 font-mono animate-pulse">...</span>
+                            ) : isPendingIntercept ? (
+                              <span className="text-amber-500 dark:text-amber-400 font-mono animate-pulse">...</span>
+                            ) : item.durationMs != null ? (
+                              `${item.durationMs}ms`
+                            ) : (
+                              '-'
                             )}
-                            {isRewritten && (
-                              <span
-                                className="px-1 py-0.2 rounded text-[9px] font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 shrink-0 select-none"
-                                title="Rewritten automatically"
-                              >
-                                RW
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-1.5 px-2 text-foreground font-medium overflow-hidden">
-                          <div className="truncate" title={item.host}>{item.host}</div>
-                        </td>
-                        <td className="py-1.5 px-2 text-muted-foreground overflow-hidden">
-                          <div className="truncate" title={item.path}>{item.path}</div>
-                        </td>
-                        <td className="py-1.5 px-2 text-center">
-                          <StatusBadge
-                            code={item.statusCode}
-                            isFailed={isFailed}
-                            isPending={isPendingResponse}
-                            isInterceptedPending={isPendingIntercept}
-                          />
-                        </td>
-                        <td className="py-1.5 px-2 text-muted-foreground text-[11px] overflow-hidden">
-                          <div className="truncate" title={item.contentType}>{item.contentType || '-'}</div>
-                        </td>
-                        <td className="py-1.5 px-2 text-right text-muted-foreground text-[11px]">
-                          {isPendingResponse || isPendingIntercept ? '-' : item.size}
-                        </td>
-                        <td className="py-1.5 px-2 text-right text-muted-foreground text-[11px]">
-                          {isPendingResponse ? (
-                            <span className="text-rose-500 dark:text-rose-400 font-mono animate-pulse">...</span>
-                          ) : isPendingIntercept ? (
-                            <span className="text-amber-500 dark:text-amber-400 font-mono animate-pulse">...</span>
-                          ) : item.durationMs != null ? (
-                            `${item.durationMs}ms`
-                          ) : (
-                            '-'
-                          )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {/* Bottom Spacer Row */}
+                    {bottomSpacer > 0 && (
+                      <tr style={{ height: `${bottomSpacer}px`, pointerEvents: 'none' }}>
+                        <td colSpan={8} className="p-0 border-0" />
+                      </tr>
+                    )}
+
+                    {/* Infinite Loading Indicator */}
+                    {isLoadingMore && (
+                      <tr>
+                        <td colSpan={8} className="py-2 text-center text-muted-foreground text-[11px] italic bg-surface/50 animate-pulse">
+                          Loading more records from SQLite...
                         </td>
                       </tr>
-                    );
-                  })
+                    )}
+                  </>
                 )}
               </tbody>
             </table>
@@ -319,7 +482,7 @@ export const HistoryView: React.FC = () => {
           style={{ height: `${100 - topHeightPercent}%` }}
         >
           <RequestResponseInspector
-            item={selectedItem}
+            item={selectedItemWithDetail}
             layoutMode={layoutMode}
             onToggleLayoutMode={() => setLayoutMode(layoutMode === 'vertical' ? 'horizontal' : 'vertical')}
           />

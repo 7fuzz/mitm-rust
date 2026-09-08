@@ -40,6 +40,7 @@ export const TrafficFilterBar: React.FC = () => {
     historySettings,
     updateHistorySettings,
     traffic,
+    totalDbCount,
   } = useProxyStore();
 
   const [localSearch, setLocalSearch] = useState(searchQuery);
@@ -173,7 +174,7 @@ export const TrafficFilterBar: React.FC = () => {
                   History Log Limit
                 </span>
                 <span className="text-[11px] font-mono text-muted-foreground">
-                  Total: {traffic.length}
+                  Total: {totalDbCount > 0 ? totalDbCount : traffic.length}
                 </span>
               </div>
 
