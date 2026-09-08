@@ -1,7 +1,7 @@
 use tauri::State;
 use rusqlite::Connection;
 use crate::db::{prune_history_logs, set_preference};
-use crate::state::{AppState, HistoryDetail, HistoryEntry, HistorySettings};
+use crate::state::{AppState, HistoryEntry, HistorySettings};
 
 #[tauri::command]
 pub async fn get_history_settings(
@@ -111,7 +111,7 @@ pub async fn get_history_logs(
         query.push_str(" AND COALESCE(is_failed, 0) = 1");
     }
 
-    query.push_str(" ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?");
+    query.push_str(" ORDER BY CAST(id AS INTEGER) DESC, created_at DESC LIMIT ? OFFSET ?");
     params.push(Box::new(limit));
     params.push(Box::new(offset));
 
@@ -300,5 +300,7 @@ pub async fn clear_history_logs(
 ) -> Result<(), String> {
     let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM history", []).map_err(|e| e.to_string())?;
+    let _ = conn.execute("DELETE FROM sqlite_sequence WHERE name = 'history'", []);
+    state.next_history_id.store(0, std::sync::atomic::Ordering::SeqCst);
     Ok(())
 }

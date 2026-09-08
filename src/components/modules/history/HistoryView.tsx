@@ -328,7 +328,7 @@ export const HistoryView: React.FC = () => {
             <table className="w-full text-left text-xs border-collapse table-fixed font-mono">
               <thead className="bg-header sticky top-0 border-b border-border text-[11px] font-medium text-muted-foreground select-none z-10 shadow-sm">
                 <tr>
-                  <th className="py-2 px-2 w-10 text-center text-muted-foreground">#</th>
+                  <th className="py-2 px-2 w-12 text-center text-muted-foreground">#</th>
                   <th className="py-2 px-2 w-24">Method</th>
                   <th className="py-2 px-2 w-48">Host</th>
                   <th className="py-2 px-2">Path</th>
@@ -355,8 +355,7 @@ export const HistoryView: React.FC = () => {
                     )}
 
                     {/* Rendered Visible Rows */}
-                    {visibleRows.map((item, relIndex) => {
-                      const index = startIndex + relIndex;
+                    {visibleRows.map((item) => {
                       const isSelected = selectedTrafficId === item.id;
                       const isPendingResponse = item.phase === 'request';
                       const isPendingIntercept = item.phase === 'intercepted_request' || item.phase === 'intercepted_response';
@@ -386,7 +385,7 @@ export const HistoryView: React.FC = () => {
                           onContextMenu={(e) => handleContextMenu(e, item)}
                           className={`cursor-pointer transition-colors ${rowClass}`}
                         >
-                          <td className="py-1 px-2 text-center text-muted-foreground text-[10px]">{totalRows - index}</td>
+                          <td className="py-1 px-2 text-center text-muted-foreground text-[10px]">{item.id}</td>
                           <td className="py-1 px-2">
                             <div className="flex items-center gap-1">
                               <MethodBadge method={item.method} />

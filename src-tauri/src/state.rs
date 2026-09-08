@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use dashmap::DashMap;
 use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
@@ -296,6 +296,7 @@ pub struct AppState {
     pub ws_stream_senders: Arc<DashMap<String, (tokio::sync::mpsc::UnboundedSender<tungstenite::Message>, tokio::sync::mpsc::UnboundedSender<tungstenite::Message>)>>,
     pub ws_client_senders: Arc<DashMap<String, tokio::sync::mpsc::UnboundedSender<tungstenite::Message>>>,
     pub ws_client_stops: Arc<DashMap<String, Arc<Mutex<Option<oneshot::Sender<()>>>>>>,
+    pub next_history_id: Arc<AtomicU64>,
 }
 
 impl AppState {
@@ -305,6 +306,20 @@ impl AppState {
         rewrite_tx: tokio::sync::mpsc::Sender<RewriteHistoryEntry>,
     ) -> Self {
         let (broadcast_tx, _) = broadcast::channel(500);
+
+        let initial_next_history_id = match rusqlite::Connection::open(&db_path) {
+            Ok(conn) => {
+                let max_id: Option<i64> = conn
+                    .query_row(
+                        "SELECT MAX(CAST(id AS INTEGER)) FROM history",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(None);
+                max_id.unwrap_or(0).max(0) as u64
+            }
+            Err(_) => 0,
+        };
 
         let initial_proxy_mode = crate::db::get_preference(&db_path, "proxy_mode")
             .unwrap_or_else(|| "on".to_string());
@@ -378,6 +393,7 @@ impl AppState {
             ws_stream_senders: Arc::new(DashMap::new()),
             ws_client_senders: Arc::new(DashMap::new()),
             ws_client_stops: Arc::new(DashMap::new()),
+            next_history_id: Arc::new(AtomicU64::new(initial_next_history_id)),
         }
     }
 

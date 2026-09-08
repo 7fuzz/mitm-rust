@@ -18,7 +18,6 @@ use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
 use tauri::{AppHandle, Emitter};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
-use uuid::Uuid;
 
 use crate::ca::CA;
 use crate::proxy::intercept::handle_intercept_hook;
@@ -213,7 +212,7 @@ async fn handle_http(
         let path = parse_path_from_url(&url);
         let request_headers = headers_to_vec(req.headers());
         let subprotocol = req.headers().get("sec-websocket-protocol").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
-        let entry_id = Uuid::new_v4().to_string();
+        let entry_id = (state.next_history_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1).to_string();
 
         let mut new_req = Request::builder()
             .method(method.clone())
@@ -324,7 +323,7 @@ async fn handle_http(
 
     let path = parse_path_from_url(&url);
 
-    let entry_id = Uuid::new_v4().to_string();
+    let entry_id = (state.next_history_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1).to_string();
 
     let proxy_mode = { state.proxy_config.read().await.proxy_mode.clone() };
 

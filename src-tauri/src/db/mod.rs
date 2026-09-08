@@ -69,7 +69,7 @@ pub fn prune_history_logs_conn(conn: &Connection, max_rows: u32) -> Result<usize
         return Ok(0);
     }
     conn.execute(
-        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY created_at DESC, rowid DESC LIMIT ?)",
+        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY CAST(id AS INTEGER) DESC, created_at DESC LIMIT ?)",
         params![max_rows],
     ).map_err(|e| e.to_string())
 }
