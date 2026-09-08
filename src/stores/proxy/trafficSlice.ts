@@ -110,9 +110,25 @@ const SAMPLE_TRAFFIC: TrafficItem[] = [
   },
 ];
 
-let incomingBatch: TrafficItem[] = [];
+declare global {
+  interface Window {
+    __MITM_TRAFFIC_UNLISTEN__?: (() => void) | null;
+  }
+}
+
+// Clean up any existing listener during Vite HMR
+if (typeof window !== 'undefined' && window.__MITM_TRAFFIC_UNLISTEN__) {
+  try {
+    window.__MITM_TRAFFIC_UNLISTEN__();
+  } catch (e) {
+    console.warn('Failed to unlisten previous traffic listener:', e);
+  }
+  window.__MITM_TRAFFIC_UNLISTEN__ = null;
+}
+
+let incomingBatchMap = new Map<string, TrafficItem>();
 let batchTimer: ReturnType<typeof setTimeout> | null = null;
-let isTrafficSubscribed = false;
+let isTrafficSubscribing = false;
 
 export const createTrafficSlice: StateCreator<
   ProxyState,
@@ -121,21 +137,31 @@ export const createTrafficSlice: StateCreator<
   TrafficSlice
 > = (set, get) => {
   const flushIncomingBatch = () => {
-    if (incomingBatch.length === 0) {
+    if (incomingBatchMap.size === 0) {
       batchTimer = null;
       return;
     }
-    const batch = [...incomingBatch];
-    incomingBatch = [];
+    const batch = Array.from(incomingBatchMap.values());
+    incomingBatchMap.clear();
     batchTimer = null;
 
     get().addTrafficBatch(batch);
   };
 
   const queueIncomingItem = (item: TrafficItem) => {
-    incomingBatch.push(item);
+    const existing = incomingBatchMap.get(item.id);
+    if (existing) {
+      // If previous event was response, do not revert to earlier phase
+      if (existing.phase === 'response' && item.phase !== 'response') {
+        incomingBatchMap.set(item.id, { ...item, ...existing });
+      } else {
+        incomingBatchMap.set(item.id, { ...existing, ...item });
+      }
+    } else {
+      incomingBatchMap.set(item.id, item);
+    }
     if (!batchTimer) {
-      batchTimer = setTimeout(flushIncomingBatch, 50);
+      batchTimer = setTimeout(flushIncomingBatch, 40);
     }
   };
 
@@ -172,24 +198,33 @@ export const createTrafficSlice: StateCreator<
         }
       }
 
-      if (!isTrafficSubscribed) {
-        isTrafficSubscribed = true;
-        subscribeTrafficCaptured((event: any) => {
-          const raw = event?.entry || event;
-          if (raw && raw.id) {
-            const mappedItem = mapHistoryEntryToTrafficItem(raw);
-            if (raw.requestBody || raw.responseBody || raw.request_body || raw.response_body) {
-              get().cacheTrafficDetail({
-                id: String(raw.id),
-                requestHeaders: mappedItem.requestHeaders.map((h) => [h.key, h.value]),
-                responseHeaders: mappedItem.responseHeaders.map((h) => [h.key, h.value]),
-                requestBody: mappedItem.requestBody,
-                responseBody: mappedItem.responseBody,
-              });
+      if (!isTrafficSubscribing && !(typeof window !== 'undefined' && window.__MITM_TRAFFIC_UNLISTEN__)) {
+        isTrafficSubscribing = true;
+        try {
+          const unlisten = await subscribeTrafficCaptured((event: any) => {
+            const raw = event?.entry || event;
+            if (raw && raw.id) {
+              const mappedItem = mapHistoryEntryToTrafficItem(raw);
+              if (raw.requestBody || raw.responseBody || raw.request_body || raw.response_body) {
+                get().cacheTrafficDetail({
+                  id: String(raw.id),
+                  requestHeaders: mappedItem.requestHeaders.map((h) => [h.key, h.value]),
+                  responseHeaders: mappedItem.responseHeaders.map((h) => [h.key, h.value]),
+                  requestBody: mappedItem.requestBody,
+                  responseBody: mappedItem.responseBody,
+                });
+              }
+              queueIncomingItem(mappedItem);
             }
-            queueIncomingItem(mappedItem);
+          });
+          if (typeof window !== 'undefined') {
+            window.__MITM_TRAFFIC_UNLISTEN__ = unlisten;
           }
-        });
+        } catch (e) {
+          console.warn('Failed to subscribe to traffic captured:', e);
+        } finally {
+          isTrafficSubscribing = false;
+        }
       }
     },
 
@@ -383,24 +418,74 @@ export const createTrafficSlice: StateCreator<
     },
 
     addTrafficBatch: (items: TrafficItem[]) => {
+      if (!items || items.length === 0) return;
+
       set((state) => {
         const settings = state.historySettings;
         const maxLimit = settings.limiterEnabled ? settings.maxRows : 100000;
         const nextTraffic = [...state.traffic];
         const itemsToPrepend: TrafficItem[] = [];
 
+        // Fast index map of existing items in traffic
+        const existingMap = new Map<string, number>();
+        for (let i = 0; i < nextTraffic.length; i++) {
+          existingMap.set(nextTraffic[i].id, i);
+        }
+
+        // Intra-batch deduplication: resolve any duplicate items within the batch itself
+        const incomingMap = new Map<string, TrafficItem>();
         for (const item of items) {
-          const existingIdx = nextTraffic.findIndex((t) => t.id === item.id);
-          if (existingIdx >= 0) {
-            nextTraffic[existingIdx] = item;
+          const prev = incomingMap.get(item.id);
+          if (prev) {
+            if (prev.phase === 'response' && item.phase !== 'response') {
+              incomingMap.set(item.id, { ...item, ...prev });
+            } else {
+              incomingMap.set(item.id, { ...prev, ...item });
+            }
+          } else {
+            incomingMap.set(item.id, item);
+          }
+        }
+
+        // Apply items: update existing in-place, or collect for prepending
+        for (const item of incomingMap.values()) {
+          const idx = existingMap.get(item.id);
+          if (idx !== undefined && idx >= 0) {
+            const current = nextTraffic[idx];
+            if (current.phase === 'response' && item.phase !== 'response') {
+              nextTraffic[idx] = { ...item, ...current };
+            } else {
+              nextTraffic[idx] = { ...current, ...item };
+            }
           } else {
             itemsToPrepend.push(item);
           }
         }
 
-        const combined = [...itemsToPrepend, ...nextTraffic].slice(0, maxLimit);
+        // Sort itemsToPrepend descending (highest numeric ID / newest timestamp at the top)
+        itemsToPrepend.sort((a, b) => {
+          const numA = Number(a.id);
+          const numB = Number(b.id);
+          if (!Number.isNaN(numA) && !Number.isNaN(numB)) {
+            return numB - numA;
+          }
+          return (b.timestamp || 0) - (a.timestamp || 0);
+        });
+
+        // Combine and guarantee absolute ID uniqueness
+        const combined = [...itemsToPrepend, ...nextTraffic];
+        const seen = new Set<string>();
+        const uniqueCombined: TrafficItem[] = [];
+        for (const it of combined) {
+          if (!seen.has(it.id)) {
+            seen.add(it.id);
+            uniqueCombined.push(it);
+          }
+        }
+
+        const limited = uniqueCombined.slice(0, maxLimit);
         return {
-          traffic: combined,
+          traffic: limited,
           totalDbCount: state.totalDbCount + itemsToPrepend.length,
         };
       });
@@ -414,6 +499,11 @@ export const createTrafficSlice: StateCreator<
     },
 
     clearTraffic: async () => {
+      incomingBatchMap.clear();
+      if (batchTimer) {
+        clearTimeout(batchTimer);
+        batchTimer = null;
+      }
       try {
         await clearHistoryLogs();
       } catch (e) {
