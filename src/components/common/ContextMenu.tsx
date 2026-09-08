@@ -3,7 +3,7 @@ import { MingCuteIcon, MingCuteIconName } from './MingCuteIcon';
 
 export interface ContextMenuItem {
   label: string;
-  icon?: MingCuteIconName;
+  icon?: MingCuteIconName | string;
   action?: () => void;
   danger?: boolean;
   disabled?: boolean;

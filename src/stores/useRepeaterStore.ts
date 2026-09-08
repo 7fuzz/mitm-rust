@@ -41,6 +41,8 @@ interface RepeaterState {
   sendToRepeater: (item: TrafficItem) => Promise<void>;
   executeActiveRequest: (tabId?: string) => Promise<void>;
   fetchHistory: (tabId: string) => Promise<void>;
+  setExecutionResult: (tabId: string, result: RepeaterExecutionResult | RepeaterHistoryItem | null) => void;
+  restoreHistoryToTab: (tabId: string, hist: RepeaterHistoryItem) => Promise<void>;
   toggleHistoryDrawer: (open?: boolean) => void;
   setHistoryDrawerOpen: (open?: boolean) => void;
   setViewMode: (mode: 'sidebar' | 'tabs') => void;
@@ -53,6 +55,63 @@ interface RepeaterState {
   setCurlModalOpen: (open: boolean) => void;
   importCurlCommand: (curl: string) => void;
 }
+
+export const getDefaultRepeaterHeaders = (): HeaderItem[] => [
+  {
+    id: `h-ua-${Date.now()}-1`,
+    key: 'User-Agent',
+    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    enabled: true,
+  },
+  {
+    id: `h-acc-${Date.now()}-2`,
+    key: 'Accept',
+    value: '*/*',
+    enabled: true,
+  },
+  {
+    id: `h-lang-${Date.now()}-3`,
+    key: 'Accept-Language',
+    value: 'en-US,en;q=0.9',
+    enabled: true,
+  },
+  {
+    id: `h-enc-${Date.now()}-4`,
+    key: 'Accept-Encoding',
+    value: 'gzip, deflate, br, zstd',
+    enabled: true,
+  },
+  {
+    id: `h-conn-${Date.now()}-5`,
+    key: 'Connection',
+    value: 'keep-alive',
+    enabled: true,
+  },
+  {
+    id: `h-fetch-dest-${Date.now()}-6`,
+    key: 'Sec-Fetch-Dest',
+    value: 'empty',
+    enabled: true,
+  },
+  {
+    id: `h-fetch-mode-${Date.now()}-7`,
+    key: 'Sec-Fetch-Mode',
+    value: 'cors',
+    enabled: true,
+  },
+  {
+    id: `h-fetch-site-${Date.now()}-8`,
+    key: 'Sec-Fetch-Site',
+    value: 'same-site',
+    enabled: true,
+  },
+  {
+    id: `h-ct-${Date.now()}-9`,
+    key: 'Content-Type',
+    value: 'application/json',
+    enabled: false,
+  },
+];
 
 export const useRepeaterStore = create<RepeaterState>((set, get) => ({
   tabs: [],
@@ -111,7 +170,7 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
         id: 'tab-' + nowMs,
         method: 'GET',
         url: 'https://httpbin.org/get',
-        headers: [{ id: 'h-' + nowMs, key: 'User-Agent', value: 'MITM-Developer-Studio', enabled: true }],
+        headers: getDefaultRepeaterHeaders(),
         params: [],
         bodyType: 'none',
         bodyContent: '',
@@ -374,6 +433,35 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     } catch (err) {
       console.error('Failed to fetch repeater execution history:', err);
     }
+  },
+
+  setExecutionResult: (tabId, result) => {
+    set((state) => ({
+      lastExecutionResult: {
+        ...state.lastExecutionResult,
+        [tabId]: result as any,
+      },
+    }));
+  },
+
+  restoreHistoryToTab: async (tabId, hist) => {
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    const updatedTab: RepeaterTab = {
+      ...tab,
+      method: hist.method,
+      url: hist.url,
+      headers: hist.requestHeaders,
+      bodyContent: hist.requestBody || '',
+      updatedAtMs: Date.now(),
+    };
+    await get().updateTab(updatedTab);
+    set((state) => ({
+      lastExecutionResult: {
+        ...state.lastExecutionResult,
+        [tabId]: hist as any,
+      },
+    }));
   },
 
   toggleHistoryDrawer: (open) => {

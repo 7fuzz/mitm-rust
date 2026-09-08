@@ -92,6 +92,88 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
     updateTab({ ...request, url });
   };
 
+  const handleBodyTypeChange = (newBodyType: string) => {
+    let headers = [...(request.headers || [])];
+    const ctIdx = headers.findIndex((h) => h.key.trim().toLowerCase() === 'content-type');
+
+    if (newBodyType === 'none') {
+      if (ctIdx >= 0) {
+        headers[ctIdx] = { ...headers[ctIdx], enabled: false };
+      }
+    } else {
+      let targetCt = 'application/json';
+      if (newBodyType === 'json') targetCt = 'application/json';
+      else if (newBodyType === 'urlencoded' || newBodyType === 'x-www-form-urlencoded') targetCt = 'application/x-www-form-urlencoded';
+      else if (newBodyType === 'form' || newBodyType === 'form-data' || newBodyType === 'multipart') targetCt = 'multipart/form-data';
+      else if (newBodyType === 'raw') targetCt = 'text/plain';
+
+      if (ctIdx >= 0) {
+        headers[ctIdx] = {
+          ...headers[ctIdx],
+          value: targetCt,
+          enabled: true,
+        };
+      } else {
+        headers.push({
+          id: `h-ct-${Date.now()}`,
+          key: 'Content-Type',
+          value: targetCt,
+          enabled: true,
+        });
+      }
+    }
+
+    updateTab({ ...request, bodyType: newBodyType, headers });
+  };
+
+  const handleAddWebHeaders = () => {
+    const currentHeaders = [...(request.headers || [])];
+    const standardHeaders = [
+      { key: 'User-Agent', value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', enabled: true },
+      { key: 'Accept', value: '*/*', enabled: true },
+      { key: 'Accept-Language', value: 'en-US,en;q=0.9', enabled: true },
+      { key: 'Accept-Encoding', value: 'gzip, deflate, br, zstd', enabled: true },
+      { key: 'Connection', value: 'keep-alive', enabled: true },
+      { key: 'Sec-Fetch-Dest', value: 'empty', enabled: true },
+      { key: 'Sec-Fetch-Mode', value: 'cors', enabled: true },
+      { key: 'Sec-Fetch-Site', value: 'same-site', enabled: true },
+      {
+        key: 'Content-Type',
+        value: request.bodyType === 'json'
+          ? 'application/json'
+          : request.bodyType === 'urlencoded'
+          ? 'application/x-www-form-urlencoded'
+          : request.bodyType === 'form'
+          ? 'multipart/form-data'
+          : request.bodyType === 'raw'
+          ? 'text/plain'
+          : 'application/json',
+        enabled: request.bodyType !== 'none',
+      },
+    ];
+
+    let hasAdded = false;
+    for (const sh of standardHeaders) {
+      const exists = currentHeaders.some((h) => h.key.trim().toLowerCase() === sh.key.toLowerCase());
+      if (!exists) {
+        currentHeaders.push({
+          id: `h-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          key: sh.key,
+          value: sh.value,
+          enabled: sh.enabled,
+        });
+        hasAdded = true;
+      }
+    }
+
+    if (hasAdded) {
+      updateTab({ ...request, headers: currentHeaders });
+      showNotification('Added Web Headers!');
+    } else {
+      showNotification('Headers already present');
+    }
+  };
+
   const handleExecute = async () => {
     await executeActiveRequest(request.id);
   };
@@ -224,12 +306,31 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         )}
 
         {activeTab === 'headers' && (
-          <KeyValueEditor
-            items={request.headers || []}
-            onChange={(headers) => updateTab({ ...request, headers })}
-            keyPlaceholder="Header Name (e.g. Authorization)"
-            valuePlaceholder="Header Value (e.g. Bearer token)"
-          />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1 text-xs">
+              <div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
+                <MingCuteIcon name="alert_line" size={13} className="text-primary shrink-0" />
+                <span>
+                  <strong>Tip:</strong> If <code>Content-Type</code> is disabled, it will be <strong>auto-detected</strong> from the body format.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddWebHeaders}
+                className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-primary font-medium text-[11px] cursor-pointer transition-colors shrink-0"
+                title="Add missing standard web headers (User-Agent, Accept, Encoding, etc.)"
+              >
+                <MingCuteIcon name="plus_line" size={12} />
+                <span>+ Add Web Headers</span>
+              </button>
+            </div>
+            <KeyValueEditor
+              items={request.headers || []}
+              onChange={(headers) => updateTab({ ...request, headers })}
+              keyPlaceholder="Header Name (e.g. Authorization)"
+              valuePlaceholder="Header Value (e.g. Bearer token)"
+            />
+          </div>
         )}
 
         {activeTab === 'body' && (
@@ -237,7 +338,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
             <div className="flex items-center gap-2 mb-2">
               <Select
                 value={request.bodyType}
-                onChange={(e) => updateTab({ ...request, bodyType: e.target.value })}
+                onChange={(e) => handleBodyTypeChange(e.target.value)}
                 options={[
                   { value: 'none', label: 'None' },
                   { value: 'json', label: 'JSON' },

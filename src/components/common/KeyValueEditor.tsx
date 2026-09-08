@@ -11,6 +11,61 @@ interface KeyValueEditorProps {
   className?: string;
 }
 
+const COMMON_HEADER_KEYS = [
+  'Accept',
+  'Accept-Charset',
+  'Accept-Encoding',
+  'Accept-Language',
+  'Authorization',
+  'Cache-Control',
+  'Connection',
+  'Content-Disposition',
+  'Content-Encoding',
+  'Content-Length',
+  'Content-Type',
+  'Cookie',
+  'Host',
+  'If-Match',
+  'If-Modified-Since',
+  'If-None-Match',
+  'Origin',
+  'Pragma',
+  'Range',
+  'Referer',
+  'Sec-Ch-Ua',
+  'Sec-Ch-Ua-Mobile',
+  'Sec-Ch-Ua-Platform',
+  'Sec-Fetch-Dest',
+  'Sec-Fetch-Mode',
+  'Sec-Fetch-Site',
+  'Sec-Fetch-User',
+  'Upgrade-Insecure-Requests',
+  'User-Agent',
+  'X-Forwarded-For',
+  'X-Requested-With',
+];
+
+const COMMON_HEADER_VALUES = [
+  'application/json',
+  'application/x-www-form-urlencoded',
+  'multipart/form-data',
+  'text/plain',
+  'text/html; charset=utf-8',
+  'application/xml',
+  'application/octet-stream',
+  '*/*',
+  'application/json, text/plain, */*',
+  'gzip, deflate, br, zstd',
+  'en-US,en;q=0.9',
+  'keep-alive',
+  'no-cache',
+  'cors',
+  'empty',
+  'same-site',
+  'same-origin',
+  'cross-site',
+];
+
 export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
   items,
   onChange,
@@ -19,6 +74,10 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
   valuePlaceholder = 'Value',
   className = '',
 }) => {
+  const isHeaderEditor = keyPlaceholder.toLowerCase().includes('header');
+  const datalistKeyId = isHeaderEditor ? 'http-header-keys-list' : undefined;
+  const datalistValId = isHeaderEditor ? 'http-header-vals-list' : undefined;
+
   const handleItemChange = (index: number, field: keyof KeyValuePair, value: any) => {
     const updated = [...items];
     updated[index] = { ...updated[index], [field]: value };
@@ -48,6 +107,21 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
 
   return (
     <div className={`space-y-2 text-xs ${className}`}>
+      {isHeaderEditor && (
+        <>
+          <datalist id="http-header-keys-list">
+            {COMMON_HEADER_KEYS.map((k) => (
+              <option key={k} value={k} />
+            ))}
+          </datalist>
+          <datalist id="http-header-vals-list">
+            {COMMON_HEADER_VALUES.map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
+        </>
+      )}
+
       <div className="border border-border rounded overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead>
@@ -86,6 +160,7 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
                     ) : (
                       <input
                         type="text"
+                        list={datalistKeyId}
                         value={item.key}
                         onChange={(e) => handleItemChange(index, 'key', e.target.value)}
                         placeholder={keyPlaceholder}
@@ -103,6 +178,7 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
                     ) : (
                       <input
                         type="text"
+                        list={datalistValId}
                         value={item.value}
                         onChange={(e) => handleItemChange(index, 'value', e.target.value)}
                         placeholder={valuePlaceholder}

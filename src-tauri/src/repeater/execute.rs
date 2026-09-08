@@ -16,6 +16,35 @@ pub async fn execute_tab_request(
     execute_repeater_tab(db_path, &tab).await
 }
 
+fn detect_body_content_type(body_type: &str, body: &str) -> Option<String> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    match body_type {
+        "json" => Some("application/json".to_string()),
+        "raw" | "text" => {
+            if (trimmed.starts_with('{') && trimmed.ends_with('}'))
+                || (trimmed.starts_with('[') && trimmed.ends_with(']'))
+            {
+                Some("application/json".to_string())
+            } else if trimmed.starts_with("<!DOCTYPE html")
+                || trimmed.starts_with("<html")
+                || (trimmed.starts_with('<') && trimmed.ends_with('>') && trimmed.contains("</html"))
+            {
+                Some("text/html; charset=utf-8".to_string())
+            } else if trimmed.starts_with("<?xml")
+                || (trimmed.starts_with('<') && trimmed.ends_with('>') && (trimmed.contains("</") || trimmed.contains("/>")))
+            {
+                Some("application/xml".to_string())
+            } else {
+                Some("text/plain; charset=utf-8".to_string())
+            }
+        }
+        _ => None,
+    }
+}
+
 pub async fn execute_repeater_tab(
     db_path: &PathBuf,
     tab: &RepeaterTab,
@@ -72,13 +101,19 @@ pub async fn execute_repeater_tab(
     let is_multipart = tab.body_type == "multipart" || tab.body_type == "form-data" || tab.body_type == "form";
     let is_urlencoded = tab.body_type == "urlencoded" || tab.body_type == "x-www-form-urlencoded";
 
+    let mut has_explicit_content_type = false;
+
     for h in &enabled_headers {
         let key_lower = h.key.trim().to_lowercase();
         // Skip headers managed automatically by reqwest
-        if key_lower == "host" || key_lower == "content-length" || key_lower == "transfer-encoding"
-            || (is_multipart && key_lower == "content-type")
-            || (is_urlencoded && key_lower == "content-type") {
+        if key_lower == "host" || key_lower == "content-length" || key_lower == "transfer-encoding" {
             continue;
+        }
+        if key_lower == "content-type" {
+            if is_multipart || is_urlencoded {
+                continue;
+            }
+            has_explicit_content_type = true;
         }
 
         if let (Ok(name), Ok(val)) = (
@@ -91,20 +126,50 @@ pub async fn execute_repeater_tab(
 
     // Attach multipart form, urlencoded form, or raw body
     let req_body_str = tab.body_content.clone().filter(|b| !b.trim().is_empty());
+    let mut logged_headers = enabled_headers.clone();
 
     if is_urlencoded {
         if let Some(ref content) = req_body_str {
             if let Ok(params) = build_urlencoded_payload(content) {
                 req_builder = req_builder.form(&params);
+                if !logged_headers.iter().any(|h| h.key.eq_ignore_ascii_case("content-type")) {
+                    logged_headers.push(HeaderItem {
+                        id: Uuid::new_v4().to_string(),
+                        key: "Content-Type".to_string(),
+                        value: "application/x-www-form-urlencoded".to_string(),
+                        enabled: true,
+                    });
+                }
             }
         }
     } else if is_multipart {
         if let Some(ref content) = req_body_str {
             if let Ok(form) = build_multipart_payload(content) {
                 req_builder = req_builder.multipart(form);
+                if !logged_headers.iter().any(|h| h.key.eq_ignore_ascii_case("content-type")) {
+                    logged_headers.push(HeaderItem {
+                        id: Uuid::new_v4().to_string(),
+                        key: "Content-Type".to_string(),
+                        value: "multipart/form-data".to_string(),
+                        enabled: true,
+                    });
+                }
             }
         }
     } else if let Some(ref body) = req_body_str {
+        if !has_explicit_content_type {
+            if let Some(detected_ct) = detect_body_content_type(&tab.body_type, body) {
+                if let Ok(val) = HeaderValue::from_str(&detected_ct) {
+                    req_builder = req_builder.header(reqwest::header::CONTENT_TYPE, val);
+                    logged_headers.push(HeaderItem {
+                        id: Uuid::new_v4().to_string(),
+                        key: "Content-Type".to_string(),
+                        value: detected_ct,
+                        enabled: true,
+                    });
+                }
+            }
+        }
         req_builder = req_builder.body(body.clone());
     }
 
@@ -153,8 +218,8 @@ pub async fn execute_repeater_tab(
                 repeater_id: tab.id.clone(),
                 method: tab.method.clone(),
                 url: final_url_str.clone(),
-                request_headers: enabled_headers,
-                request_body: req_body_str,
+                request_headers: logged_headers.clone(),
+                request_body: req_body_str.clone(),
                 status_code,
                 response_headers: response_headers.clone(),
                 response_body: Some(response_body.clone()),
@@ -182,7 +247,7 @@ pub async fn execute_repeater_tab(
                 repeater_id: tab.id.clone(),
                 method: tab.method.clone(),
                 url: final_url_str.clone(),
-                request_headers: enabled_headers,
+                request_headers: logged_headers,
                 request_body: req_body_str,
                 status_code: 0,
                 response_headers: vec![],
