@@ -77,6 +77,23 @@ export function getHttpStatusText(code: number): string {
   return 'Unknown';
 }
 
+export function tryFormatPrettyJson(text: string, indent: number = 2): string {
+  if (!text || !text.trim()) return text;
+  const trimmed = text.trim();
+  if (
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return JSON.stringify(parsed, null, indent);
+    } catch {
+      return text;
+    }
+  }
+  return text;
+}
+
 export interface CustomCopyOptions {
   requestFormat: 'curl' | 'request';
   includeRequestHeaders: boolean;
@@ -86,6 +103,7 @@ export interface CustomCopyOptions {
   includeResponseStatusText: boolean;
   includeResponseHeaders: boolean;
   includeResponseBody: boolean;
+  prettyJson?: boolean;
   truncateBodies?: boolean;
 }
 
@@ -98,6 +116,7 @@ export const DEFAULT_COPY_CUSTOM_OPTIONS: CustomCopyOptions = {
   includeResponseStatusText: false,
   includeResponseHeaders: false,
   includeResponseBody: true,
+  prettyJson: true,
   truncateBodies: false,
 };
 
@@ -160,7 +179,8 @@ export function formatRawCurl(item: TrafficItem): string {
   }
 
   if (item.requestBody && item.requestBody.trim()) {
-    curl += ` \\\n  --data '${item.requestBody.replace(/'/g, "'\\''")}'`;
+    const formattedBody = tryFormatPrettyJson(item.requestBody);
+    curl += ` \\\n  --data '${formattedBody.replace(/'/g, "'\\''")}'`;
   }
 
   return curl;
@@ -283,6 +303,8 @@ export function formatCustomCopy(item: TrafficItem, options: CustomCopyOptions):
             bodyPayload = `${item.requestBody.substring(0, 300)}... (truncated)`;
           }
         }
+      } else if (options.prettyJson !== false) {
+        bodyPayload = tryFormatPrettyJson(item.requestBody);
       }
       req += ` \\\n  --data '${bodyPayload.replace(/'/g, "'\\''")}'`;
     }
@@ -315,6 +337,8 @@ export function formatCustomCopy(item: TrafficItem, options: CustomCopyOptions):
             bodyPayload = `${item.requestBody.substring(0, 300)}... (truncated)`;
           }
         }
+      } else if (options.prettyJson !== false) {
+        bodyPayload = tryFormatPrettyJson(item.requestBody);
       }
       req += reqHeaderLines ? `\n\n${bodyPayload}` : `\n${bodyPayload}`;
     }
@@ -359,6 +383,8 @@ export function formatCustomCopy(item: TrafficItem, options: CustomCopyOptions):
             resBodyText = item.responseBody;
           }
         }
+      } else if (options.prettyJson !== false) {
+        resBodyText = tryFormatPrettyJson(item.responseBody);
       } else {
         resBodyText = item.responseBody;
       }

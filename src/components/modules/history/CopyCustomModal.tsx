@@ -222,6 +222,15 @@ export const CopyCustomModal: React.FC<CopyCustomModalProps> = ({
                   }
                 />
               </div>
+              <div className="block">
+                <Checkbox
+                  label="Pretty-print JSON Bodies"
+                  checked={options.prettyJson !== false}
+                  onChange={(e) =>
+                    setOptions((prev) => ({ ...prev, prettyJson: e.target.checked }))
+                  }
+                />
+              </div>
             </div>
           </div>
 
