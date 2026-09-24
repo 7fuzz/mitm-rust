@@ -15,6 +15,7 @@ import {
   RepeaterHistoryItem,
 } from '../services/tauri/bridge';
 import { isTauriAvailable } from '../services/tauri/ipc';
+import { parseUrlQueryParams } from '../utils/urlParams';
 
 interface RepeaterState {
   tabs: RepeaterTab[];
@@ -198,19 +199,8 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
 
   sendToRepeater: async (item: TrafficItem) => {
     // 1. Extract query params from URL
-    const params: ParamItem[] = [];
-    try {
-      const rawUrl = item.url || item.path || '';
-      const urlObj = new URL(rawUrl.startsWith('http') ? rawUrl : `http://localhost${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`);
-      urlObj.searchParams.forEach((value, key) => {
-        params.push({
-          id: `p-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          key,
-          value,
-          enabled: true,
-        });
-      });
-    } catch (e) {}
+    const rawUrl = item.url || item.path || '';
+    const params: ParamItem[] = parseUrlQueryParams(rawUrl, []);
 
     // 2. Map request headers
     const headers: HeaderItem[] = (item.requestHeaders || []).map((h, idx) => ({
@@ -376,6 +366,14 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     const targetId = tabId || get().activeTabId;
     if (!targetId) return;
 
+    // Flush any unsaved active tab changes to backend DB before execution
+    const currentTab = get().tabs.find((t) => t.id === targetId);
+    if (currentTab && isTauriAvailable()) {
+      try {
+        await updateRepeaterTab(currentTab);
+      } catch (e) {}
+    }
+
     set((state) => ({
       isExecuting: { ...state.isExecuting, [targetId]: true },
     }));
@@ -447,10 +445,12 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
   restoreHistoryToTab: async (tabId, hist) => {
     const tab = get().tabs.find((t) => t.id === tabId);
     if (!tab) return;
+    const params = parseUrlQueryParams(hist.url, tab.params || []);
     const updatedTab: RepeaterTab = {
       ...tab,
       method: hist.method,
       url: hist.url,
+      params,
       headers: hist.requestHeaders,
       bodyContent: hist.requestBody || '',
       updatedAtMs: Date.now(),

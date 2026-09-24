@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { RepeaterTab } from '../../../services/tauri/bridge';
+import type { RepeaterTab, ParamItem } from '../../../services/tauri/bridge';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
@@ -8,6 +8,7 @@ import { UrlEncodedEditor } from '../../common/UrlEncodedEditor';
 import { ExtractRulesEditor } from '../../common/ExtractRulesEditor';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Select } from '../../common/ui';
+import { buildUrlWithParams, parseUrlQueryParams } from '../../../utils/urlParams';
 
 interface RequestBuilderProps {
   request: RepeaterTab;
@@ -48,6 +49,27 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
     setTimeout(() => setCopyNotification(null), 1800);
   };
 
+  const getEffectiveUrl = (): string => {
+    return buildUrlWithParams(request.url, request.params || []);
+  };
+
+  useEffect(() => {
+    if (!request) return;
+    const hasQuery = request.url.includes('?');
+    const activeParams = (request.params || []).filter(
+      (p) => p.enabled && (p.key.trim() !== '' || p.value.trim() !== '')
+    );
+    if (!hasQuery && activeParams.length > 0) {
+      const syncedUrl = buildUrlWithParams(request.url, request.params || []);
+      updateTab({ ...request, url: syncedUrl });
+    } else if (hasQuery && (!request.params || request.params.length === 0)) {
+      const syncedParams = parseUrlQueryParams(request.url, []);
+      if (syncedParams.length > 0) {
+        updateTab({ ...request, params: syncedParams });
+      }
+    }
+  }, [request.id]);
+
   const handleCopyBody = () => {
     const body = request.bodyContent || '';
     navigator.clipboard.writeText(body);
@@ -63,23 +85,31 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
     showNotification('Copied Headers!');
   };
 
+  const handleCopyUrl = () => {
+    const effectiveUrl = getEffectiveUrl();
+    navigator.clipboard.writeText(effectiveUrl);
+    showNotification('Copied URL!');
+  };
+
   const handleCopyAll = () => {
+    const effectiveUrl = getEffectiveUrl();
     const rawHeaders = (request.headers || [])
       .filter((h) => h.enabled && h.key.trim())
       .map((h) => `${h.key}: ${h.value}`)
       .join('\n');
-    const fullReq = `${request.method} ${request.url}\n${rawHeaders}${request.bodyContent ? `\n\n${request.bodyContent}` : ''}`;
+    const fullReq = `${request.method} ${effectiveUrl}\n${rawHeaders}${request.bodyContent ? `\n\n${request.bodyContent}` : ''}`;
     navigator.clipboard.writeText(fullReq);
     showNotification('Copied Full Request!');
   };
 
   const handleCopyCurl = () => {
+    const effectiveUrl = getEffectiveUrl();
     const headersStr = (request.headers || [])
       .filter((h) => h.enabled && h.key.trim())
       .map((h) => `-H '${h.key}: ${h.value}'`)
       .join(' ');
     const bodyStr = request.bodyContent ? `-d '${request.bodyContent.replace(/'/g, "'\\''")}'` : '';
-    const curlCmd = `curl -X ${request.method} '${request.url}' ${headersStr} ${bodyStr}`.trim();
+    const curlCmd = `curl -X ${request.method} '${effectiveUrl}' ${headersStr ? headersStr + ' ' : ''}${bodyStr}`.trim();
     navigator.clipboard.writeText(curlCmd);
     showNotification('Copied as cURL!');
   };
@@ -89,7 +119,19 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
   };
 
   const handleUrlChange = (url: string) => {
-    updateTab({ ...request, url });
+    const newParams = parseUrlQueryParams(url, request.params || []);
+    updateTab({ ...request, url, params: newParams });
+  };
+
+  const handleParamsChange = (newParams: any[]) => {
+    const formattedParams: ParamItem[] = newParams.map((p) => ({
+      id: p.id || `p-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      key: p.key,
+      value: p.value,
+      enabled: p.enabled,
+    }));
+    const newUrl = buildUrlWithParams(request.url, formattedParams);
+    updateTab({ ...request, url: newUrl, params: formattedParams });
   };
 
   const handleBodyTypeChange = (newBodyType: string) => {
@@ -262,6 +304,13 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
           {copyMenuOpen && (
             <div className="absolute right-0 mt-1 w-44 bg-surface border border-border rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
               <button
+                onClick={handleCopyUrl}
+                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <MingCuteIcon name="link_line" size={14} className="text-sky-500" />
+                <span>Copy URL</span>
+              </button>
+              <button
                 onClick={handleCopyBody}
                 className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
               >
@@ -299,7 +348,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         {activeTab === 'params' && (
           <KeyValueEditor
             items={request.params || []}
-            onChange={(params) => updateTab({ ...request, params })}
+            onChange={handleParamsChange}
             keyPlaceholder="Parameter Key"
             valuePlaceholder="Parameter Value"
           />

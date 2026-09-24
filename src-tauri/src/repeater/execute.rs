@@ -81,6 +81,7 @@ pub async fn execute_repeater_tab(
         .map_err(|e| format!("Invalid URL '{}': {}", tab.url, e))?;
 
     if !enabled_params.is_empty() {
+        parsed_url.set_query(None);
         let mut query_pairs = parsed_url.query_pairs_mut();
         for p in enabled_params {
             query_pairs.append_pair(&p.key, &p.value);
