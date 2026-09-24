@@ -20,18 +20,44 @@ export const WorkspaceSelector: React.FC = () => {
     deleteWorkspaceById,
     setImportModalOpen,
     openImportModalForWorkspace,
+    exportWorkspaceToFile,
   } = useWorkspaceStore();
 
   const [isCreating, setIsCreating] = useState(false);
   const [newWsName, setNewWsName] = useState('');
   const [deletingWsId, setDeletingWsId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportFeedback, setExportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Inline renaming state
   const [renamingWsId, setRenamingWsId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleExportWorkspace = async (wsId: string) => {
+    setIsExporting(true);
+    setContextMenu(null);
+    try {
+      const result = await exportWorkspaceToFile(wsId);
+      if (result.success && result.filePath) {
+        setExportFeedback({
+          type: 'success',
+          message: `Workspace exported successfully!`,
+        });
+        setTimeout(() => setExportFeedback(null), 3000);
+      } else if (result.error) {
+        setExportFeedback({
+          type: 'error',
+          message: `Export failed: ${result.error}`,
+        });
+        setTimeout(() => setExportFeedback(null), 5000);
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -190,15 +216,45 @@ export const WorkspaceSelector: React.FC = () => {
         )}
       </div>
 
-      {/* Import Button */}
-      <button
-        onClick={() => setImportModalOpen(true)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface hover:bg-neutral-subtle border border-border text-foreground font-semibold transition-colors cursor-pointer shadow-2xs shrink-0"
-        title="Import Postman or JSON project file"
-      >
-        <MingCuteIcon name="file_import_line" size={15} className="text-amber-500" />
-        <span>Import JSON</span>
-      </button>
+      <div className="flex items-center gap-2 shrink-0">
+        {/* Export Feedback Notification */}
+        {exportFeedback && (
+          <div
+            className={`px-2.5 py-1 rounded-md text-[11px] font-medium animate-in fade-in flex items-center gap-1.5 ${
+              exportFeedback.type === 'success'
+                ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
+                : 'bg-rose-500/15 text-rose-500 border border-rose-500/30'
+            }`}
+          >
+            <MingCuteIcon
+              name={exportFeedback.type === 'success' ? 'check_line' : 'close_circle_line'}
+              size={13}
+            />
+            <span>{exportFeedback.message}</span>
+          </div>
+        )}
+
+        {/* Export Button */}
+        <button
+          onClick={() => activeWorkspaceId && handleExportWorkspace(activeWorkspaceId)}
+          disabled={isExporting || !activeWorkspaceId}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface hover:bg-neutral-subtle border border-border text-foreground font-semibold transition-colors cursor-pointer shadow-2xs shrink-0 disabled:opacity-50"
+          title="Export current workspace to JSON file"
+        >
+          <MingCuteIcon name="download_line" size={15} className="text-emerald-500" />
+          <span>{isExporting ? 'Exporting...' : 'Export JSON'}</span>
+        </button>
+
+        {/* Import Button */}
+        <button
+          onClick={() => setImportModalOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface hover:bg-neutral-subtle border border-border text-foreground font-semibold transition-colors cursor-pointer shadow-2xs shrink-0"
+          title="Import Postman or JSON project file"
+        >
+          <MingCuteIcon name="file_import_line" size={15} className="text-amber-500" />
+          <span>Import JSON</span>
+        </button>
+      </div>
 
       {/* Right-Click Context Menu */}
       {contextMenu && (
@@ -228,6 +284,14 @@ export const WorkspaceSelector: React.FC = () => {
           >
             <MingCuteIcon name="settings_3_line" size={14} className="text-blue-500" />
             <span>View Workspace Details</span>
+          </button>
+
+          <button
+            onClick={() => handleExportWorkspace(contextMenu.workspace.id)}
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-neutral-subtle text-foreground text-left cursor-pointer transition-colors"
+          >
+            <MingCuteIcon name="download_line" size={14} className="text-emerald-500" />
+            <span>Export Workspace</span>
           </button>
 
           <button

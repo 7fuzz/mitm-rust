@@ -160,6 +160,22 @@ export const importWorkspaceJson = async (
   });
 };
 
+export const exportWorkspaceJson = async (
+  workspaceId: string
+): Promise<string> => {
+  return await invoke<string>("export_workspace_json", { workspaceId });
+};
+
+export const exportWorkspaceFile = async (
+  workspaceId: string,
+  destinationPath: string
+): Promise<void> => {
+  return await invoke<void>("export_workspace_file", {
+    workspaceId,
+    destinationPath,
+  });
+};
+
 export const getWorkspaceEnvironments = async (
   workspaceId: string
 ): Promise<Environment[]> => {

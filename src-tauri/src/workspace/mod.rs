@@ -1,4 +1,5 @@
 pub mod import;
+pub mod export;
 
 use std::path::PathBuf;
 use rusqlite::{params, Connection};

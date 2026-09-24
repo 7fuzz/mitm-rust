@@ -6,6 +6,7 @@ use crate::workspace::{
     update_workspace_db, Environment, Workspace,
 };
 use crate::workspace::import::{import_workspace_json_db, ImportSummary};
+use crate::workspace::export::{export_workspace_json_db, export_workspace_file_db};
 
 #[tauri::command]
 pub async fn get_workspaces(
@@ -77,3 +78,21 @@ pub async fn save_workspace_environment(
 ) -> Result<(), String> {
     save_workspace_environment_db(&state.db_path, environment)
 }
+
+#[tauri::command]
+pub async fn export_workspace_json(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<String, String> {
+    export_workspace_json_db(&state.db_path, &workspace_id)
+}
+
+#[tauri::command]
+pub async fn export_workspace_file(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    destination_path: String,
+) -> Result<(), String> {
+    export_workspace_file_db(&state.db_path, &workspace_id, &destination_path)
+}
+

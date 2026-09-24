@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { save } from '@tauri-apps/plugin-dialog';
 import type { EnvironmentItem, VariableItem, ReplacementRule, CollectionLink } from '../types';
 import { useCollectionStore } from './useCollectionStore';
 import {
@@ -8,6 +9,8 @@ import {
   deleteWorkspace,
   setActiveWorkspace,
   importWorkspaceJson,
+  exportWorkspaceJson,
+  exportWorkspaceFile,
   getWorkspaceEnvironments,
   saveWorkspaceEnvironment,
   Workspace,
@@ -37,6 +40,8 @@ interface WorkspaceState {
   updateWorkspaceDetails: (workspace: Workspace) => Promise<void>;
   deleteWorkspaceById: (id: string) => Promise<void>;
   importProjectJson: (jsonContent: string, targetWorkspaceId?: string, customWorkspaceName?: string) => Promise<ImportSummary | null>;
+  exportWorkspaceToFile: (workspaceId?: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+  getWorkspaceExportJson: (workspaceId?: string) => Promise<string>;
   loadEnvironments: (workspaceId: string) => Promise<void>;
   saveEnvironmentVariables: (env: Environment) => Promise<void>;
   setImportModalOpen: (open: boolean) => void;
@@ -207,6 +212,74 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
     }
     return null;
+  },
+
+  getWorkspaceExportJson: async (workspaceId) => {
+    const wsId = workspaceId || get().activeWorkspaceId;
+    if (!wsId) throw new Error('No workspace selected for export');
+    if (isTauriAvailable()) {
+      return await exportWorkspaceJson(wsId);
+    }
+    const ws = get().workspaces.find((w) => w.id === wsId);
+    return JSON.stringify(
+      {
+        name: ws?.name || 'Workspace',
+        description: ws?.description,
+        all_environments: [],
+        all_variables: [],
+        test_cases: [],
+      },
+      null,
+      2
+    );
+  },
+
+  exportWorkspaceToFile: async (workspaceId) => {
+    const wsId = workspaceId || get().activeWorkspaceId;
+    if (!wsId) return { success: false, error: 'No workspace selected for export' };
+
+    const targetWs = get().workspaces.find((w) => w.id === wsId);
+    const cleanName = (targetWs?.name || 'workspace')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    const defaultFileName = `${cleanName || 'workspace'}_mitm_project.json`;
+
+    try {
+      if (isTauriAvailable()) {
+        const selectedPath = await save({
+          title: 'Export Workspace',
+          defaultPath: defaultFileName,
+          filters: [
+            { name: 'JSON Project (*.json)', extensions: ['json'] },
+            { name: 'All Files (*.*)', extensions: ['*'] },
+          ],
+        });
+
+        if (!selectedPath) {
+          return { success: false }; // User cancelled file dialog
+        }
+
+        await exportWorkspaceFile(wsId, selectedPath);
+        return { success: true, filePath: selectedPath };
+      } else {
+        // Browser fallback: download blob
+        const jsonContent = await get().getWorkspaceExportJson(wsId);
+        const blob = new Blob([jsonContent], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = defaultFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return { success: true, filePath: defaultFileName };
+      }
+    } catch (err: any) {
+      console.error('Failed to export workspace:', err);
+      return { success: false, error: err?.message || String(err) };
+    }
   },
 
   loadEnvironments: async (workspaceId) => {

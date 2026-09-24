@@ -112,6 +112,9 @@ pub fn run() {
             commands::intercept_cmd::forward_all_intercepted_flows,
             commands::intercept_cmd::drop_all_intercepted_flows,
             commands::intercept_cmd::get_pending_flows,
+            commands::intercept_cmd::focus_app_window,
+            commands::intercept_cmd::set_focus_preference,
+            commands::intercept_cmd::get_focus_preference,
 
             commands::rewrite_cmd::get_rewrite_rules,
             commands::rewrite_cmd::save_rewrite_rules,
@@ -136,6 +139,8 @@ pub fn run() {
             commands::workspace_cmd::import_workspace_json,
             commands::workspace_cmd::get_workspace_environments,
             commands::workspace_cmd::save_workspace_environment,
+            commands::workspace_cmd::export_workspace_json,
+            commands::workspace_cmd::export_workspace_file,
 
             commands::collection_cmd::get_collections,
             commands::collection_cmd::create_collection,
@@ -176,6 +181,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-            commands::intercept_cmd::focus_app_window,
-            commands::intercept_cmd::set_focus_preference,
-            commands::intercept_cmd::get_focus_preference,

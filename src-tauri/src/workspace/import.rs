@@ -329,6 +329,7 @@ pub fn import_workspace_json_db(
     // 3. Import Items (Folders & Requests)
     // Check for native project test_cases
     if let Some(test_cases) = parsed.get("test_cases").and_then(|t| t.as_array()) {
+        let root_base_url = parsed.get("url").and_then(|u| u.as_str());
         for (idx, tc) in test_cases.iter().enumerate() {
             process_custom_folder(
                 &conn,
@@ -339,6 +340,7 @@ pub fn import_workspace_json_db(
                 ts,
                 &mut col_count,
                 &mut req_count,
+                root_base_url,
             )?;
         }
     } else if let Ok(collection) = serde_json::from_str::<PostmanCollection>(json_content) {
@@ -481,9 +483,15 @@ fn process_custom_folder(
     ts: i64,
     col_count: &mut usize,
     req_count: &mut usize,
+    parent_base_url: Option<&str>,
 ) -> Result<(), String> {
     let name = folder_val.get("name").and_then(|n| n.as_str()).unwrap_or("Untitled Group");
     let desc = folder_val.get("description").and_then(|d| d.as_str()).map(|s| s.to_string());
+
+    // A folder may declare its own base "url" (e.g. "{{gateway_url}}"); requests inside
+    // it use relative "endpoint" paths that need to be joined with this base. Fall back
+    // to the parent folder's base url when this folder doesn't declare its own.
+    let folder_base_url = folder_val.get("url").and_then(|u| u.as_str()).or(parent_base_url);
 
     let col_id = Uuid::new_v4().to_string();
     conn.execute(
@@ -496,7 +504,7 @@ fn process_custom_folder(
     // Process target array (requests) inside folder
     if let Some(targets) = folder_val.get("target").and_then(|t| t.as_array()) {
         for (idx, target) in targets.iter().enumerate() {
-            process_custom_target(conn, &col_id, target, idx as i32, ts, req_count)?;
+            process_custom_target(conn, &col_id, target, idx as i32, ts, req_count, folder_base_url)?;
         }
     }
 
@@ -512,6 +520,7 @@ fn process_custom_folder(
                 ts,
                 col_count,
                 req_count,
+                folder_base_url,
             )?;
         }
     }
@@ -526,15 +535,27 @@ fn process_custom_target(
     order_idx: i32,
     ts: i64,
     req_count: &mut usize,
+    base_url: Option<&str>,
 ) -> Result<(), String> {
     let req_id = Uuid::new_v4().to_string();
     let name = target_val.get("name").and_then(|n| n.as_str()).unwrap_or("Untitled Request");
     let method = target_val.get("method").and_then(|m| m.as_str()).unwrap_or("GET").to_uppercase();
 
-    let raw_url = target_val.get("endpoint")
-        .and_then(|u| u.as_str())
-        .or_else(|| target_val.get("url").and_then(|u| u.as_str()))
-        .unwrap_or("https://httpbin.org/get");
+    // "endpoint" is normally a path relative to the enclosing folder's base "url"
+    // (e.g. folder url "{{gateway_url}}" + endpoint "/documents"). Some endpoints
+    // already embed their own absolute/templated host (e.g. "{{sso_url}}/users/...")
+    // and override the folder base entirely - detect that and don't double-prefix.
+    let raw_url = match target_val.get("endpoint").and_then(|u| u.as_str()) {
+        Some(ep) if ep.starts_with("http") || ep.starts_with("{{") => ep.to_string(),
+        Some(ep) => match base_url {
+            Some(base) => format!("{}{}", base, ep),
+            None => ep.to_string(),
+        },
+        None => target_val.get("url")
+            .and_then(|u| u.as_str())
+            .unwrap_or("https://httpbin.org/get")
+            .to_string(),
+    };
 
     let desc = target_val.get("description").and_then(|d| d.as_str()).map(|s| s.to_string());
 
@@ -573,7 +594,46 @@ fn process_custom_target(
         .and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) })
         .or_else(|| target_val.get("body_json").and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) }));
 
-    let (body_type, b_json, b_raw, b_form, b_url) = detect_and_assign_body(body_mode, raw_payload_str.as_deref());
+    let (body_type, mut b_json, b_raw, mut b_form, mut b_url) = detect_and_assign_body(body_mode, raw_payload_str.as_deref());
+
+    if b_json.is_none() {
+        if let Some(bj) = target_val.get("body_json").and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) }) {
+            b_json = Some(bj);
+        }
+    }
+    if b_url.is_none() {
+        if let Some(bu) = target_val.get("body_urlencoded").and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) }) {
+            b_url = Some(bu);
+        }
+    }
+    if b_form.is_none() {
+        if let Some(bm) = target_val.get("body_multipart").or_else(|| target_val.get("body_form_data")).and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) }) {
+            b_form = Some(bm);
+        }
+    }
+
+    // Parameters handling (supports url_params JSON string, params array, or params object)
+    let params_json = if let Some(up) = target_val.get("url_params").and_then(|p| p.as_str()) {
+        if serde_json::from_str::<Vec<serde_json::Value>>(up).is_ok() {
+            up.to_string()
+        } else {
+            "[]".to_string()
+        }
+    } else if let Some(p_arr) = target_val.get("params").and_then(|p| p.as_array()) {
+        serde_json::to_string(p_arr).unwrap_or_else(|_| "[]".to_string())
+    } else if let Some(p_obj) = target_val.get("params").and_then(|p| p.as_object()) {
+        let p_arr: Vec<serde_json::Value> = p_obj.iter().map(|(k, v)| {
+            serde_json::json!({
+                "id": Uuid::new_v4().to_string(),
+                "key": k,
+                "value": if v.is_string() { v.as_str().unwrap_or("").to_string() } else { v.to_string() },
+                "enabled": true
+            })
+        }).collect();
+        serde_json::to_string(&p_arr).unwrap_or_else(|_| "[]".to_string())
+    } else {
+        "[]".to_string()
+    };
 
     // Extraction rules handling (supports dict {"var": "expr"} or array of objects [{"type":"...","targetVariable":"...","expression":"..."}])
     let mut extract_rules = Vec::new();
@@ -631,7 +691,7 @@ fn process_custom_target(
 
     conn.execute(
         "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, body_json, body_raw, body_form_data, body_urlencoded, extract_rules_json, description, order_index, created_at_ms, updated_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
             req_id,
             col_id,
@@ -639,6 +699,7 @@ fn process_custom_target(
             method,
             raw_url,
             headers_json,
+            params_json,
             body_type,
             b_json,
             b_raw,

@@ -13,6 +13,7 @@ export const WorkspaceSettingsPanel: React.FC = () => {
     updateWorkspaceDetails,
     deleteWorkspaceById,
     saveEnvironmentVariables,
+    exportWorkspaceToFile,
   } = useWorkspaceStore();
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
@@ -20,10 +21,29 @@ export const WorkspaceSettingsPanel: React.FC = () => {
   const [wsName, setWsName] = useState(activeWorkspace?.name || '');
   const [wsDesc, setWsDesc] = useState(activeWorkspace?.description || '');
   const [savedFeedback, setSavedFeedback] = useState(false);
+  const [exportFeedback, setExportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedEnvId, setSelectedEnvId] = useState<string | null>(null);
   const [localVars, setLocalVars] = useState<EnvironmentVariable[]>([]);
   const [managingVarIndex, setManagingVarIndex] = useState<number | null>(null);
+
+  const handleExportWorkspace = async () => {
+    if (!activeWorkspace) return;
+    setIsExporting(true);
+    try {
+      const result = await exportWorkspaceToFile(activeWorkspace.id);
+      if (result.success && result.filePath) {
+        setExportFeedback({ type: 'success', message: 'Workspace exported!' });
+        setTimeout(() => setExportFeedback(null), 3000);
+      } else if (result.error) {
+        setExportFeedback({ type: 'error', message: `Export failed: ${result.error}` });
+        setTimeout(() => setExportFeedback(null), 5000);
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     if (activeWorkspace) {
@@ -119,6 +139,28 @@ export const WorkspaceSettingsPanel: React.FC = () => {
                 <span>Saved!</span>
               </span>
             )}
+            {exportFeedback && (
+              <span
+                className={`font-semibold text-xs flex items-center gap-1 animate-fade-in ${
+                  exportFeedback.type === 'success' ? 'text-emerald-500' : 'text-rose-500'
+                }`}
+              >
+                <MingCuteIcon
+                  name={exportFeedback.type === 'success' ? 'check_circle_line' : 'close_circle_line'}
+                  size={14}
+                />
+                <span>{exportFeedback.message}</span>
+              </span>
+            )}
+            <button
+              onClick={handleExportWorkspace}
+              disabled={isExporting}
+              className="px-3 py-1 bg-surface hover:bg-neutral-subtle border border-border text-foreground font-semibold rounded text-xs transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5 disabled:opacity-50"
+              title="Export workspace to JSON file"
+            >
+              <MingCuteIcon name="download_line" size={14} className="text-emerald-500" />
+              <span>{isExporting ? 'Exporting...' : 'Export Workspace'}</span>
+            </button>
             <button
               onClick={handleSaveWorkspaceInfo}
               className="px-3 py-1 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded text-xs transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
