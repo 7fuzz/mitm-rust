@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 use crate::db::{save_intercept_rules, set_preference, InterceptRule};
 use crate::state::{AppState, InterceptAction, PendingFlowPayload, ProxyConfig};
 
@@ -144,4 +144,29 @@ pub async fn get_pending_flows(
         .collect();
 
     Ok(payloads)
+}
+
+#[tauri::command]
+pub fn focus_app_window(app_handle: AppHandle) -> Result<(), String> {
+    for (_, window) in app_handle.webview_windows() {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = window.set_always_on_top(true);
+        let _ = window.set_always_on_top(false);
+        let _ = window.request_user_attention(Some(tauri::UserAttentionType::Critical));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_focus_preference(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
+    set_preference(&state.db_path, "focus_on_intercepted", if enabled { "true" } else { "false" })?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_focus_preference(state: State<'_, AppState>) -> Result<bool, String> {
+    let val = crate::db::get_preference(&state.db_path, "focus_on_intercepted");
+    Ok(val.as_deref() != Some("false"))
 }

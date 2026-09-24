@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use tokio::sync::oneshot;
-use tauri::AppHandle;
-use tauri::Emitter;
+use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 
 use crate::proxy::rules::should_intercept;
@@ -37,7 +36,15 @@ pub async fn handle_intercept_hook(
 
     state.pending_flows.insert(flow_id.clone(), pending);
 
-    let body_text = String::from_utf8(body.clone()).unwrap_or_else(|_| format!("<binary data {} bytes>", body.len()));
+    let content_encoding = headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("content-encoding"))
+        .map(|(_, v)| v.as_str())
+        .unwrap_or("");
+
+    let decompressed_body = crate::encoding::decompress_body(&body, content_encoding);
+    let body_text = String::from_utf8(decompressed_body)
+        .unwrap_or_else(|_| format!("<binary data {} bytes>", body.len()));
 
     let payload = PendingFlowPayload {
         flow_id: flow_id.clone(),
@@ -53,6 +60,18 @@ pub async fn handle_intercept_hook(
     };
 
     let _ = app_handle.emit("intercept_triggered", &payload);
+
+    let focus_pref = crate::db::get_preference(&state.db_path, "focus_on_intercepted");
+    if focus_pref.as_deref() != Some("false") {
+        for (_, window) in app_handle.webview_windows() {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+            let _ = window.set_always_on_top(true);
+            let _ = window.set_always_on_top(false);
+            let _ = window.request_user_attention(Some(tauri::UserAttentionType::Critical));
+        }
+    }
 
     if let Some(eid) = entry_id {
         let now = time::OffsetDateTime::now_utc()

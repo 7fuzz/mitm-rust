@@ -176,3 +176,6 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+            commands::intercept_cmd::focus_app_window,
+            commands::intercept_cmd::set_focus_preference,
+            commands::intercept_cmd::get_focus_preference,

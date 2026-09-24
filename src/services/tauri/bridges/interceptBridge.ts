@@ -80,3 +80,15 @@ export const subscribeInterceptTriggered = async (
     callback(e.payload);
   });
 };
+
+export const focusAppWindow = async (): Promise<void> => {
+  return await invoke<void>("focus_app_window");
+};
+
+export const setFocusPreference = async (enabled: boolean): Promise<void> => {
+  return await invoke<void>("set_focus_preference", { enabled });
+};
+
+export const getFocusPreference = async (): Promise<boolean> => {
+  return await invoke<boolean>("get_focus_preference");
+};

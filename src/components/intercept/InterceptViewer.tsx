@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useInterceptStore } from "../../stores/useInterceptStore";
 import { MingCuteIcon } from "../common/MingCuteIcon";
 import { Dialog } from "../common/ui/Dialog";
@@ -43,17 +43,22 @@ export const InterceptViewer: React.FC = () => {
     forwardAllFlows,
     dropAllFlows,
     addRule,
+    updateRule,
     toggleRule,
+    updateRuleAction,
     deleteRule,
   } = useInterceptStore();
 
   const [activeTab, setActiveTab] = useState<"params" | "headers" | "body">("params");
   const [rulesModalOpen, setRulesModalOpen] = useState(false);
 
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [newRuleAction, setNewRuleAction] = useState<"intercept" | "pass">("intercept");
   const [newRulePhase, setNewRulePhase] = useState<"request" | "response" | "both">("request");
   const [newRuleField, setNewRuleField] = useState<"url" | "host" | "path" | "method" | "header">("url");
   const [newRuleOperator, setNewRuleOperator] = useState<"contains" | "equals" | "regex">("contains");
   const [newRuleValue, setNewRuleValue] = useState("");
+  const [ruleFilterTab, setRuleFilterTab] = useState<"all" | "intercept" | "pass">("all");
 
   const selectedFlow = pendingFlows.find((f) => f.flowId === selectedFlowId);
   const isRequestPhase = selectedFlow?.phase === "request";
@@ -97,21 +102,87 @@ export const InterceptViewer: React.FC = () => {
     setEditedHeaders(editedHeaders.filter((_, i) => i !== index));
   };
 
+  const handleStartEditRule = (rule: any) => {
+    setEditingRuleId(rule.id);
+    setNewRuleAction(rule.action === "pass" ? "pass" : "intercept");
+    setNewRulePhase(rule.targetPhase);
+    setNewRuleField(rule.matchField);
+    setNewRuleOperator(rule.operator);
+    setNewRuleValue(rule.matchValue);
+  };
+
+  const handleCancelEditRule = () => {
+    setEditingRuleId(null);
+    setNewRuleAction("intercept");
+    setNewRulePhase("request");
+    setNewRuleField("url");
+    setNewRuleOperator("contains");
+    setNewRuleValue("");
+  };
+
   const handleCreateRule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRuleValue.trim()) return;
-    await addRule({
-      isEnabled: true,
-      targetPhase: newRulePhase,
-      matchField: newRuleField,
-      operator: newRuleOperator,
-      matchValue: newRuleValue.trim(),
-      orderIndex: rules.length,
-    });
+
+    if (editingRuleId) {
+      const existing = rules.find((r) => r.id === editingRuleId);
+      if (existing) {
+        await updateRule({
+          ...existing,
+          targetPhase: newRulePhase,
+          matchField: newRuleField,
+          operator: newRuleOperator,
+          matchValue: newRuleValue.trim(),
+          action: newRuleAction,
+        });
+      }
+      setEditingRuleId(null);
+    } else {
+      await addRule({
+        isEnabled: true,
+        targetPhase: newRulePhase,
+        matchField: newRuleField,
+        operator: newRuleOperator,
+        matchValue: newRuleValue.trim(),
+        action: newRuleAction,
+        orderIndex: rules.length,
+      });
+    }
     setNewRuleValue("");
   };
 
   const activeParamsCount = editedParams.filter((p) => p.enabled && p.key.trim()).length;
+
+  const handlePrettifyBody = () => {
+    try {
+      const parsed = JSON.parse(editedBodyText.trim());
+      setEditedBodyText(JSON.stringify(parsed, null, 2));
+    } catch {
+      // Not valid JSON, keep as is
+    }
+  };
+
+  const isJsonBody = useMemo(() => {
+    const trimmed = editedBodyText.trim();
+    if (
+      (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+      (trimmed.startsWith("[") && trimmed.endsWith("]"))
+    ) {
+      try {
+        JSON.parse(trimmed);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }, [editedBodyText]);
+
+  const filteredRules = rules.filter((rule) => {
+    if (ruleFilterTab === "intercept") return rule.action !== "pass";
+    if (ruleFilterTab === "pass") return rule.action === "pass";
+    return true;
+  });
 
   return (
     <div className="flex flex-col h-full w-full bg-background text-foreground font-sans antialiased overflow-hidden select-none">
@@ -407,9 +478,27 @@ export const InterceptViewer: React.FC = () => {
                   </div>
                 ) : (
                   <div className="flex flex-col h-full space-y-2">
-                    <span className="text-muted-foreground font-sans text-xs font-semibold">
-                      Edit Body Content
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground font-sans text-xs font-semibold">
+                          Edit Body Content
+                        </span>
+                        {isJsonBody && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                            JSON
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handlePrettifyBody}
+                        className="flex items-center gap-1.5 px-2.5 py-1 bg-surface hover:bg-neutral-subtle border border-border text-foreground rounded text-xs transition-colors cursor-pointer font-sans font-medium"
+                        title="Format / Prettify JSON with 2-space indentation"
+                      >
+                        <MingCuteIcon name="code_line" size={13} className="text-amber-500" />
+                        <span>Prettify JSON</span>
+                      </button>
+                    </div>
                     <textarea
                       value={editedBodyText}
                       onChange={(e) => setEditedBodyText(e.target.value)}
@@ -437,10 +526,37 @@ export const InterceptViewer: React.FC = () => {
         description="Configure whitelist and blacklist criteria to selectively pause and inspect traffic."
         size="xl"
       >
-        {/* Add New Rule Form */}
+        {/* Add/Edit Rule Form */}
         <form onSubmit={handleCreateRule} className="pb-3 border-b border-border space-y-3">
-          <div className="text-xs font-semibold text-muted-foreground">Add New Matching Rule</div>
-          <div className="grid grid-cols-4 gap-2 text-xs">
+          <div className="flex items-center justify-between text-xs font-semibold">
+            <span className={editingRuleId ? "text-amber-500 font-bold flex items-center gap-1.5" : "text-muted-foreground"}>
+              {editingRuleId ? (
+                <>
+                  <MingCuteIcon name="edit_line" size={14} /> Editing Matching Rule
+                </>
+              ) : (
+                "Add New Matching Rule"
+              )}
+            </span>
+            {editingRuleId && (
+              <button
+                type="button"
+                onClick={handleCancelEditRule}
+                className="text-[11px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+              >
+                Cancel Edit
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-5 gap-2 text-xs">
+            <select
+              value={newRuleAction}
+              onChange={(e: any) => setNewRuleAction(e.target.value)}
+              className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none cursor-pointer font-semibold"
+            >
+              <option value="intercept">Whitelist (Pause)</option>
+              <option value="pass">Blacklist (Pass)</option>
+            </select>
             <select
               value={newRulePhase}
               onChange={(e: any) => setNewRulePhase(e.target.value)}
@@ -470,12 +586,30 @@ export const InterceptViewer: React.FC = () => {
               <option value="equals">Equals</option>
               <option value="regex">Regex</option>
             </select>
-            <button
-              type="submit"
-              className="flex items-center justify-center gap-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded px-3 py-1.5 transition-colors cursor-pointer"
-            >
-              <MingCuteIcon name="plus_line" size={14} /> Add Rule
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="submit"
+                disabled={!newRuleValue.trim()}
+                className={`flex-1 flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded px-3 py-1.5 transition-colors cursor-pointer ${
+                  editingRuleId
+                    ? "bg-sky-500 hover:bg-sky-600"
+                    : "bg-amber-500 hover:bg-amber-600"
+                }`}
+              >
+                <MingCuteIcon name={editingRuleId ? "check_line" : "plus_line"} size={14} />
+                {editingRuleId ? "Save" : "Add Rule"}
+              </button>
+              {editingRuleId && (
+                <button
+                  type="button"
+                  onClick={handleCancelEditRule}
+                  className="px-2 py-1.5 bg-surface hover:bg-neutral-subtle border border-border rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs"
+                  title="Cancel editing"
+                >
+                  <MingCuteIcon name="close_line" size={14} />
+                </button>
+              )}
+            </div>
           </div>
           <input
             type="text"
@@ -486,41 +620,125 @@ export const InterceptViewer: React.FC = () => {
           />
         </form>
 
+        {/* Filter Tabs & Counter */}
+        <div className="flex items-center justify-between pt-1 text-xs border-b border-border pb-2">
+          <div className="flex items-center gap-1 bg-surface p-0.5 rounded-lg border border-border">
+            <button
+              type="button"
+              onClick={() => setRuleFilterTab("all")}
+              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                ruleFilterTab === "all"
+                  ? "bg-primary text-primary-foreground font-bold shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              All ({rules.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setRuleFilterTab("intercept")}
+              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                ruleFilterTab === "intercept"
+                  ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 font-bold border border-amber-500/40 shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Whitelist ({rules.filter((r) => r.action !== "pass").length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setRuleFilterTab("pass")}
+              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                ruleFilterTab === "pass"
+                  ? "bg-sky-500/20 text-sky-600 dark:text-sky-300 font-bold border border-sky-500/40 shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Blacklist ({rules.filter((r) => r.action === "pass").length})
+            </button>
+          </div>
+          <span className="text-[11px] text-muted-foreground font-mono">
+            {rules.filter((r) => r.isEnabled).length} active rule{rules.filter((r) => r.isEnabled).length === 1 ? "" : "s"}
+          </span>
+        </div>
+
         {/* Existing Rules List */}
         <div className="overflow-y-auto py-1 space-y-2 text-xs max-h-80">
           {rules.length === 0 ? (
             <div className="text-center py-6 text-muted-foreground italic">
               No custom rules added. All traffic will be paused when interceptor is active.
             </div>
+          ) : filteredRules.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground italic">
+              No rules in the selected filter tab.
+            </div>
           ) : (
-            rules.map((rule) => (
-              <div
-                key={rule.id}
-                className="flex items-center justify-between p-2.5 bg-background rounded-lg border border-border"
-              >
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={rule.isEnabled}
-                    onChange={() => toggleRule(rule.id)}
-                    className="rounded accent-amber-500 cursor-pointer"
-                  />
-                  <span className="font-mono text-amber-500 font-bold uppercase text-[10px]">
-                    [{rule.targetPhase}]
-                  </span>
-                  <span className="font-mono text-foreground">
-                    {rule.matchField} {rule.operator} "{rule.matchValue}"
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => deleteRule(rule.id)}
-                  className="text-muted-foreground hover:text-rose-500 transition-colors p-1 cursor-pointer"
+            filteredRules.map((rule) => {
+              const isWhitelist = rule.action !== "pass";
+              return (
+                <div
+                  key={rule.id}
+                  className={`flex items-center justify-between p-2.5 rounded-lg border transition-colors ${
+                    editingRuleId === rule.id
+                      ? "bg-sky-500/10 border-sky-500/40"
+                      : "bg-background border-border hover:border-border/80"
+                  }`}
                 >
-                  <MingCuteIcon name="delete_2_line" size={14} />
-                </button>
-              </div>
-            ))
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={rule.isEnabled}
+                      onChange={() => toggleRule(rule.id)}
+                      className="rounded accent-amber-500 cursor-pointer"
+                      title={rule.isEnabled ? "Disable rule" : "Enable rule"}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updateRuleAction(rule.id, isWhitelist ? "pass" : "intercept")}
+                      title="Click to toggle between Whitelist and Blacklist"
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-wide uppercase transition-colors cursor-pointer ${
+                        isWhitelist
+                          ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
+                          : "bg-sky-500/20 text-sky-600 dark:text-sky-300 border border-sky-500/40 hover:bg-sky-500/30"
+                      }`}
+                    >
+                      {isWhitelist ? "WHITELIST (PAUSE)" : "BLACKLIST (PASS)"}
+                    </button>
+                    <span className="font-mono text-muted-foreground font-semibold uppercase text-[10px] bg-surface px-1.5 py-0.5 rounded border border-border">
+                      {rule.targetPhase}
+                    </span>
+                    <span className="font-mono text-foreground text-xs truncate">
+                      <span className="font-semibold text-primary">{rule.matchField}</span> {rule.operator}{" "}
+                      <span className="bg-surface px-1.5 py-0.5 rounded border border-border font-mono text-amber-600 dark:text-amber-400">
+                        "{rule.matchValue}"
+                      </span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                    <button
+                      type="button"
+                      onClick={() => handleStartEditRule(rule)}
+                      className={`transition-colors p-1 cursor-pointer rounded ${
+                        editingRuleId === rule.id
+                          ? "text-sky-500 bg-sky-500/15"
+                          : "text-muted-foreground hover:text-foreground hover:bg-neutral-subtle"
+                      }`}
+                      title="Edit rule"
+                    >
+                      <MingCuteIcon name="edit_line" size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteRule(rule.id)}
+                      className="text-muted-foreground hover:text-rose-500 hover:bg-rose-500/15 transition-colors p-1 cursor-pointer rounded"
+                      title="Delete rule"
+                    >
+                      <MingCuteIcon name="delete_2_line" size={14} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       </Dialog>

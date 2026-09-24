@@ -13,6 +13,9 @@ import {
   subscribeInterceptTriggered,
   getProxyState,
   isTauriAvailable,
+  focusAppWindow,
+  setFocusPreference,
+  getFocusPreference,
 } from "../services/tauri/bridge";
 import { UnlistenFn } from "@tauri-apps/api/event";
 import { useSettingsStore } from "./useSettingsStore";
@@ -79,6 +82,23 @@ export const rebuildUrlWithParams = (baseUrlOrFullUrl: string, params: Intercept
   }
 };
 
+export const tryPrettifyJson = (text: string): string => {
+  if (!text || !text.trim()) return text;
+  const trimmed = text.trim();
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return text;
+    }
+  }
+  return text;
+};
+
 interface InterceptState {
   interceptEnabled: boolean;
   interceptMode: "request" | "response" | "both";
@@ -100,7 +120,9 @@ interface InterceptState {
   setFocusOnIntercepted: (val: boolean) => void;
   setRules: (rules: InterceptRule[]) => Promise<void>;
   addRule: (rule: Omit<InterceptRule, "id" | "createdAtMs">) => Promise<void>;
+  updateRule: (rule: InterceptRule) => Promise<void>;
   toggleRule: (id: string) => Promise<void>;
+  updateRuleAction: (id: string, action: "intercept" | "pass") => Promise<void>;
   deleteRule: (id: string) => Promise<void>;
   selectFlow: (flowId: string) => void;
   setEditedMethod: (method: string) => void;
@@ -134,18 +156,35 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
       const rules = await getInterceptRules();
       const pending = await getPendingFlows();
 
-      const selectedId = pending.length > 0 ? pending[0].flowId : null;
-      const initialMethod = pending.length > 0 ? pending[0].method : "GET";
-      const initialUrl = pending.length > 0 ? pending[0].url : "";
-      const initialParams = pending.length > 0 ? parseParamsFromUrl(pending[0].url) : [];
-      const initialHeaders = pending.length > 0 ? pending[0].headers : [];
-      const initialBody = pending.length > 0 ? pending[0].bodyText : "";
+      const formattedPending = pending.map((p) => ({
+        ...p,
+        bodyText: tryPrettifyJson(p.bodyText),
+      }));
+
+      const selectedId = formattedPending.length > 0 ? formattedPending[0].flowId : null;
+      const initialMethod = formattedPending.length > 0 ? formattedPending[0].method : "GET";
+      const initialUrl = formattedPending.length > 0 ? formattedPending[0].url : "";
+      const initialParams = formattedPending.length > 0 ? parseParamsFromUrl(formattedPending[0].url) : [];
+      const initialHeaders = formattedPending.length > 0 ? formattedPending[0].headers : [];
+      const initialBody = formattedPending.length > 0 ? formattedPending[0].bodyText : "";
+
+      let initialFocus = true;
+      if (isTauriAvailable()) {
+        try {
+          initialFocus = await getFocusPreference();
+        } catch {
+          initialFocus = typeof window !== "undefined" ? localStorage.getItem("mitm_focus_on_intercepted") !== "false" : true;
+        }
+      } else {
+        initialFocus = typeof window !== "undefined" ? localStorage.getItem("mitm_focus_on_intercepted") !== "false" : true;
+      }
 
       set({
         interceptEnabled: cfg.interceptEnabled,
         interceptMode: cfg.interceptMode,
+        focusOnIntercepted: initialFocus,
         rules,
-        pendingFlows: pending,
+        pendingFlows: formattedPending,
         selectedFlowId: selectedId,
         editedMethod: initialMethod,
         editedUrl: initialUrl,
@@ -159,7 +198,11 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
         currentUnsub();
       }
 
-      const unsub = await subscribeInterceptTriggered(async (flow) => {
+      const unsub = await subscribeInterceptTriggered(async (rawFlow) => {
+        const flow = {
+          ...rawFlow,
+          bodyText: tryPrettifyJson(rawFlow.bodyText),
+        };
         const state = get();
         const exists = state.pendingFlows.some((f) => f.flowId === flow.flowId);
         if (exists) return;
@@ -168,14 +211,10 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
         const focusEnabled = state.focusOnIntercepted;
 
         if (focusEnabled) {
-          // Bring Tauri window to front & set focus
+          // Bring Tauri window to front & set focus via dedicated native command
           if (isTauriAvailable()) {
             try {
-              const { getCurrentWindow } = await import("@tauri-apps/api/window");
-              const win = getCurrentWindow();
-              await win.unminimize();
-              await win.show();
-              await win.setFocus();
+              await focusAppWindow();
             } catch (err) {
               console.warn("Failed to focus window on intercepted traffic:", err);
             }
@@ -214,11 +253,18 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
     }
   },
 
-  setFocusOnIntercepted: (val: boolean) => {
+  setFocusOnIntercepted: async (val: boolean) => {
     if (typeof window !== "undefined") {
       localStorage.setItem("mitm_focus_on_intercepted", String(val));
     }
     set({ focusOnIntercepted: val });
+    if (isTauriAvailable()) {
+      try {
+        await setFocusPreference(val);
+      } catch (err) {
+        console.warn("Failed to sync focus preference to backend:", err);
+      }
+    }
   },
 
   setInterceptEnabled: async (enabled: boolean) => {
@@ -253,6 +299,7 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
   addRule: async (newRuleData) => {
     const rules = get().rules;
     const rule: InterceptRule = {
+      action: newRuleData.action || "intercept",
       ...newRuleData,
       id: crypto.randomUUID(),
       createdAtMs: Date.now(),
@@ -261,9 +308,23 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
     await get().setRules([...rules, rule]);
   },
 
+  updateRule: async (updatedRule: InterceptRule) => {
+    const rules = get().rules.map((r) =>
+      r.id === updatedRule.id ? updatedRule : r
+    );
+    await get().setRules(rules);
+  },
+
   toggleRule: async (id: string) => {
     const rules = get().rules.map((r) =>
       r.id === id ? { ...r, isEnabled: !r.isEnabled } : r
+    );
+    await get().setRules(rules);
+  },
+
+  updateRuleAction: async (id: string, action: "intercept" | "pass") => {
+    const rules = get().rules.map((r) =>
+      r.id === id ? { ...r, action } : r
     );
     await get().setRules(rules);
   },
@@ -320,11 +381,26 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
     if (!selectedFlowId) return;
 
     try {
-      const headersJson = JSON.stringify(editedHeaders);
-      const encoder = new TextEncoder();
-      const bodyBytes = Array.from(encoder.encode(editedBodyText));
+      const originalFlow = pendingFlows.find((f) => f.flowId === selectedFlowId);
 
-      await forwardInterceptedFlow(selectedFlowId, editedUrl, editedMethod, headersJson, bodyBytes);
+      const isUrlModified = originalFlow ? editedUrl !== originalFlow.url : false;
+      const isMethodModified = originalFlow ? editedMethod !== (originalFlow.method || "GET") : false;
+      const isHeadersModified = originalFlow
+        ? JSON.stringify(editedHeaders) !== JSON.stringify(originalFlow.headers)
+        : false;
+      const isBodyModified = originalFlow ? editedBodyText !== (originalFlow.bodyText || "") : false;
+
+      const modifiedUrl = isUrlModified ? editedUrl : undefined;
+      const modifiedMethod = isMethodModified ? editedMethod : undefined;
+      const headersJson = isHeadersModified ? JSON.stringify(editedHeaders) : undefined;
+
+      let bodyBytes: number[] | undefined = undefined;
+      if (isBodyModified) {
+        const encoder = new TextEncoder();
+        bodyBytes = Array.from(encoder.encode(editedBodyText));
+      }
+
+      await forwardInterceptedFlow(selectedFlowId, modifiedUrl, modifiedMethod, headersJson, bodyBytes);
 
       const remaining = pendingFlows.filter((f) => f.flowId !== selectedFlowId);
       const nextFlow = remaining.length > 0 ? remaining[0] : null;

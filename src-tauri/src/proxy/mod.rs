@@ -604,8 +604,13 @@ async fn handle_http(
                 }
                 Some(InterceptAction::Forward { modified_headers, modified_body, .. }) => {
                     was_intercepted = true;
+                    let body_was_modified = modified_body.is_some();
+                    let mut final_headers = modified_headers.unwrap_or(res_headers);
+                    if body_was_modified {
+                        final_headers.retain(|(k, _)| !k.eq_ignore_ascii_case("content-encoding"));
+                    }
                     (
-                        modified_headers.unwrap_or(res_headers),
+                        final_headers,
                         modified_body.unwrap_or(res_body),
                     )
                 }

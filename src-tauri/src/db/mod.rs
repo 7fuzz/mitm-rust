@@ -9,6 +9,10 @@ use std::path::PathBuf;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
+fn default_intercept_action() -> String {
+    "intercept".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InterceptRule {
@@ -20,6 +24,7 @@ pub struct InterceptRule {
     pub match_value: String,
     pub order_index: i32,
     pub created_at_ms: i64,
+    #[serde(default = "default_intercept_action")]
     pub action: String,       // 'intercept' (whitelist) or 'pass' (blacklist)
 }
 
