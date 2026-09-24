@@ -183,6 +183,7 @@ export const createTrafficSlice: StateCreator<
     searchQuery: '',
     selectedMethods: [],
     methodFilters: {},
+    flagFilters: {},
     statusCodeRange: 'all',
     onlyIntercepted: false,
     onlyRewritten: false,
@@ -230,7 +231,7 @@ export const createTrafficSlice: StateCreator<
 
     loadInitialTraffic: async () => {
       if (!isTauriAvailable()) return;
-      const { searchQuery, methodFilters, statusCodeRange, onlyIntercepted, onlyRewritten, onlyFailed, pageSize } = get();
+      const { searchQuery, methodFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed, pageSize } = get();
 
       const includeMethods = Object.entries(methodFilters)
         .filter(([_, st]) => st === 'include')
@@ -241,9 +242,10 @@ export const createTrafficSlice: StateCreator<
         searchTerm: searchQuery || undefined,
         methodFilter,
         statusRange: statusCodeRange !== 'all' ? statusCodeRange : undefined,
-        onlyIntercepted: onlyIntercepted || undefined,
-        onlyRewritten: onlyRewritten || undefined,
-        onlyFailed: onlyFailed || undefined,
+        onlyIntercepted: (flagFilters['intercepted'] === 'include' || onlyIntercepted) || undefined,
+        onlyRewritten: (flagFilters['rewritten'] === 'include' || onlyRewritten) || undefined,
+        onlyFailed: (flagFilters['failed'] === 'include' || onlyFailed) || undefined,
+        onlyWaiting: flagFilters['waiting'] === 'include' ? true : undefined,
         includeBodies: false,
       };
 
@@ -278,7 +280,7 @@ export const createTrafficSlice: StateCreator<
 
     loadNextPage: async () => {
       if (!isTauriAvailable()) return;
-      const { historyPage, pageSize, hasMore, isLoadingMore, searchQuery, methodFilters, statusCodeRange, onlyIntercepted, onlyRewritten, onlyFailed } = get();
+      const { historyPage, pageSize, hasMore, isLoadingMore, searchQuery, methodFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed } = get();
       if (!hasMore || isLoadingMore) return;
 
       set({ isLoadingMore: true });
@@ -293,9 +295,10 @@ export const createTrafficSlice: StateCreator<
         searchTerm: searchQuery || undefined,
         methodFilter,
         statusRange: statusCodeRange !== 'all' ? statusCodeRange : undefined,
-        onlyIntercepted: onlyIntercepted || undefined,
-        onlyRewritten: onlyRewritten || undefined,
-        onlyFailed: onlyFailed || undefined,
+        onlyIntercepted: (flagFilters['intercepted'] === 'include' || onlyIntercepted) || undefined,
+        onlyRewritten: (flagFilters['rewritten'] === 'include' || onlyRewritten) || undefined,
+        onlyFailed: (flagFilters['failed'] === 'include' || onlyFailed) || undefined,
+        onlyWaiting: flagFilters['waiting'] === 'include' ? true : undefined,
         includeBodies: false,
       };
 
@@ -547,20 +550,52 @@ export const createTrafficSlice: StateCreator<
       });
       get().loadInitialTraffic();
     },
+    setFlagFilter: (flag, filterState) => {
+      set((state) => {
+        const nextFilters = { ...state.flagFilters };
+        if (filterState === 'neutral') {
+          delete nextFilters[flag];
+        } else {
+          nextFilters[flag] = filterState;
+        }
+        return {
+          flagFilters: nextFilters,
+          onlyIntercepted: nextFilters['intercepted'] === 'include',
+          onlyRewritten: nextFilters['rewritten'] === 'include',
+          onlyFailed: nextFilters['failed'] === 'include',
+        };
+      });
+      get().loadInitialTraffic();
+    },
     setStatusCodeRange: (statusCodeRange) => {
       set({ statusCodeRange });
       get().loadInitialTraffic();
     },
     setOnlyIntercepted: (val) => {
-      set({ onlyIntercepted: val });
+      set((state) => {
+        const nextFilters = { ...state.flagFilters };
+        if (val) nextFilters['intercepted'] = 'include';
+        else delete nextFilters['intercepted'];
+        return { onlyIntercepted: val, flagFilters: nextFilters };
+      });
       get().loadInitialTraffic();
     },
     setOnlyRewritten: (val) => {
-      set({ onlyRewritten: val });
+      set((state) => {
+        const nextFilters = { ...state.flagFilters };
+        if (val) nextFilters['rewritten'] = 'include';
+        else delete nextFilters['rewritten'];
+        return { onlyRewritten: val, flagFilters: nextFilters };
+      });
       get().loadInitialTraffic();
     },
     setOnlyFailed: (val) => {
-      set({ onlyFailed: val });
+      set((state) => {
+        const nextFilters = { ...state.flagFilters };
+        if (val) nextFilters['failed'] = 'include';
+        else delete nextFilters['failed'];
+        return { onlyFailed: val, flagFilters: nextFilters };
+      });
       get().loadInitialTraffic();
     },
   };

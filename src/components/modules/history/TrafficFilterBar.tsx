@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useProxyStore } from '../../../stores/useProxyStore';
-import { Input, Select, TriStateFilter, Checkbox, Button, TriState } from '../../common/ui';
+import { Input, Select, TriStateFilter, Button, TriState } from '../../common/ui';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 
 const METHOD_OPTIONS = [
@@ -10,6 +10,13 @@ const METHOD_OPTIONS = [
   { value: 'DELETE', label: 'DELETE' },
   { value: 'PATCH', label: 'PATCH' },
   { value: 'OPTIONS', label: 'OPTIONS' },
+] as const;
+
+const FLAG_OPTIONS = [
+  { value: 'waiting', label: 'Waiting' },
+  { value: 'intercepted', label: 'Intercepted' },
+  { value: 'rewritten', label: 'Rewritten' },
+  { value: 'failed', label: 'Failed' },
 ] as const;
 
 const STATUS_OPTIONS = [
@@ -30,12 +37,8 @@ export const TrafficFilterBar: React.FC = () => {
     setMethodFilter,
     statusCodeRange,
     setStatusCodeRange,
-    onlyIntercepted,
-    setOnlyIntercepted,
-    onlyRewritten,
-    setOnlyRewritten,
-    onlyFailed,
-    setOnlyFailed,
+    flagFilters,
+    setFlagFilter,
     clearTraffic,
     historySettings,
     updateHistorySettings,
@@ -80,6 +83,10 @@ export const TrafficFilterBar: React.FC = () => {
     setMethodFilter(method, nextState);
   };
 
+  const handleFlagTriStateChange = (flag: string, nextState: TriState) => {
+    setFlagFilter(flag, nextState);
+  };
+
   const handleClearSearch = () => {
     setLocalSearch('');
     setSearchQuery('');
@@ -122,32 +129,12 @@ export const TrafficFilterBar: React.FC = () => {
           options={STATUS_OPTIONS}
         />
 
-        {/* Intercepted Only Checkbox */}
-        <div className="px-2 py-1 bg-surface border border-border rounded shadow-2xs">
-          <Checkbox
-            label="Intercepted"
-            checked={onlyIntercepted}
-            onChange={(e) => setOnlyIntercepted(e.target.checked)}
-          />
-        </div>
-
-        {/* Rewritten Only Checkbox */}
-        <div className="px-2 py-1 bg-surface border border-border rounded shadow-2xs">
-          <Checkbox
-            label="Rewritten"
-            checked={onlyRewritten}
-            onChange={(e) => setOnlyRewritten(e.target.checked)}
-          />
-        </div>
-
-        {/* Failed Only Checkbox */}
-        <div className="px-2 py-1 bg-surface border border-border rounded shadow-2xs">
-          <Checkbox
-            label="Failed"
-            checked={onlyFailed}
-            onChange={(e) => setOnlyFailed(e.target.checked)}
-          />
-        </div>
+        {/* Tri-State Flag Filter (Waiting, Intercepted, Rewritten, Failed) */}
+        <TriStateFilter
+          items={FLAG_OPTIONS}
+          values={flagFilters}
+          onChange={handleFlagTriStateChange}
+        />
       </div>
 
       {/* Right Controls: Limit Settings & Clear Logs */}

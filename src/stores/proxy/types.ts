@@ -25,6 +25,7 @@ export interface TrafficSlice {
   searchQuery: string;
   selectedMethods: string[];
   methodFilters: Record<string, 'include' | 'exclude' | 'neutral'>;
+  flagFilters: Record<string, 'include' | 'exclude' | 'neutral'>;
   statusCodeRange: 'all' | '2xx' | '3xx' | '4xx' | '5xx';
   onlyIntercepted: boolean;
   onlyRewritten: boolean;
@@ -47,6 +48,7 @@ export interface TrafficSlice {
   setSearchQuery: (query: string) => void;
   setSelectedMethods: (methods: string[]) => void;
   setMethodFilter: (method: string, state: 'include' | 'exclude' | 'neutral') => void;
+  setFlagFilter: (flag: string, state: 'include' | 'exclude' | 'neutral') => void;
   setStatusCodeRange: (range: 'all' | '2xx' | '3xx' | '4xx' | '5xx') => void;
   setOnlyIntercepted: (val: boolean) => void;
   setOnlyRewritten: (val: boolean) => void;

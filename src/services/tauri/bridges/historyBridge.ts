@@ -47,6 +47,7 @@ export interface HistoryFilterOptions {
   onlyIntercepted?: boolean;
   onlyRewritten?: boolean;
   onlyFailed?: boolean;
+  onlyWaiting?: boolean;
   includeBodies?: boolean;
 }
 
@@ -85,6 +86,8 @@ export const getHistoryLogs = async (
     only_rewritten: opts.onlyRewritten ?? null,
     onlyFailed: opts.onlyFailed ?? null,
     only_failed: opts.onlyFailed ?? null,
+    onlyWaiting: opts.onlyWaiting ?? null,
+    only_waiting: opts.onlyWaiting ?? null,
     includeBodies: opts.includeBodies ?? false,
     include_bodies: opts.includeBodies ?? false,
   });
@@ -111,6 +114,8 @@ export const getHistoryCount = async (options?: HistoryFilterOptions): Promise<n
     only_rewritten: opts.onlyRewritten ?? null,
     onlyFailed: opts.onlyFailed ?? null,
     only_failed: opts.onlyFailed ?? null,
+    onlyWaiting: opts.onlyWaiting ?? null,
+    only_waiting: opts.onlyWaiting ?? null,
   });
 };
 

@@ -23,6 +23,7 @@ export const HistoryView: React.FC = () => {
     searchQuery,
     selectedMethods,
     methodFilters,
+    flagFilters,
     statusCodeRange,
     onlyIntercepted,
     onlyRewritten,
@@ -113,14 +114,45 @@ export const HistoryView: React.FC = () => {
         if (statusCodeRange === '5xx' && code < 500) return false;
       }
 
-      // Flag filters
-      if (onlyIntercepted && !item.isIntercepted) return false;
-      if (onlyRewritten && !item.isRewritten) return false;
-      if (onlyFailed && !item.isFailed) return false;
+      // Tri-state Flag filters (waiting, intercepted, rewritten, failed)
+      const isPendingResponse = item.phase === 'request';
+      const isPendingIntercept = item.phase === 'intercepted_request' || item.phase === 'intercepted_response';
+      const isWaiting = isPendingResponse;
+      const isIntercepted = Boolean(item.isIntercepted || isPendingIntercept);
+      const isRewritten = Boolean(item.isRewritten);
+      const isFailed = Boolean(item.isFailed && !isPendingResponse && !isPendingIntercept);
+
+      const flagMap: Record<string, boolean> = {
+        waiting: isWaiting,
+        intercepted: isIntercepted,
+        rewritten: isRewritten,
+        failed: isFailed,
+      };
+
+      // If any active flag is set to exclude and the item matches it, exclude it
+      for (const [flag, state] of Object.entries(flagFilters || {})) {
+        if (state === 'exclude' && flagMap[flag]) {
+          return false;
+        }
+      }
+
+      // If any flags are set to include, the item must match at least one included flag
+      const hasAnyIncludeFlag = Object.values(flagFilters || {}).some((st) => st === 'include');
+      if (hasAnyIncludeFlag) {
+        const matchesAnyInclude = Object.entries(flagFilters || {}).some(
+          ([flag, state]) => state === 'include' && flagMap[flag]
+        );
+        if (!matchesAnyInclude) return false;
+      } else {
+        // Fallback for boolean flags
+        if (onlyIntercepted && !flagMap.intercepted) return false;
+        if (onlyRewritten && !flagMap.rewritten) return false;
+        if (onlyFailed && !flagMap.failed) return false;
+      }
 
       return true;
     });
-  }, [traffic, searchQuery, selectedMethods, methodFilters, statusCodeRange, onlyIntercepted, onlyRewritten, onlyFailed]);
+  }, [traffic, searchQuery, selectedMethods, methodFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed]);
 
   // Virtualization state & refs
   const tableContainerRef = useRef<HTMLDivElement>(null);

@@ -51,6 +51,7 @@ pub async fn get_history_logs(
     only_intercepted: Option<bool>,
     only_rewritten: Option<bool>,
     only_failed: Option<bool>,
+    only_waiting: Option<bool>,
     include_bodies: Option<bool>,
 ) -> Result<Vec<HistoryEntry>, String> {
     let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
@@ -109,6 +110,10 @@ pub async fn get_history_logs(
 
     if let Some(true) = only_failed {
         query.push_str(" AND COALESCE(is_failed, 0) = 1");
+    }
+
+    if let Some(true) = only_waiting {
+        query.push_str(" AND phase = 'request'");
     }
 
     query.push_str(" ORDER BY CAST(id AS INTEGER) DESC, created_at DESC LIMIT ? OFFSET ?");
@@ -239,6 +244,7 @@ pub async fn get_history_count(
     only_intercepted: Option<bool>,
     only_rewritten: Option<bool>,
     only_failed: Option<bool>,
+    only_waiting: Option<bool>,
 ) -> Result<u64, String> {
     let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
     let mut query = String::from("SELECT COUNT(*) FROM history WHERE 1=1");
@@ -286,6 +292,10 @@ pub async fn get_history_count(
 
     if let Some(true) = only_failed {
         query.push_str(" AND COALESCE(is_failed, 0) = 1");
+    }
+
+    if let Some(true) = only_waiting {
+        query.push_str(" AND phase = 'request'");
     }
 
     let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
