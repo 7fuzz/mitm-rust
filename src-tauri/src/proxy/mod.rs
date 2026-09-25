@@ -523,6 +523,18 @@ async fn handle_http(
     let mut headers_cleaned = final_req_headers.clone();
     headers_cleaned.retain(|(k, _)| !k.eq_ignore_ascii_case("content-length") && !k.eq_ignore_ascii_case("transfer-encoding"));
 
+    let mut host_updated = false;
+    for (k, v) in headers_cleaned.iter_mut() {
+        if k.eq_ignore_ascii_case("host") {
+            *v = final_host.clone();
+            host_updated = true;
+            break;
+        }
+    }
+    if !host_updated && !final_host.is_empty() {
+        headers_cleaned.push(("Host".to_string(), final_host.clone()));
+    }
+
     for (k, v) in headers_cleaned.iter() {
         new_req = new_req.header(k, v);
     }

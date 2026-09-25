@@ -98,6 +98,7 @@ pub async fn apply_request_rewrite_pipeline(
     for rule in rules.iter().filter(|r| r.enabled) {
         let is_req_action = rule.action_type == "partial_request"
             || rule.action_type == "full_request"
+            || rule.action_type == "redirect"
             || rule.action_type == "full_response";
 
         if !is_req_action {
@@ -137,6 +138,12 @@ pub async fn apply_request_rewrite_pipeline(
                             if let Ok(parsed_uri) = url.parse::<Uri>() {
                                 if let Some(h) = parsed_uri.host() {
                                     *host = h.to_string();
+                                    for (k, v) in headers.iter_mut() {
+                                        if k.eq_ignore_ascii_case("host") {
+                                            *v = h.to_string();
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -207,6 +214,12 @@ pub async fn apply_request_rewrite_pipeline(
                             if let Ok(parsed_uri) = url.parse::<Uri>() {
                                 if let Some(h) = parsed_uri.host() {
                                     *host = h.to_string();
+                                    for (k, v) in headers.iter_mut() {
+                                        if k.eq_ignore_ascii_case("host") {
+                                            *v = h.to_string();
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                             changed = true;
@@ -224,6 +237,68 @@ pub async fn apply_request_rewrite_pipeline(
                     }
                     _ => {}
                 }
+            }
+            "redirect" => {
+                let redirect_url = if rule.is_regex {
+                    if let Ok(re) = Regex::new(&rule.match_pattern) {
+                        re.replace_all(url, &rule.replacement_value).to_string()
+                    } else {
+                        rule.replacement_value.clone()
+                    }
+                } else if !rule.match_pattern.is_empty() && url.contains(&rule.match_pattern) {
+                    url.replace(&rule.match_pattern, &rule.replacement_value)
+                } else if !rule.replacement_value.is_empty() {
+                    rule.replacement_value.clone()
+                } else {
+                    url.clone()
+                };
+
+                let status = rule.mock_status_code.unwrap_or(307);
+                let mut redirect_headers: Vec<(String, String)> = vec![
+                    ("Location".to_string(), redirect_url.clone()),
+                    ("Access-Control-Allow-Origin".to_string(), "*".to_string()),
+                    ("Access-Control-Allow-Credentials".to_string(), "true".to_string()),
+                    ("Access-Control-Allow-Methods".to_string(), "GET, POST, PUT, DELETE, PATCH, OPTIONS".to_string()),
+                    ("Access-Control-Allow-Headers".to_string(), "*".to_string()),
+                    ("Content-Type".to_string(), "text/plain".to_string()),
+                ];
+
+                if let Some(ref j) = rule.mock_headers_json {
+                    if let Ok(extra_hdrs) = serde_json::from_str::<Vec<(String, String)>>(j) {
+                        for (k, v) in extra_hdrs {
+                            redirect_headers.retain(|(ek, _)| !ek.eq_ignore_ascii_case(&k));
+                            redirect_headers.push((k, v));
+                        }
+                    }
+                }
+
+                let redirect_body = format!("Redirecting to {}...", redirect_url).into_bytes();
+
+                let entry = RewriteHistoryEntry {
+                    id: format!("rw-{}", uuid::Uuid::new_v4()),
+                    rule_id: Some(rule.id.clone()),
+                    rule_name: rule.name.clone(),
+                    action_type: format!("redirect ({})", status),
+                    method: orig_method,
+                    original_url: orig_url,
+                    rewritten_url: redirect_url,
+                    original_headers: orig_headers,
+                    rewritten_headers: redirect_headers.clone(),
+                    original_body: orig_body_text,
+                    rewritten_body: String::from_utf8_lossy(&redirect_body).to_string(),
+                    status_code: Some(status),
+                    duration_ms: Some(0),
+                    created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                };
+
+                let _ = state.rewrite_tx.send(entry.clone()).await;
+                let _ = app_handle.emit("rewrite_captured", RewriteCapturedEvent { entry });
+
+                return Some(MockResponse {
+                    status,
+                    headers: redirect_headers,
+                    body: redirect_body,
+                });
             }
             "full_response" => {
                 // Short-circuit with mock response

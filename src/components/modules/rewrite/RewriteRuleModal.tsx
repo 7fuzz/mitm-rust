@@ -5,9 +5,17 @@ import { Select, Button, Checkbox, Dialog } from "../../common/ui";
 
 const ACTION_TYPE_OPTIONS = [
   { value: "partial_request", label: "1. Partial Request Rewrite (Fix typo, URL/header/body replace)" },
-  { value: "full_request", label: "2. Full Request Change (Destination Redirect / Body Override)" },
-  { value: "partial_response", label: "3. Partial Response Rewrite (Response body/header replace)" },
-  { value: "full_response", label: "4. Full Response Change (Mock Status / Headers / Body)" },
+  { value: "full_request", label: "2. Full Request Change (Forward to new URL / Override Body or Method)" },
+  { value: "redirect", label: "3. HTTP Redirect (301/302/307/308 Location redirect to new URL)" },
+  { value: "partial_response", label: "4. Partial Response Rewrite (Response body/header replace)" },
+  { value: "full_response", label: "5. Full Response Change (Mock Status / Headers / Body)" },
+] as const;
+
+const REDIRECT_STATUS_OPTIONS = [
+  { value: "307", label: "307 Temporary Redirect (Recommended - Preserves HTTP Method)" },
+  { value: "302", label: "302 Found (Standard Browser Redirect)" },
+  { value: "301", label: "301 Moved Permanently (Permanent Redirect)" },
+  { value: "308", label: "308 Permanent Redirect (Preserves HTTP Method)" },
 ] as const;
 
 const MATCH_FIELD_OPTIONS = [
@@ -31,7 +39,7 @@ export const RewriteRuleModal: React.FC = () => {
   const { isRuleModalOpen, closeRuleModal, editingRule, addOrUpdateRule } = useRewriteStore();
 
   const [name, setName] = useState("");
-  const [actionType, setActionType] = useState<"partial_request" | "full_request" | "partial_response" | "full_response">("partial_request");
+  const [actionType, setActionType] = useState<"partial_request" | "full_request" | "redirect" | "partial_response" | "full_response">("partial_request");
   
   const [matchField, setMatchField] = useState<"all" | "url" | "host" | "path" | "method" | "header">("url");
   const [matchOperator, setMatchOperator] = useState<"contains" | "equals" | "regex" | "starts_with">("contains");
@@ -63,10 +71,14 @@ export const RewriteRuleModal: React.FC = () => {
       setMatchPattern(editingRule.matchPattern);
       setReplacementValue(editingRule.replacementValue);
       setIsRegex(editingRule.isRegex);
-      setMockStatusCode(editingRule.mockStatusCode || 200);
+      setMockStatusCode(editingRule.mockStatusCode || (editingRule.actionType === "redirect" ? 307 : 200));
       setMockHeadersJson(editingRule.mockHeadersJson || '[\n  ["Content-Type", "application/json"]\n]');
       setMockBody(editingRule.mockBody || "");
-      setTestInput(editingRule.matchPattern ? `https://api.example.com${editingRule.matchPattern}sample` : "https://api.example.com/v1/v1/users");
+      if (editingRule.actionType === "redirect") {
+        setTestInput(editingRule.matchPattern ? `${editingRule.matchPattern}/dashboard?step=1` : "https://form.duluin.com/submit?id=123");
+      } else {
+        setTestInput(editingRule.matchPattern ? `https://api.example.com${editingRule.matchPattern}sample` : "https://api.example.com/v1/v1/users");
+      }
     } else {
       setName("");
       setActionType("partial_request");
@@ -102,6 +114,17 @@ export const RewriteRuleModal: React.FC = () => {
         } else {
           setTestResult(testInput);
         }
+      } else if (actionType === "redirect") {
+        let finalUrl = testInput;
+        if (isRegex && matchPattern) {
+          const re = new RegExp(matchPattern, "g");
+          finalUrl = testInput.replace(re, replacementValue);
+        } else if (matchPattern && testInput.includes(matchPattern)) {
+          finalUrl = testInput.split(matchPattern).join(replacementValue);
+        } else if (replacementValue) {
+          finalUrl = replacementValue;
+        }
+        setTestResult(`[HTTP ${mockStatusCode || 307} Redirect]\nLocation: ${finalUrl}`);
       } else if (actionType === "full_request") {
         if (targetPart === "url") {
           setTestResult(replacementValue || "Destination URL");
@@ -135,7 +158,7 @@ export const RewriteRuleModal: React.FC = () => {
       matchPattern: matchPattern.trim(),
       replacementValue,
       isRegex,
-      mockStatusCode: actionType === "full_response" ? mockStatusCode : undefined,
+      mockStatusCode: (actionType === "full_response" || actionType === "redirect") ? (mockStatusCode || (actionType === "redirect" ? 307 : 200)) : undefined,
       mockHeadersJson: actionType === "full_response" ? mockHeadersJson : undefined,
       mockBody: actionType === "full_response" ? mockBody : undefined,
     });
@@ -202,10 +225,14 @@ export const RewriteRuleModal: React.FC = () => {
                 setActionType(newAction);
                 if (newAction === "partial_request" || newAction === "full_request") {
                   setTargetPart("url");
+                } else if (newAction === "redirect") {
+                  setTargetPart("url");
+                  setMockStatusCode(307);
                 } else if (newAction === "partial_response") {
                   setTargetPart("body");
                 } else {
                   setTargetPart("status");
+                  setMockStatusCode(200);
                 }
               }}
               options={ACTION_TYPE_OPTIONS}
@@ -264,7 +291,7 @@ export const RewriteRuleModal: React.FC = () => {
               <span>2. Rewrite Transformation</span>
             </div>
 
-            {(actionType === "partial_request" || actionType === "partial_response") && (
+            {(actionType === "partial_request" || actionType === "partial_response" || actionType === "redirect") && (
               <Checkbox
                 label="Use Regular Expression (Regex)"
                 checked={isRegex}
@@ -274,7 +301,7 @@ export const RewriteRuleModal: React.FC = () => {
           </div>
 
           {/* Target Part Selector */}
-          {actionType !== "full_response" && (
+          {actionType !== "full_response" && actionType !== "redirect" && (
             <div>
               <label className="block text-[10px] text-muted-foreground mb-1">Target Component</label>
               <Select
@@ -287,7 +314,7 @@ export const RewriteRuleModal: React.FC = () => {
           )}
 
           {/* Header Key Field if Header action */}
-          {targetPart === "header" && actionType !== "full_response" && (
+          {targetPart === "header" && actionType !== "full_response" && actionType !== "redirect" && (
             <div>
               <label className="block text-[10px] text-muted-foreground mb-1">Header Name</label>
               <input
@@ -297,6 +324,58 @@ export const RewriteRuleModal: React.FC = () => {
                 placeholder="e.g. Authorization, Access-Control-Allow-Origin, User-Agent"
                 className="w-full bg-background border border-border focus:border-primary rounded px-2.5 py-1.5 text-foreground outline-none font-mono text-xs"
               />
+            </div>
+          )}
+
+          {/* HTTP Redirect Configuration */}
+          {actionType === "redirect" && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] text-muted-foreground mb-1">
+                  HTTP Redirect Status Code
+                </label>
+                <Select
+                  value={String(mockStatusCode || 307)}
+                  onChange={(e) => setMockStatusCode(parseInt(e.target.value) || 307)}
+                  options={REDIRECT_STATUS_OPTIONS}
+                  sizeVariant="sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-[10px] text-muted-foreground">
+                    URL Pattern to Replace (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={matchPattern}
+                    onChange={(e) => setMatchPattern(e.target.value)}
+                    placeholder="e.g. https://form.duluin.com (leave blank for exact redirect)"
+                    className="w-full bg-background border border-border focus:border-primary rounded px-2.5 py-1.5 text-foreground outline-none font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    If set, replaces this substring in URL while preserving paths/query params.
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] text-muted-foreground">
+                    Redirect Destination URL <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={replacementValue}
+                    onChange={(e) => setReplacementValue(e.target.value)}
+                    placeholder="e.g. https://dev-form.duluin.id"
+                    className="w-full bg-background border border-border focus:border-primary rounded px-2.5 py-1.5 text-foreground outline-none font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    The replacement domain or full destination URL sent in the <code>Location</code> header.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 

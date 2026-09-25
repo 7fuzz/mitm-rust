@@ -84,12 +84,17 @@ export const RewriteView: React.FC = () => {
         return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">PARTIAL REQ</span>;
       case "full_request":
         return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30">FULL REQ</span>;
+      case "redirect":
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">REDIRECT</span>;
       case "partial_response":
         return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30">PARTIAL RES</span>;
       case "full_response":
       case "full_response (Mock)":
         return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">MOCK RES</span>;
       default:
+        if (type.startsWith("redirect")) {
+          return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">{type.toUpperCase()}</span>;
+        }
         return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-neutral-subtle text-muted-foreground">{type}</span>;
     }
   };
@@ -114,16 +119,17 @@ export const RewriteView: React.FC = () => {
     } else if (templateType === "redirect") {
       openRuleModal({
         id: "",
-        name: "Redirect Production to Localhost",
+        name: "Redirect Domain (Prod ➔ Dev)",
         enabled: true,
-        actionType: "full_request",
+        actionType: "redirect",
         matchField: "host",
         matchOperator: "contains",
-        matchValue: "api.production.com",
+        matchValue: "form.duluin.com",
         targetPart: "url",
-        matchPattern: "https://api.production.com",
-        replacementValue: "http://localhost:3000",
+        matchPattern: "https://form.duluin.com",
+        replacementValue: "https://dev-form.duluin.id",
         isRegex: false,
+        mockStatusCode: 307,
         orderIndex: rules.length,
         createdAtMs: Date.now(),
       });
@@ -267,8 +273,8 @@ export const RewriteView: React.FC = () => {
                     onClick={() => handleCreateTemplate("redirect")}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface hover:bg-neutral-subtle border border-border text-foreground font-medium text-xs transition-colors cursor-pointer"
                   >
-                    <MingCuteIcon name="external_link_line" size={14} className="text-sky-500" />
-                    <span>Redirect Host</span>
+                    <MingCuteIcon name="external_link_line" size={14} className="text-amber-500" />
+                    <span>Redirect URL (Prod ➔ Dev)</span>
                   </button>
                   <button
                     onClick={() => handleCreateTemplate("mock")}
@@ -351,7 +357,14 @@ export const RewriteView: React.FC = () => {
 
                         {/* Transformation Summary */}
                         <td className="px-3 py-2 truncate max-w-sm">
-                          {rule.actionType === "full_response" ? (
+                          {rule.actionType === "redirect" ? (
+                            <div className="flex items-center gap-1.5 text-xs truncate">
+                              <span className="text-amber-500 font-bold">HTTP {rule.mockStatusCode || 307}</span>
+                              <MingCuteIcon name="arrow_right_line" size={11} className="text-muted-foreground shrink-0" />
+                              <span className="text-emerald-500 font-bold truncate max-w-[200px]">{rule.replacementValue}</span>
+                              {rule.matchPattern && <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">({rule.matchPattern})</span>}
+                            </div>
+                          ) : rule.actionType === "full_response" ? (
                             <span className="text-amber-500 font-bold">Mock HTTP {rule.mockStatusCode || 200}</span>
                           ) : rule.actionType === "full_request" ? (
                             <span>

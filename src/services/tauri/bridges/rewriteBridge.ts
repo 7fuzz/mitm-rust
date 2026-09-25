@@ -5,7 +5,7 @@ export interface RewriteRule {
   id: string;
   name: string;
   enabled: boolean;
-  actionType: "partial_request" | "full_request" | "partial_response" | "full_response";
+  actionType: "partial_request" | "full_request" | "redirect" | "partial_response" | "full_response";
   matchField: "all" | "url" | "host" | "path" | "method" | "header";
   matchOperator: "contains" | "equals" | "regex" | "starts_with";
   matchValue: string;
