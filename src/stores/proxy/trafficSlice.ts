@@ -184,6 +184,7 @@ export const createTrafficSlice: StateCreator<
     selectedMethods: [],
     methodFilters: {},
     flagFilters: {},
+    statusFilters: {},
     statusCodeRange: 'all',
     onlyIntercepted: false,
     onlyRewritten: false,
@@ -231,17 +232,22 @@ export const createTrafficSlice: StateCreator<
 
     loadInitialTraffic: async () => {
       if (!isTauriAvailable()) return;
-      const { searchQuery, methodFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed, pageSize } = get();
+      const { searchQuery, methodFilters, statusFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed, pageSize } = get();
 
       const includeMethods = Object.entries(methodFilters)
         .filter(([_, st]) => st === 'include')
         .map(([m]) => m);
       const methodFilter = includeMethods.length === 1 ? includeMethods[0] : undefined;
 
+      const includeStatuses = Object.entries(statusFilters)
+        .filter(([_, st]) => st === 'include')
+        .map(([s]) => s);
+      const statusRange = includeStatuses.length === 1 ? includeStatuses[0] : (statusCodeRange !== 'all' ? statusCodeRange : undefined);
+
       const opts: HistoryFilterOptions = {
         searchTerm: searchQuery || undefined,
         methodFilter,
-        statusRange: statusCodeRange !== 'all' ? statusCodeRange : undefined,
+        statusRange,
         onlyIntercepted: (flagFilters['intercepted'] === 'include' || onlyIntercepted) || undefined,
         onlyRewritten: (flagFilters['rewritten'] === 'include' || onlyRewritten) || undefined,
         onlyFailed: (flagFilters['failed'] === 'include' || onlyFailed) || undefined,
@@ -280,7 +286,7 @@ export const createTrafficSlice: StateCreator<
 
     loadNextPage: async () => {
       if (!isTauriAvailable()) return;
-      const { historyPage, pageSize, hasMore, isLoadingMore, searchQuery, methodFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed } = get();
+      const { historyPage, pageSize, hasMore, isLoadingMore, searchQuery, methodFilters, statusFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed } = get();
       if (!hasMore || isLoadingMore) return;
 
       set({ isLoadingMore: true });
@@ -291,10 +297,15 @@ export const createTrafficSlice: StateCreator<
         .map(([m]) => m);
       const methodFilter = includeMethods.length === 1 ? includeMethods[0] : undefined;
 
+      const includeStatuses = Object.entries(statusFilters)
+        .filter(([_, st]) => st === 'include')
+        .map(([s]) => s);
+      const statusRange = includeStatuses.length === 1 ? includeStatuses[0] : (statusCodeRange !== 'all' ? statusCodeRange : undefined);
+
       const opts: HistoryFilterOptions = {
         searchTerm: searchQuery || undefined,
         methodFilter,
-        statusRange: statusCodeRange !== 'all' ? statusCodeRange : undefined,
+        statusRange,
         onlyIntercepted: (flagFilters['intercepted'] === 'include' || onlyIntercepted) || undefined,
         onlyRewritten: (flagFilters['rewritten'] === 'include' || onlyRewritten) || undefined,
         onlyFailed: (flagFilters['failed'] === 'include' || onlyFailed) || undefined,
@@ -567,8 +578,27 @@ export const createTrafficSlice: StateCreator<
       });
       get().loadInitialTraffic();
     },
+    setStatusFilter: (status, filterState) => {
+      set((state) => {
+        const nextFilters = { ...state.statusFilters };
+        if (filterState === 'neutral') {
+          delete nextFilters[status];
+        } else {
+          nextFilters[status] = filterState;
+        }
+        return { statusFilters: nextFilters };
+      });
+      get().loadInitialTraffic();
+    },
     setStatusCodeRange: (statusCodeRange) => {
-      set({ statusCodeRange });
+      set((state) => {
+        const nextFilters = { ...state.statusFilters };
+        ['2xx', '3xx', '4xx', '5xx'].forEach((r) => {
+          if (statusCodeRange === r) nextFilters[r] = 'include';
+          else delete nextFilters[r];
+        });
+        return { statusCodeRange, statusFilters: nextFilters };
+      });
       get().loadInitialTraffic();
     },
     setOnlyIntercepted: (val) => {

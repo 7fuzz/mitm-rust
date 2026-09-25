@@ -24,6 +24,7 @@ export const HistoryView: React.FC = () => {
     selectedMethods,
     methodFilters,
     flagFilters,
+    statusFilters,
     statusCodeRange,
     onlyIntercepted,
     onlyRewritten,
@@ -105,13 +106,29 @@ export const HistoryView: React.FC = () => {
         return false;
       }
 
-      // Status code range filter
-      if (statusCodeRange !== 'all') {
-        const code = item.statusCode;
-        if (statusCodeRange === '2xx' && (code < 200 || code >= 300)) return false;
-        if (statusCodeRange === '3xx' && (code < 300 || code >= 400)) return false;
-        if (statusCodeRange === '4xx' && (code < 400 || code >= 500)) return false;
-        if (statusCodeRange === '5xx' && code < 500) return false;
+      // Tri-state Status Code filter (2xx, 3xx, 4xx, 5xx)
+      const code = item.statusCode;
+      const statusRange =
+        code >= 200 && code < 300
+          ? '2xx'
+          : code >= 300 && code < 400
+          ? '3xx'
+          : code >= 400 && code < 500
+          ? '4xx'
+          : code >= 500
+          ? '5xx'
+          : null;
+
+      if (statusRange && statusFilters[statusRange] === 'exclude') {
+        return false;
+      }
+
+      const hasAnyIncludeStatus = Object.values(statusFilters || {}).some((st) => st === 'include');
+      if (hasAnyIncludeStatus) {
+        if (!statusRange || statusFilters[statusRange] !== 'include') return false;
+      } else if (statusCodeRange !== 'all') {
+        // Fallback for legacy statusCodeRange
+        if (statusRange !== statusCodeRange) return false;
       }
 
       // Tri-state Flag filters (waiting, intercepted, rewritten, failed)
@@ -152,7 +169,7 @@ export const HistoryView: React.FC = () => {
 
       return true;
     });
-  }, [traffic, searchQuery, selectedMethods, methodFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed]);
+  }, [traffic, searchQuery, selectedMethods, methodFilters, statusFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed]);
 
   // Virtualization state & refs
   const tableContainerRef = useRef<HTMLDivElement>(null);

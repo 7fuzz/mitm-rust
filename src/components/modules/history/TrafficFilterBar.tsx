@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useProxyStore } from '../../../stores/useProxyStore';
-import { Input, Select, TriStateFilter, Button, TriState } from '../../common/ui';
+import { Input, TriStateFilter, Button, TriState } from '../../common/ui';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 
 const METHOD_OPTIONS = [
@@ -12,19 +12,18 @@ const METHOD_OPTIONS = [
   { value: 'OPTIONS', label: 'OPTIONS' },
 ] as const;
 
+const STATUS_OPTIONS = [
+  { value: '2xx', label: '2xx' },
+  { value: '3xx', label: '3xx' },
+  { value: '4xx', label: '4xx' },
+  { value: '5xx', label: '5xx' },
+] as const;
+
 const FLAG_OPTIONS = [
   { value: 'waiting', label: 'Waiting' },
   { value: 'intercepted', label: 'Intercepted' },
   { value: 'rewritten', label: 'Rewritten' },
   { value: 'failed', label: 'Failed' },
-] as const;
-
-const STATUS_OPTIONS = [
-  { value: 'all', label: 'All Status Codes' },
-  { value: '2xx', label: '2xx Success' },
-  { value: '3xx', label: '3xx Redirection' },
-  { value: '4xx', label: '4xx Client Error' },
-  { value: '5xx', label: '5xx Server Error' },
 ] as const;
 
 const LIMIT_PRESETS = [100, 250, 500, 1000, 2500, 5000, 10000];
@@ -35,8 +34,8 @@ export const TrafficFilterBar: React.FC = () => {
     setSearchQuery,
     methodFilters,
     setMethodFilter,
-    statusCodeRange,
-    setStatusCodeRange,
+    statusFilters,
+    setStatusFilter,
     flagFilters,
     setFlagFilter,
     clearTraffic,
@@ -83,6 +82,10 @@ export const TrafficFilterBar: React.FC = () => {
     setMethodFilter(method, nextState);
   };
 
+  const handleStatusTriStateChange = (status: string, nextState: TriState) => {
+    setStatusFilter(status, nextState);
+  };
+
   const handleFlagTriStateChange = (flag: string, nextState: TriState) => {
     setFlagFilter(flag, nextState);
   };
@@ -122,11 +125,11 @@ export const TrafficFilterBar: React.FC = () => {
           onChange={handleTriStateChange}
         />
 
-        {/* Status Code Range Atomic Select */}
-        <Select
-          value={statusCodeRange}
-          onChange={(e) => setStatusCodeRange(e.target.value as any)}
-          options={STATUS_OPTIONS}
+        {/* Tri-State Status Code Filter (2xx, 3xx, 4xx, 5xx) */}
+        <TriStateFilter
+          items={STATUS_OPTIONS}
+          values={statusFilters}
+          onChange={handleStatusTriStateChange}
         />
 
         {/* Tri-State Flag Filter (Waiting, Intercepted, Rewritten, Failed) */}
