@@ -1,6 +1,7 @@
 import React from 'react';
 import type { KeyValuePair } from '../../types';
 import { MingCuteIcon } from './MingCuteIcon';
+import { StandardHeaderPicker, type StandardHeader } from './StandardHeaderPicker';
 
 interface KeyValueEditorProps {
   items: KeyValuePair[];
@@ -9,6 +10,8 @@ interface KeyValueEditorProps {
   keyPlaceholder?: string;
   valuePlaceholder?: string;
   className?: string;
+  /** When set, shows an "Add Standard Header" picker next to Add Row */
+  standardHeaders?: StandardHeader[];
 }
 
 const COMMON_HEADER_KEYS = [
@@ -73,6 +76,7 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
   keyPlaceholder = 'Key',
   valuePlaceholder = 'Value',
   className = '',
+  standardHeaders,
 }) => {
   const isHeaderEditor = keyPlaceholder.toLowerCase().includes('header');
   const datalistKeyId = isHeaderEditor ? 'http-header-keys-list' : undefined;
@@ -95,11 +99,11 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
     onChange(updated);
   };
 
-  const handleAddRow = () => {
+  const handleAddRow = (key = '', value = '') => {
     const newItem: KeyValuePair = {
       id: 'kv-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5),
-      key: '',
-      value: '',
+      key,
+      value,
       enabled: true,
     };
     onChange([...items, newItem]);
@@ -207,13 +211,22 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
       </div>
 
       {!readOnly && (
-        <button
-          onClick={handleAddRow}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-subtle border border-border text-foreground hover:bg-neutral-subtle/80 text-xs font-medium transition-colors"
-        >
-          <MingCuteIcon name="plus_line" size={14} />
-          Add Row
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleAddRow()}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-subtle border border-border text-foreground hover:bg-neutral-subtle/80 text-xs font-medium transition-colors"
+          >
+            <MingCuteIcon name="plus_line" size={14} />
+            Add Row
+          </button>
+          {standardHeaders && (
+            <StandardHeaderPicker
+              headers={standardHeaders}
+              existingKeys={items.map((i) => i.key)}
+              onPick={(h) => handleAddRow(h.key, h.value)}
+            />
+          )}
+        </div>
       )}
     </div>
   );

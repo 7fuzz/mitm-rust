@@ -168,53 +168,41 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
     updateTab({ ...request, bodyType: newBodyType, headers });
   };
 
-  const handleAddWebHeaders = () => {
-    const currentHeaders = [...(request.headers || [])];
-    const standardHeaders = [
-      { key: 'User-Agent', value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', enabled: true },
-      { key: 'Accept', value: '*/*', enabled: true },
-      { key: 'Accept-Language', value: 'en-US,en;q=0.9', enabled: true },
-      { key: 'Accept-Encoding', value: 'gzip, deflate, br, zstd', enabled: true },
-      { key: 'Connection', value: 'keep-alive', enabled: true },
-      { key: 'Sec-Fetch-Dest', value: 'empty', enabled: true },
-      { key: 'Sec-Fetch-Mode', value: 'cors', enabled: true },
-      { key: 'Sec-Fetch-Site', value: 'same-site', enabled: true },
-      {
-        key: 'Content-Type',
-        value: request.bodyType === 'json'
-          ? 'application/json'
-          : request.bodyType === 'urlencoded'
-          ? 'application/x-www-form-urlencoded'
-          : request.bodyType === 'form'
-          ? 'multipart/form-data'
-          : request.bodyType === 'raw'
-          ? 'text/plain'
-          : 'application/json',
-        enabled: request.bodyType !== 'none',
-      },
-    ];
+  const contentTypeForBody =
+    request.bodyType === 'urlencoded'
+      ? 'application/x-www-form-urlencoded'
+      : request.bodyType === 'form'
+      ? 'multipart/form-data'
+      : request.bodyType === 'raw'
+      ? 'text/plain'
+      : 'application/json';
 
-    let hasAdded = false;
-    for (const sh of standardHeaders) {
-      const exists = currentHeaders.some((h) => h.key.trim().toLowerCase() === sh.key.toLowerCase());
-      if (!exists) {
-        currentHeaders.push({
-          id: `h-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          key: sh.key,
-          value: sh.value,
-          enabled: sh.enabled,
-        });
-        hasAdded = true;
-      }
-    }
-
-    if (hasAdded) {
-      updateTab({ ...request, headers: currentHeaders });
-      showNotification('Added Web Headers!');
-    } else {
-      showNotification('Headers already present');
-    }
-  };
+  const standardHeaders = [
+    { key: 'Accept', value: '*/*' },
+    { key: 'Accept-Encoding', value: 'gzip, deflate, br, zstd' },
+    { key: 'Accept-Language', value: 'en-US,en;q=0.9' },
+    { key: 'Authorization', value: 'Bearer ' },
+    { key: 'Cache-Control', value: 'no-cache' },
+    { key: 'Connection', value: 'keep-alive' },
+    { key: 'Content-Type', value: contentTypeForBody },
+    { key: 'Cookie', value: '' },
+    { key: 'If-Modified-Since', value: '' },
+    { key: 'If-None-Match', value: '' },
+    { key: 'Origin', value: '' },
+    { key: 'Pragma', value: 'no-cache' },
+    { key: 'Range', value: 'bytes=0-' },
+    { key: 'Referer', value: '' },
+    { key: 'Sec-Ch-Ua', value: '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"' },
+    { key: 'Sec-Ch-Ua-Mobile', value: '?0' },
+    { key: 'Sec-Ch-Ua-Platform', value: '"Windows"' },
+    { key: 'Sec-Fetch-Dest', value: 'empty' },
+    { key: 'Sec-Fetch-Mode', value: 'cors' },
+    { key: 'Sec-Fetch-Site', value: 'same-site' },
+    { key: 'Upgrade-Insecure-Requests', value: '1' },
+    { key: 'User-Agent', value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
+    { key: 'X-Forwarded-For', value: '127.0.0.1' },
+    { key: 'X-Requested-With', value: 'XMLHttpRequest' },
+  ];
 
   const handleExecute = async () => {
     await executeActiveRequest(request.id);
@@ -356,28 +344,20 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
 
         {activeTab === 'headers' && (
           <div className="space-y-2">
-            <div className="flex items-center justify-between pb-1 text-xs">
+            <div className="flex items-center pb-1 text-xs">
               <div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
                 <MingCuteIcon name="alert_line" size={13} className="text-primary shrink-0" />
                 <span>
                   <strong>Tip:</strong> If <code>Content-Type</code> is disabled, it will be <strong>auto-detected</strong> from the body format.
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={handleAddWebHeaders}
-                className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-primary font-medium text-[11px] cursor-pointer transition-colors shrink-0"
-                title="Add missing standard web headers (User-Agent, Accept, Encoding, etc.)"
-              >
-                <MingCuteIcon name="plus_line" size={12} />
-                <span>+ Add Web Headers</span>
-              </button>
             </div>
             <KeyValueEditor
               items={request.headers || []}
               onChange={(headers) => updateTab({ ...request, headers })}
               keyPlaceholder="Header Name (e.g. Authorization)"
               valuePlaceholder="Header Value (e.g. Bearer token)"
+              standardHeaders={standardHeaders}
             />
           </div>
         )}
