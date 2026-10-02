@@ -5,7 +5,7 @@ import { useProxyStore } from '../../stores/useProxyStore';
 import { MingCuteIcon } from '../common/MingCuteIcon';
 
 export const StatusBar: React.FC = () => {
-  const { dbSizeMb, isSqliteConnected, setQuickVarModalOpen, setActiveModule } = useSettingsStore();
+  const { setQuickVarModalOpen, setActiveModule } = useSettingsStore();
   const {
     activeWorkspaceId,
     workspaces,
@@ -16,7 +16,7 @@ export const StatusBar: React.FC = () => {
     createNewWorkspace,
     openImportModalForWorkspace,
   } = useWorkspaceStore();
-  const { pendingQueue, traffic } = useProxyStore();
+  const { pendingQueue } = useProxyStore();
 
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
   const [workspaceSearch, setWorkspaceSearch] = useState('');
@@ -116,27 +116,6 @@ export const StatusBar: React.FC = () => {
           <span>Env: {envName}</span>
           <MingCuteIcon name="down_line" size={12} className="opacity-70" />
         </button>
-
-        <span className="text-border">|</span>
-
-        {/* SQLite Connection */}
-        <div className="flex items-center gap-1">
-          <span className={`w-1.5 h-1.5 rounded-full ${isSqliteConnected ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-          <span>SQLite: {isSqliteConnected ? 'CONNECTED' : 'DISCONNECTED'}</span>
-        </div>
-
-        <span className="text-border">|</span>
-
-        {/* Database Size */}
-        <div className="flex items-center gap-1">
-          <MingCuteIcon name="storage_line" size={12} />
-          <span>mitm.db ({dbSizeMb})</span>
-        </div>
-
-        <span className="text-border">|</span>
-
-        {/* Traffic Count */}
-        <div>Total Captured: {traffic.length} items</div>
       </div>
 
       {/* Right Badges & Workspace Combobox Trigger */}

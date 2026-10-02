@@ -16,7 +16,7 @@ import { UtilitiesView } from '../modules/utilities/UtilitiesView';
 import { SettingsView } from '../modules/settings/SettingsView';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useInterceptStore } from '../../stores/useInterceptStore';
-import type { NavModule } from '../../types';
+import { MODULE_BY_SHORTCUT } from './navModules';
 import { useUiPref } from '../../stores/useUiPrefsStore';
 import { applyUiZoom, stepZoom } from '../../utils/uiZoom';
 
@@ -34,7 +34,7 @@ export const GlobalShell: React.FC = () => {
     initInterceptStore();
   }, [initWorkspaceStore, initInterceptStore]);
 
-  // Keyboard shortcut listener for tabs 1-9, 0 and V key for Quick Env Switcher
+  // Number keys switch modules (see navModules) and V opens the Quick Env Switcher
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger when inside inputs or textareas
@@ -50,20 +50,9 @@ export const GlobalShell: React.FC = () => {
           return;
         }
 
-        const keyMap: Record<string, NavModule> = {
-          '1': 'http-history',
-          '2': 'intercept',
-          '3': 'rewrite',
-          '4': 'repeater',
-          '5': 'collections',
-          '6': 'websockets',
-          '7': 'webhooks',
-          '8': 'workspace',
-          '9': 'utilities',
-          '0': 'settings',
-        };
-        if (keyMap[e.key]) {
-          setActiveModule(keyMap[e.key]);
+        const module = MODULE_BY_SHORTCUT[e.key];
+        if (module) {
+          setActiveModule(module);
         }
       }
     };

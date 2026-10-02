@@ -6,8 +6,6 @@ interface SettingsState {
   activeModule: NavModule;
   theme: 'dark' | 'light';
   isQuickVarModalOpen: boolean;
-  dbSizeMb: string;
-  isSqliteConnected: boolean;
   caPem: string;
   isCaLoading: boolean;
 
@@ -25,8 +23,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   activeModule: 'http-history',
   theme: 'dark',
   isQuickVarModalOpen: false,
-  dbSizeMb: '4.2 MB',
-  isSqliteConnected: true,
   caPem: '',
   isCaLoading: false,
 

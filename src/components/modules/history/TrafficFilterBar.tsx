@@ -150,6 +150,14 @@ export const TrafficFilterBar: React.FC = () => {
             <span>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
             <MingCuteIcon name={filtersOpen ? 'up_line' : 'down_line'} size={12} className="opacity-60" />
           </button>
+
+          <span
+            className="text-2xs font-mono text-muted-foreground tabular-nums whitespace-nowrap shrink-0"
+            title={`${traffic.length.toLocaleString()} loaded in the table`}
+          >
+            <span className="text-foreground font-semibold">{totalDbCount.toLocaleString()}</span>{' '}
+            {activeFilterCount > 0 || searchQuery ? 'matching' : totalDbCount === 1 ? 'request' : 'requests'}
+          </span>
         </div>
 
         {/* Right Controls: Limit Settings & Clear Logs */}
@@ -176,7 +184,7 @@ export const TrafficFilterBar: React.FC = () => {
                     History Log Limit
                   </span>
                   <span className="text-2xs font-mono text-muted-foreground">
-                    Total: {totalDbCount > 0 ? totalDbCount : traffic.length}
+                    Total: {totalDbCount.toLocaleString()}
                   </span>
                 </div>
 
