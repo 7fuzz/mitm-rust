@@ -2,83 +2,73 @@ import React from 'react';
 import type { WebhookDelivery } from '../../../../types';
 
 interface WebhookDeliveriesTableProps {
-  widthPercent: number;
   deliveries: WebhookDelivery[];
-  filteredDeliveries: WebhookDelivery[];
   selectedDeliveryId: string | null;
   onSelectDelivery: (id: string) => void;
+  emptyMessage: string;
 }
 
+const SIGNATURE_BADGE: Record<WebhookDelivery['signatureStatus'], string> = {
+  valid: 'bg-emerald-500/15 text-emerald-500',
+  invalid: 'bg-rose-500/15 text-rose-500',
+  none: 'bg-neutral-subtle text-muted-foreground',
+};
+
+const formatSize = (bytes: number) => (bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`);
+
 export const WebhookDeliveriesTable: React.FC<WebhookDeliveriesTableProps> = ({
-  widthPercent,
   deliveries,
-  filteredDeliveries,
   selectedDeliveryId,
   onSelectDelivery,
-}) => {
-  return (
-    <div
-      style={{ width: `${widthPercent}%` }}
-      className="border-r border-border overflow-y-auto bg-background shrink-0 min-w-[200px]"
-    >
-      <table className="w-full text-left font-mono text-xs">
-        <thead className="bg-header border-b border-border text-muted-foreground text-2xs sticky top-0 z-10">
+  emptyMessage,
+}) => (
+  <div className="h-full overflow-y-auto">
+    <table className="w-full text-left font-mono text-2xs">
+      <thead className="bg-header text-muted-foreground text-3xs uppercase tracking-wider font-sans sticky top-0 z-10">
+        <tr className="border-b border-border">
+          <th className="px-3 py-1.5 font-semibold">Path</th>
+          <th className="w-24 px-2 py-1.5 font-semibold">Time</th>
+          <th className="w-16 px-2 py-1.5 font-semibold text-right">Size</th>
+          <th className="w-20 px-2 py-1.5 font-semibold text-center">Signature</th>
+        </tr>
+      </thead>
+      <tbody>
+        {deliveries.length === 0 ? (
           <tr>
-            <th className="px-3 py-1.5 font-sans">Endpoint</th>
-            <th className="px-3 py-1.5 font-sans">Time</th>
-            <th className="px-3 py-1.5 text-center font-sans">HMAC Signature</th>
+            <td colSpan={4} className="px-3 py-12 text-center text-muted-foreground italic font-sans">
+              {emptyMessage}
+            </td>
           </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {filteredDeliveries.length === 0 ? (
-            <tr>
-              <td colSpan={3} className="px-3 py-12 text-center text-muted-foreground italic font-sans">
-                {deliveries.length === 0
-                  ? 'No webhook deliveries captured yet. Send HTTP requests to your registered endpoint.'
-                  : 'No deliveries match your search filter.'}
+        ) : (
+          deliveries.map((d) => (
+            <tr
+              key={d.id}
+              onClick={() => onSelectDelivery(d.id)}
+              className={`cursor-pointer border-b border-border/50 ${
+                selectedDeliveryId === d.id ? 'bg-primary/10' : 'hover:bg-neutral-subtle/60'
+              }`}
+            >
+              <td
+                className={`px-3 py-1.5 truncate max-w-0 border-l-2 ${
+                  selectedDeliveryId === d.id ? 'border-l-primary text-foreground font-semibold' : 'border-l-transparent text-foreground'
+                }`}
+                title={d.endpointPath}
+              >
+                {d.endpointPath}
+              </td>
+              <td className="px-2 py-1.5 text-muted-foreground tabular-nums" title={new Date(d.timestamp).toLocaleString()}>
+                {new Date(d.timestamp).toLocaleTimeString()}
+              </td>
+              <td className="px-2 py-1.5 text-muted-foreground text-right tabular-nums">{formatSize(d.payload.length)}</td>
+              <td className="px-2 py-1.5 text-center">
+                <span className={`px-1.5 py-px rounded text-3xs font-bold uppercase ${SIGNATURE_BADGE[d.signatureStatus]}`}>
+                  {d.signatureStatus}
+                </span>
               </td>
             </tr>
-          ) : (
-            filteredDeliveries.map((del) => {
-              const isSelected = selectedDeliveryId === del.id;
-              return (
-                <tr
-                  key={del.id}
-                  onClick={() => onSelectDelivery(del.id)}
-                  className={`cursor-pointer transition-colors ${
-                    isSelected
-                      ? 'bg-primary/15 font-semibold text-foreground ring-1 ring-inset ring-primary'
-                      : 'hover:bg-neutral-subtle'
-                  }`}
-                >
-                  <td
-                    className="px-3 py-2 text-primary font-bold truncate max-w-[140px]"
-                    title={del.endpointPath}
-                  >
-                    {del.endpointPath}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground text-2xs">
-                    {new Date(del.timestamp).toLocaleTimeString()}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-3xs font-bold border ${
-                        del.signatureStatus === 'valid'
-                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                          : del.signatureStatus === 'invalid'
-                          ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                          : 'bg-neutral-subtle text-muted-foreground border-border'
-                      }`}
-                    >
-                      {del.signatureStatus.toUpperCase()}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-};
+          ))
+        )}
+      </tbody>
+    </table>
+  </div>
+);

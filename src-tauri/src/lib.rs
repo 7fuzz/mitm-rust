@@ -165,6 +165,7 @@ pub fn run() {
             commands::webhook_cmd::clear_webhook_deliveries,
             commands::webhook_cmd::get_webhook_listener_status,
             commands::webhook_cmd::start_webhook_listener,
+            commands::webhook_cmd::set_webhook_port,
             commands::webhook_cmd::stop_webhook_listener,
             commands::webhook_cmd::calculate_webhook_signature,
             commands::webhook_cmd::replay_webhook_delivery,

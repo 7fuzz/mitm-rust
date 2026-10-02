@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useWebhookStore } from '../../../../stores/useWebhookStore';
-import { MingCuteIcon } from '../../../common/MingCuteIcon';
 import { Button, Input, Select } from '../../../common/ui';
 
 export const HMAC_PROVIDER_OPTIONS = [
@@ -33,16 +32,10 @@ export const WebhookHmacSandbox: React.FC = () => {
   };
 
   return (
-    <div className="bg-surface border border-border rounded-lg p-3 space-y-3 shadow-2xs">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <MingCuteIcon name="key_line" size={16} className="text-primary" />
-          <span className="font-semibold text-foreground text-sm">HMAC Signature Sandbox & Generator</span>
-        </div>
-        <Button variant="primary" size="xs" icon="key_line" onClick={calculateHmac}>
-          Calculate Signature
-        </Button>
-      </div>
+    <div className="space-y-3 text-xs">
+      <p className="text-muted-foreground">
+        Compute the signature header a provider would send for a payload and secret, e.g. to sign a test request.
+      </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
@@ -69,13 +62,17 @@ export const WebhookHmacSandbox: React.FC = () => {
       <div>
         <label className="block text-muted-foreground mb-1 text-2xs">Payload Body:</label>
         <textarea
-          rows={3}
+          rows={6}
           value={hmacBody}
           onChange={(e) => setHmacBody(e.target.value)}
           placeholder="JSON or raw webhook payload body..."
           className="w-full bg-background border border-border rounded p-2 text-xs font-mono text-foreground focus:outline-none focus:border-primary"
         />
       </div>
+
+      <Button variant="primary" size="sm" icon="key_line" onClick={calculateHmac}>
+        Calculate signature
+      </Button>
 
       {computedSignature && (
         <div className="p-3 bg-background border border-border rounded font-mono text-xs space-y-2">

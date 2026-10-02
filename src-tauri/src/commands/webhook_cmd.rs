@@ -5,7 +5,7 @@ use tokio::sync::oneshot;
 use crate::state::{AppState, WebhookDelivery, WebhookEndpoint, WebhookListenerConfig, WebhookSignatureResult};
 use crate::webhook::hmac::calculate_signature;
 use crate::webhook::replay::{replay_delivery, WebhookReplayResult};
-use crate::webhook::start_webhook_listener_server;
+use crate::webhook::{bind_webhook_listener, start_webhook_listener_server};
 
 #[tauri::command]
 pub async fn get_webhook_endpoints(state: State<'_, AppState>) -> Result<Vec<WebhookEndpoint>, String> {
@@ -59,9 +59,25 @@ pub async fn start_webhook_listener(
     state: State<'_, AppState>,
     port: u16,
 ) -> Result<(), String> {
-    if state.is_webhook_running() {
+    if port == 0 {
+        return Err("Port must be between 1 and 65535".to_string());
+    }
+    let was_running = state.is_webhook_running();
+    if was_running {
         stop_webhook_listener(state.clone()).await?;
     }
+
+    // A server we just stopped frees its port a moment later, so retry briefly in that case
+    let mut attempts = if was_running { 20 } else { 1 };
+    let listener = loop {
+        attempts -= 1;
+        match bind_webhook_listener(port).await {
+            Ok(listener) => break listener,
+            Err(e) if attempts == 0 => return Err(e),
+            Err(_) => tokio::time::sleep(std::time::Duration::from_millis(50)).await,
+        }
+    };
+    state.set_webhook_running(true);
 
     let (stop_tx, stop_rx) = oneshot::channel::<()>();
     {
@@ -75,12 +91,25 @@ pub async fn start_webhook_listener(
     let state_arc = Arc::new((*state).clone());
 
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = start_webhook_listener_server(app_handle, state_arc, port, stop_rx).await {
+        if let Err(e) = start_webhook_listener_server(app_handle, state_arc, listener, port, stop_rx).await {
             eprintln!("[Webhook Server] Error: {}", e);
         }
     });
 
     Ok(())
+}
+
+/// Saves the port to use on the next start; a running receiver keeps its current port.
+#[tauri::command]
+pub async fn set_webhook_port(state: State<'_, AppState>, port: u16) -> Result<(), String> {
+    if port == 0 {
+        return Err("Port must be between 1 and 65535".to_string());
+    }
+    if state.is_webhook_running() {
+        return Err("Stop the receiver before changing its port".to_string());
+    }
+    *state.webhook_port.write().await = port;
+    crate::db::set_preference(&state.db_path, "webhook_port", &port.to_string())
 }
 
 #[tauri::command]

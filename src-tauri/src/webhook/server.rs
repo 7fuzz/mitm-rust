@@ -12,14 +12,21 @@ use tauri::{AppHandle, Emitter};
 use crate::state::{AppState, WebhookDelivery, WebhookDeliveryCapturedEvent};
 use crate::webhook::hmac::verify_signature;
 
+/// Binds the port up front so the caller can report a busy or forbidden port.
+pub async fn bind_webhook_listener(port: u16) -> Result<TcpListener, String> {
+    TcpListener::bind(("0.0.0.0", port))
+        .await
+        .map_err(|e| format!("Could not listen on port {}: {}", port, e))
+}
+
 pub async fn start_webhook_listener_server(
     app_handle: AppHandle,
     state: Arc<AppState>,
+    listener: TcpListener,
     port: u16,
     mut stop_rx: oneshot::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let addr = format!("0.0.0.0:{}", port);
-    let listener = TcpListener::bind(&addr).await?;
     eprintln!("[Webhook Server] Listening on http://{}", addr);
 
     state.set_webhook_running(true);

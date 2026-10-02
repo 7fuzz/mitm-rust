@@ -99,6 +99,8 @@ export const UI_PREFS = {
     normalize: (stored, fallback) =>
       SETTINGS_SECTIONS.includes(stored as SettingsSectionId) ? (stored as SettingsSectionId) : fallback,
   }),
+  /** Delivery list share of the Webhooks work area */
+  "webhooks.listSplitPercent": splitPercent(40),
   "workspace.sidebarOpen": pref<boolean>({
     default: true,
     normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),

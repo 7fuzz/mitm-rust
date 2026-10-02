@@ -4,4 +4,4 @@ pub mod server;
 
 pub use hmac::{calculate_signature, verify_signature};
 pub use replay::{replay_delivery, WebhookReplayResult};
-pub use server::start_webhook_listener_server;
+pub use server::{bind_webhook_listener, start_webhook_listener_server};

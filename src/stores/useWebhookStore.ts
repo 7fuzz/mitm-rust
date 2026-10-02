@@ -8,6 +8,7 @@ import {
   clearWebhookDeliveries,
   getWebhookListenerStatus,
   startWebhookListener,
+  setWebhookPort,
   stopWebhookListener,
   calculateWebhookSignature,
   replayWebhookDelivery,
@@ -37,7 +38,7 @@ interface WebhookState {
   initialize: () => Promise<void>;
   fetchStatus: () => Promise<void>;
   toggleServer: () => Promise<void>;
-  setPort: (port: number) => void;
+  savePort: (port: number) => Promise<void>;
 
   fetchEndpoints: () => Promise<void>;
   addEndpoint: (endpoint: Partial<WebhookEndpoint>) => Promise<WebhookEndpoint | undefined>;
@@ -131,10 +132,12 @@ export const useWebhookStore = create<WebhookState>((set, get) => ({
       }
     } catch (err) {
       console.error('Failed to toggle webhook listener:', err);
+      throw err;
     }
   },
 
-  setPort: (port) => {
+  savePort: async (port) => {
+    await setWebhookPort(port);
     set((state) => ({ listenerConfig: { ...state.listenerConfig, port } }));
   },
 

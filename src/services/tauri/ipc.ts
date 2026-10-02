@@ -320,6 +320,10 @@ export async function startWebhookListener(port: number): Promise<void> {
   return safeInvoke<void>('start_webhook_listener', { port });
 }
 
+export async function setWebhookPort(port: number): Promise<void> {
+  return safeInvoke<void>('set_webhook_port', { port });
+}
+
 export async function stopWebhookListener(): Promise<void> {
   return safeInvoke<void>('stop_webhook_listener');
 }

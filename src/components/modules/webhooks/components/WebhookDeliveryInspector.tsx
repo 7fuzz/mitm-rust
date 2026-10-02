@@ -3,228 +3,158 @@ import type { WebhookDelivery } from '../../../../types';
 import { useWebhookStore } from '../../../../stores/useWebhookStore';
 import { CodeEditor } from '../../../common/CodeEditor';
 import { MingCuteIcon } from '../../../common/MingCuteIcon';
-import { Button, Input } from '../../../common/ui';
+import { PaneHeader } from '../../../common/PaneHeader';
+import { BodyView, useBodyFormat } from '../../../common/BodyView';
+import { KeyValueEditor } from '../../../common/KeyValueEditor';
+import { SegmentedControl } from '../../../common/ui';
+
+type Tab = 'body' | 'headers' | 'signature' | 'replay';
+
+const toHeaderPairs = (headers: WebhookDelivery['headers']) =>
+  (Array.isArray(headers) ? headers : []).map((h: any) => ({
+    key: String(Array.isArray(h) ? h[0] : h.key || h.name || ''),
+    value: String(Array.isArray(h) ? h[1] : h.value || ''),
+  }));
+
+const SIGNATURE_TEXT: Record<WebhookDelivery['signatureStatus'], { label: string; className: string }> = {
+  valid: { label: 'Signature valid', className: 'text-emerald-500' },
+  invalid: { label: 'Signature mismatch', className: 'text-rose-500' },
+  none: { label: 'No signature checked', className: 'text-muted-foreground' },
+};
 
 interface WebhookDeliveryInspectorProps {
-  selectedDelivery: WebhookDelivery | null;
+  delivery: WebhookDelivery | null;
 }
 
-export const WebhookDeliveryInspector: React.FC<WebhookDeliveryInspectorProps> = ({
-  selectedDelivery,
-}) => {
+export const WebhookDeliveryInspector: React.FC<WebhookDeliveryInspectorProps> = ({ delivery }) => {
   const { replayDelivery, isReplaying, replayResult } = useWebhookStore();
-  const [activeTab, setActiveTab] = useState<'payload' | 'headers' | 'hmac' | 'replay'>('payload');
+  const [tab, setTab] = useState<Tab>('body');
   const [replayUrl, setReplayUrl] = useState('https://httpbin.org/post');
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  const handleCopy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 2000);
+  const headers = delivery ? toHeaderPairs(delivery.headers) : [];
+  const { format, setFormat, options, mediaInfo } = useBodyFormat(delivery?.payload ?? '', headers);
+
+  if (!delivery) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-2 text-muted-foreground italic">
+        <MingCuteIcon name="link_line" size={28} className="opacity-30" />
+        <span>Select a delivery to inspect it</span>
+      </div>
+    );
+  }
+
+  const copyPayload = () => {
+    navigator.clipboard.writeText(delivery.payload);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
-  const handleReplay = async () => {
-    if (!selectedDelivery || !replayUrl.trim()) return;
-    await replayDelivery(selectedDelivery.id, replayUrl.trim());
-  };
+  const signature = SIGNATURE_TEXT[delivery.signatureStatus];
 
   return (
-    <div className="flex-1 p-3 flex flex-col bg-background overflow-hidden min-w-[250px]">
-      {selectedDelivery ? (
-        <div className="flex-1 flex flex-col gap-3 overflow-hidden">
-          {/* Inspector Header & Navigation Tabs */}
-          <div className="flex items-center justify-between border-b border-border/60 pb-2 shrink-0">
-            <div className="flex items-center gap-1 bg-surface border border-border rounded p-0.5">
-              <button
-                onClick={() => setActiveTab('payload')}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  activeTab === 'payload'
-                    ? 'bg-primary text-primary-foreground font-semibold'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Payload Body
-              </button>
-              <button
-                onClick={() => setActiveTab('headers')}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  activeTab === 'headers'
-                    ? 'bg-primary text-primary-foreground font-semibold'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Headers ({selectedDelivery.headers?.length || 0})
-              </button>
-              <button
-                onClick={() => setActiveTab('hmac')}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  activeTab === 'hmac'
-                    ? 'bg-primary text-primary-foreground font-semibold'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                HMAC Verification
-              </button>
-              <button
-                onClick={() => setActiveTab('replay')}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  activeTab === 'replay'
-                    ? 'bg-primary text-primary-foreground font-semibold'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Replay Studio
-              </button>
-            </div>
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="h-10 px-3 bg-header border-b border-border flex items-center gap-2 font-mono shrink-0">
+        <span className="font-semibold text-foreground truncate">{delivery.endpointPath}</span>
+        <span className="text-2xs text-muted-foreground shrink-0">{new Date(delivery.timestamp).toLocaleString()}</span>
+        <span className={`ml-auto text-2xs font-sans shrink-0 ${signature.className}`}>{signature.label}</span>
+        <button
+          onClick={copyPayload}
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-sans text-muted-foreground hover:text-foreground hover:bg-neutral-subtle cursor-pointer shrink-0"
+          title="Copy payload"
+        >
+          <MingCuteIcon name={copied ? 'check_line' : 'copy_line'} size={12} />
+          <span>{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      </div>
 
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="xs"
-                icon={copiedKey === 'payload-copy' ? 'check_line' : 'copy_line'}
-                onClick={() => handleCopy(selectedDelivery.payload, 'payload-copy')}
-              >
-                {copiedKey === 'payload-copy' ? 'Copied' : 'Copy'}
-              </Button>
+      <PaneHeader
+        tabs={[
+          { value: 'body', label: 'Body' },
+          { value: 'headers', label: 'Headers', count: headers.length },
+          { value: 'signature', label: 'Signature' },
+          { value: 'replay', label: 'Replay' },
+        ]}
+        activeTab={tab}
+        onTabChange={(v) => setTab(v as Tab)}
+        right={tab === 'body' && <SegmentedControl value={format} onChange={setFormat} options={options} />}
+      />
+
+      <div className={`flex-1 min-h-0 ${tab === 'body' ? 'overflow-hidden' : 'overflow-y-auto p-3'}`}>
+        {tab === 'body' && (
+          <BodyView body={delivery.payload} format={format} mediaInfo={mediaInfo} previewTitle="webhook-payload" emptyMessage="Empty payload" />
+        )}
+
+        {tab === 'headers' && <KeyValueEditor items={headers.map((h, i) => ({ id: `wh-${i}`, ...h, enabled: true }))} onChange={() => {}} readOnly />}
+
+        {tab === 'signature' && (
+          <div className="space-y-3 font-mono">
+            <div className={`font-sans font-semibold ${signature.className}`}>{signature.label}</div>
+            <div className="space-y-1">
+              <div className="text-3xs uppercase tracking-wider text-muted-foreground font-sans">Signature header received</div>
+              <div className="p-2 bg-background border border-border rounded text-2xs break-all text-foreground select-text">
+                {delivery.providedHmac || <span className="italic text-muted-foreground">none</span>}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-3xs uppercase tracking-wider text-muted-foreground font-sans">Expected (computed from the endpoint secret)</div>
+              <div className="p-2 bg-background border border-border rounded text-2xs break-all text-foreground select-text">
+                {delivery.computedHmac || (
+                  <span className="italic text-muted-foreground">no secret set, or no recognised signature header</span>
+                )}
+              </div>
             </div>
           </div>
+        )}
 
-          {/* Tab: Payload Editor */}
-          {activeTab === 'payload' && (
-            <div className="flex-1 overflow-hidden border border-border rounded">
-              <CodeEditor
-                value={selectedDelivery.payload}
-                language={
-                  selectedDelivery.payload.startsWith('{') || selectedDelivery.payload.startsWith('[')
-                    ? 'json'
-                    : 'plaintext'
-                }
-                readOnly
+        {tab === 'replay' && (
+          <div className="h-full flex flex-col gap-3">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (replayUrl.trim()) replayDelivery(delivery.id, replayUrl.trim());
+              }}
+              className="flex items-center gap-2"
+            >
+              <input
+                type="text"
+                value={replayUrl}
+                onChange={(e) => setReplayUrl(e.target.value)}
+                placeholder="https://your-api.example.com/webhook"
+                className="flex-1 bg-background border border-border rounded px-2.5 py-1.5 font-mono text-xs text-foreground focus:outline-none focus:border-primary"
               />
-            </div>
-          )}
+              <button
+                type="submit"
+                disabled={isReplaying || !replayUrl.trim()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary text-primary-foreground font-semibold hover:bg-primary-hover disabled:opacity-50 cursor-pointer shrink-0"
+              >
+                <MingCuteIcon name={isReplaying ? 'loading_line' : 'send_plane_line'} size={13} className={isReplaying ? 'animate-spin' : ''} />
+                <span>{isReplaying ? 'Sending...' : 'Replay'}</span>
+              </button>
+            </form>
+            <p className="text-2xs text-muted-foreground">Sends this payload and its headers to the URL above.</p>
 
-          {/* Tab: Headers Table */}
-          {activeTab === 'headers' && (
-            <div className="flex-1 overflow-y-auto border border-border rounded bg-surface">
-              <table className="w-full text-left font-mono text-xs">
-                <thead className="bg-header border-b border-border text-muted-foreground text-2xs sticky top-0">
-                  <tr>
-                    <th className="px-3 py-1.5 w-1/3">Header Name</th>
-                    <th className="px-3 py-1.5">Value</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {Array.isArray(selectedDelivery.headers) &&
-                    selectedDelivery.headers.map((h: any, idx: number) => {
-                      const key = Array.isArray(h) ? h[0] : h.key || h.name || '';
-                      const val = Array.isArray(h) ? h[1] : h.value || '';
-                      return (
-                        <tr key={idx} className="hover:bg-neutral-subtle/50">
-                          <td className="px-3 py-1.5 text-primary font-bold">{key}</td>
-                          <td className="px-3 py-1.5 text-foreground break-all">{val}</td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Tab: HMAC Details */}
-          {activeTab === 'hmac' && (
-            <div className="flex-1 overflow-y-auto p-3 bg-surface border border-border rounded space-y-3 font-mono">
-              <div className="flex items-center justify-between pb-2 border-b border-border">
-                <span className="font-sans font-semibold text-foreground">Signature Status</span>
-                <span
-                  className={`px-2 py-0.5 rounded text-xs font-bold uppercase border ${
-                    selectedDelivery.signatureStatus === 'valid'
-                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                      : selectedDelivery.signatureStatus === 'invalid'
-                      ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                      : 'bg-neutral-subtle text-muted-foreground border-border'
-                  }`}
-                >
-                  {selectedDelivery.signatureStatus}
-                </span>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-muted-foreground text-2xs block font-sans">
-                  Provided Signature Header:
-                </label>
-                <div className="p-2 bg-background border border-border rounded text-xs break-all text-foreground">
-                  {selectedDelivery.providedHmac || '<None Provided>'}
+            {replayResult && (
+              <div className="flex-1 min-h-0 flex flex-col border border-border rounded overflow-hidden">
+                <div className="px-3 py-1.5 bg-header border-b border-border flex items-center gap-2 font-mono text-2xs">
+                  <span className={`font-bold ${replayResult.success ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {replayResult.statusCode || 'ERR'}
+                  </span>
+                  <span className="text-muted-foreground">{replayResult.durationMs}ms</span>
+                </div>
+                <div className="flex-1 min-h-0">
+                  <CodeEditor
+                    value={replayResult.responseBody}
+                    language={replayResult.responseBody.trim().startsWith('{') ? 'json' : 'plaintext'}
+                    readOnly
+                    bare
+                  />
                 </div>
               </div>
-
-              <div className="space-y-1">
-                <label className="text-muted-foreground text-2xs block font-sans">
-                  Computed Expected HMAC:
-                </label>
-                <div className="p-2 bg-background border border-border rounded text-xs break-all text-foreground">
-                  {selectedDelivery.computedHmac || '<Secret not set or no matching algorithm>'}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Tab: Replay Studio */}
-          {activeTab === 'replay' && (
-            <div className="flex-1 flex flex-col gap-3 overflow-hidden">
-              <div className="flex items-center gap-2">
-                <Input
-                  value={replayUrl}
-                  onChange={(e) => setReplayUrl(e.target.value)}
-                  placeholder="https://your-api.com/webhook-destination"
-                  className="flex-1 font-mono text-xs"
-                />
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon="repeat_line"
-                  onClick={handleReplay}
-                  disabled={isReplaying}
-                >
-                  {isReplaying ? 'Sending...' : 'Replay Delivery'}
-                </Button>
-              </div>
-
-              {replayResult && (
-                <div className="flex-1 flex flex-col border border-border rounded overflow-hidden bg-surface font-mono">
-                  <div className="p-2 bg-header border-b border-border flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-3xs font-bold border ${
-                          replayResult.success
-                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                            : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                        }`}
-                      >
-                        {replayResult.statusCode} {replayResult.success ? 'OK' : 'FAIL'}
-                      </span>
-                      <span className="text-muted-foreground text-2xs">{replayResult.durationMs}ms</span>
-                    </div>
-                    <span className="text-muted-foreground text-2xs">Replay Response Body</span>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    <CodeEditor
-                      value={replayResult.responseBody}
-                      language={replayResult.responseBody.startsWith('{') ? 'json' : 'plaintext'}
-                      readOnly
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="h-full flex flex-col items-center justify-center text-muted-foreground italic gap-2">
-          <MingCuteIcon name="link_line" size={24} className="opacity-40" />
-          <span>Select a webhook delivery log hit from the table to inspect details</span>
-        </div>
-      )}
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
