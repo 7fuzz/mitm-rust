@@ -564,10 +564,14 @@ export const createTrafficSlice: StateCreator<
         clearTimeout(batchTimer);
         batchTimer = null;
       }
-      try {
-        await clearHistoryLogs();
-      } catch (e) {
-        console.warn('Failed to clear backend history via IPC');
+      // Keep the list when the backend delete fails, so it never looks cleared when it isn't
+      if (isTauriAvailable()) {
+        try {
+          await clearHistoryLogs();
+        } catch (err) {
+          console.error('Failed to clear backend history:', err);
+          throw err;
+        }
       }
       set({
         traffic: [],

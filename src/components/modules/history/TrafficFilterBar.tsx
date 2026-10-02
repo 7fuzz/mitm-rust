@@ -254,7 +254,7 @@ export const TrafficFilterBar: React.FC = () => {
           <Button
             variant="ghost"
             icon="delete_2_line"
-            onClick={clearTraffic}
+            onClick={() => clearTraffic().catch(() => {})}
             className="text-muted-foreground hover:text-rose-500"
             title="Clear all traffic logs"
           />

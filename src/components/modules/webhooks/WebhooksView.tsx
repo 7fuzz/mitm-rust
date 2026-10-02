@@ -93,7 +93,7 @@ export const WebhooksView: React.FC = () => {
               variant="destructive"
               size="xs"
               icon="delete_2_line"
-              onClick={clearDeliveries}
+              onClick={() => clearDeliveries().catch(() => {})}
               disabled={deliveries.length === 0}
             >
               Clear Log

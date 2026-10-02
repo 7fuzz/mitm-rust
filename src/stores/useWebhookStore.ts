@@ -185,12 +185,14 @@ export const useWebhookStore = create<WebhookState>((set, get) => ({
   },
 
   clearDeliveries: async () => {
-    set({ deliveries: [], selectedDeliveryId: null, replayResult: null });
+    // Keep the list when the backend delete fails, so it never looks cleared when it isn't
     try {
       await clearWebhookDeliveries();
     } catch (err) {
       console.error('Failed to clear deliveries:', err);
+      throw err;
     }
+    set({ deliveries: [], selectedDeliveryId: null, replayResult: null });
   },
 
   selectDelivery: (id) => set({ selectedDeliveryId: id, replayResult: null }),
