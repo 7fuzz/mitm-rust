@@ -39,6 +39,8 @@ export interface TrafficSlice {
   onlyIntercepted: boolean;
   onlyRewritten: boolean;
   onlyFailed: boolean;
+  /** Clears every filter except search */
+  resetFilters: () => void;
 
   // Traffic actions
   initTraffic: () => Promise<void>;

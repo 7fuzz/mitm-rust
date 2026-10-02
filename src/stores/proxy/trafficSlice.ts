@@ -681,6 +681,21 @@ export const createTrafficSlice: StateCreator<
       persistFilters();
       get().loadInitialTraffic();
     },
+    resetFilters: () => {
+      set({
+        methodFilters: {},
+        statusFilters: {},
+        flagFilters: {},
+        listenerFilter: '',
+        selectedMethods: [],
+        statusCodeRange: 'all',
+        onlyIntercepted: false,
+        onlyRewritten: false,
+        onlyFailed: false,
+      });
+      persistFilters();
+      get().loadInitialTraffic();
+    },
     setListenerFilter: (listenerFilter) => {
       set({ listenerFilter });
       persistFilters();

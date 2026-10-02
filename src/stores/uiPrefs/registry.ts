@@ -43,10 +43,26 @@ const normalizeTriStateMap = (value: unknown): TriStateMap => {
   ) as TriStateMap;
 };
 
+/** Split position as a percentage, clamped to the range the resizers allow */
+const splitPercent = (fallback: number) =>
+  pref<number>({
+    default: fallback,
+    normalize: (stored, def) =>
+      typeof stored === "number" && Number.isFinite(stored) ? Math.min(Math.max(stored, 15), 85) : def,
+  });
+
 export const UI_PREFS = {
   "history.columns": pref<ColumnLayout>({
     default: buildDefaultColumnLayout(HISTORY_COLUMN_DEFAULTS),
     normalize: normalizeColumnLayout,
+  }),
+  /** Height of the traffic table vs the inspector below it */
+  "history.tableHeightPercent": splitPercent(50),
+  /** Request pane share of the inspector */
+  "history.inspectorSplitPercent": splitPercent(50),
+  "history.filterBarOpen": pref<boolean>({
+    default: false,
+    normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),
   }),
   "history.filters": pref<HistoryFiltersPref>({
     default: { methods: {}, statuses: {}, flags: {}, listener: "" },
