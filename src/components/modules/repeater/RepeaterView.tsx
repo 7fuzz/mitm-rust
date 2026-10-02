@@ -1,10 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
 import { RequestBuilder } from './RequestBuilder';
 import { ResponsePanel } from './ResponsePanel';
 import { ExecutionHistoryDrawer } from './ExecutionHistoryDrawer';
 import { RepeaterSidebar } from './RepeaterSidebar';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
+import { useUiPref } from '../../../stores/useUiPrefsStore';
+import { REPEATER_HISTORY_DRAWER_WIDTH, REPEATER_SIDEBAR_WIDTH } from '../../../stores/uiPrefs/registry';
+import { clamp, clampPercent, startDragResize } from '../../../utils/dragResize';
 
 export const RepeaterView: React.FC = () => {
   const {
@@ -17,16 +20,17 @@ export const RepeaterView: React.FC = () => {
   } = useRepeaterStore();
 
   // Resizable panel dimensions
-  const [reqWidthPercent, setReqWidthPercent] = useState<number>(50);
-  const [sidebarWidthPx, setSidebarWidthPx] = useState<number>(290);
-  const [historyDrawerWidthPx, setHistoryDrawerWidthPx] = useState<number>(288);
+  // Resizable panel dimensions, persisted as UI preferences
+  const [reqWidthPercent, setReqWidthPercent, resetReqWidthPercent] = useUiPref('repeater.requestSplitPercent');
+  const [sidebarWidthPx, setSidebarWidthPx, resetSidebarWidthPx] = useUiPref('repeater.sidebarWidth');
+  const [historyDrawerWidthPx, setHistoryDrawerWidthPx, resetHistoryDrawerWidthPx] = useUiPref('repeater.historyDrawerWidth');
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mainAreaRef = useRef<HTMLDivElement>(null);
-
-  const isResizingMain = useRef(false);
-  const isResizingSidebar = useRef(false);
-  const isResizingHistoryDrawer = useRef(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const requestPaneRef = useRef<HTMLDivElement>(null);
+  const responsePaneRef = useRef<HTMLDivElement>(null);
+  const historyDrawerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     initStore();
@@ -35,81 +39,63 @@ export const RepeaterView: React.FC = () => {
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0] || null;
   const activeResponse = activeTab ? lastExecutionResult[activeTab.id] || null : null;
 
-  const handleMouseDownMainSplit = (e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingMain.current = true;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isResizingMain.current || !mainAreaRef.current) return;
-      const rect = mainAreaRef.current.getBoundingClientRect();
-      const relativeX = moveEvent.clientX - rect.left;
-      const newPercent = (relativeX / rect.width) * 100;
-      setReqWidthPercent(Math.min(Math.max(newPercent, 15), 85));
-    };
-
-    const handleMouseUp = () => {
-      isResizingMain.current = false;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+  const handleMainSplitPointerDown = (e: React.PointerEvent) => {
+    let percent = reqWidthPercent;
+    startDragResize(e, {
+      cursor: 'col-resize',
+      onMove: (ev) => {
+        if (!mainAreaRef.current || !requestPaneRef.current || !responsePaneRef.current) return;
+        const rect = mainAreaRef.current.getBoundingClientRect();
+        percent = clampPercent(((ev.clientX - rect.left) / rect.width) * 100);
+        requestPaneRef.current.style.width = `${percent}%`;
+        responsePaneRef.current.style.width = `${100 - percent}%`;
+      },
+      onEnd: () => setReqWidthPercent(percent),
+    });
   };
 
-  const handleMouseDownSidebarSplit = (e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingSidebar.current = true;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isResizingSidebar.current || !containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const newWidth = moveEvent.clientX - rect.left;
-      setSidebarWidthPx(Math.min(Math.max(newWidth, 220), 450));
-    };
-
-    const handleMouseUp = () => {
-      isResizingSidebar.current = false;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+  const handleSidebarPointerDown = (e: React.PointerEvent) => {
+    let width = sidebarWidthPx;
+    startDragResize(e, {
+      cursor: 'col-resize',
+      onMove: (ev) => {
+        if (!containerRef.current || !sidebarRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        width = Math.round(clamp(ev.clientX - rect.left, REPEATER_SIDEBAR_WIDTH.min, REPEATER_SIDEBAR_WIDTH.max));
+        sidebarRef.current.style.width = `${width}px`;
+      },
+      onEnd: () => setSidebarWidthPx(width),
+    });
   };
 
-  const handleMouseDownHistoryDrawerSplit = (e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingHistoryDrawer.current = true;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isResizingHistoryDrawer.current || !containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const newWidth = rect.right - moveEvent.clientX;
-      setHistoryDrawerWidthPx(Math.min(Math.max(newWidth, 200), 550));
-    };
-
-    const handleMouseUp = () => {
-      isResizingHistoryDrawer.current = false;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+  const handleHistoryDrawerPointerDown = (e: React.PointerEvent) => {
+    let width = historyDrawerWidthPx;
+    startDragResize(e, {
+      cursor: 'col-resize',
+      onMove: (ev) => {
+        if (!containerRef.current || !historyDrawerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        width = Math.round(clamp(rect.right - ev.clientX, REPEATER_HISTORY_DRAWER_WIDTH.min, REPEATER_HISTORY_DRAWER_WIDTH.max));
+        historyDrawerRef.current.style.width = `${width}px`;
+      },
+      onEnd: () => setHistoryDrawerWidthPx(width),
+    });
   };
 
   return (
     <div ref={containerRef} className="h-full flex flex-col bg-background overflow-hidden text-xs">
       {/* Main Body Area: Sidebar (Left) + Editor / Response (Right) */}
       <div className="flex-1 flex overflow-hidden">
-        <RepeaterSidebar widthPx={sidebarWidthPx} />
+        <div ref={sidebarRef} className="h-full shrink-0" style={{ width: `${sidebarWidthPx}px` }}>
+          <RepeaterSidebar />
+        </div>
 
         {/* Draggable Resizer Handle for Sidebar */}
         <div
-          onMouseDown={handleMouseDownSidebarSplit}
+          onPointerDown={handleSidebarPointerDown}
+          onDoubleClick={resetSidebarWidthPx}
           className="w-1 cursor-col-resize -mx-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
-          title="Drag to adjust Sidebar width"
+          title="Drag to resize, double-click to reset"
         >
           <div className="h-8 w-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
         </div>
@@ -120,6 +106,7 @@ export const RepeaterView: React.FC = () => {
             <div className="flex-1 flex overflow-hidden">
               {/* Request Builder Panel */}
               <div
+                ref={requestPaneRef}
                 className="border-r border-border flex flex-col overflow-hidden min-w-[200px]"
                 style={{ width: `${reqWidthPercent}%` }}
               >
@@ -128,15 +115,17 @@ export const RepeaterView: React.FC = () => {
 
               {/* Draggable Resizer Handle for Request vs Response */}
               <div
-                onMouseDown={handleMouseDownMainSplit}
+                onPointerDown={handleMainSplitPointerDown}
+                onDoubleClick={resetReqWidthPercent}
                 className="w-1 cursor-col-resize -mx-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
-                title="Drag to adjust Request vs Response width"
+                title="Drag to resize, double-click to reset"
               >
                 <div className="h-8 w-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
               </div>
 
               {/* Response Panel */}
               <div
+                ref={responsePaneRef}
                 className="flex flex-col overflow-hidden min-w-[200px]"
                 style={{ width: `${100 - reqWidthPercent}%` }}
               >
@@ -146,15 +135,20 @@ export const RepeaterView: React.FC = () => {
               {/* Draggable Resizer Handle for Execution History Drawer */}
               {isHistoryDrawerOpen && (
                 <div
-                  onMouseDown={handleMouseDownHistoryDrawerSplit}
+                  onPointerDown={handleHistoryDrawerPointerDown}
+                  onDoubleClick={resetHistoryDrawerWidthPx}
                   className="w-1 cursor-col-resize -mx-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
-                  title="Drag to adjust Execution History width"
+                  title="Drag to resize, double-click to reset"
                 >
                   <div className="h-8 w-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
                 </div>
               )}
 
-              <ExecutionHistoryDrawer requestId={activeTab.id} widthPx={historyDrawerWidthPx} />
+              {isHistoryDrawerOpen && (
+                <div ref={historyDrawerRef} className="h-full shrink-0" style={{ width: `${historyDrawerWidthPx}px` }}>
+                  <ExecutionHistoryDrawer requestId={activeTab.id} />
+                </div>
+              )}
             </div>
           ) : (
             <div className="h-full flex-1 flex flex-col items-center justify-center bg-surface text-muted-foreground italic text-xs p-6">

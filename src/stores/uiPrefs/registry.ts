@@ -51,6 +51,17 @@ const splitPercent = (fallback: number) =>
       typeof stored === "number" && Number.isFinite(stored) ? Math.min(Math.max(stored, 15), 85) : def,
   });
 
+/** Pixel width clamped to a resizer's range */
+const panelWidth = (fallback: number, min: number, max: number) =>
+  pref<number>({
+    default: fallback,
+    normalize: (stored, def) =>
+      typeof stored === "number" && Number.isFinite(stored) ? Math.min(Math.max(stored, min), max) : def,
+  });
+
+export const REPEATER_SIDEBAR_WIDTH = { min: 220, max: 450 };
+export const REPEATER_HISTORY_DRAWER_WIDTH = { min: 200, max: 550 };
+
 export const UI_PREFS = {
   "history.columns": pref<ColumnLayout>({
     default: buildDefaultColumnLayout(HISTORY_COLUMN_DEFAULTS),
@@ -60,6 +71,10 @@ export const UI_PREFS = {
   "history.tableHeightPercent": splitPercent(50),
   /** Request pane share of the inspector */
   "history.inspectorSplitPercent": splitPercent(50),
+  "repeater.sidebarWidth": panelWidth(290, REPEATER_SIDEBAR_WIDTH.min, REPEATER_SIDEBAR_WIDTH.max),
+  "repeater.historyDrawerWidth": panelWidth(288, REPEATER_HISTORY_DRAWER_WIDTH.min, REPEATER_HISTORY_DRAWER_WIDTH.max),
+  /** Request pane share of the Repeater work area */
+  "repeater.requestSplitPercent": splitPercent(50),
   "history.filterBarOpen": pref<boolean>({
     default: false,
     normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),

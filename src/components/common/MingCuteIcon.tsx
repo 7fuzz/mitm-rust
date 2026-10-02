@@ -66,7 +66,9 @@ export type MingCuteIconName =
   | 'alert_line'
   | 'warning_line'
   | 'file_import_line'
-  | 'layout_right_line';
+  | 'layout_right_line'
+  | 'chevron_left_line'
+  | 'expand_line';
 
 interface MingCuteIconProps {
   name: MingCuteIconName | string;
@@ -245,6 +247,14 @@ export const MingCuteIcon: React.FC<MingCuteIconProps> = ({
       case 'chevron_right_line':
         return (
           <path d="M13.172 12l-4.95-4.95 1.414-1.414L16 12l-6.364 6.364-1.414-1.414z" />
+        );
+      case 'chevron_left_line':
+        return (
+          <path d="M10.828 12l4.95 4.95-1.414 1.414L8 12l6.364-6.364 1.414 1.414z" />
+        );
+      case 'expand_line':
+        return (
+          <path d="M4 4h6v2H6v4H4V4zm10 0h6v6h-2V6h-4V4zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z" />
         );
       case 'chevron_down_line':
         return (

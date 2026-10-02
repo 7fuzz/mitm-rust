@@ -8,8 +8,11 @@ export interface DialogProps {
   description?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  /** `full` is a large fixed-height dialog for side-by-side content */
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   className?: string;
+  /** Replaces the default padded, scrolling body classes */
+  bodyClassName?: string;
 }
 
 export const Dialog: React.FC<DialogProps> = ({
@@ -21,6 +24,7 @@ export const Dialog: React.FC<DialogProps> = ({
   footer,
   size = 'md',
   className = '',
+  bodyClassName,
 }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -41,7 +45,9 @@ export const Dialog: React.FC<DialogProps> = ({
       ? 'max-w-md'
       : size === 'lg'
       ? 'max-w-lg'
-      : 'max-w-2xl';
+      : size === 'xl'
+      ? 'max-w-2xl'
+      : 'max-w-6xl h-[85vh]';
 
   return (
     <div
@@ -71,7 +77,7 @@ export const Dialog: React.FC<DialogProps> = ({
         )}
 
         {/* Body */}
-        <div className="p-4 overflow-y-auto max-h-[75vh] space-y-3">{children}</div>
+        <div className={bodyClassName ?? 'p-4 overflow-y-auto max-h-[75vh] space-y-3'}>{children}</div>
 
         {/* Footer */}
         {footer && (

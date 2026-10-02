@@ -7,6 +7,7 @@ import { CodeEditor } from '../../common/CodeEditor';
 import { HexViewer } from '../../common/HexViewer';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { SegmentedControl } from '../../common/ui';
+import { PaneHeader } from '../../common/PaneHeader';
 import { MediaResponsePreview } from '../../common/MediaResponsePreview';
 import { JsonTreeViewerRoot } from '../../common/JsonTreeViewer';
 import { detectMediaResponse } from '../../../utils/mediaDetector';
@@ -26,44 +27,6 @@ const RES_TABS = [
   { value: 'headers', label: 'Headers' },
   { value: 'cookies', label: 'Cookies' },
 ] as const;
-
-interface PaneHeaderProps {
-  title: string;
-  tabs: Array<{ value: string; label: string; count?: number }>;
-  activeTab: string;
-  onTabChange: (value: string) => void;
-  /** Controls aligned right, e.g. the body format switch */
-  right?: React.ReactNode;
-}
-
-/** Single header row per pane: title, underline tabs with counts, and optional right-aligned controls. */
-const PaneHeader: React.FC<PaneHeaderProps> = ({ title, tabs, activeTab, onTabChange, right }) => (
-  <div className="bg-header border-b border-border px-2 flex items-center gap-3 shrink-0 select-none h-8">
-    <span className="font-semibold text-muted-foreground text-[10px] uppercase tracking-wider shrink-0">{title}</span>
-    <div className="h-4 w-px bg-border shrink-0" />
-    <div className="flex items-stretch h-full gap-0.5 min-w-0 overflow-x-auto no-scrollbar">
-      {tabs.map((tab) => {
-        const isActive = tab.value === activeTab;
-        return (
-          <button
-            key={tab.value}
-            onClick={() => onTabChange(tab.value)}
-            className={`px-2.5 text-[11px] transition-colors cursor-pointer whitespace-nowrap rounded-t ${
-              isActive
-                ? // Inset shadow as the underline so the scroll container can't clip it
-                  'bg-surface text-foreground font-semibold shadow-[inset_0_-2px_0_var(--color-primary)]'
-                : 'text-muted-foreground font-medium hover:text-foreground hover:bg-neutral-subtle'
-            }`}
-          >
-            {tab.label}
-            {tab.count ? <span className="ml-1 text-[10px] text-muted-foreground font-mono">{tab.count}</span> : null}
-          </button>
-        );
-      })}
-    </div>
-    {right && <div className="ml-auto shrink-0">{right}</div>}
-  </div>
-);
 
 interface RequestResponseInspectorProps {
   item: TrafficItem | null;

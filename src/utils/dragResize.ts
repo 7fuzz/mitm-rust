@@ -40,4 +40,6 @@ export function startDragResize(e: React.PointerEvent, { cursor, onMove, onEnd }
   window.addEventListener('pointerup', handlePointerUp);
 }
 
-export const clampPercent = (value: number, min = 15, max = 85) => Math.min(Math.max(value, min), max);
+export const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+export const clampPercent = (value: number, min = 15, max = 85) => clamp(value, min, max);

@@ -6,59 +6,24 @@ import { StatusBadge } from '../../common/StatusBadge';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { ContextMenu, type ContextMenuItem } from '../../common/ContextMenu';
 import { CopyCustomModal } from '../history/CopyCustomModal';
-import {
-  formatRawCurl,
-  formatReqAndRes,
-  formatUrlBodyAndRes,
-} from '../../../utils/reqResFormatter';
+import { historyItemToTrafficItem, RUN_COPY_ACTIONS } from '../../../utils/repeaterTraffic';
+import { RepeaterRunDialog } from './RepeaterRunDialog';
 
 interface ExecutionHistoryDrawerProps {
   requestId: string;
-  widthPx?: number;
 }
 
-const historyItemToTrafficItem = (hist: RepeaterHistoryItem): TrafficItem => {
-  let host = '';
-  let path = '/';
+/** Path and query of a run's URL, falling back to the raw URL */
+const runPath = (url: string) => {
   try {
-    const urlWithScheme = !hist.url.startsWith('http://') && !hist.url.startsWith('https://')
-      ? `https://${hist.url}`
-      : hist.url;
-    const urlObj = new URL(urlWithScheme);
-    host = urlObj.host;
-    path = urlObj.pathname + urlObj.search;
+    const parsed = new URL(/^https?:\/\//.test(url) ? url : `https://${url}`);
+    return parsed.pathname + parsed.search;
   } catch {
-    host = hist.url;
+    return url;
   }
-
-  const ctHeader = (hist.responseHeaders || []).find(
-    (h) => h.key?.toLowerCase() === 'content-type'
-  );
-  const contentType = ctHeader ? ctHeader.value : '';
-
-  return {
-    id: `rep-hist-${hist.id}`,
-    method: hist.method,
-    url: hist.url,
-    host,
-    path,
-    contentType,
-    statusCode: hist.statusCode,
-    size: hist.responseBody ? hist.responseBody.length : 0,
-    requestHeaders: (hist.requestHeaders || []).map((h) => ({ key: h.key, value: h.value })),
-    responseHeaders: (hist.responseHeaders || []).map((h) => ({ key: h.key, value: h.value })),
-    requestBody: hist.requestBody || '',
-    responseBody: hist.responseBody || '',
-    durationMs: hist.durationMs,
-    timestamp: hist.executedAtMs,
-    phase: 'done',
-    isIntercepted: false,
-    isRewritten: false,
-    isFailed: hist.statusCode === 0,
-  };
 };
 
-export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ requestId, widthPx = 288 }) => {
+export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ requestId }) => {
   const {
     executionHistory,
     isHistoryDrawerOpen,
@@ -66,11 +31,14 @@ export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ 
     fetchHistory,
     setExecutionResult,
     restoreHistoryToTab,
+    executeActiveRequest,
     lastExecutionResult,
+    tabs,
   } = useRepeaterStore();
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: RepeaterHistoryItem } | null>(null);
   const [customCopyItem, setCustomCopyItem] = useState<TrafficItem | null>(null);
+  const [dialogIndex, setDialogIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (isHistoryDrawerOpen && requestId) {
@@ -83,6 +51,15 @@ export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ 
   const history = executionHistory[requestId] || [];
   const currentResult = lastExecutionResult[requestId];
 
+  // Edits made after the latest run would be lost by loading an older one
+  const tab = tabs.find((t) => t.id === requestId);
+  const hasUnsentChanges = !!tab && (history.length === 0 || tab.updatedAtMs > history[0].executedAtMs);
+
+  const handleLoadAndSend = async (run: RepeaterHistoryItem) => {
+    await restoreHistoryToTab(requestId, run);
+    await executeActiveRequest(requestId);
+  };
+
   const handleContextMenu = (e: React.MouseEvent, hist: RepeaterHistoryItem) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, item: hist });
@@ -92,12 +69,17 @@ export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ 
     const trafficItem = historyItemToTrafficItem(hist);
     return [
       {
+        label: 'Open Details',
+        icon: 'expand_line',
+        action: () => setDialogIndex(history.indexOf(hist)),
+      },
+      {
         label: 'View Response in Panel',
         icon: 'eye_line',
         action: () => setExecutionResult(requestId, hist),
       },
       {
-        label: 'Restore Request to Editor',
+        label: 'Load into Editor',
         icon: 'refresh_line',
         action: () => restoreHistoryToTab(requestId, hist),
       },
@@ -105,30 +87,11 @@ export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ 
         label: 'Copy',
         icon: 'copy_line',
         children: [
-          {
-            label: 'Copy Curl',
-            icon: 'terminal_line',
-            action: () => {
-              const curl = formatRawCurl(trafficItem);
-              navigator.clipboard.writeText(curl);
-            },
-          },
-          {
-            label: 'Copy Curl and Res',
-            icon: 'transfer_line',
-            action: () => {
-              const formatted = formatReqAndRes(trafficItem);
-              navigator.clipboard.writeText(formatted);
-            },
-          },
-          {
-            label: 'Copy URL, Body, and Response',
-            icon: 'file_code_line',
-            action: () => {
-              const formatted = formatUrlBodyAndRes(trafficItem);
-              navigator.clipboard.writeText(formatted);
-            },
-          },
+          ...RUN_COPY_ACTIONS.map((copyAction) => ({
+            label: copyAction.label,
+            icon: copyAction.icon,
+            action: () => navigator.clipboard.writeText(copyAction.format(trafficItem)),
+          })),
           {
             label: 'Copy custom',
             icon: 'settings_3_line',
@@ -141,8 +104,7 @@ export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ 
 
   return (
     <div
-      className="bg-surface border-l border-border h-full flex flex-col overflow-hidden text-xs shrink-0 select-none"
-      style={{ width: `${widthPx}px` }}
+      className="bg-surface border-l border-border h-full w-full flex flex-col overflow-hidden text-xs select-none"
     >
       <div
         onClick={() => setHistoryDrawerOpen(false)}
@@ -158,11 +120,11 @@ export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ 
         </button>
       </div>
 
-      <div className="flex-1 p-2 overflow-y-auto space-y-2">
+      <div className="flex-1 overflow-y-auto divide-y divide-border/50">
         {history.length === 0 ? (
           <div className="py-8 text-center text-muted-foreground italic">No historical executions logged</div>
         ) : (
-          history.map((hist) => {
+          history.map((hist, index) => {
             const isSelected =
               currentResult &&
               'historyId' in currentResult
@@ -175,23 +137,36 @@ export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ 
               <div
                 key={hist.id}
                 onClick={() => setExecutionResult(requestId, hist)}
+                onDoubleClick={() => setDialogIndex(index)}
                 onContextMenu={(e) => handleContextMenu(e, hist)}
-                className={`p-2 border rounded transition-colors space-y-1 font-mono text-xs cursor-pointer ${
-                  isSelected
-                    ? 'border-primary bg-primary/10 ring-1 ring-primary/40'
-                    : 'border-border bg-background hover:border-primary/50'
+                className={`group px-3 py-2 border-l-2 transition-colors font-mono text-xs cursor-pointer flex flex-col gap-1 ${
+                  isSelected ? 'bg-primary/10 border-l-primary' : 'border-l-transparent hover:bg-neutral-subtle'
                 }`}
-                title="Left click to view response, Right click for copy & restore options"
+                title="Click to view the response, double-click for details, right-click for more"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
                   <StatusBadge code={hist.statusCode} />
-                  <span className="text-[10px] text-muted-foreground">{new Date(hist.executedAtMs).toLocaleTimeString()}</span>
+                  <span className="text-[10px] text-muted-foreground">{hist.durationMs}ms</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">
+                    {new Date(hist.executedAtMs).toLocaleTimeString()}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDialogIndex(index);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 -my-1 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-neutral-subtle transition-opacity cursor-pointer"
+                    title="Open details"
+                  >
+                    <MingCuteIcon name="expand_line" size={12} />
+                  </button>
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span>Latency: {hist.durationMs}ms</span>
-                  <span>Size: {hist.responseBody?.length || 0}B</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[10px] font-bold text-muted-foreground shrink-0">{hist.method}</span>
+                  <span className="text-[11px] text-foreground truncate" title={hist.url}>
+                    {runPath(hist.url)}
+                  </span>
                 </div>
-                <div className="text-foreground text-[11px] truncate">{hist.url}</div>
               </div>
             );
           })
@@ -207,6 +182,16 @@ export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ 
           onClose={() => setContextMenu(null)}
         />
       )}
+
+      <RepeaterRunDialog
+        runs={history}
+        index={dialogIndex}
+        onIndexChange={setDialogIndex}
+        onClose={() => setDialogIndex(null)}
+        hasUnsentChanges={hasUnsentChanges}
+        onLoad={(run) => restoreHistoryToTab(requestId, run)}
+        onLoadAndSend={handleLoadAndSend}
+      />
 
       {/* Copy Custom Modal */}
       <CopyCustomModal

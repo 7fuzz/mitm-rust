@@ -5,11 +5,8 @@ import { StatusBadge } from '../../common/StatusBadge';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Input, Button } from '../../common/ui';
 
-interface RepeaterSidebarProps {
-  widthPx?: number;
-}
-
-export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 }) => {
+/** Fills its parent; RepeaterView owns the (resizable) width */
+export const RepeaterSidebar: React.FC = () => {
   const {
     tabs,
     activeTabId,
@@ -50,8 +47,7 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
 
   return (
     <div
-      className="bg-surface border-r border-border h-full flex flex-col overflow-hidden text-xs shrink-0 select-none"
-      style={{ width: `${widthPx}px` }}
+      className="bg-surface border-r border-border h-full w-full flex flex-col overflow-hidden text-xs select-none"
     >
       {/* Top Header & Search Bar */}
       <div className="p-2 bg-header border-b border-border flex flex-col gap-2 shrink-0">
@@ -83,7 +79,7 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
       </div>
 
       {/* Request Cards List */}
-      <div className="flex-1 p-2 overflow-y-auto space-y-2 no-scrollbar">
+      <div className="flex-1 overflow-y-auto divide-y divide-border/50 no-scrollbar">
         {filteredTabs.length === 0 ? (
           <div className="py-12 text-center text-muted-foreground italic flex flex-col items-center gap-2">
             <MingCuteIcon name="folder_open_line" size={32} className="opacity-40" />
@@ -104,10 +100,10 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
               <div
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`group p-2.5 rounded-lg border text-xs cursor-pointer transition-all flex flex-col gap-1 ${
+                className={`group px-3 py-2 border-l-2 text-xs cursor-pointer transition-colors flex flex-col gap-1 ${
                   isActive
-                    ? 'bg-background border-primary/60 shadow-xs ring-1 ring-primary/30'
-                    : 'bg-surface hover:bg-neutral-subtle border-border text-foreground'
+                    ? 'bg-primary/10 border-l-primary'
+                    : 'border-l-transparent hover:bg-neutral-subtle text-foreground'
                 }`}
               >
                 {/* Main Title Line: [Method Badge] https://hostname */}
@@ -130,7 +126,7 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
                       e.stopPropagation();
                       deleteTab(tab.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-500 p-1 rounded transition-opacity cursor-pointer"
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-500 -my-1 p-1 rounded transition-opacity cursor-pointer"
                     title="Delete Request"
                   >
                     <MingCuteIcon name="close_line" size={13} />
@@ -143,7 +139,7 @@ export const RepeaterSidebar: React.FC<RepeaterSidebarProps> = ({ widthPx = 280 
                 </div>
 
                 {/* Stats Bar: Hits Count & Last Response Code / Latency */}
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1.5 mt-0.5 border-t border-border/50 font-mono">
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
                   <span className="flex items-center gap-1 text-muted-foreground">
                     <MingCuteIcon name="flash_line" size={11} className="text-amber-500" />
                     <span>{hits} {hits === 1 ? 'hit' : 'hits'}</span>

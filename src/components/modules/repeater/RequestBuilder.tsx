@@ -8,6 +8,7 @@ import { UrlEncodedEditor } from '../../common/UrlEncodedEditor';
 import { ExtractRulesEditor } from '../../common/ExtractRulesEditor';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Select } from '../../common/ui';
+import { PaneHeader } from '../../common/PaneHeader';
 import { buildUrlWithParams, parseUrlQueryParams } from '../../../utils/urlParams';
 
 interface RequestBuilderProps {
@@ -23,6 +24,19 @@ const METHOD_OPTIONS = [
   { value: 'OPTIONS', label: 'OPTIONS' },
   { value: 'HEAD', label: 'HEAD' },
 ] as const;
+
+// Short labels: a native select is as wide as its longest option, and it sits in the tab row
+const BODY_TYPE_OPTIONS = [
+  { value: 'none', label: 'None' },
+  { value: 'json', label: 'JSON' },
+  { value: 'raw', label: 'Raw' },
+  { value: 'form', label: 'Multipart' },
+  { value: 'urlencoded', label: 'URL-Encoded' },
+];
+
+/** Enabled rows with a key; what actually gets sent */
+const countActive = (items?: Array<{ key: string; enabled: boolean }>) =>
+  (items || []).filter((i) => i.enabled && i.key.trim()).length;
 
 export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
   const { updateTab, executeActiveRequest, isExecuting, toggleHistoryDrawer } = useRepeaterStore();
@@ -218,7 +232,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
   return (
     <div className="flex-1 flex flex-col bg-surface border-r border-border overflow-hidden text-xs">
       {/* Top URL Bar */}
-      <div className="p-3 bg-header border-b border-border flex items-center gap-2 shrink-0">
+      <div className="h-12 px-3 bg-header border-b border-border flex items-center gap-2 shrink-0">
         {/* Method Select */}
         <Select
           value={request.method}
@@ -259,80 +273,86 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         </button>
       </div>
 
-      {/* Request Config Tabs & Copy Dropdown */}
-      <div className="bg-header border-b border-border px-3 py-1 flex items-center justify-between shrink-0 select-none">
-        <div className="flex items-center gap-2">
-          {(['params', 'headers', 'body', 'auto-extract'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-3 py-1 rounded text-xs font-medium uppercase transition-colors cursor-pointer ${
-                activeTab === tab
-                  ? 'bg-surface text-primary border border-border/80 shadow-2xs font-semibold'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {tab === 'auto-extract' ? 'Auto-Extract' : tab}
-            </button>
-          ))}
-        </div>
+      {/* Request Config Tabs, Body Type & Copy Dropdown */}
+      <PaneHeader
+        tabs={[
+          { value: 'params', label: 'Params', count: countActive(request.params) },
+          { value: 'headers', label: 'Headers', count: countActive(request.headers) },
+          { value: 'body', label: 'Body' },
+          { value: 'auto-extract', label: 'Auto-Extract', count: request.extractRules?.length },
+        ]}
+        activeTab={activeTab}
+        onTabChange={(val) => setActiveTab(val as typeof activeTab)}
+        right={
+          <>
+            {activeTab === 'body' && (
+              <Select
+                value={request.bodyType}
+                onChange={(e) => handleBodyTypeChange(e.target.value)}
+                options={BODY_TYPE_OPTIONS}
+                sizeVariant="xs"
+                className="py-0.5"
+                title="Body type (Multipart = multipart/form-data, URL-Encoded = x-www-form-urlencoded)"
+              />
+            )}
+            {/* Copy Request Actions Dropdown */}
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setCopyMenuOpen(!copyMenuOpen)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs font-medium"
+                title="Copy Request Options"
+              >
+                <MingCuteIcon name={copyNotification ? 'check_line' : 'copy_line'} size={13} className={copyNotification ? 'text-emerald-400' : ''} />
+                <span>{copyNotification || 'Copy'}</span>
+                <MingCuteIcon name="down_line" size={12} className="opacity-60" />
+              </button>
 
-        {/* Copy Request Actions Dropdown */}
-        <div className="relative" ref={menuRef}>
-          <button
-            onClick={() => setCopyMenuOpen(!copyMenuOpen)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-background hover:bg-neutral-subtle border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs font-medium"
-            title="Copy Request Options"
-          >
-            <MingCuteIcon name={copyNotification ? 'check_line' : 'copy_line'} size={13} className={copyNotification ? 'text-emerald-400' : ''} />
-            <span>{copyNotification || 'Copy Request'}</span>
-            <MingCuteIcon name="down_line" size={12} className="opacity-60" />
-          </button>
-
-          {copyMenuOpen && (
-            <div className="absolute right-0 mt-1 w-44 bg-surface border border-border rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
-              <button
-                onClick={handleCopyUrl}
-                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="link_line" size={14} className="text-sky-500" />
-                <span>Copy URL</span>
-              </button>
-              <button
-                onClick={handleCopyBody}
-                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="file_text_line" size={14} className="text-primary" />
-                <span>Copy Body</span>
-              </button>
-              <button
-                onClick={handleCopyHeaders}
-                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="list_check_line" size={14} className="text-emerald-500" />
-                <span>Copy Headers</span>
-              </button>
-              <button
-                onClick={handleCopyAll}
-                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer border-t border-border/80"
-              >
-                <MingCuteIcon name="copy_line" size={14} className="text-amber-500" />
-                <span>Copy All (Full Req)</span>
-              </button>
-              <button
-                onClick={handleCopyCurl}
-                className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
-              >
-                <MingCuteIcon name="code_line" size={14} className="text-blue-500" />
-                <span>Copy as cURL</span>
-              </button>
+              {copyMenuOpen && (
+                <div className="absolute right-0 mt-1 w-44 bg-surface border border-border rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
+                  <button
+                    onClick={handleCopyUrl}
+                    className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <MingCuteIcon name="link_line" size={14} className="text-sky-500" />
+                    <span>Copy URL</span>
+                  </button>
+                  <button
+                    onClick={handleCopyBody}
+                    className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <MingCuteIcon name="file_text_line" size={14} className="text-primary" />
+                    <span>Copy Body</span>
+                  </button>
+                  <button
+                    onClick={handleCopyHeaders}
+                    className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <MingCuteIcon name="list_check_line" size={14} className="text-emerald-500" />
+                    <span>Copy Headers</span>
+                  </button>
+                  <button
+                    onClick={handleCopyAll}
+                    className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer border-t border-border/80"
+                  >
+                    <MingCuteIcon name="copy_line" size={14} className="text-amber-500" />
+                    <span>Copy All (Full Req)</span>
+                  </button>
+                  <button
+                    onClick={handleCopyCurl}
+                    className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <MingCuteIcon name="code_line" size={14} className="text-blue-500" />
+                    <span>Copy as cURL</span>
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Tab Panels */}
-      <div className="flex-1 p-3 overflow-auto">
+      <div className={`flex-1 ${activeTab === 'body' ? 'overflow-hidden' : 'p-2 overflow-auto'}`}>
         {activeTab === 'params' && (
           <KeyValueEditor
             items={request.params || []}
@@ -364,22 +384,8 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
 
         {activeTab === 'body' && (
           <div className="h-full flex flex-col overflow-hidden">
-            <div className="flex items-center gap-2 mb-2">
-              <Select
-                value={request.bodyType}
-                onChange={(e) => handleBodyTypeChange(e.target.value)}
-                options={[
-                  { value: 'none', label: 'None' },
-                  { value: 'json', label: 'JSON' },
-                  { value: 'raw', label: 'Raw Text' },
-                  { value: 'form', label: 'Form Data (Multipart)' },
-                  { value: 'urlencoded', label: 'URL-Encoded (x-www-form-urlencoded)' },
-                ]}
-                sizeVariant="xs"
-              />
-            </div>
             {request.bodyType === 'urlencoded' || request.bodyType === 'x-www-form-urlencoded' ? (
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto p-2">
                 <UrlEncodedEditor
                   params={(() => {
                     try {
@@ -395,7 +401,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
                 />
               </div>
             ) : request.bodyType === 'form' || request.bodyType === 'form-data' || request.bodyType === 'multipart' ? (
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto p-2">
                 <MultipartEditor
                   fields={(() => {
                     try {
@@ -412,14 +418,17 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
                 />
               </div>
             ) : request.bodyType !== 'none' ? (
-              <div className="flex-1 overflow-hidden border border-border rounded">
+              <div className="flex-1 overflow-hidden">
                 <CodeEditor
                   value={request.bodyContent || ''}
                   onChange={(bodyContent) => updateTab({ ...request, bodyContent })}
                   language={request.bodyType === 'json' ? 'json' : 'plaintext'}
+                  bare
                 />
               </div>
-            ) : null}
+            ) : (
+              <div className="p-4 text-muted-foreground italic">This request has no body.</div>
+            )}
           </div>
         )}
 
