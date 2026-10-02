@@ -1,17 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import CryptoJS from 'crypto-js';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
-
-type EncodingAlgorithm =
-  | 'base64'
-  | 'base64url'
-  | 'url'
-  | 'hex'
-  | 'html'
-  | 'binary'
-  | 'jwt';
-
-type Direction = 'encode' | 'decode';
+import { useUtilitiesStore, EncodingAlgorithm } from '../../../stores/useUtilitiesStore';
 
 interface EncodingConfig {
   id: EncodingAlgorithm;
@@ -30,14 +20,20 @@ const ENCODING_ALGORITHMS: EncodingConfig[] = [
 ];
 
 export const EncodingTool: React.FC = () => {
-  const [inputText, setInputText] = useState('MITM-Developer-Security-Suite-2.0');
-  const [algorithm, setAlgorithm] = useState<EncodingAlgorithm>('base64');
-  const [direction, setDirection] = useState<Direction>('encode');
-
-  // Format-specific options
-  const [hexDelimiter, setHexDelimiter] = useState<'' | ' ' | ':' | '\\x' | '0x'>(' ');
-  const [hexCase, setHexCase] = useState<'lower' | 'upper'>('lower');
-  const [urlFull, setUrlFull] = useState(false);
+  const {
+    encodingInput: inputText,
+    setEncodingInput: setInputText,
+    encodingAlgorithm: algorithm,
+    setEncodingAlgorithm: setAlgorithm,
+    encodingDirection: direction,
+    setEncodingDirection: setDirection,
+    encodingHexDelimiter: hexDelimiter,
+    setEncodingHexDelimiter: setHexDelimiter,
+    encodingHexCase: hexCase,
+    setEncodingHexCase: setHexCase,
+    encodingUrlFull: urlFull,
+    setEncodingUrlFull: setUrlFull,
+  } = useUtilitiesStore();
 
   // User feedback states
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -320,7 +316,7 @@ export const EncodingTool: React.FC = () => {
     if (!outputText) return;
     setInputText(outputText);
     if (selectedAlgoConfig.isBidirectional) {
-      setDirection((prev) => (prev === 'encode' ? 'decode' : 'encode'));
+      setDirection(direction === 'encode' ? 'decode' : 'encode');
     }
     triggerNotice('Output sent to Input');
   };
@@ -475,7 +471,7 @@ export const EncodingTool: React.FC = () => {
               </select>
 
               <button
-                onClick={() => setHexCase((c) => (c === 'lower' ? 'upper' : 'lower'))}
+                onClick={() => setHexCase(hexCase === 'lower' ? 'upper' : 'lower')}
                 className="ml-1 px-1.5 py-0.5 rounded text-2xs font-mono font-bold bg-neutral-subtle text-foreground hover:bg-surface border border-border"
                 title="Toggle Hex Case"
               >

@@ -2,18 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import CryptoJS from 'crypto-js';
 import bcrypt from 'bcryptjs';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
-
-type HashAlgorithm =
-  | 'bcrypt'
-  | 'sha256'
-  | 'md5'
-  | 'sha1'
-  | 'sha384'
-  | 'sha512'
-  | 'hmac-sha256'
-  | 'hmac-md5';
-
-type HashMode = 'generate' | 'verify';
+import { useUtilitiesStore, HashAlgorithm } from '../../../stores/useUtilitiesStore';
 
 interface HashConfig {
   id: HashAlgorithm;
@@ -33,20 +22,24 @@ const HASH_ALGORITHMS: HashConfig[] = [
 ];
 
 export const HashingTool: React.FC = () => {
-  const [inputText, setInputText] = useState('MITM-Developer-Security-Suite-2.0');
-  const [algorithm, setAlgorithm] = useState<HashAlgorithm>('bcrypt');
-  const [mode, setMode] = useState<HashMode>('generate');
-
-  // Verify Mode Target Hash
-  const [verifyTargetHash, setVerifyTargetHash] = useState('');
-
-  // Bcrypt Options
-  const [bcryptRounds, setBcryptRounds] = useState<number>(10);
-  const [bcryptSalt, setBcryptSalt] = useState<string>('');
-
-  // Standard Hash Options
-  const [hashCase, setHashCase] = useState<'lower' | 'upper'>('lower');
-  const [hmacKey, setHmacKey] = useState('secret-key');
+  const {
+    hashingInput: inputText,
+    setHashingInput: setInputText,
+    hashingAlgorithm: algorithm,
+    setHashingAlgorithm: setAlgorithm,
+    hashingMode: mode,
+    setHashingMode: setMode,
+    hashingVerifyTarget: verifyTargetHash,
+    setHashingVerifyTarget: setVerifyTargetHash,
+    hashingBcryptRounds: bcryptRounds,
+    setHashingBcryptRounds: setBcryptRounds,
+    hashingBcryptSalt: bcryptSalt,
+    setHashingBcryptSalt: setBcryptSalt,
+    hashingCase: hashCase,
+    setHashingCase: setHashCase,
+    hashingHmacKey: hmacKey,
+    setHashingHmacKey: setHmacKey,
+  } = useUtilitiesStore();
 
   // User feedback states
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -427,7 +420,7 @@ export const HashingTool: React.FC = () => {
 
               {mode === 'generate' && (
                 <button
-                  onClick={() => setHashCase((c) => (c === 'lower' ? 'upper' : 'lower'))}
+                  onClick={() => setHashCase(hashCase === 'lower' ? 'upper' : 'lower')}
                   className="px-2 py-1 rounded text-2xs font-mono font-bold bg-background text-foreground hover:bg-neutral-subtle border border-border"
                   title="Toggle Digest Case"
                 >

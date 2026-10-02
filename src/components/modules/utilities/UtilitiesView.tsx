@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
 import { CvssCalculator } from './CvssCalculator';
 import { JsonToolkit } from './JsonToolkit';
 import { EncodingTool } from './EncodingTool';
 import { HashingTool } from './HashingTool';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
+import { useUtilitiesStore } from '../../../stores/useUtilitiesStore';
 
 export const UtilitiesView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'cvss' | 'json' | 'encoding' | 'hashing'>('cvss');
+  const { activeTab, setActiveTab } = useUtilitiesStore();
 
   return (
     <div className="h-full flex flex-col bg-background p-4 overflow-hidden">
@@ -61,16 +61,20 @@ export const UtilitiesView: React.FC = () => {
         </button>
       </div>
 
-      {/* Main Tool Content Container */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {activeTab === 'cvss' && (
-          <div className="h-full overflow-y-auto">
-            <CvssCalculator />
-          </div>
-        )}
-        {activeTab === 'json' && <JsonToolkit />}
-        {activeTab === 'encoding' && <EncodingTool />}
-        {activeTab === 'hashing' && <HashingTool />}
+      {/* Main Tool Content Container (preserved in session) */}
+      <div className="flex-1 min-h-0 overflow-hidden relative">
+        <div className={`h-full overflow-y-auto ${activeTab === 'cvss' ? '' : 'hidden'}`}>
+          <CvssCalculator />
+        </div>
+        <div className={`h-full ${activeTab === 'json' ? '' : 'hidden'}`}>
+          <JsonToolkit />
+        </div>
+        <div className={`h-full ${activeTab === 'encoding' ? '' : 'hidden'}`}>
+          <EncodingTool />
+        </div>
+        <div className={`h-full ${activeTab === 'hashing' ? '' : 'hidden'}`}>
+          <HashingTool />
+        </div>
       </div>
     </div>
   );
