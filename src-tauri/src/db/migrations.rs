@@ -64,6 +64,16 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         name: "20260831_0011_websockets",
         sql: include_str!("../../migrations/20260831_0011_websockets.sql"),
     },
+    MigrationSpec {
+        version: 12,
+        name: "20261001_0012_listener_source",
+        sql: include_str!("../../migrations/20261001_0012_listener_source.sql"),
+    },
+    MigrationSpec {
+        version: 13,
+        name: "20261002_0013_source_scoping",
+        sql: include_str!("../../migrations/20261002_0013_source_scoping.sql"),
+    },
 ];
 
 #[derive(Clone, Serialize, Debug)]

@@ -29,6 +29,7 @@ export const HistoryView: React.FC = () => {
     onlyIntercepted,
     onlyRewritten,
     onlyFailed,
+    listenerFilter,
     addInterceptRule,
     initStore,
     loadNextPage,
@@ -88,9 +89,18 @@ export const HistoryView: React.FC = () => {
           item.url.toLowerCase().includes(q) ||
           item.statusCode.toString().includes(q) ||
           item.method.toLowerCase().includes(q) ||
+          (item.listenerLabel && item.listenerLabel.toLowerCase().includes(q)) ||
           item.requestBody.toLowerCase().includes(q) ||
           item.responseBody.toLowerCase().includes(q);
         if (!matchesQuery) return false;
+      }
+
+      // Listener Source filter
+      if (listenerFilter) {
+        const itemLabel = item.listenerLabel || 'Default';
+        if (itemLabel.toLowerCase() !== listenerFilter.toLowerCase()) {
+          return false;
+        }
       }
 
       // Tri-state Method filter (include / exclude / neutral)
@@ -169,7 +179,7 @@ export const HistoryView: React.FC = () => {
 
       return true;
     });
-  }, [traffic, searchQuery, selectedMethods, methodFilters, statusFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed]);
+  }, [traffic, searchQuery, selectedMethods, methodFilters, statusFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed, listenerFilter]);
 
   // Virtualization state & refs
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -379,6 +389,7 @@ export const HistoryView: React.FC = () => {
                 <tr>
                   <th className="py-2 px-2 w-12 text-center text-muted-foreground">#</th>
                   <th className="py-2 px-2 w-24">Method</th>
+                  <th className="py-2 px-2 w-20">Source</th>
                   <th className="py-2 px-2 w-48">Host</th>
                   <th className="py-2 px-2">Path</th>
                   <th className="py-2 px-2 w-16 text-center">Status</th>
@@ -390,7 +401,7 @@ export const HistoryView: React.FC = () => {
               <tbody className="divide-y divide-border/50">
                 {totalRows === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-muted-foreground italic text-xs">
+                    <td colSpan={9} className="py-12 text-center text-muted-foreground italic text-xs">
                       {isLoadingMore ? 'Loading traffic logs...' : 'No traffic items match the current filters'}
                     </td>
                   </tr>
@@ -399,7 +410,7 @@ export const HistoryView: React.FC = () => {
                     {/* Top Spacer Row */}
                     {topSpacer > 0 && (
                       <tr style={{ height: `${topSpacer}px`, pointerEvents: 'none' }}>
-                        <td colSpan={8} className="p-0 border-0" />
+                        <td colSpan={9} className="p-0 border-0" />
                       </tr>
                     )}
 
@@ -458,6 +469,21 @@ export const HistoryView: React.FC = () => {
                               )}
                             </div>
                           </td>
+                          <td className="py-1 px-2 text-muted-foreground text-[10px] overflow-hidden">
+                            {item.listenerLabel && item.listenerLabel !== 'Default' ? (
+                              <span
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary border border-primary/20 truncate max-w-full select-none"
+                                title={`Source: ${item.listenerLabel}`}
+                              >
+                                <span className="w-1 h-1 rounded-full bg-primary shrink-0" />
+                                <span className="truncate">{item.listenerLabel}</span>
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/50 text-[10px] font-mono" title="Default proxy listener">
+                                {item.listenerLabel || 'Default'}
+                              </span>
+                            )}
+                          </td>
                           <td className="py-1 px-2 text-foreground font-medium overflow-hidden">
                             <div className="truncate" title={item.host}>{item.host}</div>
                           </td>
@@ -496,14 +522,14 @@ export const HistoryView: React.FC = () => {
                     {/* Bottom Spacer Row */}
                     {bottomSpacer > 0 && (
                       <tr style={{ height: `${bottomSpacer}px`, pointerEvents: 'none' }}>
-                        <td colSpan={8} className="p-0 border-0" />
+                        <td colSpan={9} className="p-0 border-0" />
                       </tr>
                     )}
 
                     {/* Infinite Loading Indicator */}
                     {isLoadingMore && (
                       <tr>
-                        <td colSpan={8} className="py-2 text-center text-muted-foreground text-[11px] italic bg-surface/50 animate-pulse">
+                        <td colSpan={9} className="py-2 text-center text-muted-foreground text-[11px] italic bg-surface/50 animate-pulse">
                           Loading more records from SQLite...
                         </td>
                       </tr>

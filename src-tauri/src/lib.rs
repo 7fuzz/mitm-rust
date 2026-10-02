@@ -10,11 +10,9 @@ pub mod webhook;
 pub mod workspace;
 pub mod ws;
 
-use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use tauri::Manager;
 use state::{AppState, HistoryEntry};
-use proxy::start_proxy_server;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -40,29 +38,12 @@ pub fn run() {
                     db::actor::start_rewrite_history_actor(db_path.clone(), rewrite_rx);
                     let app_state = AppState::new(db_path, history_tx.clone(), rewrite_tx.clone());
 
-                    // Auto-start proxy server if initial mode is ON (default)
+                    // Auto-start all enabled listeners if initial mode is ON (default)
                     if app_state.is_proxy_active() {
-                        let app_handle_clone = app_handle.clone();
-                        let app_data_dir = app_handle.path().app_data_dir().expect("Failed to get app data dir");
-                        let ca_dir = app_data_dir.join("ca");
-                        let ca = Arc::new(ca::get_ca(ca_dir));
-
-                        let (stop_tx, stop_rx) = oneshot::channel::<()>();
-                        
-                        let (proxy_host, proxy_port) = {
-                            let cfg = app_state.proxy_config.blocking_read();
-                            (cfg.host.clone(), cfg.port)
-                        };
-                        let addr_str = format!("{}:{}", proxy_host, proxy_port);
-                        {
-                            let mut stop_guard = app_state.stop_signal.blocking_lock();
-                            *stop_guard = Some(stop_tx);
-                        }
-
-                        let state_arc = Arc::new(app_state.clone());
-
+                        let app_handle_listeners = app_handle.clone();
+                        let state_for_listeners = app_state.clone();
                         tauri::async_runtime::spawn(async move {
-                            let _ = start_proxy_server(app_handle_clone, state_arc, ca, addr_str, stop_rx).await;
+                            commands::proxy_cmd::start_all_listeners(&app_handle_listeners, &state_for_listeners).await;
                         });
                     }
                     app.manage(app_state);
@@ -104,8 +85,14 @@ pub fn run() {
             commands::proxy_cmd::get_proxy_status,
             commands::proxy_cmd::update_network_settings,
             commands::proxy_cmd::set_ws_mitm_enabled,
+            commands::proxy_cmd::get_listener_configs,
+            commands::proxy_cmd::add_listener,
+            commands::proxy_cmd::remove_listener,
+            commands::proxy_cmd::update_listener,
+            commands::proxy_cmd::set_listener_enabled,
             commands::intercept_cmd::toggle_interceptor,
             commands::intercept_cmd::update_intercept_rules,
+            commands::intercept_cmd::set_intercept_source_scope,
             commands::intercept_cmd::get_intercept_rules,
             commands::intercept_cmd::forward_intercepted_flow,
             commands::intercept_cmd::drop_intercepted_flow,
@@ -120,6 +107,8 @@ pub fn run() {
             commands::rewrite_cmd::save_rewrite_rules,
             commands::rewrite_cmd::toggle_rewrite_enabled,
             commands::rewrite_cmd::get_rewrite_enabled,
+            commands::rewrite_cmd::get_rewrite_source_scope,
+            commands::rewrite_cmd::set_rewrite_source_scope,
             commands::rewrite_cmd::get_rewrite_history,
             commands::rewrite_cmd::clear_rewrite_history,
 

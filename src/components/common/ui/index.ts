@@ -5,3 +5,5 @@ export * from './Checkbox';
 export * from './SegmentedControl';
 export * from './TriStateFilter';
 export * from './Dialog';
+export * from './Switch';
+export * from './SourceScopeSection';

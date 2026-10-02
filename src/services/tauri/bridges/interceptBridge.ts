@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { ProxyConfig } from "./proxyBridge";
+import type { SourceScope } from "../../../types";
 
 export interface InterceptRule {
   id: string;
@@ -29,6 +30,10 @@ export const toggleInterceptor = async (
   mode: "request" | "response" | "both"
 ): Promise<ProxyConfig> => {
   return await invoke<ProxyConfig>("toggle_interceptor", { enabled, mode });
+};
+
+export const setInterceptSourceScope = async (scope: SourceScope): Promise<ProxyConfig> => {
+  return await invoke<ProxyConfig>("set_intercept_source_scope", { scope });
 };
 
 export const getInterceptRules = async (): Promise<InterceptRule[]> => {

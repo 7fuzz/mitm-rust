@@ -16,6 +16,7 @@ pub async fn bridge_proxied_websocket<C, S>(
     url: String,
     client_addr: Option<String>,
     subprotocol: Option<String>,
+    listener_label: String,
     app_handle: AppHandle,
     state: Arc<AppState>,
 ) where
@@ -35,6 +36,7 @@ pub async fn bridge_proxied_websocket<C, S>(
         client_addr,
         is_client_session: false,
         message_count: 0,
+        listener_label,
     };
 
     let _ = crate::db::ws_db::save_ws_connection(&state.db_path, &conn_info);

@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Manager, State};
 use crate::db::{save_intercept_rules, set_preference, InterceptRule};
-use crate::state::{AppState, InterceptAction, PendingFlowPayload, ProxyConfig};
+use crate::state::{AppState, InterceptAction, PendingFlowPayload, ProxyConfig, SourceScope};
 
 #[tauri::command]
 pub async fn toggle_interceptor(
@@ -17,6 +17,18 @@ pub async fn toggle_interceptor(
     let _ = set_preference(&state.db_path, "intercept_enabled", if enabled { "true" } else { "false" });
     let _ = set_preference(&state.db_path, "intercept_mode", &mode);
 
+    let cfg = state.proxy_config.read().await;
+    Ok(cfg.clone())
+}
+
+#[tauri::command]
+pub async fn set_intercept_source_scope(
+    state: State<'_, AppState>,
+    scope: SourceScope,
+) -> Result<ProxyConfig, String> {
+    let json = serde_json::to_string(&scope).map_err(|e| e.to_string())?;
+    let _ = set_preference(&state.db_path, "intercept_source_scope", &json);
+    state.proxy_config.write().await.intercept_source_scope = scope;
     let cfg = state.proxy_config.read().await;
     Ok(cfg.clone())
 }

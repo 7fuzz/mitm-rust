@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useInterceptStore } from "../../stores/useInterceptStore";
 import { MingCuteIcon } from "../common/MingCuteIcon";
 import { Dialog } from "../common/ui/Dialog";
-import { Select } from "../common/ui";
+import { Select, SourceScopeSection } from "../common/ui";
 import { KeyValueEditor } from "../common/KeyValueEditor";
 
 const METHOD_OPTIONS = [
@@ -19,6 +19,7 @@ export const InterceptViewer: React.FC = () => {
   const {
     interceptEnabled,
     interceptMode,
+    interceptSourceScope,
     focusOnIntercepted,
     pendingFlows,
     selectedFlowId,
@@ -31,6 +32,7 @@ export const InterceptViewer: React.FC = () => {
     initInterceptStore,
     setInterceptEnabled,
     setInterceptMode,
+    setInterceptSourceScope,
     setFocusOnIntercepted,
     selectFlow,
     setEditedMethod,
@@ -294,6 +296,9 @@ export const InterceptViewer: React.FC = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Left Drawer: Paused Flow Queue */}
         <div className="w-80 flex flex-col border-r border-border bg-surface shrink-0">
+          <div className="p-2 border-b border-border bg-background">
+            <SourceScopeSection value={interceptSourceScope} onChange={setInterceptSourceScope} verb="intercept" />
+          </div>
           <div className="px-3 py-2 bg-header border-b border-border flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider font-mono">
             <span>Paused Queue</span>
             <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-300 text-[10px] font-mono font-bold">

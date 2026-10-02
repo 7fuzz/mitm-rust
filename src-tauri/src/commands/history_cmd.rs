@@ -53,6 +53,7 @@ pub async fn get_history_logs(
     only_failed: Option<bool>,
     only_waiting: Option<bool>,
     include_bodies: Option<bool>,
+    listener_filter: Option<String>,
 ) -> Result<Vec<HistoryEntry>, String> {
     let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
 
@@ -60,9 +61,9 @@ pub async fn get_history_logs(
     let should_include_bodies = include_bodies.unwrap_or(false);
 
     let select_fields = if should_include_bodies {
-        "id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0)"
+        "id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, '')"
     } else {
-        "id, method, url, host, path, content_type, response_size, status_code, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0)"
+        "id, method, url, host, path, content_type, response_size, status_code, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, '')"
     };
 
     let mut query = format!("SELECT {} FROM history WHERE 1=1", select_fields);
@@ -116,6 +117,13 @@ pub async fn get_history_logs(
         query.push_str(" AND phase = 'request'");
     }
 
+    if let Some(ref lf) = listener_filter {
+        if !lf.trim().is_empty() {
+            query.push_str(" AND COALESCE(listener_label, '') = ?");
+            params.push(Box::new(lf.trim().to_string()));
+        }
+    }
+
     query.push_str(" ORDER BY CAST(id AS INTEGER) DESC, created_at DESC LIMIT ? OFFSET ?");
     params.push(Box::new(limit));
     params.push(Box::new(offset));
@@ -136,6 +144,7 @@ pub async fn get_history_logs(
             let is_intercepted_int: i32 = row.get(15)?;
             let is_rewritten_int: i32 = row.get(16)?;
             let is_failed_int: i32 = row.get(17)?;
+            let listener_label: String = row.get(18)?;
 
             Ok(HistoryEntry {
                 id: row.get(0)?,
@@ -156,6 +165,7 @@ pub async fn get_history_logs(
                 is_intercepted: is_intercepted_int != 0,
                 is_rewritten: is_rewritten_int != 0,
                 is_failed: is_failed_int != 0,
+                listener_label,
             })
         })
         .map_err(|e| e.to_string())?
@@ -166,6 +176,7 @@ pub async fn get_history_logs(
             let is_intercepted_int: i32 = row.get(11)?;
             let is_rewritten_int: i32 = row.get(12)?;
             let is_failed_int: i32 = row.get(13)?;
+            let listener_label: String = row.get(14)?;
 
             Ok(HistoryEntry {
                 id: row.get(0)?,
@@ -186,6 +197,7 @@ pub async fn get_history_logs(
                 is_intercepted: is_intercepted_int != 0,
                 is_rewritten: is_rewritten_int != 0,
                 is_failed: is_failed_int != 0,
+                listener_label,
             })
         })
         .map_err(|e| e.to_string())?
@@ -245,6 +257,7 @@ pub async fn get_history_count(
     only_rewritten: Option<bool>,
     only_failed: Option<bool>,
     only_waiting: Option<bool>,
+    listener_filter: Option<String>,
 ) -> Result<u64, String> {
     let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
     let mut query = String::from("SELECT COUNT(*) FROM history WHERE 1=1");
@@ -296,6 +309,13 @@ pub async fn get_history_count(
 
     if let Some(true) = only_waiting {
         query.push_str(" AND phase = 'request'");
+    }
+
+    if let Some(ref lf) = listener_filter {
+        if !lf.trim().is_empty() {
+            query.push_str(" AND COALESCE(listener_label, '') = ?");
+            params.push(Box::new(lf.trim().to_string()));
+        }
     }
 
     let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;

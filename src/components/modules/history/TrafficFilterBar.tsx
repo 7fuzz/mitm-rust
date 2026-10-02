@@ -43,6 +43,9 @@ export const TrafficFilterBar: React.FC = () => {
     updateHistorySettings,
     traffic,
     totalDbCount,
+    listeners,
+    listenerFilter,
+    setListenerFilter,
   } = useProxyStore();
 
   const [localSearch, setLocalSearch] = useState(searchQuery);
@@ -138,6 +141,26 @@ export const TrafficFilterBar: React.FC = () => {
           values={flagFilters}
           onChange={handleFlagTriStateChange}
         />
+
+        {/* Source / Listener Filter (Visible when multiple listeners exist) */}
+        {listeners && listeners.length > 1 && (
+          <div className="flex items-center gap-1 bg-surface border border-border rounded px-2 py-1 text-xs font-mono shadow-2xs">
+            <MingCuteIcon name="route_line" size={13} className="text-primary shrink-0" />
+            <select
+              value={listenerFilter || ''}
+              onChange={(e) => setListenerFilter(e.target.value)}
+              className="bg-transparent text-foreground text-xs font-mono focus:outline-none cursor-pointer pr-1"
+              title="Filter traffic by source listener"
+            >
+              <option value="">All Sources</option>
+              {listeners.map((l) => (
+                <option key={l.id} value={l.label}>
+                  {l.label} ({l.address})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Right Controls: Limit Settings & Clear Logs */}

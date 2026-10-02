@@ -6,16 +6,20 @@ import {
   saveRewriteRules,
   toggleRewriteEnabled,
   getRewriteEnabled,
+  getRewriteSourceScope,
+  setRewriteSourceScope,
   getRewriteHistory,
   clearRewriteHistory,
   subscribeRewriteCaptured,
 } from "../services/tauri/bridge";
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import { ALL_SOURCES, type SourceScope } from "../types";
 
 interface RewriteState {
   rules: RewriteRule[];
   logs: RewriteHistoryEntry[];
   isRewriteEnabled: boolean;
+  sourceScope: SourceScope;
   selectedLogId: string | null;
   searchQuery: string;
   isRuleModalOpen: boolean;
@@ -25,6 +29,7 @@ interface RewriteState {
   // Actions
   initStore: () => Promise<void>;
   toggleEnabled: () => Promise<void>;
+  setSourceScope: (scope: SourceScope) => Promise<void>;
   fetchRules: () => Promise<void>;
   addOrUpdateRule: (rule: Omit<RewriteRule, "id" | "createdAtMs" | "orderIndex"> & { id?: string }) => Promise<void>;
   toggleRule: (id: string) => Promise<void>;
@@ -43,6 +48,7 @@ export const useRewriteStore = create<RewriteState>((set, get) => ({
   rules: [],
   logs: [],
   isRewriteEnabled: true,
+  sourceScope: ALL_SOURCES,
   selectedLogId: null,
   searchQuery: "",
   isRuleModalOpen: false,
@@ -52,11 +58,13 @@ export const useRewriteStore = create<RewriteState>((set, get) => ({
   initStore: async () => {
     try {
       const enabled = await getRewriteEnabled();
+      const sourceScope = await getRewriteSourceScope();
       const rules = await getRewriteRules();
       const logs = await getRewriteHistory(200);
 
       set({
         isRewriteEnabled: enabled,
+        sourceScope,
         rules,
         logs,
         selectedLogId: logs.length > 0 ? logs[0].id : null,
@@ -90,6 +98,17 @@ export const useRewriteStore = create<RewriteState>((set, get) => ({
       set({ isRewriteEnabled: next });
     } catch (e) {
       console.error("Failed to toggle rewrite enabled:", e);
+    }
+  },
+
+  setSourceScope: async (scope: SourceScope) => {
+    const previous = get().sourceScope;
+    set({ sourceScope: scope });
+    try {
+      set({ sourceScope: await setRewriteSourceScope(scope) });
+    } catch (e) {
+      console.error("Failed to set rewrite sources:", e);
+      set({ sourceScope: previous });
     }
   },
 

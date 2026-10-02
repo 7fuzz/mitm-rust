@@ -59,6 +59,7 @@ export const mapHistoryEntryToTrafficItem = (item: any): TrafficItem => {
     requestBody: item.requestBody ?? item.request_body ?? '',
     responseBody: resBody,
     phase,
+    listenerLabel: item.listenerLabel || item.listener_label || '',
     isIntercepted: Boolean(item.isIntercepted || item.is_intercepted),
     isRewritten: Boolean(item.isRewritten || item.is_rewritten),
     isFailed,
@@ -189,6 +190,7 @@ export const createTrafficSlice: StateCreator<
     onlyIntercepted: false,
     onlyRewritten: false,
     onlyFailed: false,
+    listenerFilter: '',
 
     initTraffic: async () => {
       if (isTauriAvailable()) {
@@ -232,7 +234,7 @@ export const createTrafficSlice: StateCreator<
 
     loadInitialTraffic: async () => {
       if (!isTauriAvailable()) return;
-      const { searchQuery, methodFilters, statusFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed, pageSize } = get();
+      const { searchQuery, methodFilters, statusFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed, listenerFilter, pageSize } = get();
 
       const includeMethods = Object.entries(methodFilters)
         .filter(([_, st]) => st === 'include')
@@ -252,6 +254,7 @@ export const createTrafficSlice: StateCreator<
         onlyRewritten: (flagFilters['rewritten'] === 'include' || onlyRewritten) || undefined,
         onlyFailed: (flagFilters['failed'] === 'include' || onlyFailed) || undefined,
         onlyWaiting: flagFilters['waiting'] === 'include' ? true : undefined,
+        listenerFilter: listenerFilter || undefined,
         includeBodies: false,
       };
 
@@ -286,7 +289,7 @@ export const createTrafficSlice: StateCreator<
 
     loadNextPage: async () => {
       if (!isTauriAvailable()) return;
-      const { historyPage, pageSize, hasMore, isLoadingMore, searchQuery, methodFilters, statusFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed } = get();
+      const { historyPage, pageSize, hasMore, isLoadingMore, searchQuery, methodFilters, statusFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed, listenerFilter } = get();
       if (!hasMore || isLoadingMore) return;
 
       set({ isLoadingMore: true });
@@ -310,6 +313,7 @@ export const createTrafficSlice: StateCreator<
         onlyRewritten: (flagFilters['rewritten'] === 'include' || onlyRewritten) || undefined,
         onlyFailed: (flagFilters['failed'] === 'include' || onlyFailed) || undefined,
         onlyWaiting: flagFilters['waiting'] === 'include' ? true : undefined,
+        listenerFilter: listenerFilter || undefined,
         includeBodies: false,
       };
 
@@ -626,6 +630,10 @@ export const createTrafficSlice: StateCreator<
         else delete nextFilters['failed'];
         return { onlyFailed: val, flagFilters: nextFilters };
       });
+      get().loadInitialTraffic();
+    },
+    setListenerFilter: (listenerFilter) => {
+      set({ listenerFilter });
       get().loadInitialTraffic();
     },
   };

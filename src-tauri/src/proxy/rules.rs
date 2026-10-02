@@ -10,6 +10,7 @@ pub async fn should_intercept(
     url: &str,
     host: &str,
     headers: &[(String, String)],
+    listener_label: &str,
 ) -> bool {
     let cfg = state.proxy_config.read().await;
 
@@ -21,6 +22,10 @@ pub async fn should_intercept(
         ("request", InterceptPhase::Response) => return false,
         ("response", InterceptPhase::Request) => return false,
         _ => {}
+    }
+
+    if !state.source_matches(&cfg.intercept_source_scope, listener_label).await {
+        return false;
     }
 
     let rules_guard = state.rules.read().await;

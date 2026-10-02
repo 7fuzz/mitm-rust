@@ -12,6 +12,7 @@ import {
   getPendingFlows,
   subscribeInterceptTriggered,
   getProxyState,
+  setInterceptSourceScope,
   isTauriAvailable,
   focusAppWindow,
   setFocusPreference,
@@ -19,6 +20,7 @@ import {
 } from "../services/tauri/bridge";
 import { UnlistenFn } from "@tauri-apps/api/event";
 import { useSettingsStore } from "./useSettingsStore";
+import { ALL_SOURCES, type SourceScope } from "../types";
 
 export interface InterceptParam {
   id: string;
@@ -102,6 +104,7 @@ export const tryPrettifyJson = (text: string): string => {
 interface InterceptState {
   interceptEnabled: boolean;
   interceptMode: "request" | "response" | "both";
+  interceptSourceScope: SourceScope;
   focusOnIntercepted: boolean;
   rules: InterceptRule[];
   pendingFlows: PendingFlowPayload[];
@@ -117,6 +120,7 @@ interface InterceptState {
   initInterceptStore: () => Promise<void>;
   setInterceptEnabled: (enabled: boolean) => Promise<void>;
   setInterceptMode: (mode: "request" | "response" | "both") => Promise<void>;
+  setInterceptSourceScope: (scope: SourceScope) => Promise<void>;
   setFocusOnIntercepted: (val: boolean) => void;
   setRules: (rules: InterceptRule[]) => Promise<void>;
   addRule: (rule: Omit<InterceptRule, "id" | "createdAtMs">) => Promise<void>;
@@ -139,6 +143,7 @@ interface InterceptState {
 export const useInterceptStore = create<InterceptState>((set, get) => ({
   interceptEnabled: false,
   interceptMode: "request",
+  interceptSourceScope: ALL_SOURCES,
   focusOnIntercepted: typeof window !== "undefined" ? localStorage.getItem("mitm_focus_on_intercepted") !== "false" : true,
   rules: [],
   pendingFlows: [],
@@ -182,6 +187,7 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
       set({
         interceptEnabled: cfg.interceptEnabled,
         interceptMode: cfg.interceptMode,
+        interceptSourceScope: cfg.interceptSourceScope ?? ALL_SOURCES,
         focusOnIntercepted: initialFocus,
         rules,
         pendingFlows: formattedPending,
@@ -284,6 +290,18 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
       set({ interceptMode: cfg.interceptMode });
     } catch (e) {
       console.error("Failed to set intercept mode:", e);
+    }
+  },
+
+  setInterceptSourceScope: async (scope: SourceScope) => {
+    const previous = get().interceptSourceScope;
+    set({ interceptSourceScope: scope });
+    try {
+      const cfg = await setInterceptSourceScope(scope);
+      set({ interceptSourceScope: cfg.interceptSourceScope ?? ALL_SOURCES });
+    } catch (e) {
+      console.error("Failed to set intercept sources:", e);
+      set({ interceptSourceScope: previous });
     }
   },
 

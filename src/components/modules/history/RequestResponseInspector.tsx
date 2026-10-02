@@ -294,6 +294,15 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
             isPending={isPendingResponse}
             isInterceptedPending={isPendingIntercept}
           />
+          {item.listenerLabel && item.listenerLabel !== 'Default' && (
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-primary/15 text-primary border border-primary/25 shrink-0 select-none"
+              title={`Source: ${item.listenerLabel}`}
+            >
+              <MingCuteIcon name="route_line" size={11} />
+              <span>{item.listenerLabel}</span>
+            </span>
+          )}
           {isPendingIntercept && (
             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 shrink-0 animate-pulse">
               PAUSED IN INTERCEPTOR

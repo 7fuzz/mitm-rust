@@ -16,8 +16,9 @@ pub async fn handle_intercept_hook(
     host: &str,
     headers: Vec<(String, String)>,
     body: Vec<u8>,
+    listener_label: &str,
 ) -> Option<InterceptAction> {
-    if !should_intercept(state, phase, method, url, host, &headers).await {
+    if !should_intercept(state, phase, method, url, host, &headers, listener_label).await {
         return None;
     }
 
@@ -100,6 +101,7 @@ pub async fn handle_intercept_hook(
             is_intercepted: true,
             is_rewritten: false,
             is_failed: false,
+            listener_label: listener_label.to_string(),
         };
         let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: intercepted_entry });
     }

@@ -1,5 +1,5 @@
 use tauri::State;
-use crate::state::{AppState, RewriteRule, RewriteHistoryEntry};
+use crate::state::{AppState, RewriteRule, RewriteHistoryEntry, SourceScope};
 use crate::db::{save_rewrite_rules as db_save_rewrite_rules, get_rewrite_history_logs, clear_rewrite_history_logs, set_preference};
 
 #[tauri::command]
@@ -32,6 +32,22 @@ pub async fn toggle_rewrite_enabled(
 #[tauri::command]
 pub async fn get_rewrite_enabled(state: State<'_, AppState>) -> Result<bool, String> {
     Ok(state.is_rewrite_enabled())
+}
+
+#[tauri::command]
+pub async fn get_rewrite_source_scope(state: State<'_, AppState>) -> Result<SourceScope, String> {
+    Ok(state.rewrite_source_scope.read().await.clone())
+}
+
+#[tauri::command]
+pub async fn set_rewrite_source_scope(
+    state: State<'_, AppState>,
+    scope: SourceScope,
+) -> Result<SourceScope, String> {
+    let json = serde_json::to_string(&scope).map_err(|e| e.to_string())?;
+    let _ = set_preference(&state.db_path, "rewrite_source_scope", &json);
+    *state.rewrite_source_scope.write().await = scope.clone();
+    Ok(scope)
 }
 
 #[tauri::command]

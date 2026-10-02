@@ -20,6 +20,7 @@ export interface HistoryEntry {
   isIntercepted: boolean;
   isRewritten: boolean;
   isFailed: boolean;
+  listenerLabel?: string;
 }
 
 export interface HistoryDetail {
@@ -49,6 +50,7 @@ export interface HistoryFilterOptions {
   onlyFailed?: boolean;
   onlyWaiting?: boolean;
   includeBodies?: boolean;
+  listenerFilter?: string;
 }
 
 export const getHistoryLogs = async (
@@ -90,6 +92,8 @@ export const getHistoryLogs = async (
     only_waiting: opts.onlyWaiting ?? null,
     includeBodies: opts.includeBodies ?? false,
     include_bodies: opts.includeBodies ?? false,
+    listenerFilter: opts.listenerFilter || null,
+    listener_filter: opts.listenerFilter || null,
   });
 };
 
@@ -116,6 +120,8 @@ export const getHistoryCount = async (options?: HistoryFilterOptions): Promise<n
     only_failed: opts.onlyFailed ?? null,
     onlyWaiting: opts.onlyWaiting ?? null,
     only_waiting: opts.onlyWaiting ?? null,
+    listenerFilter: opts.listenerFilter || null,
+    listener_filter: opts.listenerFilter || null,
   });
 };
 

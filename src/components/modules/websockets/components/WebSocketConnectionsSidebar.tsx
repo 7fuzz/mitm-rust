@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useWebSocketStore } from '../../../../stores/useWebSocketStore';
 import { MingCuteIcon } from '../../../common/MingCuteIcon';
 import { Button } from '../../../common/ui';
@@ -23,10 +23,19 @@ export const WebSocketConnectionsSidebar: React.FC<WebSocketConnectionsSidebarPr
   } = useWebSocketStore();
 
   const [streamScope, setStreamScope] = useState<'all' | 'proxy' | 'client'>('all');
+  const [sourceFilter, setSourceFilter] = useState('');
+
+  // Labels seen on captured streams, so older/renamed sources stay filterable
+  const sourceLabels = useMemo(
+    () =>
+      Array.from(new Set(connections.map((c) => c.listenerLabel).filter((l): l is string => !!l))).sort(),
+    [connections]
+  );
 
   const filteredConnections = connections.filter((conn) => {
     if (streamScope === 'proxy' && conn.isClientSession) return false;
     if (streamScope === 'client' && !conn.isClientSession) return false;
+    if (sourceFilter && conn.listenerLabel !== sourceFilter) return false;
     return true;
   });
 
@@ -73,6 +82,26 @@ export const WebSocketConnectionsSidebar: React.FC<WebSocketConnectionsSidebarPr
           </button>
         ))}
       </div>
+
+      {/* Source (listener) filter */}
+      {sourceLabels.length > 0 && (
+        <div className="px-2 py-1.5 border-b border-border/60 bg-surface flex items-center gap-1.5 text-[11px] font-mono">
+          <MingCuteIcon name="route_line" size={13} className="text-primary shrink-0" />
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            className="flex-1 bg-transparent text-foreground focus:outline-none cursor-pointer"
+            title="Filter streams by source listener"
+          >
+            <option value="">All Sources</option>
+            {sourceLabels.map((label) => (
+              <option key={label} value={label}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* WS Proxy MITM Interception Toggle Banner */}
       <div className="px-3 py-2 bg-neutral-subtle/40 border-b border-border/70 flex items-center justify-between">
@@ -155,6 +184,14 @@ export const WebSocketConnectionsSidebar: React.FC<WebSocketConnectionsSidebarPr
                     >
                       {conn.isClientSession ? 'CLIENT' : 'PROXY'}
                     </span>
+                    {conn.listenerLabel && (
+                      <span
+                        className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-primary/10 text-primary border border-primary/20 truncate max-w-[90px]"
+                        title={`Source: ${conn.listenerLabel}`}
+                      >
+                        {conn.listenerLabel}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1">

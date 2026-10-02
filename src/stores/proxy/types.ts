@@ -1,17 +1,25 @@
-import type { TrafficItem, InterceptConfig, InterceptRule, PendingFlow, ProxyStatus } from '../../types';
+import type { TrafficItem, InterceptConfig, InterceptRule, PendingFlow, ProxyStatus, ListenerConfig } from '../../types';
 import type { HistorySettings, HistoryDetail } from '../../services/tauri/bridge';
 
 export interface ProxyServerSlice {
   proxyStatus: ProxyStatus;
+  listeners: ListenerConfig[];
   setProxyMode: (mode: 'normal' | 'intercept' | 'off') => Promise<void>;
   updateProxyBindings: (bindings: string[]) => Promise<void>;
   initProxyServer: () => Promise<void>;
+  fetchListeners: () => Promise<void>;
+  applyListeners: (listeners: ListenerConfig[]) => void;
+  addListener: (label: string, address: string, replaceConflicts?: boolean) => Promise<void>;
+  removeListener: (id: number) => Promise<void>;
+  updateListener: (id: number, label?: string, address?: string, replaceConflicts?: boolean) => Promise<void>;
+  setListenerEnabled: (id: number, enabled: boolean) => Promise<void>;
 }
 
 export interface TrafficSlice {
   traffic: TrafficItem[];
   selectedTrafficId: string | null;
   historySettings: HistorySettings;
+  listenerFilter: string;
 
   // Pagination & Lazy Loading
   historyPage: number;
@@ -55,6 +63,7 @@ export interface TrafficSlice {
   setOnlyIntercepted: (val: boolean) => void;
   setOnlyRewritten: (val: boolean) => void;
   setOnlyFailed: (val: boolean) => void;
+  setListenerFilter: (listener: string) => void;
 }
 
 export interface InterceptSlice {

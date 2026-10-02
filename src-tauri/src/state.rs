@@ -67,6 +67,8 @@ pub struct HistoryEntry {
     pub is_intercepted: bool,
     pub is_rewritten: bool,
     pub is_failed: bool,
+    #[serde(default)]
+    pub listener_label: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,6 +114,27 @@ pub struct ProxyConfig {
     pub host: String,
     #[serde(default)]
     pub ws_mitm_enabled: bool,
+    /// Which listeners' traffic may be intercepted
+    #[serde(default)]
+    pub intercept_source_scope: SourceScope,
+}
+
+/// Restricts a feature to traffic from selected proxy listeners (sources).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceScope {
+    /// When true every source matches and `ids` is ignored
+    #[serde(default = "default_true")]
+    pub all: bool,
+    /// Listener ids that match when `all` is false
+    #[serde(default)]
+    pub ids: Vec<u32>,
+}
+
+impl Default for SourceScope {
+    fn default() -> Self {
+        Self { all: true, ids: Vec::new() }
+    }
 }
 
 impl Default for ProxyConfig {
@@ -124,6 +147,7 @@ impl Default for ProxyConfig {
             port: 8080,
             host: "0.0.0.0".to_string(),
             ws_mitm_enabled: false,
+            intercept_source_scope: SourceScope::default(),
         }
     }
 }
@@ -246,6 +270,8 @@ pub struct WebSocketConn {
     pub is_client_session: bool,
     #[serde(default)]
     pub message_count: u64,
+    #[serde(default)]
+    pub listener_label: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -276,6 +302,133 @@ pub struct WebSocketConnectionEvent {
     pub event_type: String, // "opened" | "closed"
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListenerConfig {
+    pub id: u32,
+    pub label: String,
+    pub address: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Listener config plus its runtime status, returned to the frontend.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListenerStatus {
+    #[serde(flatten)]
+    pub config: ListenerConfig,
+    pub running: bool,
+    pub error: Option<String>,
+}
+
+pub struct ListenerInstance {
+    pub id: u32,
+    pub stop_tx: Option<oneshot::Sender<()>>,
+}
+
+/// Normalizes "localhost:8080", "8080", "0.0.0.0:8080" etc. into a canonical "ip:port".
+pub fn normalize_listener_address(input: &str) -> Result<String, String> {
+    let raw = input.trim();
+    if raw.is_empty() {
+        return Err("Listener address cannot be empty".to_string());
+    }
+    let (host, port_str) = match raw.rfind(':') {
+        Some(pos) => (raw[..pos].trim(), raw[pos + 1..].trim()),
+        None => ("", raw),
+    };
+    let port = port_str
+        .parse::<u16>()
+        .map_err(|_| format!("Invalid port '{}' in address '{}'", port_str, raw))?;
+    if port == 0 {
+        return Err("Port must be between 1 and 65535".to_string());
+    }
+    let host = match host {
+        "" => "0.0.0.0",
+        h if h.eq_ignore_ascii_case("localhost") => "127.0.0.1",
+        h => h,
+    };
+    let candidate = if host.contains(':') && !host.starts_with('[') {
+        format!("[{}]:{}", host, port)
+    } else {
+        format!("{}:{}", host, port)
+    };
+    candidate
+        .parse::<std::net::SocketAddr>()
+        .map(|a| a.to_string())
+        .map_err(|_| format!("Invalid bind address '{}': host must be an IP address or 'localhost'", raw))
+}
+
+/// Loads listener configs from preferences, migrating older formats (non-numeric ids,
+/// missing Default listener stored as proxy_host/proxy_port).
+fn load_listener_configs(db_path: &PathBuf, legacy_host: &str, legacy_port: u16) -> Vec<ListenerConfig> {
+    let raw: Vec<serde_json::Value> = crate::db::get_preference(db_path, "proxy_listeners")
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default();
+
+    let mut configs: Vec<ListenerConfig> = Vec::new();
+    let mut pending_ids: Vec<usize> = Vec::new();
+    for v in raw {
+        let label = v.get("label").and_then(|l| l.as_str()).unwrap_or("").trim().to_string();
+        let address = v.get("address").and_then(|a| a.as_str()).unwrap_or("");
+        let Ok(address) = normalize_listener_address(address) else { continue };
+        if label.is_empty() {
+            continue;
+        }
+        let enabled = v.get("enabled").and_then(|e| e.as_bool()).unwrap_or(true);
+        let id = v.get("id").and_then(|i| i.as_u64()).map(|i| i as u32);
+        match id {
+            Some(id) if !configs.iter().any(|c| c.id == id) => {
+                configs.push(ListenerConfig { id, label, address, enabled });
+            }
+            _ => {
+                pending_ids.push(configs.len());
+                configs.push(ListenerConfig { id: u32::MAX, label, address, enabled });
+            }
+        }
+    }
+
+    if !configs.iter().any(|c| c.id == 0) {
+        let address = normalize_listener_address(&format!("{}:{}", legacy_host, legacy_port))
+            .unwrap_or_else(|_| format!("0.0.0.0:{}", legacy_port));
+        configs.insert(0, ListenerConfig { id: 0, label: "Default".to_string(), address, enabled: true });
+        pending_ids.iter_mut().for_each(|i| *i += 1);
+    }
+
+    let mut next_id = configs.iter().filter(|c| c.id != u32::MAX).map(|c| c.id).max().unwrap_or(0) + 1;
+    for idx in pending_ids {
+        configs[idx].id = next_id;
+        next_id += 1;
+    }
+
+    configs.sort_by_key(|c| c.id);
+
+    // Disable stored listeners that clash with an earlier one (same address, or a port owned by 0.0.0.0)
+    let mut taken: Vec<std::net::SocketAddr> = Vec::new();
+    for c in configs.iter_mut().filter(|c| c.enabled) {
+        let Ok(addr) = c.address.parse::<std::net::SocketAddr>() else { continue };
+        let clashes = taken.iter().any(|t| {
+            t.port() == addr.port() && (t.ip() == addr.ip() || t.ip().is_unspecified() || addr.ip().is_unspecified())
+        });
+        if clashes {
+            c.enabled = false;
+        } else {
+            taken.push(addr);
+        }
+    }
+    configs
+}
+
+fn load_source_scope(db_path: &PathBuf, key: &str) -> SourceScope {
+    crate::db::get_preference(db_path, key)
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default()
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub db_path: PathBuf,
@@ -285,11 +438,14 @@ pub struct AppState {
     pub broadcast_tx: broadcast::Sender<TrafficCapturedEvent>,
     pub proxy_config: Arc<RwLock<ProxyConfig>>,
     pub history_settings: Arc<RwLock<HistorySettings>>,
-    pub stop_signal: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub listeners: Arc<RwLock<Vec<ListenerInstance>>>,
+    pub listener_errors: Arc<DashMap<u32, String>>,
+    pub listener_configs: Arc<RwLock<Vec<ListenerConfig>>>,
     pub pending_flows: Arc<DashMap<String, PendingFlow>>,
     pub rules: Arc<RwLock<Vec<InterceptRule>>>,
     pub rewrite_rules: Arc<RwLock<Vec<RewriteRule>>>,
     pub rewrite_enabled: Arc<AtomicBool>,
+    pub rewrite_source_scope: Arc<RwLock<SourceScope>>,
     pub webhook_running: Arc<AtomicBool>,
     pub webhook_port: Arc<RwLock<u16>>,
     pub webhook_stop_signal: Arc<Mutex<Option<oneshot::Sender<()>>>>,
@@ -359,6 +515,15 @@ impl AppState {
         let initial_rules = crate::db::load_intercept_rules(&db_path).unwrap_or_default();
         let initial_rewrite_rules = crate::db::load_rewrite_rules(&db_path).unwrap_or_default();
 
+        let initial_listener_configs = load_listener_configs(&db_path, &initial_host, initial_port);
+        // Keep the legacy host/port fields mirroring listener #0
+        let (initial_host, initial_port) = initial_listener_configs
+            .iter()
+            .find(|c| c.id == 0)
+            .and_then(|c| c.address.parse::<std::net::SocketAddr>().ok())
+            .map(|a| (a.ip().to_string(), a.port()))
+            .unwrap_or((initial_host, initial_port));
+
         let proxy_config = ProxyConfig {
             proxy_enabled: initial_proxy_enabled,
             intercept_enabled: initial_intercept_enabled,
@@ -367,7 +532,10 @@ impl AppState {
             port: initial_port,
             host: initial_host,
             ws_mitm_enabled: initial_ws_mitm_enabled,
+            intercept_source_scope: load_source_scope(&db_path, "intercept_source_scope"),
         };
+
+        let initial_rewrite_source_scope = load_source_scope(&db_path, "rewrite_source_scope");
 
         let history_settings = HistorySettings {
             limiter_enabled,
@@ -382,11 +550,14 @@ impl AppState {
             broadcast_tx,
             proxy_config: Arc::new(RwLock::new(proxy_config)),
             history_settings: Arc::new(RwLock::new(history_settings)),
-            stop_signal: Arc::new(Mutex::new(None)),
+            listeners: Arc::new(RwLock::new(Vec::new())),
+            listener_errors: Arc::new(DashMap::new()),
+            listener_configs: Arc::new(RwLock::new(initial_listener_configs)),
             pending_flows: Arc::new(DashMap::new()),
             rules: Arc::new(RwLock::new(initial_rules)),
             rewrite_rules: Arc::new(RwLock::new(initial_rewrite_rules)),
             rewrite_enabled: Arc::new(AtomicBool::new(initial_rewrite_enabled)),
+            rewrite_source_scope: Arc::new(RwLock::new(initial_rewrite_source_scope)),
             webhook_running: Arc::new(AtomicBool::new(false)),
             webhook_port: Arc::new(RwLock::new(initial_webhook_port)),
             webhook_stop_signal: Arc::new(Mutex::new(None)),
@@ -403,6 +574,18 @@ impl AppState {
 
     pub fn is_proxy_active(&self) -> bool {
         self.proxy_active.load(Ordering::SeqCst)
+    }
+
+    /// True when `listener_label` is covered by `scope`. Ids of removed listeners never match.
+    pub async fn source_matches(&self, scope: &SourceScope, listener_label: &str) -> bool {
+        if scope.all {
+            return true;
+        }
+        self.listener_configs
+            .read()
+            .await
+            .iter()
+            .any(|c| scope.ids.contains(&c.id) && c.label == listener_label)
     }
 
     pub fn set_rewrite_enabled(&self, enabled: bool) {

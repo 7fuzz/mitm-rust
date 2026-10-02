@@ -40,6 +40,7 @@ export interface TrafficItem {
   responseBody: string;
   phase?: string;
   ip?: string;
+  listenerLabel?: string;
   isIntercepted?: boolean;
   isRewritten?: boolean;
   isFailed?: boolean;
@@ -160,6 +161,7 @@ export interface WebSocketConn {
   clientAddr?: string;
   isClientSession?: boolean;
   messageCount?: number;
+  listenerLabel?: string;
 }
 
 export interface WebSocketMessage {
@@ -229,6 +231,24 @@ export interface ProxyConfig {
   port: number;
   host: string;
   wsMitmEnabled?: boolean;
+  interceptSourceScope?: SourceScope;
+}
+
+/** Limits a feature to traffic from selected listeners; `all` ignores `ids`. */
+export interface SourceScope {
+  all: boolean;
+  ids: number[];
+}
+
+export const ALL_SOURCES: SourceScope = { all: true, ids: [] };
+
+export interface ListenerConfig {
+  id: number;
+  label: string;
+  address: string;
+  enabled: boolean;
+  running?: boolean;
+  error?: string | null;
 }
 
 export interface ProxyStatus {
@@ -236,6 +256,7 @@ export interface ProxyStatus {
   bindings: string[];
   activeCount?: number;
   wsMitmEnabled?: boolean;
+  listeners?: ListenerConfig[];
 }
 
 export interface AppPreferences {

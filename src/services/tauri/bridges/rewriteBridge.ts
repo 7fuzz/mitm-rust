@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { SourceScope } from "../../../types";
 
 export interface RewriteRule {
   id: string;
@@ -56,6 +57,14 @@ export const toggleRewriteEnabled = async (enabled: boolean): Promise<boolean> =
 
 export const getRewriteEnabled = async (): Promise<boolean> => {
   return await invoke<boolean>("get_rewrite_enabled");
+};
+
+export const getRewriteSourceScope = async (): Promise<SourceScope> => {
+  return await invoke<SourceScope>("get_rewrite_source_scope");
+};
+
+export const setRewriteSourceScope = async (scope: SourceScope): Promise<SourceScope> => {
+  return await invoke<SourceScope>("set_rewrite_source_scope", { scope });
 };
 
 export const getRewriteHistory = async (limit?: number): Promise<RewriteHistoryEntry[]> => {

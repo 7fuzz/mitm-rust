@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useRewriteStore } from "../../../stores/useRewriteStore";
 import { MingCuteIcon } from "../../common/MingCuteIcon";
-import { Button, Input } from "../../common/ui";
+import { Button, Input, SourceScopeSection } from "../../common/ui";
 import { RewriteRuleModal } from "./RewriteRuleModal";
 
 export const RewriteView: React.FC = () => {
@@ -9,6 +9,8 @@ export const RewriteView: React.FC = () => {
     rules,
     logs,
     isRewriteEnabled,
+    sourceScope,
+    setSourceScope,
     selectedLogId,
     searchQuery,
     initStore,
@@ -250,6 +252,7 @@ export const RewriteView: React.FC = () => {
         {activeTab === "rules" ? (
           /* Rules List Table */
           <div className="h-full flex flex-col p-4 overflow-y-auto font-sans text-xs">
+            <SourceScopeSection value={sourceScope} onChange={setSourceScope} verb="rewrite" className="mb-3 max-w-md shrink-0" />
             {filteredRules.length === 0 ? (
               <div className="flex flex-col items-center justify-center flex-1 text-center p-8 border border-dashed border-border rounded-xl bg-surface/40">
                 <div className="p-3 bg-emerald-500/10 rounded-full mb-3">

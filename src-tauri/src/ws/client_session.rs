@@ -63,6 +63,7 @@ pub async fn connect_client_session(
         client_addr: Some("127.0.0.1 (Studio Client)".to_string()),
         is_client_session: true,
         message_count: 0,
+        listener_label: String::new(),
     };
 
     crate::db::ws_db::save_ws_connection(&state.db_path, &conn_info)?;
