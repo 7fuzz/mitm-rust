@@ -187,11 +187,8 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response }) => {
     } else if (bodyFormat === 'hex') {
       return <HexViewer content={responseBody} />;
     } else if (bodyFormat === 'html') {
-      return (
-        <div className="w-full h-full bg-white text-black p-4 overflow-auto text-xs font-sans border rounded select-text">
-          <div dangerouslySetInnerHTML={{ __html: responseBody }} />
-        </div>
-      );
+      // Empty sandbox: no scripts, no same-origin access to the app or its Tauri bridge
+      return <iframe sandbox="" srcDoc={responseBody} title="HTML preview" className="w-full h-full bg-white border border-border rounded" />;
     }
 
     return <CodeEditor value={responseBody} language="plaintext" readOnly />;
