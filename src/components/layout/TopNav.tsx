@@ -60,11 +60,11 @@ export const TopNav: React.FC = () => {
             ? 'bg-surface text-primary shadow-xs border border-border/80 font-semibold'
             : 'border border-transparent text-muted-foreground font-medium hover:text-foreground hover:bg-surface/50'
         }`}
-        title={`${item.label} (${item.shortcut})`}
+        title={item.shortcut ? `${item.label} (${item.shortcut})` : item.label}
       >
         <MingCuteIcon name={item.icon} size={14} />
         <span>{item.label}</span>
-        <span className="text-3xs opacity-50 font-mono">{item.shortcut}</span>
+        {item.shortcut && <span className="text-3xs opacity-50 font-mono">{item.shortcut}</span>}
         {pendingCount > 0 && (
           <span className="ml-0.5 px-1.5 bg-amber-500 text-zinc-950 rounded-full text-3xs font-mono font-bold animate-pulse">
             {pendingCount}
@@ -131,7 +131,7 @@ export const TopNav: React.FC = () => {
                   >
                     <MingCuteIcon name={item.icon} size={14} />
                     <span className="flex-1">{item.label}</span>
-                    <span className="text-3xs font-mono text-muted-foreground">{item.shortcut}</span>
+                    {item.shortcut && <span className="text-3xs font-mono text-muted-foreground">{item.shortcut}</span>}
                   </button>
                 ))}
               </div>

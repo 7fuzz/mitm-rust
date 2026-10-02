@@ -3,6 +3,7 @@ export type NavModule =
   | 'intercept'
   | 'rewrite'
   | 'repeater'
+  | 'fuzzer'
   | 'collections'
   | 'websockets'
   | 'webhooks'

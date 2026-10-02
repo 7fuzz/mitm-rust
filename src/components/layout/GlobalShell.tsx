@@ -8,6 +8,7 @@ import { HistoryView } from '../modules/history/HistoryView';
 import { InterceptView } from '../modules/intercept/InterceptView';
 import { RewriteView } from '../modules/rewrite/RewriteView';
 import { RepeaterView } from '../modules/repeater/RepeaterView';
+import { FuzzerView } from '../modules/fuzzer/FuzzerView';
 import { CollectionsView } from '../modules/collections/CollectionsView';
 import { WebSocketsView } from '../modules/websockets/WebSocketsView';
 import { WebhooksView } from '../modules/webhooks/WebhooksView';
@@ -104,6 +105,8 @@ export const GlobalShell: React.FC = () => {
         return <RewriteView />;
       case 'repeater':
         return <RepeaterView />;
+      case 'fuzzer':
+        return <FuzzerView />;
       case 'collections':
         return <CollectionsView />;
       case 'websockets':
