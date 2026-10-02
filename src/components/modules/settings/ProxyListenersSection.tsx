@@ -3,6 +3,7 @@ import { useProxyStore } from '../../../stores/useProxyStore';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Switch } from '../../common/ui';
 import type { ListenerConfig } from '../../../types';
+import { SettingsGroup, SettingsSection } from './SettingsSection';
 
 const WILDCARD_HOSTS = ['0.0.0.0', '::'];
 
@@ -217,7 +218,7 @@ const statusOf = (l: ListenerConfig): { dot: string; text: string } => {
   return { dot: 'bg-amber-400', text: 'Idle (proxy off)' };
 };
 
-export const ProxyListenersCard: React.FC = () => {
+export const ProxyListenersSection: React.FC = () => {
   const { listeners, fetchListeners, addListener, removeListener, updateListener, setListenerEnabled } =
     useProxyStore();
 
@@ -247,30 +248,28 @@ export const ProxyListenersCard: React.FC = () => {
   const runningCount = listeners.filter((l) => l.running).length;
 
   return (
-    <div className="bg-surface border border-border rounded-lg p-3 space-y-3 shadow-2xs">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <MingCuteIcon name="settings_3_line" size={16} className="text-primary" />
-          <span className="font-semibold text-foreground text-sm">Proxy Listeners</span>
-        </div>
+    <SettingsSection
+      title="Proxy listeners"
+      description={
+        <>
+          Each listener binds a host and port, and traffic it captures is tagged with its label in History.{' '}
+          <code className="font-mono text-foreground">0.0.0.0</code> takes over the whole port (all interfaces); use
+          specific IPs to tell clients apart on the same port.
+        </>
+      }
+      aside={
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary border border-primary/20 font-medium">
           <span className={`w-1.5 h-1.5 rounded-full ${runningCount > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/40'}`} />
           {runningCount}/{listeners.length} listening
         </span>
-      </div>
-
-      <p className="text-muted-foreground text-xs leading-relaxed">
-        Each listener binds a host and port, and traffic it captures is tagged with its label in History.{' '}
-        <code className="font-mono text-foreground">0.0.0.0</code> takes over the whole port (all interfaces);
-        use specific IPs to tell clients apart on the same port.
-      </p>
-
-      <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-0.5">
+      }
+    >
+      <SettingsGroup label="Listeners">
         {listeners.map((listener) => {
           if (editingId === listener.id) {
             const { host, port } = splitAddress(listener.address);
             return (
-              <div key={listener.id} className="p-2 rounded bg-background border border-primary/40 space-y-1.5">
+              <div key={listener.id} className="px-3 py-2.5 bg-primary/5 space-y-1.5">
                 <span className="text-[11px] text-primary font-semibold font-mono flex items-center gap-1.5">
                   <MingCuteIcon name="edit_line" size={12} />
                   Editing #{listener.id}
@@ -298,7 +297,7 @@ export const ProxyListenersCard: React.FC = () => {
           return (
             <div
               key={listener.id}
-              className={`p-2 rounded bg-background border border-border text-xs font-mono transition-opacity ${
+              className={`px-3 py-2 text-xs font-mono transition-opacity ${
                 listener.enabled ? '' : 'opacity-60'
               }`}
             >
@@ -359,22 +358,20 @@ export const ProxyListenersCard: React.FC = () => {
             </div>
           );
         })}
-      </div>
+      </SettingsGroup>
 
-      <div className="space-y-2 pt-2.5 border-t border-border">
-        <span className="text-[11px] font-semibold text-foreground font-mono flex items-center gap-1.5">
-          <MingCuteIcon name="add_line" size={13} className="text-primary" />
-          Add Listener
-        </span>
-        <ListenerForm
-          listeners={listeners}
-          submitLabel="Add"
-          submitIcon="add_line"
-          onSubmit={(label, address, replace) =>
-            run(() => addListener(label, address, replace), `Listener '${label}' added on ${address}`)
-          }
-        />
-      </div>
+      <SettingsGroup label="Add listener">
+        <div className="px-3 py-2.5">
+          <ListenerForm
+            listeners={listeners}
+            submitLabel="Add"
+            submitIcon="add_line"
+            onSubmit={(label, address, replace) =>
+              run(() => addListener(label, address, replace), `Listener '${label}' added on ${address}`)
+            }
+          />
+        </div>
+      </SettingsGroup>
 
       {feedback && (
         <div
@@ -388,6 +385,6 @@ export const ProxyListenersCard: React.FC = () => {
           <span className="break-all">{feedback.message}</span>
         </div>
       )}
-    </div>
+    </SettingsSection>
   );
 };

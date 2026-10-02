@@ -340,29 +340,7 @@ export async function replayWebhookDelivery(id: string, targetUrl: string): Prom
   });
 }
 
-// Database Browser & Settings
-export async function getDatabaseTables(): Promise<string[]> {
-  return safeInvoke<string[]>('get_database_tables', undefined, ['traffic_history', 'repeater_requests', 'environments', 'variables', 'webhooks']);
-}
-
-export async function getTableData(table: string, limit: number = 100, query?: string): Promise<{ columns: string[]; rows: any[][] }> {
-  return safeInvoke<{ columns: string[]; rows: any[][] }>('get_table_data', { table, limit, query }, {
-    columns: ['id', 'name', 'status', 'created_at'],
-    rows: [
-      ['1', 'System Initialization', 'OK', new Date().toISOString()],
-      ['2', 'Proxy Listener', 'ACTIVE', new Date().toISOString()],
-    ],
-  });
-}
-
-export async function purgeAllData(): Promise<void> {
-  return safeInvoke<void>('purge_all_data');
-}
-
-export async function purgeSelectiveData(target: 'traffic' | 'repeater' | 'webhooks'): Promise<void> {
-  return safeInvoke<void>('purge_selective_data', { target });
-}
-
+// Settings
 export async function updatePrefs(prefs: Partial<AppPreferences>): Promise<void> {
   return safeInvoke<void>('update_prefs', { prefs });
 }

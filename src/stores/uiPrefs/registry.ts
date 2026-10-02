@@ -64,6 +64,9 @@ export const REPEATER_HISTORY_DRAWER_WIDTH = { min: 200, max: 550 };
 export const COLLECTIONS_SIDEBAR_WIDTH = { min: 220, max: 450 };
 export const COLLECTIONS_HISTORY_DRAWER_WIDTH = { min: 200, max: 550 };
 
+export const SETTINGS_SECTIONS = ["proxy", "certificate", "appearance", "data", "database"] as const;
+export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number];
+
 export const UI_PREFS = {
   "history.columns": pref<ColumnLayout>({
     default: buildDefaultColumnLayout(HISTORY_COLUMN_DEFAULTS),
@@ -81,6 +84,12 @@ export const UI_PREFS = {
   "collections.historyDrawerWidth": panelWidth(288, COLLECTIONS_HISTORY_DRAWER_WIDTH.min, COLLECTIONS_HISTORY_DRAWER_WIDTH.max),
   /** Request pane share of the Collections work area */
   "collections.requestSplitPercent": splitPercent(50),
+  /** Settings page last opened */
+  "settings.section": pref<SettingsSectionId>({
+    default: "proxy",
+    normalize: (stored, fallback) =>
+      SETTINGS_SECTIONS.includes(stored as SettingsSectionId) ? (stored as SettingsSectionId) : fallback,
+  }),
   "history.filterBarOpen": pref<boolean>({
     default: false,
     normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),

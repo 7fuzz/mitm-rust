@@ -64,6 +64,11 @@ pub fn run() {
             commands::ca_cmd::export_root_ca,
             commands::ca_cmd::regenerate_root_ca,
 
+            commands::db_browser_cmd::list_db_tables,
+            commands::db_browser_cmd::query_db_table,
+            commands::db_browser_cmd::get_db_row,
+            commands::db_browser_cmd::run_db_query,
+
             commands::db_recovery_cmd::run_database_migrations,
             commands::db_recovery_cmd::backup_and_reset_database,
             commands::db_recovery_cmd::export_database_file,

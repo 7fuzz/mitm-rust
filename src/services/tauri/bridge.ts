@@ -5,3 +5,4 @@ export * from "./bridges/interceptBridge";
 export * from "./bridges/rewriteBridge";
 export * from "./bridges/repeaterBridge";
 export * from "./bridges/workspaceBridge";
+export * from "./bridges/dbBrowserBridge";
