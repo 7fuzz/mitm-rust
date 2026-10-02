@@ -24,7 +24,6 @@ interface RepeaterState {
   executionHistory: Record<string, RepeaterHistoryItem[]>;
   lastExecutionResult: Record<string, RepeaterExecutionResult | null>;
   isHistoryDrawerOpen: boolean;
-  viewMode: 'sidebar' | 'tabs';
 
   // Compatibility properties for legacy components
   groups: any[];
@@ -46,7 +45,6 @@ interface RepeaterState {
   restoreHistoryToTab: (tabId: string, hist: RepeaterHistoryItem) => Promise<void>;
   toggleHistoryDrawer: (open?: boolean) => void;
   setHistoryDrawerOpen: (open?: boolean) => void;
-  setViewMode: (mode: 'sidebar' | 'tabs') => void;
 
   // Compatibility methods for legacy components
   closeTab: (id: string) => void;
@@ -121,7 +119,6 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
   executionHistory: {},
   lastExecutionResult: {},
   isHistoryDrawerOpen: false,
-  viewMode: 'sidebar',
 
   // Compatibility state defaults
   groups: [],
@@ -476,7 +473,6 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     get().toggleHistoryDrawer(open);
   },
 
-  setViewMode: (viewMode) => set({ viewMode }),
 
   // Legacy compatibility methods
   closeTab: (id) => get().deleteTab(id),
