@@ -457,6 +457,7 @@ async fn handle_http(
         &req_host_str,
         req_headers.clone(),
         req_body_bytes.clone(),
+        &req_headers,
         &listener_label,
     ).await {
         Some(InterceptAction::Drop) => {
@@ -606,6 +607,7 @@ async fn handle_http(
                 &final_host,
                 res_headers.clone(),
                 res_body.clone(),
+                &final_req_headers,
                 &listener_label,
             ).await {
                 Some(InterceptAction::Drop) => {

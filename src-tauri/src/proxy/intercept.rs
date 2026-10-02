@@ -16,9 +16,10 @@ pub async fn handle_intercept_hook(
     host: &str,
     headers: Vec<(String, String)>,
     body: Vec<u8>,
+    request_headers: &[(String, String)],
     listener_label: &str,
 ) -> Option<InterceptAction> {
-    if !should_intercept(state, phase, method, url, host, &headers, listener_label).await {
+    if !should_intercept(state, phase, method, url, host, &headers, request_headers, listener_label).await {
         return None;
     }
 
