@@ -1,55 +1,77 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { RepeaterHistoryItem } from '../../../services/tauri/bridge';
-import type { TrafficItem } from '../../../types';
-import { Dialog } from '../../common/ui';
-import { PaneHeader } from '../../common/PaneHeader';
-import { CodeEditor } from '../../common/CodeEditor';
-import { KeyValueEditor } from '../../common/KeyValueEditor';
-import { MethodBadge } from '../../common/MethodBadge';
-import { StatusBadge } from '../../common/StatusBadge';
-import { MingCuteIcon } from '../../common/MingCuteIcon';
-import { CopyCustomModal } from '../history/CopyCustomModal';
-import { historyItemToTrafficItem, RUN_COPY_ACTIONS } from '../../../utils/repeaterTraffic';
+import type { TrafficItem } from '../../types';
+import { Dialog, SegmentedControl } from './ui';
+import { PaneHeader, type PaneHeaderTab } from './PaneHeader';
+import { KeyValueEditor } from './KeyValueEditor';
+import { MethodBadge } from './MethodBadge';
+import { StatusBadge } from './StatusBadge';
+import { MingCuteIcon } from './MingCuteIcon';
+import { BodyView, useBodyFormat } from './BodyView';
+import { CopyCustomModal } from '../modules/history/CopyCustomModal';
+import { historyItemToTrafficItem, RUN_COPY_ACTIONS, type RunRecord } from '../../utils/repeaterTraffic';
 
-interface RepeaterRunDialogProps {
+interface RunDetailsDialogProps<T extends RunRecord> {
   /** Runs newest first, as the drawer lists them */
-  runs: RepeaterHistoryItem[];
+  runs: T[];
   index: number | null;
   onIndexChange: (index: number) => void;
   onClose: () => void;
   /** True when the editor has edits made after its latest run */
-  hasUnsentChanges: boolean;
-  onLoad: (run: RepeaterHistoryItem) => Promise<void>;
-  onLoadAndSend: (run: RepeaterHistoryItem) => Promise<void>;
+  hasUnsentChanges?: boolean;
+  /** Omit both load actions for a read-only view (copy only) */
+  onLoad?: (run: T) => Promise<void>;
+  onLoadAndSend?: (run: T) => Promise<void>;
 }
 
-const RunBody: React.FC<{ body?: string }> = ({ body }) => {
-  const formatted = useMemo(() => {
-    if (!body) return null;
-    try {
-      return { text: JSON.stringify(JSON.parse(body), null, 2), language: 'json' };
-    } catch {
-      return { text: body, language: body.trim().startsWith('<') ? 'html' : 'plaintext' };
-    }
-  }, [body]);
+interface RunPaneProps {
+  title: string;
+  tabs: PaneHeaderTab[];
+  activeTab: string;
+  onTabChange: (value: string) => void;
+  body?: string;
+  /** Headers sent with the body, used to detect JSON and media */
+  headers: Array<{ key: string; value: string }>;
+  previewTitle: string;
+  /** Content of the tabs other than Body */
+  renderTab: (tab: string) => React.ReactNode;
+}
 
-  if (!formatted) return <div className="p-4 text-muted-foreground italic">No body</div>;
-  return <CodeEditor value={formatted.text} language={formatted.language} readOnly bare />;
+/** One side of the dialog: tab header with the body format switch, then the active tab. */
+const RunPane: React.FC<RunPaneProps> = ({ title, tabs, activeTab, onTabChange, body, headers, previewTitle, renderTab }) => {
+  const { format, setFormat, options, mediaInfo } = useBodyFormat(body || '', headers);
+  return (
+    <>
+      <PaneHeader
+        title={title}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={onTabChange}
+        right={activeTab === 'body' && <SegmentedControl value={format} onChange={setFormat} options={options} />}
+      />
+      <div className={`flex-1 min-h-0 ${activeTab === 'body' ? 'overflow-hidden' : 'p-2 overflow-auto'}`}>
+        {activeTab === 'body' ? (
+          <BodyView body={body || ''} format={format} mediaInfo={mediaInfo} previewTitle={previewTitle} emptyMessage="No body" />
+        ) : (
+          renderTab(activeTab)
+        )}
+      </div>
+    </>
+  );
 };
 
 const toRows = (items: Array<{ key: string; value: string }>, prefix: string) =>
   items.map((h, i) => ({ id: `${prefix}-${i}`, key: h.key, value: h.value, enabled: true }));
 
-/** Full request/response view of one Repeater run, with actions to load it back into the editor. */
-export const RepeaterRunDialog: React.FC<RepeaterRunDialogProps> = ({
+/** Full request/response view of one run, with optional actions to load it back into the editor. */
+export function RunDetailsDialog<T extends RunRecord>({
   runs,
   index,
   onIndexChange,
   onClose,
-  hasUnsentChanges,
+  hasUnsentChanges = false,
   onLoad,
   onLoadAndSend,
-}) => {
+}: RunDetailsDialogProps<T>) {
   const run = index !== null ? runs[index] : undefined;
   const [reqTab, setReqTab] = useState<'body' | 'headers' | 'params'>('body');
   const [resTab, setResTab] = useState<'body' | 'headers'>('body');
@@ -106,8 +128,8 @@ export const RepeaterRunDialog: React.FC<RepeaterRunDialogProps> = ({
       return;
     }
     setPendingLoad(null);
-    if (mode === 'send') await onLoadAndSend(run);
-    else await onLoad(run);
+    if (mode === 'send') await onLoadAndSend?.(run);
+    else await onLoad?.(run);
     onClose();
   };
 
@@ -172,30 +194,34 @@ export const RepeaterRunDialog: React.FC<RepeaterRunDialogProps> = ({
                 The editor has unsent changes. Click again to replace them.
               </span>
             )}
-            <button
-              onClick={() => doLoad('load')}
-              className={`${footerButtonClass} ${
-                pendingLoad === 'load'
-                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-600 dark:text-amber-300'
-                  : 'bg-background border-border text-foreground hover:bg-neutral-subtle'
-              }`}
-              title="Replace the editor's method, URL, params, headers, and body with this run's"
-            >
-              <MingCuteIcon name="refresh_line" size={13} />
-              <span>{pendingLoad === 'load' ? 'Replace & Load' : 'Load into editor'}</span>
-            </button>
-            <button
-              onClick={() => doLoad('send')}
-              className={`${footerButtonClass} ${
-                pendingLoad === 'send'
-                  ? 'bg-amber-500 border-amber-500 text-white'
-                  : 'bg-primary border-primary text-primary-foreground hover:bg-primary-hover'
-              }`}
-              title="Load this run into the editor and send it again"
-            >
-              <MingCuteIcon name="send_plane_line" size={13} />
-              <span>{pendingLoad === 'send' ? 'Replace & Send' : 'Load & Send'}</span>
-            </button>
+            {onLoad && (
+              <button
+                onClick={() => doLoad('load')}
+                className={`${footerButtonClass} ${
+                  pendingLoad === 'load'
+                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-600 dark:text-amber-300'
+                    : 'bg-background border-border text-foreground hover:bg-neutral-subtle'
+                }`}
+                title="Replace the editor's method, URL, params, headers, and body with this run's"
+              >
+                <MingCuteIcon name="refresh_line" size={13} />
+                <span>{pendingLoad === 'load' ? 'Replace & Load' : 'Load into editor'}</span>
+              </button>
+            )}
+            {onLoadAndSend && (
+              <button
+                onClick={() => doLoad('send')}
+                className={`${footerButtonClass} ${
+                  pendingLoad === 'send'
+                    ? 'bg-amber-500 border-amber-500 text-white'
+                    : 'bg-primary border-primary text-primary-foreground hover:bg-primary-hover'
+                }`}
+                title="Load this run into the editor and send it again"
+              >
+                <MingCuteIcon name="send_plane_line" size={13} />
+                <span>{pendingLoad === 'send' ? 'Replace & Send' : 'Load & Send'}</span>
+              </button>
+            )}
           </>
         }
       >
@@ -227,7 +253,7 @@ export const RepeaterRunDialog: React.FC<RepeaterRunDialogProps> = ({
         {/* Request (as sent) | Response */}
         <div className="flex-1 min-h-0 flex">
           <div className="w-1/2 flex flex-col min-w-0 border-r border-border">
-            <PaneHeader
+            <RunPane
               title="Request"
               tabs={[
                 { value: 'body', label: 'Body' },
@@ -236,16 +262,17 @@ export const RepeaterRunDialog: React.FC<RepeaterRunDialogProps> = ({
               ]}
               activeTab={reqTab}
               onTabChange={(val) => setReqTab(val as typeof reqTab)}
+              body={run.requestBody}
+              headers={run.requestHeaders}
+              previewTitle="run-request"
+              renderTab={(tab) => (
+                <KeyValueEditor items={tab === 'params' ? params : toRows(run.requestHeaders, 'rq')} onChange={() => {}} readOnly />
+              )}
             />
-            <div className={`flex-1 min-h-0 ${reqTab === 'body' ? 'overflow-hidden' : 'p-2 overflow-auto'}`}>
-              {reqTab === 'body' && <RunBody body={run.requestBody} />}
-              {reqTab === 'headers' && <KeyValueEditor items={toRows(run.requestHeaders, 'rq')} onChange={() => {}} readOnly />}
-              {reqTab === 'params' && <KeyValueEditor items={params} onChange={() => {}} readOnly />}
-            </div>
           </div>
 
           <div className="w-1/2 flex flex-col min-w-0">
-            <PaneHeader
+            <RunPane
               title="Response"
               tabs={[
                 { value: 'body', label: 'Body' },
@@ -253,11 +280,11 @@ export const RepeaterRunDialog: React.FC<RepeaterRunDialogProps> = ({
               ]}
               activeTab={resTab}
               onTabChange={(val) => setResTab(val as typeof resTab)}
+              body={run.responseBody}
+              headers={run.responseHeaders}
+              previewTitle="run-response"
+              renderTab={() => <KeyValueEditor items={toRows(run.responseHeaders, 'rs')} onChange={() => {}} readOnly />}
             />
-            <div className={`flex-1 min-h-0 ${resTab === 'body' ? 'overflow-hidden' : 'p-2 overflow-auto'}`}>
-              {resTab === 'body' && <RunBody body={run.responseBody} />}
-              {resTab === 'headers' && <KeyValueEditor items={toRows(run.responseHeaders, 'rs')} onChange={() => {}} readOnly />}
-            </div>
           </div>
         </div>
       </Dialog>
@@ -265,4 +292,4 @@ export const RepeaterRunDialog: React.FC<RepeaterRunDialogProps> = ({
       <CopyCustomModal isOpen={!!customCopyItem} item={customCopyItem} onClose={() => setCustomCopyItem(null)} />
     </>
   );
-};
+}

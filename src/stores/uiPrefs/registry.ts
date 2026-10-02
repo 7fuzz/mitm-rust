@@ -61,6 +61,8 @@ const panelWidth = (fallback: number, min: number, max: number) =>
 
 export const REPEATER_SIDEBAR_WIDTH = { min: 220, max: 450 };
 export const REPEATER_HISTORY_DRAWER_WIDTH = { min: 200, max: 550 };
+export const COLLECTIONS_SIDEBAR_WIDTH = { min: 220, max: 450 };
+export const COLLECTIONS_HISTORY_DRAWER_WIDTH = { min: 200, max: 550 };
 
 export const UI_PREFS = {
   "history.columns": pref<ColumnLayout>({
@@ -75,6 +77,10 @@ export const UI_PREFS = {
   "repeater.historyDrawerWidth": panelWidth(288, REPEATER_HISTORY_DRAWER_WIDTH.min, REPEATER_HISTORY_DRAWER_WIDTH.max),
   /** Request pane share of the Repeater work area */
   "repeater.requestSplitPercent": splitPercent(50),
+  "collections.sidebarWidth": panelWidth(290, COLLECTIONS_SIDEBAR_WIDTH.min, COLLECTIONS_SIDEBAR_WIDTH.max),
+  "collections.historyDrawerWidth": panelWidth(288, COLLECTIONS_HISTORY_DRAWER_WIDTH.min, COLLECTIONS_HISTORY_DRAWER_WIDTH.max),
+  /** Request pane share of the Collections work area */
+  "collections.requestSplitPercent": splitPercent(50),
   "history.filterBarOpen": pref<boolean>({
     default: false,
     normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),

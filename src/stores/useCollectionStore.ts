@@ -12,10 +12,13 @@ import {
   moveRequest,
   duplicateRequest,
   executeCollectionRequest,
+  getRequestHistories,
+  clearRequestHistories,
   Collection,
   CollectionTreeItem,
   RequestItem,
   ExecutionResult,
+  RequestHistoryItem,
 } from '../services/tauri/bridge';
 import { isTauriAvailable } from '../services/tauri/ipc';
 
@@ -25,6 +28,11 @@ interface CollectionState {
   activeRequestId: string | null;
   isExecuting: Record<string, boolean>;
   executionResult: Record<string, ExecutionResult | null>;
+  /** Recorded runs per request, newest first */
+  runHistory: Record<string, RequestHistoryItem[]>;
+  /** Run shown in the response pane per request; absent means the latest */
+  selectedRunId: Record<string, number | undefined>;
+  isHistoryDrawerOpen: boolean;
   searchQuery: string;
 
   // Actions
@@ -43,6 +51,10 @@ interface CollectionState {
   closeRequestTab: (id: string) => void;
   setActiveRequestId: (id: string | null) => void;
   executeRequest: (requestId: string) => Promise<void>;
+  fetchRunHistory: (requestId: string) => Promise<void>;
+  selectRun: (requestId: string, runId: number | undefined) => void;
+  clearRunHistory: (requestId: string) => Promise<void>;
+  toggleHistoryDrawer: (open?: boolean) => void;
   setSearchQuery: (query: string) => void;
 }
 
@@ -52,6 +64,9 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   activeRequestId: null,
   isExecuting: {},
   executionResult: {},
+  runHistory: {},
+  selectedRunId: {},
+  isHistoryDrawerOpen: false,
   searchQuery: '',
 
   fetchCollections: async (workspaceId: string) => {
@@ -248,7 +263,9 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
         set((state) => ({
           executionResult: { ...state.executionResult, [requestId]: result },
           isExecuting: { ...state.isExecuting, [requestId]: false },
+          selectedRunId: { ...state.selectedRunId, [requestId]: undefined },
         }));
+        await get().fetchRunHistory(requestId);
         try {
           const { activeWorkspaceId, loadEnvironments } = (await import('./useWorkspaceStore')).useWorkspaceStore.getState();
           if (activeWorkspaceId) {
@@ -281,6 +298,37 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       }));
     }
   },
+
+  fetchRunHistory: async (requestId) => {
+    if (!requestId || !isTauriAvailable()) return;
+    try {
+      const runs = await getRequestHistories(requestId);
+      set((state) => ({ runHistory: { ...state.runHistory, [requestId]: runs } }));
+    } catch (err) {
+      console.error('Failed to load request histories:', err);
+    }
+  },
+
+  selectRun: (requestId, runId) =>
+    set((state) => ({ selectedRunId: { ...state.selectedRunId, [requestId]: runId } })),
+
+  clearRunHistory: async (requestId) => {
+    if (isTauriAvailable()) {
+      try {
+        await clearRequestHistories(requestId);
+      } catch (err) {
+        console.error('Failed to clear request histories:', err);
+        return;
+      }
+    }
+    set((state) => ({
+      runHistory: { ...state.runHistory, [requestId]: [] },
+      selectedRunId: { ...state.selectedRunId, [requestId]: undefined },
+      executionResult: { ...state.executionResult, [requestId]: null },
+    }));
+  },
+
+  toggleHistoryDrawer: (open) => set((state) => ({ isHistoryDrawerOpen: open ?? !state.isHistoryDrawerOpen })),
 
   setSearchQuery: (query) => set({ searchQuery: query }),
 }));

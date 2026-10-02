@@ -1,5 +1,6 @@
 import React from 'react';
 import { Select, Button } from '../../../common/ui';
+import { MingCuteIcon } from '../../../common/MingCuteIcon';
 
 export const HTTP_METHODS = [
   { value: 'GET', label: 'GET' },
@@ -18,6 +19,8 @@ interface CollectionAddressBarProps {
   onUrlChange: (url: string) => void;
   onUrlBlur: () => void;
   onSend: () => void;
+  isHistoryOpen: boolean;
+  onToggleHistory: () => void;
 }
 
 export const CollectionAddressBar: React.FC<CollectionAddressBarProps> = ({
@@ -28,9 +31,11 @@ export const CollectionAddressBar: React.FC<CollectionAddressBarProps> = ({
   onUrlChange,
   onUrlBlur,
   onSend,
+  isHistoryOpen,
+  onToggleHistory,
 }) => {
   return (
-    <div className="p-2.5 bg-header border-b border-border flex items-center gap-2 shrink-0 font-mono">
+    <div className="h-12 px-2.5 bg-header border-b border-border flex items-center gap-2 shrink-0 font-mono">
       <div className="w-28 shrink-0 font-bold">
         <Select
           value={method}
@@ -65,6 +70,18 @@ export const CollectionAddressBar: React.FC<CollectionAddressBarProps> = ({
       >
         {isLoading ? 'Sending...' : 'Send'}
       </Button>
+
+      <button
+        onClick={onToggleHistory}
+        className={`p-1.5 rounded border cursor-pointer transition-colors shrink-0 ${
+          isHistoryOpen
+            ? 'bg-primary/10 border-primary/40 text-primary'
+            : 'bg-background border-border text-muted-foreground hover:text-foreground'
+        }`}
+        title={isHistoryOpen ? 'Hide Run History' : 'Show Run History'}
+      >
+        <MingCuteIcon name="history_line" size={16} />
+      </button>
     </div>
   );
 };

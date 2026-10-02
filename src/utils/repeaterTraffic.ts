@@ -2,8 +2,24 @@ import type { RepeaterHistoryItem } from '../services/tauri/bridge';
 import type { TrafficItem } from '../types';
 import { formatRawCurl, formatReqAndRes, formatUrlBodyAndRes } from './reqResFormatter';
 
-/** Converts a Repeater run (request as sent + response) into the shape the copy formatters take */
-export const historyItemToTrafficItem = (hist: RepeaterHistoryItem): TrafficItem => {
+/** One recorded send (request as sent + response); both Repeater and Collection runs fit this shape */
+export type RunRecord = Pick<
+  RepeaterHistoryItem,
+  'id' | 'method' | 'url' | 'requestHeaders' | 'requestBody' | 'statusCode' | 'responseHeaders' | 'responseBody' | 'durationMs' | 'executedAtMs'
+>;
+
+/** Path and query of a run's URL, falling back to the raw URL */
+export const runPath = (url: string) => {
+  try {
+    const parsed = new URL(/^https?:\/\//.test(url) ? url : `https://${url}`);
+    return parsed.pathname + parsed.search;
+  } catch {
+    return url;
+  }
+};
+
+/** Converts a run (request as sent + response) into the shape the copy formatters take */
+export const historyItemToTrafficItem = (hist: RunRecord): TrafficItem => {
   let host = '';
   let path = '/';
   try {

@@ -9,11 +9,7 @@ import { CollectionContextMenu, type ContextMenuState } from './tree/CollectionC
 import { filterTree } from './tree/collectionTreeFilter';
 import type { CollectionTreeItem, RequestItem } from '../../../services/tauri/bridge';
 
-interface CollectionTreeSidebarProps {
-  widthPx?: number;
-}
-
-export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ widthPx = 280 }) => {
+export const CollectionTreeSidebar: React.FC = () => {
   const { activeWorkspaceId } = useWorkspaceStore();
   const {
     collectionsTree,
@@ -271,8 +267,7 @@ export const CollectionTreeSidebar: React.FC<CollectionTreeSidebarProps> = ({ wi
   return (
     <div
       onContextMenu={(e) => handleContextMenu(e, 'root')}
-      className="bg-surface border-r border-border h-full flex flex-col overflow-hidden text-xs shrink-0 select-none relative"
-      style={{ width: `${widthPx}px` }}
+      className="bg-surface border-r border-border h-full w-full flex flex-col overflow-hidden text-xs select-none relative"
     >
       {/* Top Header */}
       <div className="p-2.5 bg-header border-b border-border flex flex-col gap-2 shrink-0">

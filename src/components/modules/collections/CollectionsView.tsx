@@ -1,11 +1,15 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useCollectionStore } from '../../../stores/useCollectionStore';
 import { useWorkspaceStore } from '../../../stores/useWorkspaceStore';
 import { CollectionTreeSidebar } from './CollectionTreeSidebar';
 import { CollectionRequestTab } from './CollectionRequestTab';
 import { CollectionResponseViewer } from './CollectionResponseViewer';
+import { CollectionHistoryDrawer } from './CollectionHistoryDrawer';
 import { MethodBadge } from '../../common/MethodBadge';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
+import { useUiPref } from '../../../stores/useUiPrefsStore';
+import { COLLECTIONS_HISTORY_DRAWER_WIDTH, COLLECTIONS_SIDEBAR_WIDTH } from '../../../stores/uiPrefs/registry';
+import { clamp, clampPercent, startDragResize } from '../../../utils/dragResize';
 
 export const CollectionsView: React.FC = () => {
   const { activeWorkspaceId } = useWorkspaceStore();
@@ -15,15 +19,21 @@ export const CollectionsView: React.FC = () => {
     setActiveRequestId,
     closeRequestTab,
     fetchCollections,
+    fetchRunHistory,
+    isHistoryDrawerOpen,
   } = useCollectionStore();
 
-  const [sidebarWidthPx, setSidebarWidthPx] = useState(290);
-  const [reqWidthPercent, setReqWidthPercent] = useState(50);
+  // Resizable panel dimensions, persisted as UI preferences
+  const [sidebarWidthPx, setSidebarWidthPx, resetSidebarWidthPx] = useUiPref('collections.sidebarWidth');
+  const [reqWidthPercent, setReqWidthPercent, resetReqWidthPercent] = useUiPref('collections.requestSplitPercent');
+  const [historyDrawerWidthPx, setHistoryDrawerWidthPx, resetHistoryDrawerWidthPx] = useUiPref('collections.historyDrawerWidth');
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mainAreaRef = useRef<HTMLDivElement>(null);
-  const isResizingSidebar = useRef(false);
-  const isResizingMain = useRef(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const requestPaneRef = useRef<HTMLDivElement>(null);
+  const responsePaneRef = useRef<HTMLDivElement>(null);
+  const historyDrawerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (activeWorkspaceId) {
@@ -31,55 +41,73 @@ export const CollectionsView: React.FC = () => {
     }
   }, [activeWorkspaceId, fetchCollections]);
 
+  // The response pane shows the latest recorded run, so load runs for whichever tab is active
+  useEffect(() => {
+    if (activeRequestId) {
+      fetchRunHistory(activeRequestId);
+    }
+  }, [activeRequestId, fetchRunHistory]);
+
   const activeRequest = openRequests.find((r) => r.id === activeRequestId) || null;
 
-  const handleMouseDownSidebarSplit = (e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingSidebar.current = true;
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isResizingSidebar.current || !containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const newWidth = moveEvent.clientX - rect.left;
-      setSidebarWidthPx(Math.min(Math.max(newWidth, 220), 450));
-    };
-    const handleMouseUp = () => {
-      isResizingSidebar.current = false;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+  const handleSidebarPointerDown = (e: React.PointerEvent) => {
+    let width = sidebarWidthPx;
+    startDragResize(e, {
+      cursor: 'col-resize',
+      onMove: (ev) => {
+        if (!containerRef.current || !sidebarRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        width = Math.round(clamp(ev.clientX - rect.left, COLLECTIONS_SIDEBAR_WIDTH.min, COLLECTIONS_SIDEBAR_WIDTH.max));
+        sidebarRef.current.style.width = `${width}px`;
+      },
+      onEnd: () => setSidebarWidthPx(width),
+    });
   };
 
-  const handleMouseDownMainSplit = (e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingMain.current = true;
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isResizingMain.current || !mainAreaRef.current) return;
-      const rect = mainAreaRef.current.getBoundingClientRect();
-      const relativeX = moveEvent.clientX - rect.left;
-      const newPercent = (relativeX / rect.width) * 100;
-      setReqWidthPercent(Math.min(Math.max(newPercent, 15), 85));
-    };
-    const handleMouseUp = () => {
-      isResizingMain.current = false;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+  const handleMainSplitPointerDown = (e: React.PointerEvent) => {
+    let percent = reqWidthPercent;
+    startDragResize(e, {
+      cursor: 'col-resize',
+      onMove: (ev) => {
+        if (!mainAreaRef.current || !requestPaneRef.current || !responsePaneRef.current) return;
+        const rect = mainAreaRef.current.getBoundingClientRect();
+        percent = clampPercent(((ev.clientX - rect.left) / rect.width) * 100);
+        requestPaneRef.current.style.width = `${percent}%`;
+        responsePaneRef.current.style.width = `${100 - percent}%`;
+      },
+      onEnd: () => setReqWidthPercent(percent),
+    });
+  };
+
+  const handleHistoryDrawerPointerDown = (e: React.PointerEvent) => {
+    let width = historyDrawerWidthPx;
+    startDragResize(e, {
+      cursor: 'col-resize',
+      onMove: (ev) => {
+        if (!containerRef.current || !historyDrawerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        width = Math.round(
+          clamp(rect.right - ev.clientX, COLLECTIONS_HISTORY_DRAWER_WIDTH.min, COLLECTIONS_HISTORY_DRAWER_WIDTH.max)
+        );
+        historyDrawerRef.current.style.width = `${width}px`;
+      },
+      onEnd: () => setHistoryDrawerWidthPx(width),
+    });
   };
 
   return (
     <div ref={containerRef} className="h-full flex bg-background overflow-hidden text-xs">
       {/* Left Collection Tree Sidebar */}
-      <CollectionTreeSidebar widthPx={sidebarWidthPx} />
+      <div ref={sidebarRef} className="h-full shrink-0" style={{ width: `${sidebarWidthPx}px` }}>
+        <CollectionTreeSidebar />
+      </div>
 
       {/* Draggable Resizer Handle for Sidebar */}
       <div
-        onMouseDown={handleMouseDownSidebarSplit}
+        onPointerDown={handleSidebarPointerDown}
+        onDoubleClick={resetSidebarWidthPx}
         className="w-1 cursor-col-resize -mx-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
-        title="Drag to adjust Sidebar width"
+        title="Drag to resize, double-click to reset"
       >
         <div className="h-8 w-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
       </div>
@@ -141,6 +169,7 @@ export const CollectionsView: React.FC = () => {
             <>
               {/* Request Editor */}
               <div
+                ref={requestPaneRef}
                 className="border-r border-border flex flex-col overflow-hidden min-w-[200px]"
                 style={{ width: `${reqWidthPercent}%` }}
               >
@@ -149,20 +178,40 @@ export const CollectionsView: React.FC = () => {
 
               {/* Resizer Handle */}
               <div
-                onMouseDown={handleMouseDownMainSplit}
+                onPointerDown={handleMainSplitPointerDown}
+                onDoubleClick={resetReqWidthPercent}
                 className="w-1 cursor-col-resize -mx-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
-                title="Drag to adjust Request vs Response width"
+                title="Drag to resize, double-click to reset"
               >
                 <div className="h-8 w-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
               </div>
 
               {/* Response Inspector */}
               <div
+                ref={responsePaneRef}
                 className="flex flex-col overflow-hidden min-w-[200px]"
                 style={{ width: `${100 - reqWidthPercent}%` }}
               >
                 <CollectionResponseViewer requestId={activeRequest.id} />
               </div>
+
+              {/* Draggable Resizer Handle for Run History Drawer */}
+              {isHistoryDrawerOpen && (
+                <div
+                  onPointerDown={handleHistoryDrawerPointerDown}
+                  onDoubleClick={resetHistoryDrawerWidthPx}
+                  className="w-1 cursor-col-resize -mx-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
+                  title="Drag to resize, double-click to reset"
+                >
+                  <div className="h-8 w-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
+                </div>
+              )}
+
+              {isHistoryDrawerOpen && (
+                <div ref={historyDrawerRef} className="h-full shrink-0" style={{ width: `${historyDrawerWidthPx}px` }}>
+                  <CollectionHistoryDrawer requestId={activeRequest.id} />
+                </div>
+              )}
             </>
           ) : (
             <div className="h-full flex-1 flex flex-col items-center justify-center bg-surface text-muted-foreground italic text-xs p-6">

@@ -2,26 +2,16 @@ import React, { useEffect, useState } from 'react';
 import type { RepeaterHistoryItem } from '../../../services/tauri/bridge';
 import type { TrafficItem } from '../../../types';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
-import { StatusBadge } from '../../common/StatusBadge';
+import { RunHistoryRow } from '../../common/RunHistoryRow';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { ContextMenu, type ContextMenuItem } from '../../common/ContextMenu';
 import { CopyCustomModal } from '../history/CopyCustomModal';
 import { historyItemToTrafficItem, RUN_COPY_ACTIONS } from '../../../utils/repeaterTraffic';
-import { RepeaterRunDialog } from './RepeaterRunDialog';
+import { RunDetailsDialog } from '../../common/RunDetailsDialog';
 
 interface ExecutionHistoryDrawerProps {
   requestId: string;
 }
-
-/** Path and query of a run's URL, falling back to the raw URL */
-const runPath = (url: string) => {
-  try {
-    const parsed = new URL(/^https?:\/\//.test(url) ? url : `https://${url}`);
-    return parsed.pathname + parsed.search;
-  } catch {
-    return url;
-  }
-};
 
 export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ requestId }) => {
   const {
@@ -134,40 +124,14 @@ export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ 
                 : false;
 
             return (
-              <div
+              <RunHistoryRow
                 key={hist.id}
-                onClick={() => setExecutionResult(requestId, hist)}
-                onDoubleClick={() => setDialogIndex(index)}
+                run={hist}
+                isSelected={!!isSelected}
+                onSelect={() => setExecutionResult(requestId, hist)}
+                onOpenDetails={() => setDialogIndex(index)}
                 onContextMenu={(e) => handleContextMenu(e, hist)}
-                className={`group px-3 py-2 border-l-2 transition-colors font-mono text-xs cursor-pointer flex flex-col gap-1 ${
-                  isSelected ? 'bg-primary/10 border-l-primary' : 'border-l-transparent hover:bg-neutral-subtle'
-                }`}
-                title="Click to view the response, double-click for details, right-click for more"
-              >
-                <div className="flex items-center gap-1.5">
-                  <StatusBadge code={hist.statusCode} />
-                  <span className="text-[10px] text-muted-foreground">{hist.durationMs}ms</span>
-                  <span className="ml-auto text-[10px] text-muted-foreground">
-                    {new Date(hist.executedAtMs).toLocaleTimeString()}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDialogIndex(index);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 -my-1 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-neutral-subtle transition-opacity cursor-pointer"
-                    title="Open details"
-                  >
-                    <MingCuteIcon name="expand_line" size={12} />
-                  </button>
-                </div>
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-[10px] font-bold text-muted-foreground shrink-0">{hist.method}</span>
-                  <span className="text-[11px] text-foreground truncate" title={hist.url}>
-                    {runPath(hist.url)}
-                  </span>
-                </div>
-              </div>
+              />
             );
           })
         )}
@@ -183,7 +147,7 @@ export const ExecutionHistoryDrawer: React.FC<ExecutionHistoryDrawerProps> = ({ 
         />
       )}
 
-      <RepeaterRunDialog
+      <RunDetailsDialog
         runs={history}
         index={dialogIndex}
         onIndexChange={setDialogIndex}

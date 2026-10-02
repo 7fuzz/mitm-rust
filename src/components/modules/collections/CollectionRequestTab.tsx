@@ -6,6 +6,7 @@ import { CodeEditor } from '../../common/CodeEditor';
 import { ExtractRulesEditor } from '../../common/ExtractRulesEditor';
 import { MarkdownViewer } from '../../common/MarkdownViewer';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
+import { PaneHeader } from '../../common/PaneHeader';
 import type { RequestItem, HeaderItem, ParamItem, ExtractRuleItem, RequestPreview } from '../../../services/tauri/bridge';
 import { previewCollectionRequest } from '../../../services/tauri/bridge';
 import { CollectionAddressBar } from './tab/CollectionAddressBar';
@@ -24,7 +25,7 @@ interface CollectionRequestTabProps {
 }
 
 export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ request }) => {
-  const { updateRequestDetails, executeRequest, isExecuting } = useCollectionStore();
+  const { updateRequestDetails, executeRequest, isExecuting, isHistoryDrawerOpen, toggleHistoryDrawer } = useCollectionStore();
 
   const [activeTab, setActiveTab] = useState<'docs' | 'params' | 'headers' | 'body' | 'extract_rules' | 'interpolation'>('params');
   const [docsMode, setDocsMode] = useState<'preview' | 'edit' | 'split'>('preview');
@@ -146,40 +147,28 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
         onUrlChange={setUrl}
         onUrlBlur={() => handleUpdateStore({ url })}
         onSend={handleSaveAndSend}
+        isHistoryOpen={isHistoryDrawerOpen}
+        onToggleHistory={() => toggleHistoryDrawer()}
       />
 
-      {/* Request Config Tabs Bar */}
-      <div className="bg-header border-b border-border px-3 py-1 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-1">
-          {(['docs', 'params', 'headers', 'body', 'extract_rules', 'interpolation'] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => {
-                setActiveTab(tab);
-                if (tab === 'interpolation') {
-                  handleFetchPreview();
-                }
-              }}
-              className={`px-3 py-1 rounded text-xs font-medium uppercase transition-colors cursor-pointer ${
-                activeTab === tab
-                  ? 'bg-surface text-primary border border-border shadow-2xs font-semibold'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {tab === 'docs'
-                ? `Docs${description ? ' •' : ''}`
-                : tab === 'headers'
-                ? `Headers (${headers.length})`
-                : tab === 'extract_rules'
-                ? `Extract Rules (${extractRules.length})`
-                : tab === 'interpolation'
-                ? 'Interpolation'
-                : tab}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* Request Config Tabs */}
+      <PaneHeader
+        tabs={[
+          { value: 'docs', label: description ? 'Docs •' : 'Docs' },
+          { value: 'params', label: 'Params', count: params.length },
+          { value: 'headers', label: 'Headers', count: headers.length },
+          { value: 'body', label: 'Body' },
+          { value: 'extract_rules', label: 'Extract Rules', count: extractRules.length },
+          { value: 'interpolation', label: 'Interpolation' },
+        ]}
+        activeTab={activeTab}
+        onTabChange={(val) => {
+          setActiveTab(val as typeof activeTab);
+          if (val === 'interpolation') {
+            handleFetchPreview();
+          }
+        }}
+      />
 
       {/* Tab Panels */}
       <div className="flex-1 p-3 overflow-auto">
