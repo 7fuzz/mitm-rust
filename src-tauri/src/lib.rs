@@ -91,6 +91,7 @@ pub fn run() {
             commands::proxy_cmd::update_network_settings,
             commands::proxy_cmd::set_ws_mitm_enabled,
             commands::proxy_cmd::get_listener_configs,
+            commands::proxy_cmd::list_host_ips,
             commands::proxy_cmd::add_listener,
             commands::proxy_cmd::remove_listener,
             commands::proxy_cmd::update_listener,

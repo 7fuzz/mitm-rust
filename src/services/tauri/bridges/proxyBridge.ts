@@ -37,6 +37,21 @@ export const getListenerConfigs = async (): Promise<ListenerConfig[]> => {
   return await invoke<ListenerConfig[]>("get_listener_configs");
 };
 
+export interface HostIp {
+  /** OS interface name, e.g. eth0, wlan0, lo */
+  interface: string;
+  ip: string;
+  isIpv6: boolean;
+  isLoopback: boolean;
+  isLinkLocal: boolean;
+  isUp: boolean;
+}
+
+/** IP addresses on this machine's interfaces, usable LAN IPv4 first */
+export const listHostIps = async (): Promise<HostIp[]> => {
+  return await invoke<HostIp[]>("list_host_ips");
+};
+
 export const addListener = async (
   label: string,
   address: string,

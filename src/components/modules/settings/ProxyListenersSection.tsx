@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useId, useState } from 'react';
 import { useProxyStore } from '../../../stores/useProxyStore';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Switch } from '../../common/ui';
 import type { ListenerConfig } from '../../../types';
+import { isTauriAvailable } from '../../../services/tauri/ipc';
+import { listHostIps, type HostIp } from '../../../services/tauri/bridge';
 import { SettingsGroup, SettingsSection } from './SettingsSection';
 
 const WILDCARD_HOSTS = ['0.0.0.0', '::'];
@@ -112,6 +114,10 @@ interface ListenerFormProps {
   submitIcon: string;
   onSubmit: (label: string, address: string, replaceConflicts: boolean) => Promise<void>;
   onCancel?: () => void;
+  /** This machine's IPs, offered as host suggestions */
+  hostIps: HostIp[];
+  /** Sets the host field from outside; the nonce makes the same host apply again */
+  hostPreset?: { host: string; nonce: number };
 }
 
 const ListenerForm: React.FC<ListenerFormProps> = ({
@@ -122,11 +128,18 @@ const ListenerForm: React.FC<ListenerFormProps> = ({
   submitIcon,
   onSubmit,
   onCancel,
+  hostIps,
+  hostPreset,
 }) => {
   const [label, setLabel] = useState(initial?.label ?? '');
   const [host, setHost] = useState(initial?.host ?? '');
   const [port, setPort] = useState(initial?.port ?? '');
   const [busy, setBusy] = useState(false);
+  const hostListId = useId();
+
+  useEffect(() => {
+    if (hostPreset) setHost(hostPreset.host);
+  }, [hostPreset]);
 
   const touched = label.trim() !== '' || host.trim() !== '' || port.trim() !== '';
   const conflict: ConflictResult = port.trim()
@@ -169,8 +182,17 @@ const ListenerForm: React.FC<ListenerFormProps> = ({
           onChange={(e) => setHost(e.target.value)}
           placeholder="Host (blank = 0.0.0.0)"
           title="IP address to bind. 0.0.0.0 = all interfaces, 127.0.0.1 / localhost = this machine only"
+          list={hostListId}
           className={`${inputClass} flex-1`}
         />
+        <datalist id={hostListId}>
+          <option value="0.0.0.0">All interfaces</option>
+          {hostIps.map((h) => (
+            <option key={`${h.interface}-${h.ip}`} value={h.ip}>
+              {h.interface}
+            </option>
+          ))}
+        </datalist>
         <span className="text-muted-foreground font-mono">:</span>
         <input
           type="text"
@@ -224,10 +246,44 @@ export const ProxyListenersSection: React.FC = () => {
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [hostIps, setHostIps] = useState<HostIp[]>([]);
+  const [hostIpsError, setHostIpsError] = useState<string | null>(null);
+  const [showAllIps, setShowAllIps] = useState(false);
+  const [hostPreset, setHostPreset] = useState<{ host: string; nonce: number }>();
+  const [copiedIp, setCopiedIp] = useState<string | null>(null);
 
   useEffect(() => {
     fetchListeners();
   }, [fetchListeners]);
+
+  const loadHostIps = useCallback(async () => {
+    if (!isTauriAvailable()) return;
+    try {
+      setHostIps(await listHostIps());
+      setHostIpsError(null);
+    } catch (err) {
+      setHostIpsError(String(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHostIps();
+  }, [loadHostIps]);
+
+  const copyIp = (ip: string) => {
+    navigator.clipboard.writeText(ip);
+    setCopiedIp(ip);
+    setTimeout(() => setCopiedIp((c) => (c === ip ? null : c)), 1500);
+  };
+
+  // IPv6 and link-local addresses are rarely what a device should point at; tuck them away
+  const isSecondaryIp = (h: HostIp) => h.isIpv6 || h.isLinkLocal;
+  const shownIps = showAllIps ? hostIps : hostIps.filter((h) => !isSecondaryIp(h));
+  const hiddenIpCount = hostIps.length - hostIps.filter((h) => !isSecondaryIp(h)).length;
+
+  const listenersOn = (ip: string) =>
+    listeners.filter((l) => normalizeHost(splitAddress(l.address).host) === ip);
+  const wildcardListeners = listeners.filter((l) => WILDCARD_HOSTS.includes(normalizeHost(splitAddress(l.address).host)));
 
   const flash = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message });
@@ -277,6 +333,7 @@ export const ProxyListenersSection: React.FC = () => {
                 <ListenerForm
                   initial={{ label: listener.label, host, port }}
                   listeners={listeners}
+                  hostIps={hostIps}
                   ignoreId={listener.id}
                   submitLabel="Save"
                   submitIcon="check_line"
@@ -364,6 +421,8 @@ export const ProxyListenersSection: React.FC = () => {
         <div className="px-3 py-2.5">
           <ListenerForm
             listeners={listeners}
+            hostIps={hostIps}
+            hostPreset={hostPreset}
             submitLabel="Add"
             submitIcon="add_line"
             onSubmit={(label, address, replace) =>
@@ -385,6 +444,81 @@ export const ProxyListenersSection: React.FC = () => {
           <span className="break-all">{feedback.message}</span>
         </div>
       )}
+
+      <SettingsGroup label="Host addresses">
+        <div className="px-3 py-2 flex items-center gap-2 text-2xs text-muted-foreground">
+          <span className="flex-1">
+            IPs on this machine. Point a device at one of these, or bind a listener to it to tell clients apart.
+          </span>
+          {hiddenIpCount > 0 && (
+            <button
+              onClick={() => setShowAllIps(!showAllIps)}
+              className="text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+            >
+              {showAllIps ? 'Hide IPv6 & link-local' : `Show IPv6 & link-local (${hiddenIpCount})`}
+            </button>
+          )}
+          <button
+            onClick={loadHostIps}
+            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-neutral-subtle cursor-pointer shrink-0"
+            title="Re-read network interfaces"
+          >
+            <MingCuteIcon name="refresh_line" size={13} />
+          </button>
+        </div>
+
+        {hostIpsError && <div className="px-3 py-2 text-rose-500 font-mono text-2xs break-all">{hostIpsError}</div>}
+        {!hostIpsError && shownIps.length === 0 && (
+          <div className="px-3 py-3 text-muted-foreground italic text-2xs">No addresses found</div>
+        )}
+
+        {shownIps.map((h) => {
+          const boundBy = listenersOn(h.ip);
+          // An all-interfaces listener accepts connections to this IP too (:: also takes IPv4 on dual-stack hosts)
+          const coveredBy = wildcardListeners.filter(
+            (l) => l.enabled && (!h.isIpv6 || normalizeHost(splitAddress(l.address).host) === '::')
+          );
+          return (
+            <div key={`${h.interface}-${h.ip}`} className="group px-3 py-1.5 flex items-center gap-2 font-mono text-xs">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${h.isUp ? 'bg-emerald-400' : 'bg-muted-foreground/40'}`} title={h.isUp ? 'Interface up' : 'Interface down'} />
+              <span className="text-foreground select-text">{h.ip}</span>
+              <span className="text-3xs text-muted-foreground">{h.interface}</span>
+              {h.isLoopback && <span className="text-3xs px-1 rounded bg-neutral-subtle text-muted-foreground">this machine only</span>}
+              {h.isLinkLocal && <span className="text-3xs px-1 rounded bg-neutral-subtle text-muted-foreground">link-local</span>}
+
+              <span className="ml-auto flex items-center gap-1.5 min-w-0">
+                {boundBy.map((l) => (
+                  <span key={l.id} className="text-3xs px-1.5 py-px rounded bg-primary/10 text-primary truncate" title={l.address}>
+                    {l.label} :{splitAddress(l.address).port}
+                  </span>
+                ))}
+                {boundBy.length === 0 && coveredBy.length > 0 && (
+                  <span
+                    className="text-3xs text-muted-foreground truncate"
+                    title={coveredBy.map((l) => `${l.label} (${l.address})`).join(', ')}
+                  >
+                    via all interfaces :{coveredBy.map((l) => splitAddress(l.address).port).join(', :')}
+                  </span>
+                )}
+                <button
+                  onClick={() => copyIp(h.ip)}
+                  className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-neutral-subtle cursor-pointer transition-opacity"
+                  title="Copy IP"
+                >
+                  <MingCuteIcon name={copiedIp === h.ip ? 'check_line' : 'copy_line'} size={12} />
+                </button>
+                <button
+                  onClick={() => setHostPreset({ host: h.ip, nonce: Date.now() })}
+                  className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 rounded text-2xs font-sans text-muted-foreground hover:text-foreground hover:bg-neutral-subtle cursor-pointer transition-opacity"
+                  title="Put this IP in the Add listener form"
+                >
+                  Use
+                </button>
+              </span>
+            </div>
+          );
+        })}
+      </SettingsGroup>
     </SettingsSection>
   );
 };

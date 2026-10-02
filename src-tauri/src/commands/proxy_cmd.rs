@@ -487,3 +487,35 @@ mod tests {
         assert!(normalize_listener_address("a:8080").is_err());
     }
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostIp {
+    /// OS interface name, e.g. eth0, wlan0, lo
+    pub interface: String,
+    pub ip: String,
+    pub is_ipv6: bool,
+    pub is_loopback: bool,
+    pub is_link_local: bool,
+    pub is_up: bool,
+}
+
+/// IP addresses on this machine's network interfaces, to pick a listener host from.
+/// Usable LAN IPv4 addresses come first, loopback and link-local last.
+#[tauri::command]
+pub async fn list_host_ips() -> Result<Vec<HostIp>, String> {
+    let mut ips: Vec<HostIp> = if_addrs::get_if_addrs()
+        .map_err(|e| format!("Failed to read network interfaces: {}", e))?
+        .into_iter()
+        .map(|iface| HostIp {
+            is_ipv6: iface.ip().is_ipv6(),
+            is_loopback: iface.is_loopback(),
+            is_link_local: iface.is_link_local(),
+            is_up: iface.is_oper_up(),
+            ip: iface.ip().to_string(),
+            interface: iface.name,
+        })
+        .collect();
+    ips.sort_by_key(|h| (h.is_loopback, h.is_link_local, h.is_ipv6, !h.is_up));
+    Ok(ips)
+}

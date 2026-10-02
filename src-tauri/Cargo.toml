@@ -47,5 +47,6 @@ tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots", "
 tungstenite = "0.24"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std", "async-await"] }
 hex = "0.4"
+if-addrs = "0.15"
 
 
