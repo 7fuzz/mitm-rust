@@ -3,6 +3,7 @@ pub mod collections;
 pub mod commands;
 pub mod db;
 pub mod encoding;
+pub mod instance;
 pub mod proxy;
 pub mod repeater;
 pub mod state;
@@ -31,6 +32,14 @@ pub fn run() {
         .setup(move |app| {
             let app_handle = app.handle().clone();
 
+            // A second instance starts nothing that binds ports until the user picks which one to keep
+            let conflict = match instance::try_claim(&app_handle) {
+                instance::Claim::Conflict(other) => Some(other),
+                instance::Claim::Primary | instance::Claim::Unguarded => None,
+            };
+            let is_secondary = conflict.is_some();
+            app.manage(instance::InstanceState(std::sync::Mutex::new(conflict)));
+
             // Perform DB initialization safely; if it fails, log error so window opens and recovery modal handles it!
             match db::init_database(&app_handle) {
                 Ok(db_path) => {
@@ -39,7 +48,7 @@ pub fn run() {
                     let app_state = AppState::new(db_path, history_tx.clone(), rewrite_tx.clone());
 
                     // Auto-start all enabled listeners if initial mode is ON (default)
-                    if app_state.is_proxy_active() {
+                    if app_state.is_proxy_active() && !is_secondary {
                         let app_handle_listeners = app_handle.clone();
                         let state_for_listeners = app_state.clone();
                         tauri::async_runtime::spawn(async move {
@@ -68,6 +77,9 @@ pub fn run() {
             commands::db_browser_cmd::query_db_table,
             commands::db_browser_cmd::get_db_row,
             commands::db_browser_cmd::run_db_query,
+
+            commands::instance_cmd::get_instance_conflict,
+            commands::instance_cmd::take_over_instance,
 
             commands::db_recovery_cmd::run_database_migrations,
             commands::db_recovery_cmd::backup_and_reset_database,

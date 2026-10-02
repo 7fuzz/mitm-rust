@@ -49,3 +49,17 @@ export const quitApplication = async (): Promise<void> => {
 
 export const isTauriAvailable = (): boolean =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+export interface OtherInstance {
+  pid: number;
+  startedAtMs: number;
+}
+
+/** The already-running instance this one is waiting on, or null when this is the only one */
+export const getInstanceConflict = async (): Promise<OtherInstance | null> => {
+  return await invoke<OtherInstance | null>("get_instance_conflict");
+};
+
+export const takeOverInstance = async (): Promise<void> => {
+  return await invoke<void>("take_over_instance");
+};
