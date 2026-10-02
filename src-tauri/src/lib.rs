@@ -103,6 +103,9 @@ pub fn run() {
             commands::intercept_cmd::set_focus_preference,
             commands::intercept_cmd::get_focus_preference,
 
+            commands::ui_prefs_cmd::get_ui_preferences,
+            commands::ui_prefs_cmd::set_ui_preference,
+
             commands::rewrite_cmd::get_rewrite_rules,
             commands::rewrite_cmd::save_rewrite_rules,
             commands::rewrite_cmd::toggle_rewrite_enabled,
