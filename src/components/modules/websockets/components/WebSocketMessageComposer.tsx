@@ -54,7 +54,7 @@ export const WebSocketMessageComposer: React.FC<WebSocketMessageComposerProps> =
               <button
                 key={t}
                 onClick={() => setMessageBuilderType(t)}
-                className={`px-2 py-0.5 rounded uppercase font-bold text-[10px] transition-colors ${
+                className={`px-2 py-0.5 rounded uppercase font-bold text-3xs transition-colors ${
                   messageBuilderType === t
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground'
@@ -67,22 +67,22 @@ export const WebSocketMessageComposer: React.FC<WebSocketMessageComposerProps> =
 
           {/* Quick Templates */}
           <div className="flex items-center gap-1">
-            <span className="text-[11px] text-muted-foreground font-sans">Templates:</span>
+            <span className="text-2xs text-muted-foreground font-sans">Templates:</span>
             <button
               onClick={() => handleQuickTemplate('ping')}
-              className="px-1.5 py-0.5 rounded text-[10px] bg-neutral-subtle text-foreground border border-border hover:border-primary transition-colors"
+              className="px-1.5 py-0.5 rounded text-3xs bg-neutral-subtle text-foreground border border-border hover:border-primary transition-colors"
             >
               Ping
             </button>
             <button
               onClick={() => handleQuickTemplate('subscribe')}
-              className="px-1.5 py-0.5 rounded text-[10px] bg-neutral-subtle text-foreground border border-border hover:border-primary transition-colors"
+              className="px-1.5 py-0.5 rounded text-3xs bg-neutral-subtle text-foreground border border-border hover:border-primary transition-colors"
             >
               Subscribe
             </button>
             <button
               onClick={() => handleQuickTemplate('echo')}
-              className="px-1.5 py-0.5 rounded text-[10px] bg-neutral-subtle text-foreground border border-border hover:border-primary transition-colors"
+              className="px-1.5 py-0.5 rounded text-3xs bg-neutral-subtle text-foreground border border-border hover:border-primary transition-colors"
             >
               Echo
             </button>

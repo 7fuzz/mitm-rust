@@ -17,9 +17,12 @@ import { SettingsView } from '../modules/settings/SettingsView';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useInterceptStore } from '../../stores/useInterceptStore';
 import type { NavModule } from '../../types';
+import { useUiPref } from '../../stores/useUiPrefsStore';
+import { applyUiZoom, stepZoom } from '../../utils/uiZoom';
 
 export const GlobalShell: React.FC = () => {
-  const { activeModule, setActiveModule, theme, fontSize } = useSettingsStore();
+  const { activeModule, setActiveModule, theme } = useSettingsStore();
+  const [zoom, setZoom] = useUiPref('appearance.zoom');
 
   const { isQuickVarModalOpen, setQuickVarModalOpen } = useSettingsStore();
   const initWorkspaceStore = useWorkspaceStore((state) => state.initStore);
@@ -69,6 +72,30 @@ export const GlobalShell: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [setActiveModule, isQuickVarModalOpen, setQuickVarModalOpen]);
 
+  // Saved zoom, applied on startup and whenever it changes
+  useEffect(() => {
+    applyUiZoom(zoom);
+  }, [zoom]);
+
+  // Ctrl/Cmd + = / - / 0 zoom the UI in, out, and back to 100% (works inside inputs and editors too)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault();
+        setZoom(stepZoom(zoom, 1));
+      } else if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        setZoom(stepZoom(zoom, -1));
+      } else if (e.key === '0') {
+        e.preventDefault();
+        setZoom(1);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zoom, setZoom]);
+
   // Ensure theme class applied on root HTML
   useEffect(() => {
     if (theme === 'dark') {
@@ -107,9 +134,7 @@ export const GlobalShell: React.FC = () => {
 
   return (
     <div
-      className={`h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground font-sans ${
-        fontSize === 'lg' ? 'text-sm' : fontSize === 'md' ? 'text-xs' : 'text-[11px]'
-      }`}
+      className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground font-sans text-2xs"
     >
       {/* Top Navigation Bar */}
       <TopNav />

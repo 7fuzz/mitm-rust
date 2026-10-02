@@ -83,7 +83,7 @@ export const CollectionHistoryDrawer: React.FC<CollectionHistoryDrawerProps> = (
             <button
               onClick={handleClear}
               onMouseLeave={() => setConfirmClear(false)}
-              className={`px-1.5 py-0.5 rounded text-[11px] font-medium cursor-pointer transition-colors flex items-center gap-1 ${
+              className={`px-1.5 py-0.5 rounded text-2xs font-medium cursor-pointer transition-colors flex items-center gap-1 ${
                 confirmClear
                   ? 'bg-rose-500/15 text-rose-500'
                   : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'

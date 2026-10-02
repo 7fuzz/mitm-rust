@@ -92,7 +92,7 @@ export const BodyView: React.FC<BodyViewProps> = ({ body, format, mediaInfo, pre
             <button
               type="button"
               onClick={() => setTreeFilterMode(!treeFilterMode)}
-              className={`px-2 py-0.5 text-[10px] font-bold rounded border cursor-pointer ${
+              className={`px-2 py-0.5 text-3xs font-bold rounded border cursor-pointer ${
                 treeFilterMode
                   ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
                   : 'bg-background text-muted-foreground border-border hover:text-foreground'

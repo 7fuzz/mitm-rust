@@ -129,7 +129,7 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
       <div className="border border-border rounded overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-header border-b border-border text-muted-foreground text-[11px] font-medium">
+            <tr className="bg-header border-b border-border text-muted-foreground text-2xs font-medium">
               {!readOnly && <th className="w-8 px-2 py-1.5 text-center">#</th>}
               <th className="px-3 py-1.5 font-medium">{keyPlaceholder}</th>
               <th className="px-3 py-1.5 font-medium">{valuePlaceholder}</th>

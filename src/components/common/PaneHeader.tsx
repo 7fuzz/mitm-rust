@@ -22,7 +22,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = ({ title, tabs, activeTab, 
   <div className="bg-header border-b border-border px-2 flex items-center gap-3 shrink-0 select-none h-8">
     {title && (
       <>
-        <span className="font-semibold text-muted-foreground text-[10px] uppercase tracking-wider shrink-0">{title}</span>
+        <span className="font-semibold text-muted-foreground text-3xs uppercase tracking-wider shrink-0">{title}</span>
         <div className="h-4 w-px bg-border shrink-0" />
       </>
     )}
@@ -33,7 +33,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = ({ title, tabs, activeTab, 
           <button
             key={tab.value}
             onClick={() => onTabChange(tab.value)}
-            className={`px-2.5 text-[11px] transition-colors cursor-pointer whitespace-nowrap rounded-t ${
+            className={`px-2.5 text-2xs transition-colors cursor-pointer whitespace-nowrap rounded-t ${
               isActive
                 ? // Inset shadow as the underline so the scroll container can't clip it
                   'bg-surface text-foreground font-semibold shadow-[inset_0_-2px_0_var(--color-primary)]'
@@ -41,7 +41,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = ({ title, tabs, activeTab, 
             }`}
           >
             {tab.label}
-            {tab.count ? <span className="ml-1 text-[10px] text-muted-foreground font-mono">{tab.count}</span> : null}
+            {tab.count ? <span className="ml-1 text-3xs text-muted-foreground font-mono">{tab.count}</span> : null}
           </button>
         );
       })}

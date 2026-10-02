@@ -81,7 +81,7 @@ const checkConflict = (
 const ConflictNotice: React.FC<{ conflict: ConflictResult }> = ({ conflict }) => {
   if (conflict.error) {
     return (
-      <div className="flex items-start gap-1.5 text-[10px] text-rose-400 font-mono bg-rose-500/10 border border-rose-500/20 p-1.5 rounded animate-fade-in">
+      <div className="flex items-start gap-1.5 text-3xs text-rose-400 font-mono bg-rose-500/10 border border-rose-500/20 p-1.5 rounded animate-fade-in">
         <MingCuteIcon name="alert_line" size={12} className="shrink-0 mt-px" />
         <span>{conflict.error}</span>
       </div>
@@ -89,7 +89,7 @@ const ConflictNotice: React.FC<{ conflict: ConflictResult }> = ({ conflict }) =>
   }
   if (conflict.displaced.length > 0) {
     return (
-      <div className="flex items-start gap-1.5 text-[10px] text-amber-400 font-mono bg-amber-500/10 border border-amber-500/20 p-1.5 rounded animate-fade-in">
+      <div className="flex items-start gap-1.5 text-3xs text-amber-400 font-mono bg-amber-500/10 border border-amber-500/20 p-1.5 rounded animate-fade-in">
         <MingCuteIcon name="alert_line" size={12} className="shrink-0 mt-px" />
         <span>
           0.0.0.0 covers every interface on this port, so these listeners will be removed:{' '}
@@ -200,7 +200,7 @@ const ListenerForm: React.FC<ListenerFormProps> = ({
           <button
             type="button"
             onClick={onCancel}
-            className="text-muted-foreground hover:text-foreground text-[11px] px-1.5 cursor-pointer shrink-0"
+            className="text-muted-foreground hover:text-foreground text-2xs px-1.5 cursor-pointer shrink-0"
           >
             Cancel
           </button>
@@ -258,7 +258,7 @@ export const ProxyListenersSection: React.FC = () => {
         </>
       }
       aside={
-        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary border border-primary/20 font-medium">
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-3xs font-mono bg-primary/10 text-primary border border-primary/20 font-medium">
           <span className={`w-1.5 h-1.5 rounded-full ${runningCount > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/40'}`} />
           {runningCount}/{listeners.length} listening
         </span>
@@ -270,7 +270,7 @@ export const ProxyListenersSection: React.FC = () => {
             const { host, port } = splitAddress(listener.address);
             return (
               <div key={listener.id} className="px-3 py-2.5 bg-primary/5 space-y-1.5">
-                <span className="text-[11px] text-primary font-semibold font-mono flex items-center gap-1.5">
+                <span className="text-2xs text-primary font-semibold font-mono flex items-center gap-1.5">
                   <MingCuteIcon name="edit_line" size={12} />
                   Editing #{listener.id}
                 </span>
@@ -313,13 +313,13 @@ export const ProxyListenersSection: React.FC = () => {
                       ).catch(() => {})
                     }
                   />
-                  <span className="text-[10px] text-muted-foreground shrink-0">#{listener.id}</span>
+                  <span className="text-3xs text-muted-foreground shrink-0">#{listener.id}</span>
                   <span className="font-semibold text-foreground truncate">{listener.label}</span>
-                  <span className="text-muted-foreground text-[11px] truncate">{listener.address}</span>
+                  <span className="text-muted-foreground text-2xs truncate">{listener.address}</span>
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
-                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground mr-1" title={listener.error ?? status.text}>
+                  <span className="flex items-center gap-1 text-3xs text-muted-foreground mr-1" title={listener.error ?? status.text}>
                     <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
                     {status.text}
                   </span>
@@ -353,7 +353,7 @@ export const ProxyListenersSection: React.FC = () => {
                 </div>
               </div>
               {listener.enabled && listener.error && (
-                <div className="mt-1 pl-9 text-[10px] text-rose-400 break-all">{listener.error}</div>
+                <div className="mt-1 pl-9 text-3xs text-rose-400 break-all">{listener.error}</div>
               )}
             </div>
           );
@@ -375,7 +375,7 @@ export const ProxyListenersSection: React.FC = () => {
 
       {feedback && (
         <div
-          className={`flex items-center gap-2 p-2 rounded-lg border font-mono text-[11px] animate-fade-in ${
+          className={`flex items-center gap-2 p-2 rounded-lg border font-mono text-2xs animate-fade-in ${
             feedback.type === 'success'
               ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
               : 'bg-rose-500/10 border-rose-500/30 text-rose-400'

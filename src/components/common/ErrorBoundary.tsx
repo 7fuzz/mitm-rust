@@ -58,10 +58,10 @@ export class ErrorBoundary extends Component<Props, State> {
               An unexpected error occurred during rendering. You can select and copy the stack trace below or click below to reload.
             </p>
 
-            <div className="p-3 bg-background border border-border rounded text-[11px] text-rose-400 font-mono overflow-auto max-h-60 select-text whitespace-pre-wrap break-all">
+            <div className="p-3 bg-background border border-border rounded text-2xs text-rose-400 font-mono overflow-auto max-h-60 select-text whitespace-pre-wrap break-all">
               <strong>{this.state.error?.name || 'Error'}: {this.state.error?.message || 'Unknown Error'}</strong>
               {this.state.error?.stack && (
-                <div className="mt-2 text-muted-foreground text-[10px] opacity-80 select-text">
+                <div className="mt-2 text-muted-foreground text-3xs opacity-80 select-text">
                   {this.state.error.stack}
                 </div>
               )}

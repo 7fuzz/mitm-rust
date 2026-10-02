@@ -220,7 +220,7 @@ export const WorkspaceSelector: React.FC = () => {
         {/* Export Feedback Notification */}
         {exportFeedback && (
           <div
-            className={`px-2.5 py-1 rounded-md text-[11px] font-medium animate-in fade-in flex items-center gap-1.5 ${
+            className={`px-2.5 py-1 rounded-md text-2xs font-medium animate-in fade-in flex items-center gap-1.5 ${
               exportFeedback.type === 'success'
                 ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
                 : 'bg-rose-500/15 text-rose-500 border border-rose-500/30'
@@ -263,7 +263,7 @@ export const WorkspaceSelector: React.FC = () => {
           style={{ top: contextMenu.y + 4, left: contextMenu.x }}
           className="fixed z-50 bg-surface border border-border rounded-xl shadow-2xl p-1 w-48 text-foreground font-sans text-xs flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100"
         >
-          <div className="px-2.5 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border/60 mb-0.5 truncate">
+          <div className="px-2.5 py-1 text-3xs font-bold text-muted-foreground uppercase tracking-wider border-b border-border/60 mb-0.5 truncate">
             {contextMenu.workspace.name}
           </div>
 

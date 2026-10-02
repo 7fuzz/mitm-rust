@@ -190,7 +190,7 @@ export function RunDetailsDialog<T extends RunRecord>({
             </div>
 
             {pendingLoad && (
-              <span className="text-amber-500 text-[11px]">
+              <span className="text-amber-500 text-2xs">
                 The editor has unsent changes. Click again to replace them.
               </span>
             )}
@@ -230,7 +230,7 @@ export function RunDetailsDialog<T extends RunRecord>({
           <button onClick={() => onIndexChange(index + 1)} disabled={index >= runs.length - 1} className={navButtonClass} title="Older run (←)">
             <MingCuteIcon name="chevron_left_line" size={15} />
           </button>
-          <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+          <span className="text-2xs text-muted-foreground whitespace-nowrap">
             Run {runNumber} of {runs.length}
           </span>
           <button onClick={() => onIndexChange(index - 1)} disabled={index <= 0} className={navButtonClass} title="Newer run (→)">
@@ -242,7 +242,7 @@ export function RunDetailsDialog<T extends RunRecord>({
           <span className="text-foreground font-semibold truncate select-text" title={run.url}>
             {run.url}
           </span>
-          <span className="ml-auto text-[11px] text-muted-foreground whitespace-nowrap">
+          <span className="ml-auto text-2xs text-muted-foreground whitespace-nowrap">
             {run.durationMs}ms · {run.responseBody?.length ?? 0} B · {new Date(run.executedAtMs).toLocaleString()}
           </span>
           <button onClick={onClose} className={navButtonClass} title="Close (Esc)">

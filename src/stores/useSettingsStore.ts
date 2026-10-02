@@ -5,7 +5,6 @@ import { getRootCaPem, exportRootCa, regenerateRootCa, updatePrefs } from '../se
 interface SettingsState {
   activeModule: NavModule;
   theme: 'dark' | 'light';
-  fontSize: 'sm' | 'md' | 'lg';
   isQuickVarModalOpen: boolean;
   dbSizeMb: string;
   isSqliteConnected: boolean;
@@ -15,7 +14,6 @@ interface SettingsState {
   setActiveModule: (module: NavModule) => void;
   setTheme: (theme: 'dark' | 'light') => void;
   toggleTheme: () => void;
-  setFontSize: (size: 'sm' | 'md' | 'lg') => void;
   setQuickVarModalOpen: (open: boolean) => void;
   fetchCaCert: () => Promise<void>;
   exportCaCert: (destinationPath: string) => Promise<void>;
@@ -26,7 +24,6 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   activeModule: 'http-history',
   theme: 'dark',
-  fontSize: 'sm',
   isQuickVarModalOpen: false,
   dbSizeMb: '4.2 MB',
   isSqliteConnected: true,
@@ -51,7 +48,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     get().setTheme(nextTheme);
   },
 
-  setFontSize: (fontSize) => set({ fontSize }),
   setQuickVarModalOpen: (isQuickVarModalOpen) => set({ isQuickVarModalOpen }),
 
   fetchCaCert: async () => {
@@ -89,7 +85,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     try {
       await updatePrefs(newPrefs);
       if (newPrefs.theme) get().setTheme(newPrefs.theme);
-      if (newPrefs.fontSize) set({ fontSize: newPrefs.fontSize });
     } catch (err) {
       console.error('Failed to update preferences:', err);
     }

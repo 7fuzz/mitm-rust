@@ -88,7 +88,7 @@ export const CollectionSidebar: React.FC = () => {
                 <div className="flex items-center gap-1.5 truncate">
                   <MingCuteIcon name="folder_line" size={14} className="text-amber-500" />
                   <span className="truncate">{group.name}</span>
-                  <span className="text-[10px] text-muted-foreground font-normal font-mono">({groupRequests.length})</span>
+                  <span className="text-3xs text-muted-foreground font-normal font-mono">({groupRequests.length})</span>
                 </div>
                 <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
                   <button
@@ -139,7 +139,7 @@ export const CollectionSidebar: React.FC = () => {
         {/* Requests List */}
         {tabs.length > 0 && (
           <div className="space-y-1 pt-2 border-t border-border/50">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1">
+            <span className="text-3xs font-bold uppercase tracking-wider text-muted-foreground px-1">
               All Requests ({tabs.length})
             </span>
             <div className="space-y-0.5">

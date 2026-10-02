@@ -50,7 +50,7 @@ export const VariablesManager: React.FC = () => {
       <div className="border border-border rounded overflow-hidden">
         <table className="w-full text-left border-collapse font-mono text-xs">
           <thead>
-            <tr className="bg-header border-b border-border text-muted-foreground text-[11px]">
+            <tr className="bg-header border-b border-border text-muted-foreground text-2xs">
               <th className="px-3 py-1.5 font-medium">Variable Key</th>
               <th className="px-3 py-1.5 font-medium">Current Value</th>
               <th className="px-3 py-1.5 font-medium">Scope</th>
@@ -81,7 +81,7 @@ export const VariablesManager: React.FC = () => {
                     </td>
                     <td className="px-3 py-1.5">
                       <span
-                        className="px-1.5 py-0.2 rounded text-[10px] uppercase font-bold border"
+                        className="px-1.5 py-0.2 rounded text-3xs uppercase font-bold border"
                         style={{
                           backgroundColor: `${v.environmentId === 'env-global' ? '#94a3b8' : currentEnv?.color || '#38bdf8'}15`,
                           color: v.environmentId === 'env-global' ? '#94a3b8' : currentEnv?.color || '#38bdf8',
@@ -134,7 +134,7 @@ export const VariablesManager: React.FC = () => {
           placeholder="Variable Value..."
           className="w-1/2 bg-background border border-border rounded px-2.5 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
         />
-        <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none font-sans">
+        <label className="flex items-center gap-1 text-2xs text-muted-foreground cursor-pointer select-none font-sans">
           <input
             type="checkbox"
             checked={isSecret}

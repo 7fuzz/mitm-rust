@@ -238,7 +238,7 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
               <button
                 type="button"
                 onClick={() => setFilterMode(!filterMode)}
-                className={`px-2 py-0.5 text-[10px] font-bold rounded border cursor-pointer ${
+                className={`px-2 py-0.5 text-3xs font-bold rounded border cursor-pointer ${
                   filterMode
                     ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
                     : 'bg-background text-muted-foreground border-border hover:text-foreground'
@@ -292,7 +292,7 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
           />
           {item.listenerLabel && item.listenerLabel !== 'Default' && (
             <span
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-primary/15 text-primary border border-primary/25 shrink-0 select-none"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-3xs font-mono font-medium bg-primary/15 text-primary border border-primary/25 shrink-0 select-none"
               title={`Source: ${item.listenerLabel}`}
             >
               <MingCuteIcon name="route_line" size={11} />
@@ -300,27 +300,27 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
             </span>
           )}
           {isPendingIntercept && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 shrink-0 animate-pulse">
+            <span className="px-1.5 py-0.5 rounded text-3xs font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 shrink-0 animate-pulse">
               PAUSED IN INTERCEPTOR
             </span>
           )}
           {isPendingResponse && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/40 shrink-0 animate-pulse">
+            <span className="px-1.5 py-0.5 rounded text-3xs font-bold bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/40 shrink-0 animate-pulse">
               WAITING FOR RESPONSE...
             </span>
           )}
           {item.isIntercepted && !isPendingIntercept && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0">
+            <span className="px-1.5 py-0.5 rounded text-3xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0">
               INTERCEPTED
             </span>
           )}
           {item.isRewritten && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 shrink-0">
+            <span className="px-1.5 py-0.5 rounded text-3xs font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 shrink-0">
               REWRITTEN
             </span>
           )}
           {isFailed && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 shrink-0">
+            <span className="px-1.5 py-0.5 rounded text-3xs font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 shrink-0">
               FAILED (NO RESPONSE)
             </span>
           )}
@@ -328,10 +328,10 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-muted-foreground text-[11px]">
+          <span className="text-muted-foreground text-2xs">
             {isPendingResponse || isPendingIntercept ? '...' : item.durationMs != null ? `${item.durationMs}ms` : '-'}
           </span>
-          <span className="text-muted-foreground text-[11px]">
+          <span className="text-muted-foreground text-2xs">
             {isPendingResponse || isPendingIntercept ? '-' : `${item.size} B`}
           </span>
 

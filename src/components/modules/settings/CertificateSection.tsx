@@ -136,7 +136,7 @@ export const CertificateSection: React.FC = () => {
       title="Certificate"
       description="Install and trust this root CA on a device, browser, or CLI so its HTTPS traffic can be decrypted."
       aside={
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-medium">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-3xs font-mono bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-medium">
           <MingCuteIcon name="lock_line" size={11} />
           TLS active
         </span>
@@ -146,8 +146,8 @@ export const CertificateSection: React.FC = () => {
         <dl className="px-3 py-2.5 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {CA_DETAILS.map((d) => (
             <div key={d.label} className="min-w-0">
-              <dt className="text-muted-foreground text-[10px] uppercase tracking-wider">{d.label}</dt>
-              <dd className="text-foreground font-mono text-[11px] truncate">{d.value}</dd>
+              <dt className="text-muted-foreground text-3xs uppercase tracking-wider">{d.label}</dt>
+              <dd className="text-foreground font-mono text-2xs truncate">{d.value}</dd>
             </div>
           ))}
         </dl>
@@ -166,7 +166,7 @@ export const CertificateSection: React.FC = () => {
             <span>{showPem ? 'Hide PEM' : 'View PEM'}</span>
           </button>
           {notice && (
-            <span className="flex items-center gap-1 text-emerald-500 text-[11px] font-mono min-w-0 animate-fade-in">
+            <span className="flex items-center gap-1 text-emerald-500 text-2xs font-mono min-w-0 animate-fade-in">
               <MingCuteIcon name="check_line" size={13} className="shrink-0" />
               <span className="truncate">{notice}</span>
             </span>
@@ -179,7 +179,7 @@ export const CertificateSection: React.FC = () => {
               readOnly
               rows={8}
               value={caPem || 'Loading Root CA certificate...'}
-              className="w-full bg-background border border-border rounded p-2 text-foreground/80 font-mono text-[10px] resize-none focus:outline-none select-all"
+              className="w-full bg-background border border-border rounded p-2 text-foreground/80 font-mono text-3xs resize-none focus:outline-none select-all"
             />
           </div>
         )}
@@ -188,7 +188,7 @@ export const CertificateSection: React.FC = () => {
       <SettingsGroup label="How to trust it">
         <div className="px-3 py-2.5 space-y-2">
           <SegmentedControl value={guide} onChange={setGuide} options={TRUST_GUIDES} />
-          <p className="text-muted-foreground text-[11px] leading-relaxed">{activeGuide.steps}</p>
+          <p className="text-muted-foreground text-2xs leading-relaxed">{activeGuide.steps}</p>
         </div>
       </SettingsGroup>
 

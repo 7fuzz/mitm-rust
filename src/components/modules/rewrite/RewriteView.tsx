@@ -83,21 +83,21 @@ export const RewriteView: React.FC = () => {
   const getActionBadge = (type: string) => {
     switch (type) {
       case "partial_request":
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">PARTIAL REQ</span>;
+        return <span className="px-2 py-0.5 rounded text-3xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">PARTIAL REQ</span>;
       case "full_request":
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30">FULL REQ</span>;
+        return <span className="px-2 py-0.5 rounded text-3xs font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30">FULL REQ</span>;
       case "redirect":
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">REDIRECT</span>;
+        return <span className="px-2 py-0.5 rounded text-3xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">REDIRECT</span>;
       case "partial_response":
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30">PARTIAL RES</span>;
+        return <span className="px-2 py-0.5 rounded text-3xs font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30">PARTIAL RES</span>;
       case "full_response":
       case "full_response (Mock)":
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">MOCK RES</span>;
+        return <span className="px-2 py-0.5 rounded text-3xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">MOCK RES</span>;
       default:
         if (type.startsWith("redirect")) {
-          return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">{type.toUpperCase()}</span>;
+          return <span className="px-2 py-0.5 rounded text-3xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">{type.toUpperCase()}</span>;
         }
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-neutral-subtle text-muted-foreground">{type}</span>;
+        return <span className="px-2 py-0.5 rounded text-3xs font-bold bg-neutral-subtle text-muted-foreground">{type}</span>;
     }
   };
 
@@ -292,7 +292,7 @@ export const RewriteView: React.FC = () => {
               <div className="border border-border rounded-lg overflow-hidden bg-surface shadow-2xs font-mono">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-header border-b border-border text-muted-foreground text-[11px] font-sans font-semibold">
+                    <tr className="bg-header border-b border-border text-muted-foreground text-2xs font-sans font-semibold">
                       <th className="w-10 px-3 py-2 text-center">Active</th>
                       <th className="w-12 px-2 py-2 text-center">Order</th>
                       <th className="px-3 py-2">Rule Name</th>
@@ -365,7 +365,7 @@ export const RewriteView: React.FC = () => {
                               <span className="text-amber-500 font-bold">HTTP {rule.mockStatusCode || 307}</span>
                               <MingCuteIcon name="arrow_right_line" size={11} className="text-muted-foreground shrink-0" />
                               <span className="text-emerald-500 font-bold truncate max-w-[200px]">{rule.replacementValue}</span>
-                              {rule.matchPattern && <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">({rule.matchPattern})</span>}
+                              {rule.matchPattern && <span className="text-3xs text-muted-foreground truncate max-w-[120px]">({rule.matchPattern})</span>}
                             </div>
                           ) : rule.actionType === "full_response" ? (
                             <span className="text-amber-500 font-bold">Mock HTTP {rule.mockStatusCode || 200}</span>
@@ -379,7 +379,7 @@ export const RewriteView: React.FC = () => {
                               <span className="text-rose-500 font-bold line-through truncate max-w-[120px]">{rule.matchPattern}</span>
                               <MingCuteIcon name="arrow_right_line" size={11} className="text-muted-foreground shrink-0" />
                               <span className="text-emerald-500 font-bold truncate max-w-[120px]">{rule.replacementValue || "(empty)"}</span>
-                              {rule.isRegex && <span className="text-[9px] px-1 bg-neutral-subtle rounded text-muted-foreground">regex</span>}
+                              {rule.isRegex && <span className="text-3xs px-1 bg-neutral-subtle rounded text-muted-foreground">regex</span>}
                             </div>
                           )}
                         </td>
@@ -427,7 +427,7 @@ export const RewriteView: React.FC = () => {
             >
               <div className="px-3 py-2 bg-header border-b border-border flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase font-mono">
                 <span>Captured Rewrites</span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-3xs">
                   {filteredLogs.length}
                 </span>
               </div>
@@ -437,7 +437,7 @@ export const RewriteView: React.FC = () => {
                   <div className="flex flex-col items-center justify-center h-full p-6 text-center text-muted-foreground font-sans">
                     <MingCuteIcon name="history_line" size={32} className="mb-2 opacity-30" />
                     <p className="text-xs font-semibold">No rewrite history captured yet</p>
-                    <p className="text-[11px] text-muted-foreground mt-1">
+                    <p className="text-2xs text-muted-foreground mt-1">
                       When requests or responses match active rewrite rules, they are automatically logged here.
                     </p>
                   </div>
@@ -456,14 +456,14 @@ export const RewriteView: React.FC = () => {
                       >
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="px-1.5 py-0.5 rounded bg-header border border-border text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">
+                            <span className="px-1.5 py-0.5 rounded bg-header border border-border text-emerald-600 dark:text-emerald-400 font-bold text-3xs">
                               {log.method}
                             </span>
                             <span className="font-sans font-bold text-foreground text-xs truncate max-w-[160px]">
                               {log.ruleName}
                             </span>
                           </div>
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="text-3xs text-muted-foreground">
                             {log.createdAt.split(" ")[1] || log.createdAt}
                           </span>
                         </div>
@@ -507,14 +507,14 @@ export const RewriteView: React.FC = () => {
                         </span>
                         {getActionBadge(selectedLog.actionType)}
                       </div>
-                      <div className="text-[11px] text-muted-foreground mt-1">
+                      <div className="text-2xs text-muted-foreground mt-1">
                         Executed at: {selectedLog.createdAt}
                       </div>
                     </div>
 
                     {selectedLog.statusCode && (
                       <div className="px-3 py-1 rounded bg-surface border border-border text-center">
-                        <div className="text-[10px] text-muted-foreground uppercase font-sans">Status</div>
+                        <div className="text-3xs text-muted-foreground uppercase font-sans">Status</div>
                         <div className="font-bold text-emerald-500">{selectedLog.statusCode}</div>
                       </div>
                     )}
@@ -522,16 +522,16 @@ export const RewriteView: React.FC = () => {
 
                   {/* URL Comparison */}
                   <div className="space-y-1.5 p-3 rounded-lg bg-surface border border-border">
-                    <div className="text-[11px] font-bold text-muted-foreground font-sans uppercase">
+                    <div className="text-2xs font-bold text-muted-foreground font-sans uppercase">
                       URL Transformation
                     </div>
                     <div className="space-y-1">
                       <div className="p-2 rounded bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 break-all select-all">
-                        <span className="font-sans font-semibold text-[10px] text-muted-foreground block">ORIGINAL:</span>
+                        <span className="font-sans font-semibold text-3xs text-muted-foreground block">ORIGINAL:</span>
                         {selectedLog.originalUrl}
                       </div>
                       <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 break-all select-all font-bold">
-                        <span className="font-sans font-semibold text-[10px] text-muted-foreground block">REWRITTEN:</span>
+                        <span className="font-sans font-semibold text-3xs text-muted-foreground block">REWRITTEN:</span>
                         {selectedLog.rewrittenUrl}
                       </div>
                     </div>
@@ -540,19 +540,19 @@ export const RewriteView: React.FC = () => {
                   {/* Headers Comparison if modified */}
                   {JSON.stringify(selectedLog.originalHeaders) !== JSON.stringify(selectedLog.rewrittenHeaders) && (
                     <div className="space-y-1.5 p-3 rounded-lg bg-surface border border-border">
-                      <div className="text-[11px] font-bold text-muted-foreground font-sans uppercase">
+                      <div className="text-2xs font-bold text-muted-foreground font-sans uppercase">
                         Headers Transformation
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="p-2 rounded bg-background border border-border">
-                          <span className="font-sans font-semibold text-[10px] text-muted-foreground block mb-1">ORIGINAL HEADERS:</span>
-                          <pre className="text-[11px] text-muted-foreground overflow-x-auto whitespace-pre-wrap">
+                          <span className="font-sans font-semibold text-3xs text-muted-foreground block mb-1">ORIGINAL HEADERS:</span>
+                          <pre className="text-2xs text-muted-foreground overflow-x-auto whitespace-pre-wrap">
                             {selectedLog.originalHeaders.map(([k, v]) => `${k}: ${v}`).join("\n") || "(none)"}
                           </pre>
                         </div>
                         <div className="p-2 rounded bg-background border border-emerald-500/30">
-                          <span className="font-sans font-semibold text-[10px] text-emerald-500 block mb-1">REWRITTEN HEADERS:</span>
-                          <pre className="text-[11px] text-emerald-600 dark:text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+                          <span className="font-sans font-semibold text-3xs text-emerald-500 block mb-1">REWRITTEN HEADERS:</span>
+                          <pre className="text-2xs text-emerald-600 dark:text-emerald-400 overflow-x-auto whitespace-pre-wrap">
                             {selectedLog.rewrittenHeaders.map(([k, v]) => `${k}: ${v}`).join("\n") || "(none)"}
                           </pre>
                         </div>
@@ -563,19 +563,19 @@ export const RewriteView: React.FC = () => {
                   {/* Body Comparison if modified */}
                   {(selectedLog.originalBody || selectedLog.rewrittenBody) && (
                     <div className="space-y-1.5 p-3 rounded-lg bg-surface border border-border flex-1 flex flex-col min-h-[220px]">
-                      <div className="text-[11px] font-bold text-muted-foreground font-sans uppercase">
+                      <div className="text-2xs font-bold text-muted-foreground font-sans uppercase">
                         Body Payload Transformation
                       </div>
                       <div className="grid grid-cols-2 gap-2 flex-1">
                         <div className="p-2 rounded bg-background border border-border overflow-y-auto">
-                          <span className="font-sans font-semibold text-[10px] text-muted-foreground block mb-1">ORIGINAL BODY:</span>
-                          <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap">
+                          <span className="font-sans font-semibold text-3xs text-muted-foreground block mb-1">ORIGINAL BODY:</span>
+                          <pre className="text-2xs text-muted-foreground whitespace-pre-wrap">
                             {selectedLog.originalBody || "(empty)"}
                           </pre>
                         </div>
                         <div className="p-2 rounded bg-background border border-emerald-500/30 overflow-y-auto">
-                          <span className="font-sans font-semibold text-[10px] text-emerald-500 block mb-1">REWRITTEN BODY:</span>
-                          <pre className="text-[11px] text-emerald-600 dark:text-emerald-400 whitespace-pre-wrap">
+                          <span className="font-sans font-semibold text-3xs text-emerald-500 block mb-1">REWRITTEN BODY:</span>
+                          <pre className="text-2xs text-emerald-600 dark:text-emerald-400 whitespace-pre-wrap">
                             {selectedLog.rewrittenBody || "(empty)"}
                           </pre>
                         </div>

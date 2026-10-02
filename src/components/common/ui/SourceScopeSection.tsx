@@ -34,12 +34,12 @@ export const SourceScopeSection: React.FC<SourceScopeSectionProps> = ({ value, o
       <div className="flex items-center justify-between gap-2 px-3 py-2">
         <div className="min-w-0">
           <div className="font-semibold text-foreground">Sources</div>
-          <div className="text-[11px] text-muted-foreground truncate">
+          <div className="text-2xs text-muted-foreground truncate">
             {value.all ? `Traffic from every listener is ${done}` : `Only checked listeners are ${done}`}
           </div>
         </div>
         <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
-          <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+          <span className="text-2xs font-medium text-muted-foreground whitespace-nowrap">
             {verb.charAt(0).toUpperCase() + verb.slice(1)} all
           </span>
           <Switch
@@ -53,7 +53,7 @@ export const SourceScopeSection: React.FC<SourceScopeSectionProps> = ({ value, o
       {!value.all && (
         <div className="border-t border-border px-3 py-2 space-y-1">
           {listeners.length === 0 && staleIds.length === 0 && (
-            <div className="text-[11px] text-muted-foreground">No listeners configured.</div>
+            <div className="text-2xs text-muted-foreground">No listeners configured.</div>
           )}
           {listeners.map((l) => (
             <label
@@ -68,7 +68,7 @@ export const SourceScopeSection: React.FC<SourceScopeSectionProps> = ({ value, o
                 className="rounded accent-primary cursor-pointer w-3.5 h-3.5"
               />
               <span className="font-medium text-foreground truncate">{l.label}</span>
-              <span className="ml-auto font-mono text-[10px] text-muted-foreground">{l.address}</span>
+              <span className="ml-auto font-mono text-3xs text-muted-foreground">{l.address}</span>
             </label>
           ))}
           {staleIds.map((id) => (
@@ -87,7 +87,7 @@ export const SourceScopeSection: React.FC<SourceScopeSectionProps> = ({ value, o
             </label>
           ))}
           {noneSelected && (
-            <div className="text-[11px] text-amber-500 pt-0.5">No source checked, so nothing will be {done}.</div>
+            <div className="text-2xs text-amber-500 pt-0.5">No source checked, so nothing will be {done}.</div>
           )}
         </div>
       )}

@@ -12,7 +12,7 @@ import { DatabaseSection } from './DatabaseSection';
 const NAV: Array<{ id: SettingsSectionId; label: string; icon: string; hint: string }> = [
   { id: 'proxy', label: 'Proxy', icon: 'transfer_line', hint: 'Listeners, hosts and ports' },
   { id: 'certificate', label: 'Certificate', icon: 'key_line', hint: 'Root CA for HTTPS' },
-  { id: 'appearance', label: 'Appearance', icon: 'sun_line', hint: 'Theme and font size' },
+  { id: 'appearance', label: 'Appearance', icon: 'sun_line', hint: 'Theme and zoom' },
   { id: 'data', label: 'Data', icon: 'delete_2_line', hint: 'Clear logs, factory reset' },
   { id: 'database', label: 'Database', icon: 'storage_line', hint: 'Browse mitm.db' },
 ];
@@ -26,7 +26,7 @@ export const SettingsView: React.FC = () => {
     <div className="h-full flex bg-background overflow-hidden text-xs">
       {/* Section navigation */}
       <nav className="w-52 shrink-0 bg-surface border-r border-border flex flex-col py-3 px-2 gap-0.5 select-none">
-        <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Settings</div>
+        <div className="px-2 pb-2 text-3xs font-semibold uppercase tracking-wider text-muted-foreground">Settings</div>
         {NAV.map((item) => {
           const isActive = item.id === section;
           return (
@@ -40,7 +40,7 @@ export const SettingsView: React.FC = () => {
               <MingCuteIcon name={item.icon} size={15} className={isActive ? 'text-primary' : ''} />
               <span className="min-w-0 flex-1">
                 <span className={`block ${isActive ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
-                <span className="block text-[10px] text-muted-foreground truncate">{item.hint}</span>
+                <span className="block text-3xs text-muted-foreground truncate">{item.hint}</span>
               </span>
               {item.id === 'proxy' && failedListeners > 0 && (
                 <span

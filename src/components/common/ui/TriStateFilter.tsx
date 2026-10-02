@@ -48,7 +48,7 @@ export const TriStateFilter: React.FC<TriStateFilterProps> = ({
             key={item.value}
             type="button"
             onClick={() => handleItemClick(item.value)}
-            className={`px-1.5 py-0.5 rounded text-[10px] uppercase border transition-all cursor-pointer ${stateClasses}`}
+            className={`px-1.5 py-0.5 rounded text-3xs uppercase border transition-all cursor-pointer ${stateClasses}`}
             title={`${item.label}: Click to toggle (${state === 'include' ? 'Green = Whitelisted' : state === 'exclude' ? 'Red = Excluded' : 'Neutral'})`}
           >
             {item.label}

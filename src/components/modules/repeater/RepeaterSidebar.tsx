@@ -134,12 +134,12 @@ export const RepeaterSidebar: React.FC = () => {
                 </div>
 
                 {/* Subtitle: Path / Directory */}
-                <div className="font-mono text-[11px] truncate text-muted-foreground leading-tight pl-0.5">
+                <div className="font-mono text-2xs truncate text-muted-foreground leading-tight pl-0.5">
                   {path || '/'}
                 </div>
 
                 {/* Stats Bar: Hits Count & Last Response Code / Latency */}
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
+                <div className="flex items-center justify-between text-3xs text-muted-foreground font-mono">
                   <span className="flex items-center gap-1 text-muted-foreground">
                     <MingCuteIcon name="flash_line" size={11} className="text-amber-500" />
                     <span>{hits} {hits === 1 ? 'hit' : 'hits'}</span>
@@ -153,7 +153,7 @@ export const RepeaterSidebar: React.FC = () => {
                       )}
                     </div>
                   ) : (
-                    <span className="text-muted-foreground/60 italic text-[10px]">Unsent</span>
+                    <span className="text-muted-foreground/60 italic text-3xs">Unsent</span>
                   )}
                 </div>
               </div>

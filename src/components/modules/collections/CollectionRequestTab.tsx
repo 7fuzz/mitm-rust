@@ -181,7 +181,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
                     key={mode}
                     type="button"
                     onClick={() => setDocsMode(mode)}
-                    className={`px-2.5 py-0.5 rounded text-[11px] font-semibold uppercase transition-colors cursor-pointer ${
+                    className={`px-2.5 py-0.5 rounded text-2xs font-semibold uppercase transition-colors cursor-pointer ${
                       docsMode === mode
                         ? 'bg-primary text-primary-foreground shadow-2xs'
                         : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
@@ -196,7 +196,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(description)}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-foreground text-[11px] cursor-pointer transition-colors"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-foreground text-2xs cursor-pointer transition-colors"
                   title="Copy Markdown"
                 >
                   <MingCuteIcon name="copy_line" size={12} />

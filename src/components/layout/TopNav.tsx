@@ -60,7 +60,7 @@ export const TopNav: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveModule(tab.id)}
-              className={`relative flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium text-[11px] whitespace-nowrap shrink-0 ${
+              className={`relative flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium text-2xs whitespace-nowrap shrink-0 ${
                 isActive
                   ? 'bg-surface text-primary shadow-xs border border-border/80 font-semibold'
                   : 'text-muted-foreground hover:text-foreground hover:bg-surface/50'
@@ -68,10 +68,10 @@ export const TopNav: React.FC = () => {
             >
               <MingCuteIcon name={tab.icon} size={14} />
               <span>{tab.label}</span>
-              <span className="text-[9px] opacity-60 font-mono">[{tab.shortcut}]</span>
+              <span className="text-3xs opacity-60 font-mono">[{tab.shortcut}]</span>
 
               {isIntercept && pendingCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 bg-amber-500 text-zinc-950 rounded-full text-[9px] font-mono font-bold animate-pulse">
+                <span className="ml-1 px-1.5 py-0.2 bg-amber-500 text-zinc-950 rounded-full text-3xs font-mono font-bold animate-pulse">
                   {pendingCount}
                 </span>
               )}

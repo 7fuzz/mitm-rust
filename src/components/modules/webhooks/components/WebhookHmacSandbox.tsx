@@ -46,7 +46,7 @@ export const WebhookHmacSandbox: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
-          <label className="block text-muted-foreground mb-1 text-[11px]">Provider Format:</label>
+          <label className="block text-muted-foreground mb-1 text-2xs">Provider Format:</label>
           <Select
             value={hmacProvider}
             onChange={(e) => setHmacProvider(e.target.value as any)}
@@ -56,7 +56,7 @@ export const WebhookHmacSandbox: React.FC = () => {
         </div>
 
         <div className="md:col-span-2">
-          <label className="block text-muted-foreground mb-1 text-[11px]">Signing Secret Key:</label>
+          <label className="block text-muted-foreground mb-1 text-2xs">Signing Secret Key:</label>
           <Input
             value={hmacSecret}
             onChange={(e) => setHmacSecret(e.target.value)}
@@ -67,7 +67,7 @@ export const WebhookHmacSandbox: React.FC = () => {
       </div>
 
       <div>
-        <label className="block text-muted-foreground mb-1 text-[11px]">Payload Body:</label>
+        <label className="block text-muted-foreground mb-1 text-2xs">Payload Body:</label>
         <textarea
           rows={3}
           value={hmacBody}

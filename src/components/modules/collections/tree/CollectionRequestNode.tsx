@@ -73,7 +73,7 @@ export const CollectionRequestNode: React.FC<CollectionRequestNodeProps> = ({
           <div className="flex flex-col min-w-0 truncate">
             <span className="truncate text-foreground font-medium">{request.name}</span>
             {isSearching && request.url && (
-              <span className="truncate text-[10px] text-muted-foreground font-mono" title={request.url}>
+              <span className="truncate text-3xs text-muted-foreground font-mono" title={request.url}>
                 {request.url}
               </span>
             )}

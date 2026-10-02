@@ -131,7 +131,7 @@ export const StartupLoadingModal: React.FC = () => {
         {!hasError ? (
           <div className="flex flex-col gap-3 py-1">
             <div className="flex justify-between items-center text-xs">
-              <span className="font-mono text-zinc-400 text-[11px]">
+              <span className="font-mono text-zinc-400 text-2xs">
                 {progress?.status || 'Initializing database...'}
               </span>
               <span className="font-mono text-primary text-xs font-semibold">
@@ -154,7 +154,7 @@ export const StartupLoadingModal: React.FC = () => {
               <MingCuteIcon name="alert_line" size={18} className="text-rose-400 shrink-0 mt-0.5" />
               <div className="flex flex-col gap-1 text-xs">
                 <span className="font-bold text-rose-400">Database Conflict Detected</span>
-                <p className="text-zinc-300 leading-relaxed font-mono text-[11px]">
+                <p className="text-zinc-300 leading-relaxed font-mono text-2xs">
                   {progress?.errorMessage || 'A schema mismatch occurred on your existing database.'}
                 </p>
               </div>

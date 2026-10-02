@@ -297,7 +297,7 @@ export const InterceptViewer: React.FC = () => {
         <div style={{ width: queueWidthPx }} className="flex flex-col border-r border-border bg-surface shrink-0">
           <div className="px-3 py-2 bg-header border-b border-border flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider font-mono">
             <span>Paused Queue</span>
-            <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-300 text-[10px] font-mono font-bold">
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-300 text-3xs font-mono font-bold">
               {pendingFlows.length}
             </span>
           </div>
@@ -307,7 +307,7 @@ export const InterceptViewer: React.FC = () => {
               <div className="flex flex-col items-center justify-center h-full p-6 text-center text-muted-foreground">
                 <MingCuteIcon name="shield_line" size={32} className="mb-2 opacity-40" />
                 <p className="text-xs font-semibold">No traffic paused</p>
-                <p className="text-[11px] text-muted-foreground mt-1">
+                <p className="text-2xs text-muted-foreground mt-1">
                   Enable interceptor and send requests to capture flows.
                 </p>
               </div>
@@ -325,10 +325,10 @@ export const InterceptViewer: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="px-1.5 py-0.5 rounded bg-header border border-border text-amber-600 dark:text-amber-400 font-mono text-[10px] font-bold">
+                      <span className="px-1.5 py-0.5 rounded bg-header border border-border text-amber-600 dark:text-amber-400 font-mono text-3xs font-bold">
                         {isSelected ? editedMethod : flow.method}
                       </span>
-                      <span className="text-[10px] font-mono uppercase text-muted-foreground">
+                      <span className="text-3xs font-mono uppercase text-muted-foreground">
                         {flow.phase}
                       </span>
                     </div>
@@ -375,7 +375,7 @@ export const InterceptViewer: React.FC = () => {
                         className="w-full bg-background border border-border rounded px-3 py-1.5 font-mono text-xs text-foreground focus:outline-none focus:border-primary shadow-2xs"
                       />
                     </div>
-                    <span className="px-2 py-1 rounded bg-amber-500/20 text-amber-600 dark:text-amber-300 font-bold text-[10px] uppercase shrink-0">
+                    <span className="px-2 py-1 rounded bg-amber-500/20 text-amber-600 dark:text-amber-300 font-bold text-3xs uppercase shrink-0">
                       REQUEST
                     </span>
                   </>
@@ -387,7 +387,7 @@ export const InterceptViewer: React.FC = () => {
                       </span>
                       <span className="text-foreground truncate font-semibold">{selectedFlow.url}</span>
                     </div>
-                    <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-600 dark:text-purple-300 font-bold text-[10px] uppercase shrink-0">
+                    <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-600 dark:text-purple-300 font-bold text-3xs uppercase shrink-0">
                       RESPONSE
                     </span>
                   </div>
@@ -493,7 +493,7 @@ export const InterceptViewer: React.FC = () => {
                           Edit Body Content
                         </span>
                         {isJsonBody && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                          <span className="px-1.5 py-0.5 rounded text-3xs font-mono font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
                             JSON
                           </span>
                         )}
@@ -578,7 +578,7 @@ export const InterceptViewer: React.FC = () => {
                         <button
                           type="button"
                           onClick={handleCancelEditRule}
-                          className="text-[11px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+                          className="text-2xs text-muted-foreground hover:text-foreground underline cursor-pointer"
                         >
                           Cancel Edit
                         </button>
@@ -662,7 +662,7 @@ export const InterceptViewer: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setRuleFilterTab("all")}
-                        className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                        className={`px-2.5 py-1 rounded text-2xs font-medium transition-colors cursor-pointer ${
                           ruleFilterTab === "all"
                             ? "bg-primary text-primary-foreground font-bold shadow-2xs"
                             : "text-muted-foreground hover:text-foreground"
@@ -673,7 +673,7 @@ export const InterceptViewer: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setRuleFilterTab("intercept")}
-                        className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                        className={`px-2.5 py-1 rounded text-2xs font-medium transition-colors cursor-pointer ${
                           ruleFilterTab === "intercept"
                             ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 font-bold border border-amber-500/40 shadow-2xs"
                             : "text-muted-foreground hover:text-foreground"
@@ -684,7 +684,7 @@ export const InterceptViewer: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setRuleFilterTab("pass")}
-                        className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                        className={`px-2.5 py-1 rounded text-2xs font-medium transition-colors cursor-pointer ${
                           ruleFilterTab === "pass"
                             ? "bg-sky-500/20 text-sky-600 dark:text-sky-300 font-bold border border-sky-500/40 shadow-2xs"
                             : "text-muted-foreground hover:text-foreground"
@@ -693,7 +693,7 @@ export const InterceptViewer: React.FC = () => {
                         Blacklist ({rules.filter((r) => r.action === "pass").length})
                       </button>
                     </div>
-                    <span className="text-[11px] text-muted-foreground font-mono">
+                    <span className="text-2xs text-muted-foreground font-mono">
                       {rules.filter((r) => r.isEnabled).length} active rule{rules.filter((r) => r.isEnabled).length === 1 ? "" : "s"}
                     </span>
                   </div>
@@ -732,7 +732,7 @@ export const InterceptViewer: React.FC = () => {
                                 type="button"
                                 onClick={() => updateRuleAction(rule.id, isWhitelist ? "pass" : "intercept")}
                                 title="Click to toggle between Whitelist and Blacklist"
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-wide uppercase transition-colors cursor-pointer ${
+                                className={`px-1.5 py-0.5 rounded text-3xs font-mono font-bold tracking-wide uppercase transition-colors cursor-pointer ${
                                   isWhitelist
                                     ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
                                     : "bg-sky-500/20 text-sky-600 dark:text-sky-300 border border-sky-500/40 hover:bg-sky-500/30"
@@ -740,7 +740,7 @@ export const InterceptViewer: React.FC = () => {
                               >
                                 {isWhitelist ? "WHITELIST (PAUSE)" : "BLACKLIST (PASS)"}
                               </button>
-                              <span className="font-mono text-muted-foreground font-semibold uppercase text-[10px] bg-surface px-1.5 py-0.5 rounded border border-border">
+                              <span className="font-mono text-muted-foreground font-semibold uppercase text-3xs bg-surface px-1.5 py-0.5 rounded border border-border">
                                 {rule.targetPhase}
                               </span>
                               <span className="font-mono text-foreground text-xs truncate">
@@ -783,14 +783,14 @@ export const InterceptViewer: React.FC = () => {
                   <div className="bg-surface border border-border rounded-lg px-3 py-2 space-y-2">
                     <div>
                       <div className="font-semibold text-foreground">Intercept Phase</div>
-                      <div className="text-[11px] text-muted-foreground">Which side of the exchange to pause</div>
+                      <div className="text-2xs text-muted-foreground">Which side of the exchange to pause</div>
                     </div>
                     <div className="flex items-center bg-background p-0.5 rounded-lg border border-border">
                       {(["request", "response", "both"] as const).map((mode) => (
                         <button
                           key={mode}
                           onClick={() => setInterceptMode(mode)}
-                          className={`flex-1 px-2.5 py-1 rounded text-[11px] transition-colors cursor-pointer capitalize ${
+                          className={`flex-1 px-2.5 py-1 rounded text-2xs transition-colors cursor-pointer capitalize ${
                             interceptMode === mode
                               ? "bg-primary text-primary-foreground font-bold shadow-2xs"
                               : "text-muted-foreground hover:text-foreground hover:bg-neutral-subtle"
@@ -808,7 +808,7 @@ export const InterceptViewer: React.FC = () => {
                   >
                     <div className="min-w-0">
                       <div className="font-semibold text-foreground">Focus on Intercepted</div>
-                      <div className="text-[11px] text-muted-foreground">Bring the window to front when traffic is paused</div>
+                      <div className="text-2xs text-muted-foreground">Bring the window to front when traffic is paused</div>
                     </div>
                     <Switch checked={focusOnIntercepted} onChange={() => setFocusOnIntercepted(!focusOnIntercepted)} />
                   </label>

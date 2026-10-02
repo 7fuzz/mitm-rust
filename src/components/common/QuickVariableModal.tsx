@@ -317,7 +317,7 @@ export const QuickVariableModal: React.FC = () => {
             <span>Quick Environment & Variable Switcher</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono text-muted-foreground">Press <kbd className="px-1 py-0.5 rounded bg-background border border-border text-foreground font-bold">Esc</kbd> to close</span>
+            <span className="text-2xs font-mono text-muted-foreground">Press <kbd className="px-1 py-0.5 rounded bg-background border border-border text-foreground font-bold">Esc</kbd> to close</span>
             <button
               type="button"
               onClick={() => setQuickVarModalOpen(false)}
@@ -367,7 +367,7 @@ export const QuickVariableModal: React.FC = () => {
             <div className="py-12 text-center text-xs text-muted-foreground italic font-sans flex flex-col items-center gap-2">
               <MingCuteIcon name="earth_line" size={28} className="opacity-30" />
               <span>No variables found in "{currentEnvName}"</span>
-              <span className="text-[11px] font-mono">Press <kbd className="px-1 py-0.5 rounded bg-surface border border-border text-foreground">Shift+N</kbd> to add a new variable</span>
+              <span className="text-2xs font-mono">Press <kbd className="px-1 py-0.5 rounded bg-surface border border-border text-foreground">Shift+N</kbd> to add a new variable</span>
             </div>
           ) : (
             filteredVars.map((v, idx) => (
@@ -407,7 +407,7 @@ export const QuickVariableModal: React.FC = () => {
             placeholder="Value..."
             className="w-1/2 bg-background border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
           />
-          <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none font-sans">
+          <label className="flex items-center gap-1 text-2xs text-muted-foreground cursor-pointer select-none font-sans">
             <input
               type="checkbox"
               checked={isSecret}

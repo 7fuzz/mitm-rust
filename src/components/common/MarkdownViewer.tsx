@@ -122,7 +122,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
           const lang = codeBlockLang;
           elements.push(
             <div key={`codeblock-${elements.length}`} className="my-3 rounded-lg border border-border overflow-hidden bg-background">
-              <div className="flex items-center justify-between px-3 py-1 bg-header border-b border-border text-[11px] font-mono text-muted-foreground">
+              <div className="flex items-center justify-between px-3 py-1 bg-header border-b border-border text-2xs font-mono text-muted-foreground">
                 <span>{lang || 'text'}</span>
                 <button
                   onClick={() => navigator.clipboard.writeText(codeContent)}
@@ -292,7 +292,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
         return (
           <code
             key={idx}
-            className="px-1.5 py-0.5 rounded bg-background border border-border font-mono text-[11px] text-primary"
+            className="px-1.5 py-0.5 rounded bg-background border border-border font-mono text-2xs text-primary"
           >
             {part.slice(1, -1)}
           </code>

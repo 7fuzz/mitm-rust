@@ -38,7 +38,7 @@ export const DbGrid: React.FC<DbGridProps> = ({
   emptyMessage,
 }) => (
   <div className="h-full overflow-auto">
-    <table className="w-max min-w-full text-left font-mono text-[11px] border-collapse">
+    <table className="w-max min-w-full text-left font-mono text-2xs border-collapse">
       <thead className="bg-header text-muted-foreground sticky top-0 z-10">
         <tr>
           <th className="px-2 py-1.5 font-semibold font-sans text-right border-b border-r border-border w-10">#</th>

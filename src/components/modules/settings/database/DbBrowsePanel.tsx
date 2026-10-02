@@ -98,10 +98,10 @@ export const DbBrowsePanel: React.FC<DbBrowsePanelProps> = ({ table, refreshKey 
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search all columns..."
-                className="w-full bg-background border border-border rounded pl-7 pr-2 py-1 text-[11px] font-mono text-foreground focus:outline-none focus:border-primary"
+                className="w-full bg-background border border-border rounded pl-7 pr-2 py-1 text-2xs font-mono text-foreground focus:outline-none focus:border-primary"
               />
             </div>
-            <div className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground shrink-0">
+            <div className="flex items-center gap-1 font-mono text-2xs text-muted-foreground shrink-0">
               {isLoading && <MingCuteIcon name="loading_line" size={12} className="animate-spin text-primary" />}
               <span className="tabular-nums">
                 {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
@@ -118,7 +118,7 @@ export const DbBrowsePanel: React.FC<DbBrowsePanelProps> = ({ table, refreshKey 
                   setPageSize(Number(e.target.value));
                   setPage(0);
                 }}
-                className="bg-background border border-border rounded px-1 py-0.5 text-[11px] text-foreground cursor-pointer focus:outline-none"
+                className="bg-background border border-border rounded px-1 py-0.5 text-2xs text-foreground cursor-pointer focus:outline-none"
                 title="Rows per page"
               >
                 {PAGE_SIZES.map((size) => (
@@ -134,7 +134,7 @@ export const DbBrowsePanel: React.FC<DbBrowsePanelProps> = ({ table, refreshKey 
 
       {view === 'schema' ? (
         <div className="flex-1 overflow-auto p-3 space-y-3">
-          <table className="w-full text-left font-mono text-[11px] border border-border rounded">
+          <table className="w-full text-left font-mono text-2xs border border-border rounded">
             <thead className="bg-header text-muted-foreground font-sans">
               <tr>
                 <th className="px-3 py-1.5 font-semibold">Column</th>
@@ -155,7 +155,7 @@ export const DbBrowsePanel: React.FC<DbBrowsePanelProps> = ({ table, refreshKey 
             </tbody>
           </table>
           {table.sql && (
-            <pre className="font-mono text-[11px] text-muted-foreground whitespace-pre-wrap bg-background border border-border rounded p-2 select-text">
+            <pre className="font-mono text-2xs text-muted-foreground whitespace-pre-wrap bg-background border border-border rounded p-2 select-text">
               {table.sql}
             </pre>
           )}
@@ -164,7 +164,7 @@ export const DbBrowsePanel: React.FC<DbBrowsePanelProps> = ({ table, refreshKey 
         <div className="flex-1 min-h-0 flex">
           <div className="flex-1 min-w-0">
             {error ? (
-              <div className="m-3 p-2 rounded border border-rose-500/30 bg-rose-500/10 text-rose-500 font-mono text-[11px] break-all">{error}</div>
+              <div className="m-3 p-2 rounded border border-rose-500/30 bg-rose-500/10 text-rose-500 font-mono text-2xs break-all">{error}</div>
             ) : (
               <DbGrid
                 columns={data?.columns ?? table.columns.map((c) => c.name)}

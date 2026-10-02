@@ -31,7 +31,7 @@ export const Base64LeafActions: React.FC<Base64LeafActionsProps> = ({ value, lab
 
   return (
     <div className="inline-flex flex-col gap-1 align-middle my-0.5">
-      <span className="inline-flex items-center gap-1.5 ml-2 select-none shrink-0 font-mono text-[10px]">
+      <span className="inline-flex items-center gap-1.5 ml-2 select-none shrink-0 font-mono text-3xs">
         <span className="font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded flex items-center gap-1">
           ⚡ Base64 ({info.extension.toUpperCase()})
         </span>
@@ -79,7 +79,7 @@ export const Base64LeafActions: React.FC<Base64LeafActionsProps> = ({ value, lab
       </span>
 
       {showInline && isMedia && (
-        <div className="my-1.5 ml-2 p-2 bg-background border border-border rounded-lg shadow-inner flex flex-col gap-2 max-w-md animate-in fade-in duration-150 font-mono text-[10px]">
+        <div className="my-1.5 ml-2 p-2 bg-background border border-border rounded-lg shadow-inner flex flex-col gap-2 max-w-md animate-in fade-in duration-150 font-mono text-3xs">
           <div className="flex items-center justify-between text-muted-foreground border-b border-border pb-1">
             <span className="font-bold text-foreground">Live Preview ({info.mimeType})</span>
             <button

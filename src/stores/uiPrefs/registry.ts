@@ -64,6 +64,9 @@ export const REPEATER_HISTORY_DRAWER_WIDTH = { min: 200, max: 550 };
 export const COLLECTIONS_SIDEBAR_WIDTH = { min: 220, max: 450 };
 export const COLLECTIONS_HISTORY_DRAWER_WIDTH = { min: 200, max: 550 };
 
+/** UI zoom steps offered in Settings → Appearance and by Ctrl+= / Ctrl+- */
+export const ZOOM_LEVELS = [0.8, 0.9, 1, 1.1, 1.25, 1.5] as const;
+
 export const SETTINGS_SECTIONS = ["proxy", "certificate", "appearance", "data", "database"] as const;
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number];
 
@@ -84,6 +87,12 @@ export const UI_PREFS = {
   "collections.historyDrawerWidth": panelWidth(288, COLLECTIONS_HISTORY_DRAWER_WIDTH.min, COLLECTIONS_HISTORY_DRAWER_WIDTH.max),
   /** Request pane share of the Collections work area */
   "collections.requestSplitPercent": splitPercent(50),
+  /** Whole-UI zoom factor, one of ZOOM_LEVELS */
+  "appearance.zoom": pref<number>({
+    default: 1,
+    normalize: (stored, fallback) =>
+      typeof stored === "number" && (ZOOM_LEVELS as readonly number[]).includes(stored) ? stored : fallback,
+  }),
   /** Settings page last opened */
   "settings.section": pref<SettingsSectionId>({
     default: "proxy",

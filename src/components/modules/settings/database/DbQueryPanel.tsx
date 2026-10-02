@@ -55,14 +55,14 @@ export const DbQueryPanel: React.FC<DbQueryPanelProps> = ({ sql, onSqlChange }) 
         <button onClick={run} disabled={isRunning || !sql.trim()} className={settingsButtonClass.primary}>
           <MingCuteIcon name={isRunning ? 'loading_line' : 'play_line'} size={13} className={isRunning ? 'animate-spin' : ''} />
           <span>Run</span>
-          <span className="text-[10px] opacity-70 font-mono">Ctrl+↵</span>
+          <span className="text-3xs opacity-70 font-mono">Ctrl+↵</span>
         </button>
-        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1 text-2xs text-muted-foreground">
           <MingCuteIcon name="lock_line" size={12} />
           Read-only: statements that write are rejected
         </span>
         {result && (
-          <span className="ml-auto font-mono text-[11px] text-muted-foreground tabular-nums">
+          <span className="ml-auto font-mono text-2xs text-muted-foreground tabular-nums">
             {result.rows.length.toLocaleString()} row{result.rows.length === 1 ? '' : 's'}
             {result.truncated && ' (first 1,000 shown)'} · {result.elapsedMs}ms
           </span>
@@ -71,7 +71,7 @@ export const DbQueryPanel: React.FC<DbQueryPanelProps> = ({ sql, onSqlChange }) 
 
       <div className="flex-1 min-h-0">
         {error ? (
-          <div className="m-3 p-2 rounded border border-rose-500/30 bg-rose-500/10 text-rose-500 font-mono text-[11px] break-all">{error}</div>
+          <div className="m-3 p-2 rounded border border-rose-500/30 bg-rose-500/10 text-rose-500 font-mono text-2xs break-all">{error}</div>
         ) : result ? (
           <DbGrid columns={result.columns} rows={result.rows} emptyMessage="Query returned no rows" />
         ) : (

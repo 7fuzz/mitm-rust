@@ -146,7 +146,7 @@ export const ProjectImportModal: React.FC = () => {
           <div className="flex flex-col gap-3">
             {/* Target Workspace Option Selector */}
             <div className="bg-background p-3 rounded-lg border border-border space-y-2.5">
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
+              <label className="text-2xs font-semibold text-muted-foreground uppercase tracking-wider block">
                 Target Workspace Option
               </label>
 
@@ -180,8 +180,8 @@ export const ProjectImportModal: React.FC = () => {
 
               {importMode === 'new' ? (
                 <div className="flex flex-col gap-1 pt-1">
-                  <label className="text-[11px] text-muted-foreground">
-                    Workspace Name <span className="text-[10px] opacity-70">(Optional - auto-detected if left blank)</span>
+                  <label className="text-2xs text-muted-foreground">
+                    Workspace Name <span className="text-3xs opacity-70">(Optional - auto-detected if left blank)</span>
                   </label>
                   <input
                     type="text"
@@ -193,7 +193,7 @@ export const ProjectImportModal: React.FC = () => {
                 </div>
               ) : (
                 <div className="flex flex-col gap-1 pt-1">
-                  <label className="text-[11px] text-muted-foreground">Select Target Workspace</label>
+                  <label className="text-2xs text-muted-foreground">Select Target Workspace</label>
                   <select
                     value={selectedTargetWsId}
                     onChange={(e) => setSelectedTargetWsId(e.target.value)}
@@ -218,7 +218,7 @@ export const ProjectImportModal: React.FC = () => {
             >
               <MingCuteIcon name="upload_2_line" size={28} className="text-primary opacity-80" />
               <span className="font-semibold text-foreground">Drag and drop JSON file here or click to browse</span>
-              <span className="text-[11px] text-muted-foreground">Supports Postman v2.1 collections and native workspace specs</span>
+              <span className="text-2xs text-muted-foreground">Supports Postman v2.1 collections and native workspace specs</span>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -229,7 +229,7 @@ export const ProjectImportModal: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-mono text-muted-foreground">Or paste raw JSON content below:</label>
+              <label className="text-2xs font-mono text-muted-foreground">Or paste raw JSON content below:</label>
               <textarea
                 value={jsonText}
                 onChange={(e) => setJsonText(e.target.value)}
@@ -241,7 +241,7 @@ export const ProjectImportModal: React.FC = () => {
 
             {errorMessage && (
               <div className="bg-rose-500/10 border border-rose-500/30 text-rose-500 p-3 rounded-lg text-xs font-mono select-text flex flex-col gap-2">
-                <div className="flex items-center justify-between font-bold border-b border-rose-500/20 pb-1 text-[11px] uppercase tracking-wider">
+                <div className="flex items-center justify-between font-bold border-b border-rose-500/20 pb-1 text-2xs uppercase tracking-wider">
                   <span className="flex items-center gap-1">
                     <MingCuteIcon name="alert_line" size={14} />
                     Import Error
@@ -249,7 +249,7 @@ export const ProjectImportModal: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleCopyError}
-                    className="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 font-sans font-semibold rounded text-[10px] transition-colors cursor-pointer flex items-center gap-1"
+                    className="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 font-sans font-semibold rounded text-3xs transition-colors cursor-pointer flex items-center gap-1"
                   >
                     <MingCuteIcon name={copiedError ? 'check_line' : 'copy_line'} size={12} />
                     <span>{copiedError ? 'Copied!' : 'Copy Error'}</span>

@@ -52,7 +52,7 @@ export const WebSocketConnectionsSidebar: React.FC<WebSocketConnectionsSidebarPr
           </div>
           <div>
             <span className="font-semibold text-foreground text-xs block">WebSocket Streams</span>
-            <span className="text-[10px] text-muted-foreground">{connections.length} active sessions</span>
+            <span className="text-3xs text-muted-foreground">{connections.length} active sessions</span>
           </div>
         </div>
 
@@ -72,7 +72,7 @@ export const WebSocketConnectionsSidebar: React.FC<WebSocketConnectionsSidebarPr
           <button
             key={s}
             onClick={() => setStreamScope(s)}
-            className={`flex-1 py-1 rounded text-[11px] font-medium transition-colors text-center ${
+            className={`flex-1 py-1 rounded text-2xs font-medium transition-colors text-center ${
               streamScope === s
                 ? 'bg-primary text-primary-foreground font-semibold'
                 : 'text-muted-foreground hover:text-foreground bg-neutral-subtle/50'
@@ -85,7 +85,7 @@ export const WebSocketConnectionsSidebar: React.FC<WebSocketConnectionsSidebarPr
 
       {/* Source (listener) filter */}
       {sourceLabels.length > 0 && (
-        <div className="px-2 py-1.5 border-b border-border/60 bg-surface flex items-center gap-1.5 text-[11px] font-mono">
+        <div className="px-2 py-1.5 border-b border-border/60 bg-surface flex items-center gap-1.5 text-2xs font-mono">
           <MingCuteIcon name="route_line" size={13} className="text-primary shrink-0" />
           <select
             value={sourceFilter}
@@ -111,9 +111,9 @@ export const WebSocketConnectionsSidebar: React.FC<WebSocketConnectionsSidebarPr
               wsMitmEnabled ? 'bg-cyan-500 animate-pulse' : 'bg-slate-400'
             }`}
           />
-          <span className="text-[11px] font-medium text-foreground">Proxy MITM:</span>
+          <span className="text-2xs font-medium text-foreground">Proxy MITM:</span>
           <span
-            className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase border ${
+            className={`px-1.5 py-0.2 rounded text-3xs font-bold uppercase border ${
               wsMitmEnabled
                 ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/30'
                 : 'bg-neutral-subtle text-muted-foreground border-border'
@@ -138,7 +138,7 @@ export const WebSocketConnectionsSidebar: React.FC<WebSocketConnectionsSidebarPr
           <div className="p-6 text-center text-muted-foreground italic font-sans space-y-2">
             <MingCuteIcon name="websocket_line" size={24} className="opacity-40 mx-auto" />
             <p>No WebSocket streams available.</p>
-            <p className="text-[10px]">
+            <p className="text-3xs">
               {wsMitmEnabled
                 ? 'Proxy WebSocket traffic through MITM or click "+ Connect" to establish a direct client connection.'
                 : 'Enable Proxy MITM above to intercept proxied WebSocket frames, or click "+ Connect" for client studio.'}
@@ -167,7 +167,7 @@ export const WebSocketConnectionsSidebar: React.FC<WebSocketConnectionsSidebarPr
                       }`}
                     />
                     <span
-                      className={`px-1.5 py-0.2 rounded text-[10px] uppercase font-bold border ${
+                      className={`px-1.5 py-0.2 rounded text-3xs uppercase font-bold border ${
                         isConnected
                           ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                           : 'bg-neutral-subtle text-muted-foreground border-border'
@@ -176,7 +176,7 @@ export const WebSocketConnectionsSidebar: React.FC<WebSocketConnectionsSidebarPr
                       {conn.status}
                     </span>
                     <span
-                      className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                      className={`px-1.5 py-0.2 rounded text-3xs font-bold ${
                         conn.isClientSession
                           ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30'
                           : 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30'
@@ -186,7 +186,7 @@ export const WebSocketConnectionsSidebar: React.FC<WebSocketConnectionsSidebarPr
                     </span>
                     {conn.listenerLabel && (
                       <span
-                        className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-primary/10 text-primary border border-primary/20 truncate max-w-[90px]"
+                        className="px-1.5 py-0.2 rounded text-3xs font-bold bg-primary/10 text-primary border border-primary/20 truncate max-w-[90px]"
                         title={`Source: ${conn.listenerLabel}`}
                       >
                         {conn.listenerLabel}
@@ -195,17 +195,17 @@ export const WebSocketConnectionsSidebar: React.FC<WebSocketConnectionsSidebarPr
                   </div>
 
                   <div className="flex items-center gap-1">
-                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-neutral-subtle text-muted-foreground border border-border">
+                    <span className="px-1.5 py-0.2 rounded text-3xs font-bold bg-neutral-subtle text-muted-foreground border border-border">
                       {conn.messageCount || 0} msgs
                     </span>
                   </div>
                 </div>
 
-                <div className="text-foreground text-[11px] truncate font-bold" title={conn.url}>
+                <div className="text-foreground text-2xs truncate font-bold" title={conn.url}>
                   {conn.url}
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground font-sans pt-0.5">
+                <div className="flex items-center justify-between text-3xs text-muted-foreground font-sans pt-0.5">
                   <span>{new Date(conn.handshakeTime).toLocaleTimeString()}</span>
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                     {isConnected ? (

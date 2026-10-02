@@ -91,14 +91,14 @@ export const JsonToolkit: React.FC = () => {
       {/* Dual Pane Editors: Left Input (50%) vs Right Output (50%) */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3 overflow-hidden">
         <div className="flex flex-col gap-1 overflow-hidden bg-surface border border-border rounded-lg p-2">
-          <span className="font-semibold text-foreground text-[11px] uppercase tracking-wider">Input JSON:</span>
+          <span className="font-semibold text-foreground text-2xs uppercase tracking-wider">Input JSON:</span>
           <div className="flex-1 overflow-hidden">
             <CodeEditor value={inputJson} onChange={setInputJson} language="json" readOnly={false} />
           </div>
         </div>
 
         <div className="flex flex-col gap-1 overflow-hidden bg-surface border border-border rounded-lg p-2">
-          <span className="font-semibold text-foreground text-[11px] uppercase tracking-wider">Transformed Output:</span>
+          <span className="font-semibold text-foreground text-2xs uppercase tracking-wider">Transformed Output:</span>
           <div className="flex-1 overflow-hidden">
             <CodeEditor value={outputJson} language="json" readOnly />
           </div>

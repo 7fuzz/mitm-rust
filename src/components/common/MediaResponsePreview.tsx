@@ -60,16 +60,16 @@ export const MediaResponsePreview: React.FC<MediaResponsePreviewProps> = ({ medi
       {/* Top Media Toolbar */}
       <div className="p-2 bg-header border-b border-border flex items-center justify-between gap-2 font-mono text-xs shrink-0">
         <div className="flex items-center gap-2 overflow-hidden">
-          <span className={`px-2 py-0.5 rounded font-bold text-[10px] border flex items-center gap-1 ${badge.color}`}>
+          <span className={`px-2 py-0.5 rounded font-bold text-3xs border flex items-center gap-1 ${badge.color}`}>
             <MingCuteIcon name={badge.icon} size={12} />
             <span>{badge.label}</span>
           </span>
-          <span className="text-muted-foreground text-[11px] truncate">{media.mimeType}</span>
+          <span className="text-muted-foreground text-2xs truncate">{media.mimeType}</span>
           {media.sizeBytes ? (
-            <span className="text-muted-foreground text-[11px]">• {formatBytes(media.sizeBytes)}</span>
+            <span className="text-muted-foreground text-2xs">• {formatBytes(media.sizeBytes)}</span>
           ) : null}
           {imgDimensions && (
-            <span className="text-muted-foreground text-[11px]">• {imgDimensions.width}×{imgDimensions.height}px</span>
+            <span className="text-muted-foreground text-2xs">• {imgDimensions.width}×{imgDimensions.height}px</span>
           )}
         </div>
 
@@ -78,7 +78,7 @@ export const MediaResponsePreview: React.FC<MediaResponsePreviewProps> = ({ medi
             <button
               type="button"
               onClick={() => setImgZoom(imgZoom === 'fit' ? 'original' : 'fit')}
-              className="px-2 py-0.5 rounded bg-surface hover:bg-neutral-subtle border border-border text-foreground text-[11px] font-sans font-medium cursor-pointer transition-colors"
+              className="px-2 py-0.5 rounded bg-surface hover:bg-neutral-subtle border border-border text-foreground text-2xs font-sans font-medium cursor-pointer transition-colors"
               title="Toggle Fit vs Actual Size"
             >
               {imgZoom === 'fit' ? '100% Size' : 'Fit to Window'}
@@ -88,7 +88,7 @@ export const MediaResponsePreview: React.FC<MediaResponsePreviewProps> = ({ medi
           <button
             type="button"
             onClick={handleCopy}
-            className="flex items-center gap-1 px-2 py-0.5 rounded bg-surface hover:bg-neutral-subtle border border-border text-foreground text-[11px] font-sans font-medium cursor-pointer transition-colors"
+            className="flex items-center gap-1 px-2 py-0.5 rounded bg-surface hover:bg-neutral-subtle border border-border text-foreground text-2xs font-sans font-medium cursor-pointer transition-colors"
             title="Copy Data URI"
           >
             <MingCuteIcon name={copied ? 'check_line' : 'copy_2_line'} size={12} />
@@ -99,7 +99,7 @@ export const MediaResponsePreview: React.FC<MediaResponsePreviewProps> = ({ medi
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[11px] font-sans font-semibold cursor-pointer transition-colors"
+            className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-2xs font-sans font-semibold cursor-pointer transition-colors"
             title="Save Decoded File to Disk"
           >
             <MingCuteIcon name="download_line" size={12} />
@@ -109,7 +109,7 @@ export const MediaResponsePreview: React.FC<MediaResponsePreviewProps> = ({ medi
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-[11px] font-sans font-semibold cursor-pointer transition-colors"
+            className="flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-2xs font-sans font-semibold cursor-pointer transition-colors"
             title="Open Fullscreen Preview Modal"
           >
             <MingCuteIcon name="fullscreen_line" size={12} />

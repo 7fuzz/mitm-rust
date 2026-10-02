@@ -44,7 +44,7 @@ export const ReplacementRules: React.FC = () => {
       <div className="border border-border rounded overflow-hidden">
         <table className="w-full text-left font-mono text-xs">
           <thead>
-            <tr className="bg-header border-b border-border text-muted-foreground text-[11px]">
+            <tr className="bg-header border-b border-border text-muted-foreground text-2xs">
               <th className="w-8 px-2 py-1.5 text-center">Active</th>
               <th className="px-3 py-1.5">Match Domain</th>
               <th className="px-3 py-1.5">Target</th>
@@ -115,7 +115,7 @@ export const ReplacementRules: React.FC = () => {
           placeholder="Replacement String"
           className="bg-background border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
         />
-        <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none font-sans">
+        <label className="flex items-center gap-1 text-2xs text-muted-foreground cursor-pointer select-none font-sans">
           <input
             type="checkbox"
             checked={isRegex}

@@ -68,7 +68,7 @@ export const QuickVariableItem: React.FC<QuickVariableItemProps> = ({
         <div className="flex items-center gap-2 font-mono text-xs overflow-hidden">
           {isEditingThis && inlineEdit.type === 'rename-var' ? (
             <div className="flex items-center gap-1">
-              <span className="text-[10px] text-primary font-bold">KEY:</span>
+              <span className="text-3xs text-primary font-bold">KEY:</span>
               <input
                 ref={editInputRef}
                 type="text"
@@ -115,7 +115,7 @@ export const QuickVariableItem: React.FC<QuickVariableItemProps> = ({
         <div className="flex items-center gap-1.5 shrink-0">
           {isEditingThis && inlineEdit.type === 'rename-variant' ? (
             <div className="flex items-center gap-1">
-              <span className="text-[10px] text-amber-500 font-bold">Variant:</span>
+              <span className="text-3xs text-amber-500 font-bold">Variant:</span>
               <input
                 ref={editInputRef}
                 type="text"
@@ -157,7 +157,7 @@ export const QuickVariableItem: React.FC<QuickVariableItemProps> = ({
                   e.stopPropagation();
                   onSetInlineEdit({ type: 'rename-variant', varIndex: index, value: activeVariant.name });
                 }}
-                className="text-[10px] uppercase font-mono font-bold text-amber-500 cursor-pointer"
+                className="text-3xs uppercase font-mono font-bold text-amber-500 cursor-pointer"
                 title="Click or press ←/→ to cycle variant, 'r' to rename"
               >
                 Variant: <span className="underline">{activeVariant.name}</span>
@@ -188,7 +188,7 @@ export const QuickVariableItem: React.FC<QuickVariableItemProps> = ({
                 extraValue: '',
               });
             }}
-            className="px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-surface hover:bg-neutral-subtle border border-border rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-0.5"
+            className="px-1.5 py-0.5 text-3xs font-mono font-semibold bg-surface hover:bg-neutral-subtle border border-border rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-0.5"
             title="Add new variant (n)"
           >
             <MingCuteIcon name="add_line" size={11} />
@@ -233,7 +233,7 @@ export const QuickVariableItem: React.FC<QuickVariableItemProps> = ({
       <div className="flex items-center justify-between gap-2 font-mono text-xs">
         {isEditingThis && inlineEdit.type === 'value' ? (
           <div className="flex items-center gap-2 w-full">
-            <span className="text-[10px] text-emerald-500 font-bold uppercase shrink-0">Edit Value:</span>
+            <span className="text-3xs text-emerald-500 font-bold uppercase shrink-0">Edit Value:</span>
             <input
               ref={editInputRef}
               type="text"
@@ -277,11 +277,11 @@ export const QuickVariableItem: React.FC<QuickVariableItemProps> = ({
           <div className="flex items-center gap-2 w-full bg-amber-500/10 p-2 rounded border border-amber-500/40">
             <div className="flex flex-col gap-1 w-full">
               <div className="flex items-center justify-between">
-                <span className="text-[9px] uppercase font-bold text-amber-500">New Variant:</span>
+                <span className="text-3xs uppercase font-bold text-amber-500">New Variant:</span>
                 <button
                   type="button"
                   onClick={() => onSetInlineEdit(null)}
-                  className="text-muted-foreground hover:text-foreground text-[10px] cursor-pointer"
+                  className="text-muted-foreground hover:text-foreground text-3xs cursor-pointer"
                 >
                   ✕ Close
                 </button>
@@ -354,7 +354,7 @@ export const QuickVariableItem: React.FC<QuickVariableItemProps> = ({
             <span className="truncate max-w-[420px]">
               {valStr ? (isSecretVal ? '••••••••' : valStr) : <span className="opacity-40 italic">&lt;empty&gt;</span>}
             </span>
-            <span className="text-[10px] text-muted-foreground/60 font-sans">Press Enter to edit</span>
+            <span className="text-3xs text-muted-foreground/60 font-sans">Press Enter to edit</span>
           </div>
         )}
       </div>

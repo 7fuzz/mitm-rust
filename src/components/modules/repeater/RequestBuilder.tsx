@@ -365,7 +365,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         {activeTab === 'headers' && (
           <div className="space-y-2">
             <div className="flex items-center pb-1 text-xs">
-              <div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
+              <div className="flex items-center gap-1.5 text-muted-foreground text-2xs">
                 <MingCuteIcon name="alert_line" size={13} className="text-primary shrink-0" />
                 <span>
                   <strong>Tip:</strong> If <code>Content-Type</code> is disabled, it will be <strong>auto-detected</strong> from the body format.

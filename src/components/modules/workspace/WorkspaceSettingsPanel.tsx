@@ -173,7 +173,7 @@ export const WorkspaceSettingsPanel: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-mono text-muted-foreground">Workspace Name</label>
+            <label className="text-2xs font-mono text-muted-foreground">Workspace Name</label>
             <input
               type="text"
               value={wsName}
@@ -184,7 +184,7 @@ export const WorkspaceSettingsPanel: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-mono text-muted-foreground">Description</label>
+            <label className="text-2xs font-mono text-muted-foreground">Description</label>
             <input
               type="text"
               placeholder="Workspace description..."
@@ -216,7 +216,7 @@ export const WorkspaceSettingsPanel: React.FC = () => {
           )}
         </div>
 
-        <p className="text-muted-foreground text-[11px]">
+        <p className="text-muted-foreground text-2xs">
           Define environment key-value pairs. Reference them anywhere in URLs, Headers, or Request Bodies using macro syntax: <code className="font-mono text-primary font-bold">{`{{variable_name}}`}</code>
         </p>
 
@@ -237,7 +237,7 @@ export const WorkspaceSettingsPanel: React.FC = () => {
               >
                 <span>{displayName}</span>
                 {env.isActive && (
-                  <span className="bg-emerald-500 text-white text-[9px] px-1 py-0.2 rounded font-mono font-bold">
+                  <span className="bg-emerald-500 text-white text-3xs px-1 py-0.2 rounded font-mono font-bold">
                     ACTIVE
                   </span>
                 )}
@@ -266,7 +266,7 @@ export const WorkspaceSettingsPanel: React.FC = () => {
             <div className="border border-border rounded-lg overflow-hidden">
               <table className="w-full text-left font-mono text-xs">
                 <thead>
-                  <tr className="bg-header border-b border-border text-muted-foreground text-[11px]">
+                  <tr className="bg-header border-b border-border text-muted-foreground text-2xs">
                     <th className="w-8 px-2 py-1.5 text-center">En</th>
                     <th className="px-3 py-1.5 font-medium">Variable Key</th>
                     <th className="px-3 py-1.5 font-medium">Active Value</th>
@@ -357,7 +357,7 @@ export const WorkspaceSettingsPanel: React.FC = () => {
                               <select
                                 value={activeVariantIdx}
                                 onChange={(e) => handleVariantChange(Number(e.target.value))}
-                                className="w-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/30 rounded px-1.5 py-0.5 text-[11px] focus:outline-none cursor-pointer"
+                                className="w-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/30 rounded px-1.5 py-0.5 text-2xs focus:outline-none cursor-pointer"
                               >
                                 {effectiveVariants.map((variant, idx) => (
                                   <option key={idx} value={idx}>
@@ -379,7 +379,7 @@ export const WorkspaceSettingsPanel: React.FC = () => {
                             <select
                               value={varType}
                               onChange={(e) => handleVarChange(i, 'type', e.target.value as any)}
-                              className="w-full bg-background border border-border rounded px-1.5 py-0.5 text-[11px] text-foreground focus:outline-none cursor-pointer"
+                              className="w-full bg-background border border-border rounded px-1.5 py-0.5 text-2xs text-foreground focus:outline-none cursor-pointer"
                             >
                               <option value="default">Default</option>
                               <option value="secret">Secret</option>
@@ -426,7 +426,7 @@ export const WorkspaceSettingsPanel: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h4 className="font-semibold text-foreground">Delete Workspace</h4>
-            <p className="text-muted-foreground text-[11px]">
+            <p className="text-muted-foreground text-2xs">
               Permanently remove workspace "{activeWorkspace.name}" and all associated collections, environments, and saved requests.
             </p>
           </div>

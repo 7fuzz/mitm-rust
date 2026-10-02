@@ -84,27 +84,27 @@ export const WebSocketMessageInspector: React.FC<WebSocketMessageInspectorProps>
             <div className="p-3 space-y-2 font-mono text-xs">
               <div className="grid grid-cols-2 gap-2 pb-2 border-b border-border">
                 <div>
-                  <span className="text-muted-foreground text-[11px] block font-sans">Message ID:</span>
+                  <span className="text-muted-foreground text-2xs block font-sans">Message ID:</span>
                   <span className="text-foreground">{selectedMsg.id}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-[11px] block font-sans">Direction:</span>
+                  <span className="text-muted-foreground text-2xs block font-sans">Direction:</span>
                   <span className="font-bold text-primary">{selectedMsg.direction}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-[11px] block font-sans">Format:</span>
+                  <span className="text-muted-foreground text-2xs block font-sans">Format:</span>
                   <span className="uppercase text-foreground">{selectedMsg.msg_type}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-[11px] block font-sans">Length:</span>
+                  <span className="text-muted-foreground text-2xs block font-sans">Length:</span>
                   <span className="text-foreground">{selectedMsg.length || selectedMsg.payload.length} Bytes</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-[11px] block font-sans">Timestamp:</span>
+                  <span className="text-muted-foreground text-2xs block font-sans">Timestamp:</span>
                   <span className="text-foreground">{new Date(selectedMsg.timestamp).toLocaleString()}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-[11px] block font-sans">Injected:</span>
+                  <span className="text-muted-foreground text-2xs block font-sans">Injected:</span>
                   <span className="text-foreground">{selectedMsg.is_injected ? 'Yes (User Injected)' : 'No (Wire Captured)'}</span>
                 </div>
               </div>

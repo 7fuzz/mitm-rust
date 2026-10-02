@@ -95,7 +95,7 @@ export const JsonTreeLeaf: React.FC<JsonTreeLeafProps> = ({
           <button
             type="button"
             onClick={() => setIsLongTextExpanded(!shouldShowFullText)}
-            className="ml-2 text-[10px] font-sans text-muted-foreground hover:text-foreground bg-background border border-border px-1.5 py-0.5 rounded cursor-pointer shrink-0"
+            className="ml-2 text-3xs font-sans text-muted-foreground hover:text-foreground bg-background border border-border px-1.5 py-0.5 rounded cursor-pointer shrink-0"
           >
             {shouldShowFullText ? 'Collapse' : `Expand (${(value as string).length} chars)`}
           </button>

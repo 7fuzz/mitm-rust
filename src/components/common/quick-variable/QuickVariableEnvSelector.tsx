@@ -20,7 +20,7 @@ export const QuickVariableEnvSelector: React.FC<QuickVariableEnvSelectorProps> =
   return (
     <div className="p-2.5 bg-background border-b border-border flex flex-col gap-1.5 shrink-0">
       <div className="flex items-center justify-between">
-        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block font-mono">
+        <label className="text-3xs font-semibold text-muted-foreground uppercase tracking-wider block font-mono">
           Active Workspace Environments (Press <kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">e</kbd>/<kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">E</kbd> to cycle)
         </label>
       </div>
@@ -41,7 +41,7 @@ export const QuickVariableEnvSelector: React.FC<QuickVariableEnvSelectorProps> =
               <MingCuteIcon name="earth_line" size={13} />
               <span>{env.name}</span>
               {isActive && (
-                <span className="bg-emerald-500 text-white text-[9px] px-1 py-0.2 rounded font-mono font-bold">
+                <span className="bg-emerald-500 text-white text-3xs px-1 py-0.2 rounded font-mono font-bold">
                   ACTIVE
                 </span>
               )}

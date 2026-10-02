@@ -103,7 +103,7 @@ export const StatusBar: React.FC = () => {
   };
 
   return (
-    <footer className="relative h-6 bg-header border-t border-border flex items-center justify-between px-3 shrink-0 select-none text-[11px] font-mono text-muted-foreground">
+    <footer className="relative h-6 bg-header border-t border-border flex items-center justify-between px-3 shrink-0 select-none text-2xs font-mono text-muted-foreground">
       {/* Left Info & Quick Env Trigger (Bottom Left Corner) */}
       <div className="flex items-center gap-3">
         {/* Quick Env Switcher Trigger Button (Corner Left Bottom) */}
@@ -154,7 +154,7 @@ export const StatusBar: React.FC = () => {
           ref={triggerRef}
           type="button"
           onClick={() => setIsWorkspaceMenuOpen(!isWorkspaceMenuOpen)}
-          className={`flex items-center gap-1.5 px-2 py-0.5 rounded border transition-colors cursor-pointer font-sans text-[11px] ${
+          className={`flex items-center gap-1.5 px-2 py-0.5 rounded border transition-colors cursor-pointer font-sans text-2xs ${
             isWorkspaceMenuOpen
               ? 'bg-primary/15 border-primary/50 text-primary font-semibold'
               : 'bg-surface hover:bg-neutral-subtle border-border text-foreground font-medium'
@@ -162,7 +162,7 @@ export const StatusBar: React.FC = () => {
           title="Click to switch active workspace"
         >
           <MingCuteIcon name="folder_2_line" size={13} className="text-primary shrink-0" />
-          <span className="text-muted-foreground uppercase text-[10px] tracking-wider font-mono">Workspace:</span>
+          <span className="text-muted-foreground uppercase text-3xs tracking-wider font-mono">Workspace:</span>
           <span className="font-semibold text-foreground truncate max-w-[140px]">{workspaceName}</span>
           <MingCuteIcon
             name={isWorkspaceMenuOpen ? 'down_line' : 'up_line'}
@@ -185,7 +185,7 @@ export const StatusBar: React.FC = () => {
                 <MingCuteIcon name="folder_2_line" size={14} className="text-primary" />
                 <span>Switch Workspace</span>
               </div>
-              <span className="text-[10px] text-muted-foreground font-mono">
+              <span className="text-3xs text-muted-foreground font-mono">
                 {workspaces.length} {workspaces.length === 1 ? 'workspace' : 'workspaces'}
               </span>
             </div>
@@ -247,13 +247,13 @@ export const StatusBar: React.FC = () => {
                       <div className="flex flex-col min-w-0 truncate">
                         <span className="text-xs truncate">{ws.name}</span>
                         {ws.description && (
-                          <span className="text-[10px] text-muted-foreground truncate">{ws.description}</span>
+                          <span className="text-3xs text-muted-foreground truncate">{ws.description}</span>
                         )}
                       </div>
                     </div>
 
                     {isActive && (
-                      <span className="flex items-center gap-1 text-primary text-[10px] shrink-0 font-mono">
+                      <span className="flex items-center gap-1 text-primary text-3xs shrink-0 font-mono">
                         <MingCuteIcon name="check_line" size={14} />
                         Active
                       </span>

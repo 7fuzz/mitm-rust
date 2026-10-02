@@ -37,7 +37,7 @@ export const MethodBadge: React.FC<MethodBadgeProps> = ({ method, className = ''
 
   return (
     <span
-      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border ${badgeColor} ${className}`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-3xs font-mono font-semibold border ${badgeColor} ${className}`}
     >
       {m}
     </span>

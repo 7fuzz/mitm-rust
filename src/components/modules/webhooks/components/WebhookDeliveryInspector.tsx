@@ -108,7 +108,7 @@ export const WebhookDeliveryInspector: React.FC<WebhookDeliveryInspectorProps> =
           {activeTab === 'headers' && (
             <div className="flex-1 overflow-y-auto border border-border rounded bg-surface">
               <table className="w-full text-left font-mono text-xs">
-                <thead className="bg-header border-b border-border text-muted-foreground text-[11px] sticky top-0">
+                <thead className="bg-header border-b border-border text-muted-foreground text-2xs sticky top-0">
                   <tr>
                     <th className="px-3 py-1.5 w-1/3">Header Name</th>
                     <th className="px-3 py-1.5">Value</th>
@@ -150,7 +150,7 @@ export const WebhookDeliveryInspector: React.FC<WebhookDeliveryInspectorProps> =
               </div>
 
               <div className="space-y-1">
-                <label className="text-muted-foreground text-[11px] block font-sans">
+                <label className="text-muted-foreground text-2xs block font-sans">
                   Provided Signature Header:
                 </label>
                 <div className="p-2 bg-background border border-border rounded text-xs break-all text-foreground">
@@ -159,7 +159,7 @@ export const WebhookDeliveryInspector: React.FC<WebhookDeliveryInspectorProps> =
               </div>
 
               <div className="space-y-1">
-                <label className="text-muted-foreground text-[11px] block font-sans">
+                <label className="text-muted-foreground text-2xs block font-sans">
                   Computed Expected HMAC:
                 </label>
                 <div className="p-2 bg-background border border-border rounded text-xs break-all text-foreground">
@@ -195,7 +195,7 @@ export const WebhookDeliveryInspector: React.FC<WebhookDeliveryInspectorProps> =
                   <div className="p-2 bg-header border-b border-border flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                        className={`px-1.5 py-0.5 rounded text-3xs font-bold border ${
                           replayResult.success
                             ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                             : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
@@ -203,9 +203,9 @@ export const WebhookDeliveryInspector: React.FC<WebhookDeliveryInspectorProps> =
                       >
                         {replayResult.statusCode} {replayResult.success ? 'OK' : 'FAIL'}
                       </span>
-                      <span className="text-muted-foreground text-[11px]">{replayResult.durationMs}ms</span>
+                      <span className="text-muted-foreground text-2xs">{replayResult.durationMs}ms</span>
                     </div>
-                    <span className="text-muted-foreground text-[11px]">Replay Response Body</span>
+                    <span className="text-muted-foreground text-2xs">Replay Response Body</span>
                   </div>
                   <div className="flex-1 overflow-hidden">
                     <CodeEditor

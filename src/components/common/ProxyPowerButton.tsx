@@ -67,7 +67,7 @@ export const ProxyPowerButton: React.FC = () => {
       {/* Mode Selection Overlay Popover */}
       {isOpen && (
         <div className="fixed top-11 right-3 w-72 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-[9999] p-2 text-xs divide-y divide-zinc-800/60 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
-          <div className="px-3 py-2 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+          <div className="px-3 py-2 text-3xs font-semibold text-zinc-400 uppercase tracking-wider">
             Select Proxy Mode (:8080)
           </div>
 
@@ -87,7 +87,7 @@ export const ProxyPowerButton: React.FC = () => {
                   <span>ON (Green)</span>
                   {mode === "on" && <MingCuteIcon name="check_line" size={14} className="text-emerald-400" />}
                 </div>
-                <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
+                <p className="text-2xs text-zinc-400 mt-0.5 leading-snug">
                   Normal proxying. Sends requests to server and returns responses to client.
                 </p>
               </div>
@@ -108,7 +108,7 @@ export const ProxyPowerButton: React.FC = () => {
                   <span>OFF (Red)</span>
                   {mode === "off" && <MingCuteIcon name="check_line" size={14} className="text-rose-400" />}
                 </div>
-                <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
+                <p className="text-2xs text-zinc-400 mt-0.5 leading-snug">
                   Proxy disabled. Stops proxy listener server.
                 </p>
               </div>
@@ -129,7 +129,7 @@ export const ProxyPowerButton: React.FC = () => {
                   <span>Block Client (Yellow)</span>
                   {mode === "block_client" && <MingCuteIcon name="check_line" size={14} className="text-amber-400" />}
                 </div>
-                <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
+                <p className="text-2xs text-zinc-400 mt-0.5 leading-snug">
                   Sends request to server & logs history, but client does NOT receive response.
                 </p>
               </div>
@@ -150,7 +150,7 @@ export const ProxyPowerButton: React.FC = () => {
                   <span>Block All (Purple)</span>
                   {mode === "block" && <MingCuteIcon name="check_line" size={14} className="text-purple-400" />}
                 </div>
-                <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
+                <p className="text-2xs text-zinc-400 mt-0.5 leading-snug">
                   Logs request history, but NEVER sends to server and NEVER returns to client.
                 </p>
               </div>

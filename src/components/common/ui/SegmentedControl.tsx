@@ -27,12 +27,12 @@ export function SegmentedControl<T extends string = string>({
   label,
   className = '',
 }: SegmentedControlProps<T>) {
-  const sizeClasses = sizeVariant === 'xs' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs';
+  const sizeClasses = sizeVariant === 'xs' ? 'px-2 py-0.5 text-3xs' : 'px-2.5 py-1 text-xs';
 
   return (
     <div className={`inline-flex items-center gap-1 bg-surface border border-border p-0.5 rounded-lg shadow-2xs font-mono select-none ${className}`}>
       {label && (
-        <span className="text-[10px] text-muted-foreground px-1.5 uppercase font-sans font-medium">
+        <span className="text-3xs text-muted-foreground px-1.5 uppercase font-sans font-medium">
           {label}:
         </span>
       )}

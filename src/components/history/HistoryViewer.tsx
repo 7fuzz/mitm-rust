@@ -98,12 +98,12 @@ export const HistoryViewer: React.FC = () => {
               alt="Response Preview"
               className="max-h-64 rounded border border-zinc-800 object-contain"
             />
-            <span className="text-[10px] text-zinc-500 font-mono">Base64 Image Preview ({mime})</span>
+            <span className="text-3xs text-zinc-500 font-mono">Base64 Image Preview ({mime})</span>
           </div>
         );
       }
       return (
-        <div className="p-2 bg-zinc-900 rounded text-zinc-400 font-mono text-[11px]">
+        <div className="p-2 bg-zinc-900 rounded text-zinc-400 font-mono text-2xs">
           [Binary Content ({mime}): {rawB64.length} chars base64]
         </div>
       );
@@ -137,7 +137,7 @@ export const HistoryViewer: React.FC = () => {
           {/* History Rotation Limiter Badge & Button */}
           <button
             onClick={() => setSettingsModalOpen(true)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all border ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-2xs font-semibold transition-all border ${
               limiterEnabled
                 ? "bg-indigo-500/10 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/20"
                 : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700"
@@ -212,7 +212,7 @@ export const HistoryViewer: React.FC = () => {
                   <th className="py-2.5 px-3 w-20 text-right">Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-900/60 font-mono text-[11px]">
+              <tbody className="divide-y divide-zinc-900/60 font-mono text-2xs">
                 {logs.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="text-center py-16 text-zinc-500 text-sm">
@@ -235,7 +235,7 @@ export const HistoryViewer: React.FC = () => {
                         <td className="py-2 px-3 text-zinc-600 font-mono">{logs.length - index}</td>
                         <td className="py-2 px-3">
                           <span
-                            className={`inline-block px-2 py-0.5 rounded border text-[10px] font-mono font-bold ${getStatusBadgeClass(
+                            className={`inline-block px-2 py-0.5 rounded border text-3xs font-mono font-bold ${getStatusBadgeClass(
                               item.statusCode
                             )}`}
                           >
@@ -244,7 +244,7 @@ export const HistoryViewer: React.FC = () => {
                         </td>
                         <td className="py-2 px-3">
                           <span
-                            className={`inline-block px-1.5 py-0.5 rounded border text-[10px] font-mono font-semibold ${getMethodBadgeClass(
+                            className={`inline-block px-1.5 py-0.5 rounded border text-3xs font-mono font-semibold ${getMethodBadgeClass(
                               item.method
                             )}`}
                           >
@@ -303,7 +303,7 @@ export const HistoryViewer: React.FC = () => {
                     Response
                   </button>
                 </div>
-                <div className="text-[11px] font-mono text-zinc-400">
+                <div className="text-2xs font-mono text-zinc-400">
                   ID: {selectedLogDetail.id.slice(0, 8)}...
                 </div>
               </div>
@@ -316,12 +316,12 @@ export const HistoryViewer: React.FC = () => {
                       <div className="text-indigo-400 font-semibold mb-1">
                         {selectedLogDetail.method} {selectedLogDetail.url}
                       </div>
-                      <div className="text-zinc-400 text-[11px]">Host: {selectedLogDetail.host}</div>
+                      <div className="text-zinc-400 text-2xs">Host: {selectedLogDetail.host}</div>
                     </div>
 
                     {/* Request Headers */}
                     <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800">
-                      <div className="text-zinc-400 font-semibold mb-2 uppercase text-[10px] tracking-wider">
+                      <div className="text-zinc-400 font-semibold mb-2 uppercase text-3xs tracking-wider">
                         Headers ({selectedLogDetail.requestHeaders?.length || 0})
                       </div>
                       <div className="space-y-1 divide-y divide-zinc-900/50">
@@ -336,10 +336,10 @@ export const HistoryViewer: React.FC = () => {
 
                     {/* Request Body */}
                     <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800">
-                      <div className="text-zinc-400 font-semibold mb-2 uppercase text-[10px] tracking-wider">
+                      <div className="text-zinc-400 font-semibold mb-2 uppercase text-3xs tracking-wider">
                         Body
                       </div>
-                      <pre className="text-zinc-200 bg-zinc-900 p-2.5 rounded overflow-x-auto text-[11px] whitespace-pre-wrap break-all">
+                      <pre className="text-zinc-200 bg-zinc-900 p-2.5 rounded overflow-x-auto text-2xs whitespace-pre-wrap break-all">
                         {renderBodyContent(selectedLogDetail.requestBody)}
                       </pre>
                     </div>
@@ -360,7 +360,7 @@ export const HistoryViewer: React.FC = () => {
 
                     {/* Response Headers */}
                     <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800">
-                      <div className="text-zinc-400 font-semibold mb-2 uppercase text-[10px] tracking-wider">
+                      <div className="text-zinc-400 font-semibold mb-2 uppercase text-3xs tracking-wider">
                         Headers ({selectedLogDetail.responseHeaders?.length || 0})
                       </div>
                       <div className="space-y-1 divide-y divide-zinc-900/50">
@@ -375,10 +375,10 @@ export const HistoryViewer: React.FC = () => {
 
                     {/* Response Body */}
                     <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800">
-                      <div className="text-zinc-400 font-semibold mb-2 uppercase text-[10px] tracking-wider">
+                      <div className="text-zinc-400 font-semibold mb-2 uppercase text-3xs tracking-wider">
                         Body
                       </div>
-                      <pre className="text-zinc-200 bg-zinc-900 p-2.5 rounded overflow-x-auto text-[11px] whitespace-pre-wrap break-all">
+                      <pre className="text-zinc-200 bg-zinc-900 p-2.5 rounded overflow-x-auto text-2xs whitespace-pre-wrap break-all">
                         {renderBodyContent(selectedLogDetail.responseBody, selectedLogDetail.contentType)}
                       </pre>
                     </div>
@@ -426,7 +426,7 @@ export const HistoryViewer: React.FC = () => {
             <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-lg border border-zinc-800">
               <div>
                 <div className="text-xs font-semibold text-zinc-200">Automatic Rotation Limiter</div>
-                <div className="text-[11px] text-zinc-400 mt-0.5">
+                <div className="text-2xs text-zinc-400 mt-0.5">
                   Enforces maximum row count in SQLite database.
                 </div>
               </div>
@@ -449,7 +449,7 @@ export const HistoryViewer: React.FC = () => {
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-zinc-300 flex items-center justify-between">
                 <span>Maximum Stored Records</span>
-                <span className="text-[11px] text-indigo-400 font-mono">{tempMaxRows} rows</span>
+                <span className="text-2xs text-indigo-400 font-mono">{tempMaxRows} rows</span>
               </label>
               <div className="flex items-center gap-2">
                 <input

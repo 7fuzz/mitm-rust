@@ -125,7 +125,7 @@ export const CollectionExtractRulesModal: React.FC<CollectionExtractRulesModalPr
           {/* Request Selector Sidebar if Collection has multiple requests */}
           {allCollectionRequests.length > 1 && (
             <div className="w-full md:w-56 bg-background border-r border-border p-2 overflow-y-auto space-y-1 shrink-0">
-              <label className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider px-1 block mb-1 font-mono">
+              <label className="text-3xs font-semibold uppercase text-muted-foreground tracking-wider px-1 block mb-1 font-mono">
                 Requests ({allCollectionRequests.length})
               </label>
               {allCollectionRequests.map((req) => {
@@ -143,10 +143,10 @@ export const CollectionExtractRulesModal: React.FC<CollectionExtractRulesModalPr
                   >
                     <div className="truncate min-w-0 flex-1">
                       <div className="truncate text-xs">{req.name}</div>
-                      <div className="text-[10px] text-muted-foreground/80 font-mono truncate">{req.method} {req.url}</div>
+                      <div className="text-3xs text-muted-foreground/80 font-mono truncate">{req.method} {req.url}</div>
                     </div>
                     {ruleCount > 0 && (
-                      <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono text-[10px] font-bold shrink-0">
+                      <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono text-3xs font-bold shrink-0">
                         {ruleCount}
                       </span>
                     )}
@@ -163,7 +163,7 @@ export const CollectionExtractRulesModal: React.FC<CollectionExtractRulesModalPr
                 <div className="flex items-center justify-between pb-1 border-b border-border">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-foreground text-xs">{activeRequest.name}</span>
-                    <span className="text-[11px] font-mono text-muted-foreground">({rules.length} rules)</span>
+                    <span className="text-2xs font-mono text-muted-foreground">({rules.length} rules)</span>
                   </div>
                   <Button
                     variant="outline"
@@ -179,7 +179,7 @@ export const CollectionExtractRulesModal: React.FC<CollectionExtractRulesModalPr
                   <div className="py-12 text-center text-muted-foreground italic flex flex-col items-center gap-2">
                     <MingCuteIcon name="lightning_line" size={32} className="opacity-30" />
                     <span>No auto-extraction rules configured for this request</span>
-                    <span className="text-[11px]">
+                    <span className="text-2xs">
                       Extracted values automatically populate the active environment's <code className="text-amber-500">(auto)</code> variable.
                     </span>
                     <Button variant="primary" sizeVariant="xs" icon="plus_line" onClick={handleAddRule}>
@@ -215,7 +215,7 @@ export const CollectionExtractRulesModal: React.FC<CollectionExtractRulesModalPr
                           </select>
 
                           <div className="flex-1 flex items-center gap-1.5 bg-surface border border-border rounded px-2 py-1">
-                            <span className="text-[10px] text-muted-foreground font-sans font-bold">Target:</span>
+                            <span className="text-3xs text-muted-foreground font-sans font-bold">Target:</span>
                             <input
                               type="text"
                               value={rule.targetVariable}
@@ -235,7 +235,7 @@ export const CollectionExtractRulesModal: React.FC<CollectionExtractRulesModalPr
                         </div>
 
                         <div className="flex items-center gap-1.5 bg-surface border border-border rounded px-2 py-1">
-                          <span className="text-[10px] text-muted-foreground font-sans font-bold">Expr:</span>
+                          <span className="text-3xs text-muted-foreground font-sans font-bold">Expr:</span>
                           <input
                             type="text"
                             value={rule.expression}
@@ -269,7 +269,7 @@ export const CollectionExtractRulesModal: React.FC<CollectionExtractRulesModalPr
 
         {/* Footer */}
         <div className="p-3 bg-header border-t border-border flex items-center justify-between">
-          <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+          <div className="text-2xs text-muted-foreground flex items-center gap-1">
             <MingCuteIcon name="information_line" size={14} className="text-primary" />
             <span>Extracted values automatically update the <strong>(auto)</strong> variant on send.</span>
           </div>

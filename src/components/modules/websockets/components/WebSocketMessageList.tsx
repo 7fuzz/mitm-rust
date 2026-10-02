@@ -42,7 +42,7 @@ export const WebSocketMessageList: React.FC<WebSocketMessageListProps> = ({
           <span className="font-bold text-foreground text-xs truncate max-w-md" title={connection.url}>
             {connection.url}
           </span>
-          <span className="text-[10px] text-muted-foreground shrink-0">
+          <span className="text-3xs text-muted-foreground shrink-0">
             ({connection.isClientSession ? 'Direct Studio Client' : 'MITM Intercept Stream'})
           </span>
         </div>
@@ -59,7 +59,7 @@ export const WebSocketMessageList: React.FC<WebSocketMessageListProps> = ({
           </div>
 
           {/* Direction Filter */}
-          <div className="flex items-center gap-0.5 bg-surface border border-border rounded p-0.5 font-mono text-[10px]">
+          <div className="flex items-center gap-0.5 bg-surface border border-border rounded p-0.5 font-mono text-3xs">
             {(['all', 'in', 'out'] as const).map((dir) => (
               <button
                 key={dir}
@@ -92,7 +92,7 @@ export const WebSocketMessageList: React.FC<WebSocketMessageListProps> = ({
         style={{ height: `${tableHeightPercent}%` }}
         className="border-b border-border bg-surface flex flex-col overflow-hidden min-h-[100px]"
       >
-        <div className="bg-header border-b border-border flex items-center text-[11px] font-medium text-muted-foreground select-none shrink-0 font-mono px-3 py-1.5">
+        <div className="bg-header border-b border-border flex items-center text-2xs font-medium text-muted-foreground select-none shrink-0 font-mono px-3 py-1.5">
           <span className="w-16 text-center font-sans">Direction</span>
           <span className="w-16 font-sans">Type</span>
           <span className="w-24 font-sans">Time</span>
@@ -124,7 +124,7 @@ export const WebSocketMessageList: React.FC<WebSocketMessageListProps> = ({
                 >
                   <span className="w-16 flex items-center justify-center">
                     <span
-                      className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                      className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-3xs font-bold border ${
                         isIncoming
                           ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
                           : 'text-sky-600 dark:text-sky-400 bg-sky-500/10 border-sky-500/30'
@@ -136,22 +136,22 @@ export const WebSocketMessageList: React.FC<WebSocketMessageListProps> = ({
                   </span>
 
                   <span className="w-16">
-                    <span className="px-1.5 py-0.5 rounded text-[9px] uppercase font-bold bg-neutral-subtle text-muted-foreground border border-border">
+                    <span className="px-1.5 py-0.5 rounded text-3xs uppercase font-bold bg-neutral-subtle text-muted-foreground border border-border">
                       {msg.msg_type}
                     </span>
                   </span>
 
-                  <span className="w-24 text-muted-foreground text-[10px]">
+                  <span className="w-24 text-muted-foreground text-3xs">
                     {new Date(msg.timestamp).toLocaleTimeString()}
                   </span>
 
-                  <span className="w-20 text-right px-2 text-muted-foreground text-[11px]">
+                  <span className="w-20 text-right px-2 text-muted-foreground text-2xs">
                     {msg.length || msg.payload.length} B
                   </span>
 
                   <div className="flex-1 flex items-center gap-2 truncate px-2">
                     {msg.is_injected && (
-                      <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                      <span className="px-1 py-0.2 rounded text-3xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
                         INJECTED
                       </span>
                     )}

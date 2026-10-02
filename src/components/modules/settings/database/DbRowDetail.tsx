@@ -54,11 +54,11 @@ export const DbRowDetail: React.FC<DbRowDetailProps> = ({ table, columns, values
     <div className="h-full flex flex-col bg-surface overflow-hidden">
       <div className="h-9 px-3 bg-header border-b border-border flex items-center gap-2 shrink-0">
         <span className="font-semibold text-foreground">Row</span>
-        {rowid !== undefined && <span className="font-mono text-[11px] text-muted-foreground">rowid {rowid}</span>}
+        {rowid !== undefined && <span className="font-mono text-2xs text-muted-foreground">rowid {rowid}</span>}
         <div className="ml-auto flex items-center gap-1">
           <button
             onClick={() => copy('__row', rowAsJson())}
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-neutral-subtle cursor-pointer"
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs text-muted-foreground hover:text-foreground hover:bg-neutral-subtle cursor-pointer"
             title="Copy the row as a JSON object"
           >
             <MingCuteIcon name={copied === '__row' ? 'check_line' : 'copy_line'} size={12} />
@@ -80,9 +80,9 @@ export const DbRowDetail: React.FC<DbRowDetailProps> = ({ table, columns, values
           return (
             <div key={col.name} className="group px-3 py-2 space-y-1">
               <div className="flex items-center gap-1.5">
-                <span className="font-mono font-semibold text-foreground text-[11px]">{col.name}</span>
-                {col.declType && <span className="font-mono text-[10px] text-muted-foreground">{col.declType}</span>}
-                {col.primaryKey && <span className="text-[9px] font-bold px-1 rounded bg-amber-500/15 text-amber-500">PK</span>}
+                <span className="font-mono font-semibold text-foreground text-2xs">{col.name}</span>
+                {col.declType && <span className="font-mono text-3xs text-muted-foreground">{col.declType}</span>}
+                {col.primaryKey && <span className="text-3xs font-bold px-1 rounded bg-amber-500/15 text-amber-500">PK</span>}
                 {value !== null && (
                   <button
                     onClick={() => copy(col.name, String(value))}
@@ -94,11 +94,11 @@ export const DbRowDetail: React.FC<DbRowDetailProps> = ({ table, columns, values
                 )}
               </div>
               {typeof value === 'string' ? (
-                <pre className="font-mono text-[11px] text-foreground whitespace-pre-wrap break-all bg-background border border-border rounded px-2 py-1.5 max-h-80 overflow-auto select-text">
+                <pre className="font-mono text-2xs text-foreground whitespace-pre-wrap break-all bg-background border border-border rounded px-2 py-1.5 max-h-80 overflow-auto select-text">
                   {formatValue(value)}
                 </pre>
               ) : (
-                <div className="font-mono text-[11px] px-2">
+                <div className="font-mono text-2xs px-2">
                   <DbCellValue value={value} />
                 </div>
               )}

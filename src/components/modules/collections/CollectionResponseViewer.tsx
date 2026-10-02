@@ -36,7 +36,7 @@ export const CollectionResponseViewer: React.FC<CollectionResponseViewerProps> =
       response={response}
       toolbar={
         isOlderRun && (
-          <div className="flex items-center gap-1 pl-2 pr-0.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-300 text-[11px]">
+          <div className="flex items-center gap-1 pl-2 pr-0.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-300 text-2xs">
             <MingCuteIcon name="history_line" size={12} />
             <span title={new Date(run.executedAtMs).toLocaleString()}>
               Run {history.length - runIndex} · {new Date(run.executedAtMs).toLocaleTimeString()}

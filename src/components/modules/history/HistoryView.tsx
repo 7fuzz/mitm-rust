@@ -72,7 +72,7 @@ const HISTORY_COLUMNS: HistoryColumn[] = [
     label: '#',
     menuLabel: '# (ID)',
     align: 'center',
-    cellClass: 'text-muted-foreground text-[10px]',
+    cellClass: 'text-muted-foreground text-3xs',
     render: (item) => item.id,
   },
   {
@@ -83,7 +83,7 @@ const HISTORY_COLUMNS: HistoryColumn[] = [
         <MethodBadge method={item.method} />
         {(row.isIntercepted || row.isPendingIntercept) && (
           <span
-            className={`px-1 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 select-none ${
+            className={`px-1 py-0.2 rounded text-3xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 select-none ${
               row.isPendingIntercept ? 'animate-pulse' : ''
             }`}
             title={row.isPendingIntercept ? 'Paused in Interceptor' : 'Intercepted manually'}
@@ -93,7 +93,7 @@ const HISTORY_COLUMNS: HistoryColumn[] = [
         )}
         {row.isRewritten && (
           <span
-            className="px-1 py-0.2 rounded text-[9px] font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 shrink-0 select-none"
+            className="px-1 py-0.2 rounded text-3xs font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 shrink-0 select-none"
             title="Rewritten automatically"
           >
             RW
@@ -105,18 +105,18 @@ const HISTORY_COLUMNS: HistoryColumn[] = [
   {
     id: 'source',
     label: 'Source',
-    cellClass: 'text-muted-foreground text-[10px]',
+    cellClass: 'text-muted-foreground text-3xs',
     render: (item) =>
       item.listenerLabel && item.listenerLabel !== 'Default' ? (
         <span
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary border border-primary/20 truncate max-w-full select-none"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-3xs font-semibold bg-primary/10 text-primary border border-primary/20 truncate max-w-full select-none"
           title={`Source: ${item.listenerLabel}`}
         >
           <span className="w-1 h-1 rounded-full bg-primary shrink-0" />
           <span className="truncate">{item.listenerLabel}</span>
         </span>
       ) : (
-        <span className="text-muted-foreground/50 text-[10px] font-mono" title="Default proxy listener">
+        <span className="text-muted-foreground/50 text-3xs font-mono" title="Default proxy listener">
           {item.listenerLabel || 'Default'}
         </span>
       ),
@@ -149,21 +149,21 @@ const HISTORY_COLUMNS: HistoryColumn[] = [
   {
     id: 'contentType',
     label: 'Content-Type',
-    cellClass: 'text-muted-foreground text-[11px]',
+    cellClass: 'text-muted-foreground text-2xs',
     render: (item) => <div className="truncate" title={item.contentType}>{item.contentType || '-'}</div>,
   },
   {
     id: 'size',
     label: 'Size',
     align: 'right',
-    cellClass: 'text-muted-foreground text-[11px]',
+    cellClass: 'text-muted-foreground text-2xs',
     render: (item, row) => (row.isPendingResponse || row.isPendingIntercept ? '-' : item.size),
   },
   {
     id: 'duration',
     label: 'Duration',
     align: 'right',
-    cellClass: 'text-muted-foreground text-[11px]',
+    cellClass: 'text-muted-foreground text-2xs',
     render: (item, row) =>
       row.isPendingResponse || row.isPendingIntercept ? (
         <PendingDots row={row} />
@@ -177,14 +177,14 @@ const HISTORY_COLUMNS: HistoryColumn[] = [
     id: 'requestAt',
     label: 'Request Time',
     align: 'right',
-    cellClass: 'text-muted-foreground text-[11px]',
+    cellClass: 'text-muted-foreground text-2xs',
     render: (item) => <ClockCell ms={item.requestAt} />,
   },
   {
     id: 'responseAt',
     label: 'Response Time',
     align: 'right',
-    cellClass: 'text-muted-foreground text-[11px]',
+    cellClass: 'text-muted-foreground text-2xs',
     render: (item, row) =>
       row.isPendingResponse || row.isPendingIntercept ? <PendingDots row={row} /> : <ClockCell ms={item.responseAt} />,
   },
@@ -705,7 +705,7 @@ export const HistoryView: React.FC = () => {
                   />
                 ))}
               </colgroup>
-              <thead className="bg-header sticky top-0 border-b border-border text-[11px] font-medium text-muted-foreground select-none z-10 shadow-sm">
+              <thead className="bg-header sticky top-0 border-b border-border text-2xs font-medium text-muted-foreground select-none z-10 shadow-sm">
                 <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
                   <SortableContext items={visibleColumns.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
                     <tr onContextMenu={openColumnMenu}>
@@ -791,7 +791,7 @@ export const HistoryView: React.FC = () => {
                     {/* Infinite Loading Indicator */}
                     {isLoadingMore && (
                       <tr>
-                        <td colSpan={visibleColumns.length} className="py-2 text-center text-muted-foreground text-[11px] italic bg-surface/50 animate-pulse">
+                        <td colSpan={visibleColumns.length} className="py-2 text-center text-muted-foreground text-2xs italic bg-surface/50 animate-pulse">
                           Loading more records from SQLite...
                         </td>
                       </tr>
@@ -847,7 +847,7 @@ export const HistoryView: React.FC = () => {
           style={{ left: columnMenu.x, top: columnMenu.y }}
           className="fixed z-50 min-w-[180px] py-1 bg-surface border border-border rounded-lg shadow-lg text-xs select-none"
         >
-          <div className="px-3 py-1 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Columns</div>
+          <div className="px-3 py-1 text-3xs uppercase tracking-wider font-semibold text-muted-foreground">Columns</div>
           {columnLayout.order.map((id) => {
             const col = COLUMNS_BY_ID[id];
             const isVisible = !columnLayout.hidden.includes(id);

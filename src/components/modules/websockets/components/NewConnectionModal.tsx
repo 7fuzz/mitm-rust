@@ -82,7 +82,7 @@ export const NewConnectionModal: React.FC<NewConnectionModalProps> = ({
             className="font-mono"
             required
           />
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="text-2xs text-muted-foreground mt-1">
             Connects directly to the specified endpoint with live frame bidirectional streaming.
           </p>
         </div>
@@ -93,7 +93,7 @@ export const NewConnectionModal: React.FC<NewConnectionModalProps> = ({
             <button
               type="button"
               onClick={addHeaderRow}
-              className="text-primary hover:underline font-bold text-[11px]"
+              className="text-primary hover:underline font-bold text-2xs"
             >
               + Add Header
             </button>

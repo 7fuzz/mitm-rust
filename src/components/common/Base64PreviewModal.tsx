@@ -107,7 +107,7 @@ export const Base64PreviewModal: React.FC<Base64PreviewModalProps> = ({
         <div className="max-h-[70vh] overflow-y-auto">{renderContent()}</div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border pt-3 font-mono text-[11px]">
+        <div className="flex items-center justify-between border-t border-border pt-3 font-mono text-2xs">
           <span className="text-muted-foreground">
             Type: <strong className="text-foreground">{info.mimeType}</strong> ({info.sizeBytes} bytes)
           </span>

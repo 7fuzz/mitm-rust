@@ -59,7 +59,7 @@ export const NewEndpointModal: React.FC<NewEndpointModalProps> = ({
             className="font-mono"
             required
           />
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="text-2xs text-muted-foreground mt-1">
             Accessible locally at{' '}
             <code>
               http://localhost:{listenerPort}
@@ -85,7 +85,7 @@ export const NewEndpointModal: React.FC<NewEndpointModalProps> = ({
             placeholder="whsec_custom_secret"
             className="font-mono"
           />
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="text-2xs text-muted-foreground mt-1">
             Used to automatically verify incoming HMAC signature headers.
           </p>
         </div>

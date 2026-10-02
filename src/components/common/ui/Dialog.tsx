@@ -64,7 +64,7 @@ export const Dialog: React.FC<DialogProps> = ({
           <div className="px-4 py-3 bg-header border-b border-border flex items-center justify-between shrink-0 select-none">
             <div>
               {title && <h3 className="text-sm font-semibold text-foreground tracking-tight">{title}</h3>}
-              {description && <p className="text-muted-foreground text-[11px] mt-0.5">{description}</p>}
+              {description && <p className="text-muted-foreground text-2xs mt-0.5">{description}</p>}
             </div>
             <button
               onClick={onClose}

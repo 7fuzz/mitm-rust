@@ -20,7 +20,7 @@ export const CollectionLinking: React.FC = () => {
       <div className="border border-border rounded overflow-hidden">
         <table className="w-full text-left font-mono text-xs">
           <thead>
-            <tr className="bg-header border-b border-border text-muted-foreground text-[11px]">
+            <tr className="bg-header border-b border-border text-muted-foreground text-2xs">
               <th className="px-3 py-1.5 font-medium font-sans">Collection Folder</th>
               {environments.map((env) => (
                 <th key={env.id} className="px-3 py-1.5 font-medium text-center font-sans">

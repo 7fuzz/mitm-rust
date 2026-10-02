@@ -31,7 +31,7 @@ const LIMIT_PRESETS = [100, 250, 500, 1000, 2500, 5000, 10000];
 
 const FilterGroup: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="flex items-center gap-1.5">
-    <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">{label}</span>
+    <span className="text-3xs uppercase tracking-wider font-semibold text-muted-foreground">{label}</span>
     {children}
   </div>
 );
@@ -175,7 +175,7 @@ export const TrafficFilterBar: React.FC = () => {
                     <MingCuteIcon name="history_line" size={15} className="text-primary" />
                     History Log Limit
                   </span>
-                  <span className="text-[11px] font-mono text-muted-foreground">
+                  <span className="text-2xs font-mono text-muted-foreground">
                     Total: {totalDbCount > 0 ? totalDbCount : traffic.length}
                   </span>
                 </div>
@@ -184,7 +184,7 @@ export const TrafficFilterBar: React.FC = () => {
                 <div className="flex items-center justify-between bg-header p-2 rounded-lg border border-border">
                   <div className="flex flex-col">
                     <span className="font-medium text-foreground">Limit Max Capacity</span>
-                    <span className="text-[10px] text-muted-foreground">Delete oldest logs when full</span>
+                    <span className="text-3xs text-muted-foreground">Delete oldest logs when full</span>
                   </div>
                   <input
                     type="checkbox"
@@ -197,7 +197,7 @@ export const TrafficFilterBar: React.FC = () => {
                 {/* Max Rows Input & Presets */}
                 {localEnabled && (
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] text-muted-foreground font-mono flex items-center justify-between">
+                    <label className="text-2xs text-muted-foreground font-mono flex items-center justify-between">
                       <span>Max Rows Limit:</span>
                       <strong className="text-primary font-bold">{localMaxRows} rows</strong>
                     </label>
@@ -216,7 +216,7 @@ export const TrafficFilterBar: React.FC = () => {
                         <button
                           key={preset}
                           onClick={() => setLocalMaxRows(preset)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer ${
+                          className={`px-2 py-0.5 rounded text-3xs font-mono transition-colors cursor-pointer ${
                             localMaxRows === preset
                               ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
                               : 'bg-header text-muted-foreground hover:text-foreground hover:bg-neutral-subtle border border-border/60'
@@ -305,7 +305,7 @@ export const TrafficFilterBar: React.FC = () => {
           {activeFilterCount > 0 && (
             <button
               onClick={resetFilters}
-              className="ml-auto text-[11px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+              className="ml-auto text-2xs text-muted-foreground hover:text-foreground underline cursor-pointer"
             >
               Reset filters
             </button>

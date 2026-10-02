@@ -81,7 +81,7 @@ export const CopyCustomModal: React.FC<CopyCustomModalProps> = ({
       size="lg"
       footer={
         <div className="flex items-center justify-between w-full">
-          <div className="text-[11px] text-muted-foreground font-mono">
+          <div className="text-2xs text-muted-foreground font-mono">
             {lineCount} lines · {charCount} chars
           </div>
           <div className="flex items-center gap-2">
@@ -107,7 +107,7 @@ export const CopyCustomModal: React.FC<CopyCustomModalProps> = ({
       <div className="space-y-4 text-xs font-sans">
         {/* Quick Presets */}
         <div className="flex flex-wrap items-center gap-1.5 pb-2 border-b border-border">
-          <span className="text-[10px] uppercase font-bold text-muted-foreground mr-1">
+          <span className="text-3xs uppercase font-bold text-muted-foreground mr-1">
             Presets:
           </span>
           <button
@@ -120,7 +120,7 @@ export const CopyCustomModal: React.FC<CopyCustomModalProps> = ({
                 includeResponse: false,
               })
             }
-            className="px-2 py-0.5 rounded text-[11px] bg-surface hover:bg-neutral-subtle border border-border text-foreground transition-colors cursor-pointer"
+            className="px-2 py-0.5 rounded text-2xs bg-surface hover:bg-neutral-subtle border border-border text-foreground transition-colors cursor-pointer"
           >
             cURL Only
           </button>
@@ -138,7 +138,7 @@ export const CopyCustomModal: React.FC<CopyCustomModalProps> = ({
                 includeResponseBody: true,
               })
             }
-            className="px-2 py-0.5 rounded text-[11px] bg-surface hover:bg-neutral-subtle border border-border text-foreground transition-colors cursor-pointer"
+            className="px-2 py-0.5 rounded text-2xs bg-surface hover:bg-neutral-subtle border border-border text-foreground transition-colors cursor-pointer"
           >
             cURL + Response
           </button>
@@ -156,7 +156,7 @@ export const CopyCustomModal: React.FC<CopyCustomModalProps> = ({
                 includeResponseBody: true,
               })
             }
-            className="px-2 py-0.5 rounded text-[11px] bg-surface hover:bg-neutral-subtle border border-border text-foreground transition-colors cursor-pointer"
+            className="px-2 py-0.5 rounded text-2xs bg-surface hover:bg-neutral-subtle border border-border text-foreground transition-colors cursor-pointer"
           >
             URL, Body & Response
           </button>
@@ -174,7 +174,7 @@ export const CopyCustomModal: React.FC<CopyCustomModalProps> = ({
                 includeResponseBody: true,
               })
             }
-            className="px-2 py-0.5 rounded text-[11px] bg-surface hover:bg-neutral-subtle border border-border text-foreground transition-colors cursor-pointer"
+            className="px-2 py-0.5 rounded text-2xs bg-surface hover:bg-neutral-subtle border border-border text-foreground transition-colors cursor-pointer"
           >
             Full HTTP Request & Response
           </button>
@@ -190,7 +190,7 @@ export const CopyCustomModal: React.FC<CopyCustomModalProps> = ({
             </div>
 
             <div className="space-y-2">
-              <label className="block text-[11px] text-muted-foreground font-medium">
+              <label className="block text-2xs text-muted-foreground font-medium">
                 Request Shape:
               </label>
               <SegmentedControl
@@ -299,7 +299,7 @@ export const CopyCustomModal: React.FC<CopyCustomModalProps> = ({
                 </div>
               </div>
             ) : (
-              <p className="text-[11px] text-muted-foreground italic py-2">
+              <p className="text-2xs text-muted-foreground italic py-2">
                 Response output is omitted.
               </p>
             )}
@@ -309,20 +309,20 @@ export const CopyCustomModal: React.FC<CopyCustomModalProps> = ({
         {/* Live Preview */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+            <label className="text-2xs font-semibold text-muted-foreground uppercase tracking-wider">
               Live Preview
             </label>
             <button
               type="button"
               onClick={handleCopy}
-              className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer"
+              className="text-2xs text-primary hover:underline flex items-center gap-1 cursor-pointer"
             >
               <MingCuteIcon name={copied ? 'check_line' : 'copy_line'} size={12} />
               <span>{copied ? 'Copied!' : 'Quick Copy'}</span>
             </button>
           </div>
           <div className="relative">
-            <pre className="w-full bg-background border border-border rounded-lg p-3 text-[11px] font-mono text-foreground overflow-auto max-h-[200px] leading-relaxed whitespace-pre-wrap break-all select-text">
+            <pre className="w-full bg-background border border-border rounded-lg p-3 text-2xs font-mono text-foreground overflow-auto max-h-[200px] leading-relaxed whitespace-pre-wrap break-all select-text">
               {previewText || <span className="text-muted-foreground italic">(Nothing selected)</span>}
             </pre>
           </div>

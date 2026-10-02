@@ -96,7 +96,7 @@ export const StandardHeaderPicker: React.FC<StandardHeaderPickerProps> = ({ head
             />
           </div>
           {available.length === 0 ? (
-            <div className="px-3 py-2 text-[11px] text-muted-foreground italic">
+            <div className="px-3 py-2 text-2xs text-muted-foreground italic">
               {query.trim() ? 'No matching headers' : 'All standard headers already added'}
             </div>
           ) : (
@@ -112,7 +112,7 @@ export const StandardHeaderPicker: React.FC<StandardHeaderPickerProps> = ({ head
                   className={`px-3 py-1 cursor-pointer ${i === highlight ? 'bg-primary/15' : ''}`}
                 >
                   <div className="font-mono text-xs text-foreground">{h.key}</div>
-                  {h.value && <div className="font-mono text-[10px] text-muted-foreground truncate">{h.value}</div>}
+                  {h.value && <div className="font-mono text-3xs text-muted-foreground truncate">{h.value}</div>}
                 </li>
               ))}
             </ul>

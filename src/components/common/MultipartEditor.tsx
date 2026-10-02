@@ -105,7 +105,7 @@ export const MultipartEditor: React.FC<MultipartEditorProps> = ({
       <div className="border border-border rounded-lg overflow-hidden">
         <table className="w-full text-left">
           <thead>
-            <tr className="bg-header border-b border-border text-muted-foreground text-[11px]">
+            <tr className="bg-header border-b border-border text-muted-foreground text-2xs">
               <th className="w-8 px-2 py-1.5 text-center">En</th>
               <th className="w-24 px-2 py-1.5 font-medium">Type</th>
               <th className="w-1/3 px-3 py-1.5 font-medium">Key Name</th>
@@ -147,7 +147,7 @@ export const MultipartEditor: React.FC<MultipartEditorProps> = ({
                           handlePickFileNative(idx);
                         }
                       }}
-                      className="w-full bg-background border border-border rounded px-1.5 py-0.5 text-[11px] text-foreground focus:outline-none cursor-pointer"
+                      className="w-full bg-background border border-border rounded px-1.5 py-0.5 text-2xs text-foreground focus:outline-none cursor-pointer"
                     >
                       <option value="text">Text</option>
                       <option value="file">File</option>
@@ -183,7 +183,7 @@ export const MultipartEditor: React.FC<MultipartEditorProps> = ({
                           type="button"
                           disabled={readOnly}
                           onClick={() => handlePickFileNative(idx)}
-                          className="px-2 py-0.5 bg-header hover:bg-neutral-subtle border border-border rounded text-[11px] font-semibold text-foreground cursor-pointer transition-colors flex items-center gap-1 shrink-0"
+                          className="px-2 py-0.5 bg-header hover:bg-neutral-subtle border border-border rounded text-2xs font-semibold text-foreground cursor-pointer transition-colors flex items-center gap-1 shrink-0"
                         >
                           <MingCuteIcon name="folder_open_line" size={13} className="text-amber-500" />
                           <span>Select File</span>
@@ -192,7 +192,7 @@ export const MultipartEditor: React.FC<MultipartEditorProps> = ({
                           {field.file_name || field.value || 'No file selected'}
                         </span>
                         {field.content_type && (
-                          <span className="text-[10px] text-muted-foreground bg-background px-1.5 py-0.2 rounded border border-border shrink-0">
+                          <span className="text-3xs text-muted-foreground bg-background px-1.5 py-0.2 rounded border border-border shrink-0">
                             {field.content_type}
                           </span>
                         )}

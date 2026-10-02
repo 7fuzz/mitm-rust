@@ -124,7 +124,7 @@ export const CollectionBodyEditor: React.FC<CollectionBodyEditorProps> = ({
           <button
             type="button"
             onClick={() => setIsConvertMenuOpen(!isConvertMenuOpen)}
-            className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-amber-500 font-bold text-[11px] cursor-pointer transition-colors"
+            className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-amber-500 font-bold text-2xs cursor-pointer transition-colors"
             title="Auto Convert Format"
           >
             <MingCuteIcon name="transfer_line" size={13} />
@@ -133,7 +133,7 @@ export const CollectionBodyEditor: React.FC<CollectionBodyEditorProps> = ({
           </button>
 
           {isConvertMenuOpen && (
-            <div className="absolute right-0 top-full mt-1 z-50 bg-surface border border-border rounded-lg shadow-xl py-1 text-[11px] w-48 font-sans text-foreground flex flex-col">
+            <div className="absolute right-0 top-full mt-1 z-50 bg-surface border border-border rounded-lg shadow-xl py-1 text-2xs w-48 font-sans text-foreground flex flex-col">
               <button
                 type="button"
                 onClick={() => handleConvert('json_to_formdata')}

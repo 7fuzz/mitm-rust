@@ -142,7 +142,7 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
             <>
               <span
                 onClick={() => handleCollapse(false)}
-                className="cursor-pointer text-muted-foreground hover:text-foreground mx-1.5 bg-background border border-border px-1.5 py-0.5 rounded text-[10px]"
+                className="cursor-pointer text-muted-foreground hover:text-foreground mx-1.5 bg-background border border-border px-1.5 py-0.5 rounded text-3xs"
               >
                 ...
               </span>
@@ -150,7 +150,7 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
                 {closeBracket}
                 {!isLast ? ',' : ''}
               </span>
-              <span className="text-muted-foreground text-[10px] ml-2 italic">
+              <span className="text-muted-foreground text-3xs ml-2 italic">
                 ({processedItems.length} {isArray ? 'items' : 'keys'})
               </span>
             </>
@@ -192,7 +192,7 @@ export const JsonTreeViewer: React.FC<JsonTreeViewerProps> = ({
           {isLongArray && !effectiveShowAll && (
             <div
               onClick={handleArrayExpand}
-              className="text-amber-500 hover:text-amber-400 font-semibold text-[11px] py-1 cursor-pointer select-none pl-2 flex items-center gap-1.5"
+              className="text-amber-500 hover:text-amber-400 font-semibold text-2xs py-1 cursor-pointer select-none pl-2 flex items-center gap-1.5"
             >
               <span className="bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded hover:bg-amber-500/20">
                 + {processedItems.length - 1} more items... (click to expand)
@@ -241,7 +241,7 @@ export const JsonTreeViewerRoot: React.FC<JsonTreeViewerRootProps> = ({
       <button
         type="button"
         onClick={handleCopy}
-        className={`absolute top-0 right-0 z-10 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] border transition-colors cursor-pointer font-sans ${
+        className={`absolute top-0 right-0 z-10 flex items-center gap-1 px-2 py-0.5 rounded text-3xs border transition-colors cursor-pointer font-sans ${
           copied
             ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
             : 'bg-surface border-border text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'

@@ -201,7 +201,7 @@ export const RewriteRuleModal: React.FC = () => {
         {/* Rule Name & Action Type */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="md:col-span-1 space-y-1">
-            <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+            <label className="block text-2xs font-semibold text-muted-foreground uppercase tracking-wider">
               Rule Name <span className="text-rose-500">*</span>
             </label>
             <input
@@ -215,7 +215,7 @@ export const RewriteRuleModal: React.FC = () => {
           </div>
 
           <div className="md:col-span-2 space-y-1">
-            <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+            <label className="block text-2xs font-semibold text-muted-foreground uppercase tracking-wider">
               Rewrite Type
             </label>
             <Select
@@ -250,7 +250,7 @@ export const RewriteRuleModal: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <div>
-              <label className="block text-[10px] text-muted-foreground mb-1">Target Field</label>
+              <label className="block text-3xs text-muted-foreground mb-1">Target Field</label>
               <Select
                 value={matchField}
                 onChange={(e) => setMatchField(e.target.value as any)}
@@ -260,7 +260,7 @@ export const RewriteRuleModal: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-[10px] text-muted-foreground mb-1">Operator</label>
+              <label className="block text-3xs text-muted-foreground mb-1">Operator</label>
               <Select
                 value={matchOperator}
                 onChange={(e) => setMatchOperator(e.target.value as any)}
@@ -270,7 +270,7 @@ export const RewriteRuleModal: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-[10px] text-muted-foreground mb-1">Filter Pattern</label>
+              <label className="block text-3xs text-muted-foreground mb-1">Filter Pattern</label>
               <input
                 type="text"
                 value={matchValue}
@@ -303,7 +303,7 @@ export const RewriteRuleModal: React.FC = () => {
           {/* Target Part Selector */}
           {actionType !== "full_response" && actionType !== "redirect" && (
             <div>
-              <label className="block text-[10px] text-muted-foreground mb-1">Target Component</label>
+              <label className="block text-3xs text-muted-foreground mb-1">Target Component</label>
               <Select
                 value={targetPart}
                 onChange={(e) => setTargetPart(e.target.value as any)}
@@ -316,7 +316,7 @@ export const RewriteRuleModal: React.FC = () => {
           {/* Header Key Field if Header action */}
           {targetPart === "header" && actionType !== "full_response" && actionType !== "redirect" && (
             <div>
-              <label className="block text-[10px] text-muted-foreground mb-1">Header Name</label>
+              <label className="block text-3xs text-muted-foreground mb-1">Header Name</label>
               <input
                 type="text"
                 value={targetHeader}
@@ -331,7 +331,7 @@ export const RewriteRuleModal: React.FC = () => {
           {actionType === "redirect" && (
             <div className="space-y-3">
               <div>
-                <label className="block text-[10px] text-muted-foreground mb-1">
+                <label className="block text-3xs text-muted-foreground mb-1">
                   HTTP Redirect Status Code
                 </label>
                 <Select
@@ -344,7 +344,7 @@ export const RewriteRuleModal: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="block text-[10px] text-muted-foreground">
+                  <label className="block text-3xs text-muted-foreground">
                     URL Pattern to Replace (Optional)
                   </label>
                   <input
@@ -354,13 +354,13 @@ export const RewriteRuleModal: React.FC = () => {
                     placeholder="e.g. https://form.duluin.com (leave blank for exact redirect)"
                     className="w-full bg-background border border-border focus:border-primary rounded px-2.5 py-1.5 text-foreground outline-none font-mono text-xs"
                   />
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-3xs text-muted-foreground">
                     If set, replaces this substring in URL while preserving paths/query params.
                   </p>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-[10px] text-muted-foreground">
+                  <label className="block text-3xs text-muted-foreground">
                     Redirect Destination URL <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -371,7 +371,7 @@ export const RewriteRuleModal: React.FC = () => {
                     placeholder="e.g. https://dev-form.duluin.id"
                     className="w-full bg-background border border-border focus:border-primary rounded px-2.5 py-1.5 text-foreground outline-none font-mono text-xs"
                   />
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-3xs text-muted-foreground">
                     The replacement domain or full destination URL sent in the <code>Location</code> header.
                   </p>
                 </div>
@@ -383,7 +383,7 @@ export const RewriteRuleModal: React.FC = () => {
           {(actionType === "partial_request" || actionType === "partial_response") && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="block text-[10px] text-muted-foreground">
+                <label className="block text-3xs text-muted-foreground">
                   Find String / Pattern to Replace <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -397,7 +397,7 @@ export const RewriteRuleModal: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="block text-[10px] text-muted-foreground">
+                <label className="block text-3xs text-muted-foreground">
                   Replace With
                 </label>
                 <input
@@ -414,7 +414,7 @@ export const RewriteRuleModal: React.FC = () => {
           {/* Full Request Replacement Fields */}
           {actionType === "full_request" && (
             <div className="space-y-1">
-              <label className="block text-[10px] text-muted-foreground">
+              <label className="block text-3xs text-muted-foreground">
                 {targetPart === "url"
                   ? "New Destination Target URL (Full Redirect)"
                   : targetPart === "body"
@@ -446,7 +446,7 @@ export const RewriteRuleModal: React.FC = () => {
           {actionType === "full_response" && (
             <div className="space-y-3">
               <div className="w-36">
-                <label className="block text-[10px] text-muted-foreground mb-1">Mock HTTP Status</label>
+                <label className="block text-3xs text-muted-foreground mb-1">Mock HTTP Status</label>
                 <input
                   type="number"
                   value={mockStatusCode}
@@ -456,17 +456,17 @@ export const RewriteRuleModal: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[10px] text-muted-foreground mb-1">Mock Headers (JSON array)</label>
+                <label className="block text-3xs text-muted-foreground mb-1">Mock Headers (JSON array)</label>
                 <textarea
                   value={mockHeadersJson}
                   onChange={(e) => setMockHeadersJson(e.target.value)}
                   rows={3}
-                  className="w-full bg-background border border-border focus:border-primary rounded p-2 text-foreground outline-none font-mono text-[11px] resize-none"
+                  className="w-full bg-background border border-border focus:border-primary rounded p-2 text-foreground outline-none font-mono text-2xs resize-none"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] text-muted-foreground mb-1">Mock Response Body</label>
+                <label className="block text-3xs text-muted-foreground mb-1">Mock Response Body</label>
                 <textarea
                   value={mockBody}
                   onChange={(e) => setMockBody(e.target.value)}
@@ -481,14 +481,14 @@ export const RewriteRuleModal: React.FC = () => {
 
         {/* Live Interactive Sandbox Tester */}
         <div className="p-3 rounded-lg bg-neutral-subtle/50 border border-dashed border-border space-y-2 font-mono text-xs">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground font-sans uppercase tracking-wide">
+          <div className="flex items-center gap-1.5 text-2xs font-bold text-muted-foreground font-sans uppercase tracking-wide">
             <MingCuteIcon name="flask_line" size={13} className="text-emerald-500" />
             <span>Interactive Live Sandbox Preview</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div className="space-y-1">
-              <span className="text-[10px] text-muted-foreground font-sans">Sample Input:</span>
+              <span className="text-3xs text-muted-foreground font-sans">Sample Input:</span>
               <input
                 type="text"
                 value={testInput}
@@ -499,7 +499,7 @@ export const RewriteRuleModal: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <span className="text-[10px] text-emerald-500 font-sans font-bold">Rewritten Result Preview:</span>
+              <span className="text-3xs text-emerald-500 font-sans font-bold">Rewritten Result Preview:</span>
               <div className="w-full bg-surface border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded px-2 py-1 text-xs truncate select-all">
                 {testResult || <span className="opacity-40 italic">Result preview</span>}
               </div>

@@ -148,7 +148,7 @@ export const CvssCalculator: React.FC = () => {
         </div>
 
         <div className="flex-1 max-w-lg ml-4">
-          <span className="text-[11px] text-muted-foreground block mb-1">Vector String:</span>
+          <span className="text-2xs text-muted-foreground block mb-1">Vector String:</span>
           <div className="flex items-center gap-2">
             <code className="flex-1 bg-background border border-border rounded px-2.5 py-1 text-xs text-primary font-mono select-all">
               {vectorString}

@@ -38,7 +38,7 @@ export const CollectionInterpolationTab: React.FC<CollectionInterpolationTabProp
               key={m.id}
               type="button"
               onClick={() => setPreviewMode(m.id as 'full_url' | 'host' | 'curl')}
-              className={`px-3 py-1 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+              className={`px-3 py-1 rounded text-2xs font-semibold transition-colors cursor-pointer ${
                 previewMode === m.id
                   ? 'bg-primary text-primary-foreground shadow'
                   : 'text-muted-foreground hover:text-foreground'
@@ -51,7 +51,7 @@ export const CollectionInterpolationTab: React.FC<CollectionInterpolationTabProp
         <button
           type="button"
           onClick={onRefresh}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] border border-border bg-background hover:bg-neutral-subtle transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
+          className="flex items-center gap-1 px-2 py-1 rounded text-2xs border border-border bg-background hover:bg-neutral-subtle transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
           title="Refresh preview"
         >
           <MingCuteIcon name="refresh_1_line" size={12} />
@@ -77,13 +77,13 @@ export const CollectionInterpolationTab: React.FC<CollectionInterpolationTabProp
             onClick={() => {
               navigator.clipboard.writeText(getActiveText());
             }}
-            className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-surface border border-border text-muted-foreground hover:text-foreground hover:bg-neutral-subtle transition-colors cursor-pointer"
+            className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded text-3xs bg-surface border border-border text-muted-foreground hover:text-foreground hover:bg-neutral-subtle transition-colors cursor-pointer"
             title="Copy to clipboard"
           >
             <MingCuteIcon name="copy_2_line" size={11} />
             <span>Copy</span>
           </button>
-          <pre className="p-4 overflow-auto h-full text-[11px] leading-relaxed whitespace-pre-wrap break-all text-foreground font-mono">
+          <pre className="p-4 overflow-auto h-full text-2xs leading-relaxed whitespace-pre-wrap break-all text-foreground font-mono">
             {getActiveText()}
           </pre>
         </div>

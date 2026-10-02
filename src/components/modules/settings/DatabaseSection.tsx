@@ -85,7 +85,7 @@ export const DatabaseSection: React.FC = () => {
                 value={tableFilter}
                 onChange={(e) => setTableFilter(e.target.value)}
                 placeholder={`Filter ${tables.length} tables...`}
-                className="w-full bg-background border border-border rounded pl-7 pr-2 py-1 text-[11px] font-mono text-foreground focus:outline-none focus:border-primary"
+                className="w-full bg-background border border-border rounded pl-7 pr-2 py-1 text-2xs font-mono text-foreground focus:outline-none focus:border-primary"
               />
             </div>
           </div>
@@ -96,7 +96,7 @@ export const DatabaseSection: React.FC = () => {
                 <button
                   key={table.name}
                   onClick={() => handleTableClick(table)}
-                  className={`w-full px-3 py-1.5 flex items-center gap-2 text-left font-mono text-[11px] border-l-2 cursor-pointer transition-colors ${
+                  className={`w-full px-3 py-1.5 flex items-center gap-2 text-left font-mono text-2xs border-l-2 cursor-pointer transition-colors ${
                     isActive
                       ? 'bg-primary/10 border-l-primary text-foreground font-semibold'
                       : 'border-l-transparent text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
@@ -105,11 +105,11 @@ export const DatabaseSection: React.FC = () => {
                 >
                   <MingCuteIcon name="grid_line" size={12} className="shrink-0 opacity-60" />
                   <span className="truncate flex-1">{table.name}</span>
-                  <span className="text-[10px] text-muted-foreground tabular-nums font-normal">{table.rowCount.toLocaleString()}</span>
+                  <span className="text-3xs text-muted-foreground tabular-nums font-normal">{table.rowCount.toLocaleString()}</span>
                 </button>
               );
             })}
-            {error && <div className="px-3 py-2 text-rose-500 text-[11px] font-mono break-all">{error}</div>}
+            {error && <div className="px-3 py-2 text-rose-500 text-2xs font-mono break-all">{error}</div>}
           </div>
         </div>
 

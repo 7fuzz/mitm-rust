@@ -22,7 +22,7 @@ export const WebhookDeliveriesTable: React.FC<WebhookDeliveriesTableProps> = ({
       className="border-r border-border overflow-y-auto bg-background shrink-0 min-w-[200px]"
     >
       <table className="w-full text-left font-mono text-xs">
-        <thead className="bg-header border-b border-border text-muted-foreground text-[11px] sticky top-0 z-10">
+        <thead className="bg-header border-b border-border text-muted-foreground text-2xs sticky top-0 z-10">
           <tr>
             <th className="px-3 py-1.5 font-sans">Endpoint</th>
             <th className="px-3 py-1.5 font-sans">Time</th>
@@ -57,12 +57,12 @@ export const WebhookDeliveriesTable: React.FC<WebhookDeliveriesTableProps> = ({
                   >
                     {del.endpointPath}
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground text-[11px]">
+                  <td className="px-3 py-2 text-muted-foreground text-2xs">
                     {new Date(del.timestamp).toLocaleTimeString()}
                   </td>
                   <td className="px-3 py-2 text-center">
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                      className={`px-1.5 py-0.5 rounded text-3xs font-bold border ${
                         del.signatureStatus === 'valid'
                           ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                           : del.signatureStatus === 'invalid'

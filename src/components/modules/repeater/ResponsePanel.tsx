@@ -118,7 +118,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, toolbar 
         <div className="flex items-center gap-2 min-w-0">
           <StatusBadge code={response.statusCode} />
           {statusText && <span className="text-foreground font-semibold truncate">{statusText}</span>}
-          <span className="text-muted-foreground text-[11px] shrink-0">
+          <span className="text-muted-foreground text-2xs shrink-0">
             {durationMs}ms · {formatBytes(size)}
           </span>
         </div>
@@ -140,7 +140,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, toolbar 
 
             {copyMenuOpen && (
               <div className="absolute right-0 mt-1 w-56 bg-surface border border-border rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
-                <div className="px-3 pt-1 pb-0.5 text-[10px] uppercase tracking-wider font-sans font-semibold text-muted-foreground">Response</div>
+                <div className="px-3 pt-1 pb-0.5 text-3xs uppercase tracking-wider font-sans font-semibold text-muted-foreground">Response</div>
                 <button onClick={handleCopyBody} disabled={!responseBody} className={menuItemClass}>
                   <MingCuteIcon name="file_text_line" size={14} className="text-primary" />
                   <span>Copy Body</span>
@@ -156,7 +156,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, toolbar 
 
                 <div className="my-1 border-t border-border/80" />
                 <div
-                  className="px-3 pt-0.5 pb-0.5 text-[10px] uppercase tracking-wider font-sans font-semibold text-muted-foreground"
+                  className="px-3 pt-0.5 pb-0.5 text-3xs uppercase tracking-wider font-sans font-semibold text-muted-foreground"
                   title={sentRun ? undefined : 'The request for this response is not in the run history yet'}
                 >
                   Request + Response

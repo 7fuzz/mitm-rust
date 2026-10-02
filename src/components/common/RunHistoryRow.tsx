@@ -24,8 +24,8 @@ export const RunHistoryRow: React.FC<RunHistoryRowProps> = ({ run, isSelected, o
   >
     <div className="flex items-center gap-1.5">
       <StatusBadge code={run.statusCode} />
-      <span className="text-[10px] text-muted-foreground">{run.durationMs}ms</span>
-      <span className="ml-auto text-[10px] text-muted-foreground">
+      <span className="text-3xs text-muted-foreground">{run.durationMs}ms</span>
+      <span className="ml-auto text-3xs text-muted-foreground">
         {new Date(run.executedAtMs).toLocaleTimeString()}
       </span>
       <button
@@ -40,8 +40,8 @@ export const RunHistoryRow: React.FC<RunHistoryRowProps> = ({ run, isSelected, o
       </button>
     </div>
     <div className="flex items-center gap-1.5 min-w-0">
-      <span className="text-[10px] font-bold text-muted-foreground shrink-0">{run.method}</span>
-      <span className="text-[11px] text-foreground truncate" title={run.url}>
+      <span className="text-3xs font-bold text-muted-foreground shrink-0">{run.method}</span>
+      <span className="text-2xs text-foreground truncate" title={run.url}>
         {runPath(run.url)}
       </span>
     </div>

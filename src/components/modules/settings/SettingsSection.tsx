@@ -49,7 +49,7 @@ export const SettingsGroup: React.FC<SettingsGroupProps> = ({ label, tone = 'def
   <div className="space-y-1.5">
     {label && (
       <div
-        className={`text-[10px] font-semibold uppercase tracking-wider ${
+        className={`text-3xs font-semibold uppercase tracking-wider ${
           tone === 'danger' ? 'text-rose-500' : 'text-muted-foreground'
         }`}
       >
@@ -78,7 +78,7 @@ export const SettingsRow: React.FC<SettingsRowProps> = ({ label, description, ch
   <div className="px-3 py-2.5 flex items-center justify-between gap-4">
     <div className="min-w-0 space-y-0.5">
       <div className="text-foreground font-medium">{label}</div>
-      {description && <div className="text-muted-foreground text-[11px] leading-relaxed">{description}</div>}
+      {description && <div className="text-muted-foreground text-2xs leading-relaxed">{description}</div>}
     </div>
     {children && <div className="shrink-0 flex items-center gap-2">{children}</div>}
   </div>

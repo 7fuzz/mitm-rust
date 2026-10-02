@@ -59,7 +59,7 @@ export const ExtractRulesEditor: React.FC<ExtractRulesEditorProps> = ({
 
   return (
     <div className="space-y-3 font-sans text-xs select-none">
-      <div className="flex items-center justify-between text-muted-foreground text-[11px] pb-1 border-b border-border">
+      <div className="flex items-center justify-between text-muted-foreground text-2xs pb-1 border-b border-border">
         <span>
           Define extraction rules (JSON path, String delimiters, Headers, Regex) to auto-populate environment variables.
         </span>
@@ -181,7 +181,7 @@ export const ExtractRulesEditor: React.FC<ExtractRulesEditorProps> = ({
                           placeholder="Extract text after string (e.g. token=)"
                           className="flex-1 bg-surface border border-border rounded px-2.5 py-1 text-xs text-foreground font-mono focus:outline-none focus:border-primary"
                         />
-                        <div className="flex items-center gap-1 shrink-0 font-sans text-[11px] text-muted-foreground">
+                        <div className="flex items-center gap-1 shrink-0 font-sans text-2xs text-muted-foreground">
                           <span>Max Chars:</span>
                           <input
                             type="number"
@@ -209,7 +209,7 @@ export const ExtractRulesEditor: React.FC<ExtractRulesEditorProps> = ({
                           placeholder="Extract text before string (e.g. &expires=)"
                           className="flex-1 bg-surface border border-border rounded px-2.5 py-1 text-xs text-foreground font-mono focus:outline-none focus:border-primary"
                         />
-                        <div className="flex items-center gap-1 shrink-0 font-sans text-[11px] text-muted-foreground">
+                        <div className="flex items-center gap-1 shrink-0 font-sans text-2xs text-muted-foreground">
                           <span>Max Chars:</span>
                           <input
                             type="number"
@@ -237,7 +237,7 @@ export const ExtractRulesEditor: React.FC<ExtractRulesEditorProps> = ({
                           placeholder="Start Delimiter (e.g. session=&quot;)"
                           className="flex-1 bg-surface border border-border rounded px-2.5 py-1 text-xs text-foreground font-mono focus:outline-none focus:border-primary"
                         />
-                        <span className="text-muted-foreground shrink-0 font-sans text-[11px]">and</span>
+                        <span className="text-muted-foreground shrink-0 font-sans text-2xs">and</span>
                         <input
                           type="text"
                           value={end}

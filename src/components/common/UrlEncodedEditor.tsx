@@ -109,7 +109,7 @@ export const UrlEncodedEditor: React.FC<UrlEncodedEditorProps> = ({
       <div className="border border-border rounded-lg overflow-hidden">
         <table className="w-full text-left">
           <thead>
-            <tr className="bg-header border-b border-border text-muted-foreground text-[11px]">
+            <tr className="bg-header border-b border-border text-muted-foreground text-2xs">
               <th className="w-8 px-2 py-1.5 text-center">En</th>
               <th className="w-1/3 px-3 py-1.5 font-medium">Parameter Key</th>
               <th className="px-3 py-1.5 font-medium">Value</th>

@@ -52,7 +52,7 @@ export const RuleManagerDrawer: React.FC<RuleManagerDrawerProps> = ({
         </button>
 
         <div className="flex-1 flex items-center justify-center">
-          <span className="font-semibold text-muted-foreground group-hover:text-foreground text-[11px] uppercase tracking-wider rotate-90 whitespace-nowrap transition-colors">
+          <span className="font-semibold text-muted-foreground group-hover:text-foreground text-2xs uppercase tracking-wider rotate-90 whitespace-nowrap transition-colors">
             Rules ({interceptRules.length})
           </span>
         </div>
@@ -102,7 +102,7 @@ export const RuleManagerDrawer: React.FC<RuleManagerDrawerProps> = ({
                     onChange={() => toggleInterceptRule(rule.id)}
                     className="rounded border-border text-primary"
                   />
-                  <span className="uppercase text-[10px] font-bold text-muted-foreground">{rule.target}:</span>
+                  <span className="uppercase text-3xs font-bold text-muted-foreground">{rule.target}:</span>
                   <span className="font-medium text-foreground">{rule.pattern}</span>
                 </div>
                 <button
@@ -116,7 +116,7 @@ export const RuleManagerDrawer: React.FC<RuleManagerDrawerProps> = ({
                 </button>
               </div>
 
-              <div className="flex items-center gap-2 text-[10px]">
+              <div className="flex items-center gap-2 text-3xs">
                 <span
                   className={`px-1.5 py-0.2 rounded font-mono uppercase border font-semibold ${
                     rule.action === 'intercept'
@@ -134,7 +134,7 @@ export const RuleManagerDrawer: React.FC<RuleManagerDrawerProps> = ({
 
       {/* Add Rule Form */}
       <form onSubmit={handleAdd} className="p-3 bg-header border-t border-border space-y-2">
-        <span className="font-semibold text-foreground text-[11px] block">Add Rule (Whitelist / Blacklist)</span>
+        <span className="font-semibold text-foreground text-2xs block">Add Rule (Whitelist / Blacklist)</span>
         <div className="grid grid-cols-2 gap-2">
           <Select
             value={target}

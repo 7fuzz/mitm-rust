@@ -49,7 +49,7 @@ export const WebhookEndpointsSection: React.FC<WebhookEndpointsSectionProps> = (
             </div>
             <div>
               <span className="font-semibold text-foreground text-sm block">Webhook Receiver</span>
-              <span className="text-[11px] text-muted-foreground">Embedded HTTP Listener</span>
+              <span className="text-2xs text-muted-foreground">Embedded HTTP Listener</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -81,19 +81,19 @@ export const WebhookEndpointsSection: React.FC<WebhookEndpointsSectionProps> = (
         </div>
 
         <div className="flex items-center gap-2 font-mono bg-background/50 border border-border/60 rounded px-2.5 py-1.5">
-          <span className="text-muted-foreground text-[11px]">Port:</span>
+          <span className="text-muted-foreground text-2xs">Port:</span>
           <input
             type="number"
             value={listenerConfig.port}
             onChange={(e) => setPort(parseInt(e.target.value) || 9000)}
             className="w-20 bg-background border border-border rounded px-2 py-0.5 text-foreground focus:outline-none focus:border-primary text-center font-bold text-xs"
           />
-          <span className="text-muted-foreground text-[11px] ml-auto">
+          <span className="text-muted-foreground text-2xs ml-auto">
             <code>http://127.0.0.1:{listenerConfig.port}</code>
           </span>
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+        <div className="flex items-center justify-between text-2xs text-muted-foreground pt-1 border-t border-border/40">
           <span>
             Endpoints: <strong className="text-foreground">{endpoints.length}</strong>
           </span>
@@ -123,7 +123,7 @@ export const WebhookEndpointsSection: React.FC<WebhookEndpointsSectionProps> = (
         <div className="border border-border rounded overflow-hidden max-h-44 overflow-y-auto">
           <table className="w-full text-left font-mono text-xs">
             <thead>
-              <tr className="bg-header border-b border-border text-muted-foreground text-[11px]">
+              <tr className="bg-header border-b border-border text-muted-foreground text-2xs">
                 <th className="px-3 py-1.5 font-sans">Path & Local URL</th>
                 <th className="px-3 py-1.5 font-sans">Name</th>
                 <th className="px-3 py-1.5 font-sans">Secret Key</th>
@@ -159,7 +159,7 @@ export const WebhookEndpointsSection: React.FC<WebhookEndpointsSectionProps> = (
                           </button>
                         </div>
                       </td>
-                      <td className="px-3 py-1.5 font-sans text-muted-foreground text-[11px]">{ep.name}</td>
+                      <td className="px-3 py-1.5 font-sans text-muted-foreground text-2xs">{ep.name}</td>
                       <td className="px-3 py-1.5">
                         <div className="flex items-center gap-1.5">
                           <span className="text-amber-500 font-bold">
@@ -185,7 +185,7 @@ export const WebhookEndpointsSection: React.FC<WebhookEndpointsSectionProps> = (
                         </div>
                       </td>
                       <td className="px-2 py-1.5 text-center">
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-neutral-subtle text-foreground border border-border">
+                        <span className="px-1.5 py-0.5 rounded text-3xs font-bold bg-neutral-subtle text-foreground border border-border">
                           {ep.hitCount}
                         </span>
                       </td>

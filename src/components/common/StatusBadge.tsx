@@ -39,7 +39,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 
   return (
     <span
-      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium border ${colorStyle} ${className}`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-3xs font-mono font-medium border ${colorStyle} ${className}`}
     >
       {label}
     </span>
