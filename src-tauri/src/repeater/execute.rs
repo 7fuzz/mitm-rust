@@ -45,10 +45,21 @@ fn detect_body_content_type(body_type: &str, body: &str) -> Option<String> {
     }
 }
 
-pub async fn execute_repeater_tab(
-    db_path: &PathBuf,
-    tab: &RepeaterTab,
-) -> Result<RepeaterExecutionResult, String> {
+pub struct SentRequest {
+    pub final_url: String,
+    pub request_headers: Vec<HeaderItem>,
+    pub request_body: Option<String>,
+    pub status_code: u16,
+    pub status_text: String,
+    pub response_headers: Vec<HeaderItem>,
+    pub response_body: String,
+    pub response_size: u64,
+    pub duration_ms: u64,
+}
+
+/// Builds and sends a request from a tab and returns what was sent plus the response.
+/// Does not touch the database; callers decide whether to log it.
+pub async fn send_tab_request(tab: &RepeaterTab) -> Result<SentRequest, String> {
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .gzip(true)
@@ -178,11 +189,6 @@ pub async fn execute_repeater_tab(
     let response_res = req_builder.send().await;
     let duration_ms = start_time.elapsed().as_millis() as u64;
 
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0);
-
     match response_res {
         Ok(res) => {
             let status_code = res.status().as_u16();
@@ -214,61 +220,68 @@ pub async fn execute_repeater_tab(
             let response_size = res_bytes.len() as u64;
             let response_body = format_body_for_ui(&res_bytes, &content_type, &content_encoding);
 
-            let history_entry = RepeaterHistoryItem {
-                id: 0,
-                repeater_id: tab.id.clone(),
-                method: tab.method.clone(),
-                url: final_url_str.clone(),
-                request_headers: logged_headers.clone(),
-                request_body: req_body_str.clone(),
-                status_code,
-                response_headers: response_headers.clone(),
-                response_body: Some(response_body.clone()),
-                duration_ms,
-                executed_at_ms: now_ms,
-            };
-
-            let history_id = insert_repeater_history_db(db_path, &history_entry).unwrap_or(0);
-
-            Ok(RepeaterExecutionResult {
-                history_id,
-                repeater_id: tab.id.clone(),
+            Ok(SentRequest {
+                final_url: final_url_str,
+                request_headers: logged_headers,
+                request_body: req_body_str,
                 status_code,
                 status_text,
                 response_headers,
                 response_body,
-                duration_ms,
                 response_size,
+                duration_ms,
             })
         }
         Err(err) => {
             let err_msg = format!("Network Error: {}", err);
-            let history_entry = RepeaterHistoryItem {
-                id: 0,
-                repeater_id: tab.id.clone(),
-                method: tab.method.clone(),
-                url: final_url_str.clone(),
+            Ok(SentRequest {
+                final_url: final_url_str,
                 request_headers: logged_headers,
                 request_body: req_body_str,
-                status_code: 0,
-                response_headers: vec![],
-                response_body: Some(err_msg.clone()),
-                duration_ms,
-                executed_at_ms: now_ms,
-            };
-
-            let history_id = insert_repeater_history_db(db_path, &history_entry).unwrap_or(0);
-
-            Ok(RepeaterExecutionResult {
-                history_id,
-                repeater_id: tab.id.clone(),
                 status_code: 0,
                 status_text: "ERR_FAILED".to_string(),
                 response_headers: vec![],
                 response_body: err_msg.clone(),
-                duration_ms,
                 response_size: err_msg.len() as u64,
+                duration_ms,
             })
         }
     }
+}
+
+pub async fn execute_repeater_tab(
+    db_path: &PathBuf,
+    tab: &RepeaterTab,
+) -> Result<RepeaterExecutionResult, String> {
+    let sent = send_tab_request(tab).await?;
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+
+    let history_entry = RepeaterHistoryItem {
+        id: 0,
+        repeater_id: tab.id.clone(),
+        method: tab.method.clone(),
+        url: sent.final_url.clone(),
+        request_headers: sent.request_headers.clone(),
+        request_body: sent.request_body.clone(),
+        status_code: sent.status_code,
+        response_headers: sent.response_headers.clone(),
+        response_body: Some(sent.response_body.clone()),
+        duration_ms: sent.duration_ms,
+        executed_at_ms: now_ms,
+    };
+    let history_id = insert_repeater_history_db(db_path, &history_entry).unwrap_or(0);
+
+    Ok(RepeaterExecutionResult {
+        history_id,
+        repeater_id: tab.id.clone(),
+        status_code: sent.status_code,
+        status_text: sent.status_text,
+        response_headers: sent.response_headers,
+        response_body: sent.response_body,
+        duration_ms: sent.duration_ms,
+        response_size: sent.response_size,
+    })
 }

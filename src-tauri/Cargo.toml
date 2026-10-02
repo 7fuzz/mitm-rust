@@ -48,5 +48,6 @@ tungstenite = "0.24"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std", "async-await"] }
 hex = "0.4"
 if-addrs = "0.15"
+urlencoding = "2.1.3"
 
 

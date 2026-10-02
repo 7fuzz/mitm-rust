@@ -5,6 +5,7 @@ pub mod db;
 pub mod encoding;
 pub mod instance;
 pub mod proxy;
+pub mod fuzzer;
 pub mod repeater;
 pub mod state;
 pub mod webhook;
@@ -77,6 +78,17 @@ pub fn run() {
             commands::db_browser_cmd::query_db_table,
             commands::db_browser_cmd::get_db_row,
             commands::db_browser_cmd::run_db_query,
+
+            commands::fuzzer_cmd::parse_fuzz_positions,
+            commands::fuzzer_cmd::count_fuzz_requests,
+            commands::fuzzer_cmd::start_fuzz,
+            commands::fuzzer_cmd::stop_fuzz,
+            commands::fuzzer_cmd::get_fuzz_result,
+            commands::fuzzer_cmd::save_current_fuzz,
+            commands::fuzzer_cmd::list_fuzz_runs,
+            commands::fuzzer_cmd::get_fuzz_run_config,
+            commands::fuzzer_cmd::get_fuzz_run_results,
+            commands::fuzzer_cmd::delete_fuzz_run,
 
             commands::instance_cmd::get_instance_conflict,
             commands::instance_cmd::take_over_instance,

@@ -459,6 +459,9 @@ pub struct AppState {
     pub ws_client_senders: Arc<DashMap<String, tokio::sync::mpsc::UnboundedSender<tungstenite::Message>>>,
     pub ws_client_stops: Arc<DashMap<String, Arc<Mutex<Option<oneshot::Sender<()>>>>>>,
     pub next_history_id: Arc<AtomicU64>,
+    pub fuzz_cancel: Arc<AtomicBool>,
+    pub fuzz_running: Arc<AtomicBool>,
+    pub fuzz_buffer: Arc<RwLock<Option<crate::fuzzer::execute::FuzzRunBuffer>>>,
 }
 
 impl AppState {
@@ -567,6 +570,9 @@ impl AppState {
             webhook_running: Arc::new(AtomicBool::new(false)),
             webhook_port: Arc::new(RwLock::new(initial_webhook_port)),
             webhook_stop_signal: Arc::new(Mutex::new(None)),
+            fuzz_cancel: Arc::new(AtomicBool::new(false)),
+            fuzz_running: Arc::new(AtomicBool::new(false)),
+            fuzz_buffer: Arc::new(RwLock::new(None)),
             ws_stream_senders: Arc::new(DashMap::new()),
             ws_client_senders: Arc::new(DashMap::new()),
             ws_client_stops: Arc::new(DashMap::new()),

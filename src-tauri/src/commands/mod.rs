@@ -1,6 +1,7 @@
 pub mod ca_cmd;
 pub mod collection_cmd;
 pub mod db_browser_cmd;
+pub mod fuzzer_cmd;
 pub mod db_recovery_cmd;
 pub mod history_cmd;
 pub mod instance_cmd;
@@ -16,6 +17,7 @@ pub mod ws_cmd;
 pub use ca_cmd::*;
 pub use collection_cmd::*;
 pub use db_browser_cmd::*;
+pub use fuzzer_cmd::*;
 pub use db_recovery_cmd::*;
 pub use history_cmd::*;
 pub use instance_cmd::*;

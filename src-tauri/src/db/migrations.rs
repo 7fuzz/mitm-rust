@@ -79,6 +79,11 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         name: "20261002_0014_history_timestamps",
         sql: include_str!("../../migrations/20261002_0014_history_timestamps.sql"),
     },
+    MigrationSpec {
+        version: 15,
+        name: "20261003_0015_fuzzer",
+        sql: include_str!("../../migrations/20261003_0015_fuzzer.sql"),
+    },
 ];
 
 #[derive(Clone, Serialize, Debug)]
