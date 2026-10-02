@@ -1,8 +1,7 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useInterceptStore } from "../../stores/useInterceptStore";
 import { MingCuteIcon } from "../common/MingCuteIcon";
-import { Dialog } from "../common/ui/Dialog";
-import { Select, SourceScopeSection } from "../common/ui";
+import { Select, SourceScopeSection, Switch } from "../common/ui";
 import { KeyValueEditor } from "../common/KeyValueEditor";
 
 const METHOD_OPTIONS = [
@@ -52,11 +51,15 @@ export const InterceptViewer: React.FC = () => {
   } = useInterceptStore();
 
   const [activeTab, setActiveTab] = useState<"params" | "headers" | "body">("params");
-  const [rulesModalOpen, setRulesModalOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState<"rules" | "settings">("rules");
+  const [queueWidthPx, setQueueWidthPx] = useState(320);
+  const [sidebarWidthPx, setSidebarWidthPx] = useState(384);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [newRuleAction, setNewRuleAction] = useState<"intercept" | "pass">("intercept");
-  const [newRulePhase, setNewRulePhase] = useState<"request" | "response" | "both">("request");
+  const [newRulePhase, setNewRulePhase] = useState<"request" | "response" | "both">("both");
   const [newRuleField, setNewRuleField] = useState<"url" | "host" | "path" | "method" | "header">("url");
   const [newRuleOperator, setNewRuleOperator] = useState<"contains" | "equals" | "regex">("contains");
   const [newRuleValue, setNewRuleValue] = useState("");
@@ -80,7 +83,7 @@ export const InterceptViewer: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        if (!rulesModalOpen && selectedFlow) {
+        if (selectedFlow) {
           e.preventDefault();
           forwardCurrentFlow();
         }
@@ -88,7 +91,7 @@ export const InterceptViewer: React.FC = () => {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [rulesModalOpen, selectedFlow, forwardCurrentFlow]);
+  }, [selectedFlow, forwardCurrentFlow]);
 
   const handleHeaderChange = (index: number, key: string, value: string) => {
     const updated: [string, string][] = [...editedHeaders];
@@ -116,7 +119,7 @@ export const InterceptViewer: React.FC = () => {
   const handleCancelEditRule = () => {
     setEditingRuleId(null);
     setNewRuleAction("intercept");
-    setNewRulePhase("request");
+    setNewRulePhase("both");
     setNewRuleField("url");
     setNewRuleOperator("contains");
     setNewRuleValue("");
@@ -152,6 +155,29 @@ export const InterceptViewer: React.FC = () => {
     }
     setNewRuleValue("");
   };
+
+  // Drag a split handle; `side` says which edge of the container the panel is anchored to
+  const startResize = (side: "left" | "right", setWidth: (w: number) => void, min: number, max: number) =>
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (!containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const newWidth = side === "left" ? moveEvent.clientX - rect.left : rect.right - moveEvent.clientX;
+        setWidth(Math.min(Math.max(newWidth, min), max));
+      };
+
+      const handleMouseUp = () => {
+        document.body.style.cursor = "";
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+      };
+
+      document.body.style.cursor = "col-resize";
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    };
 
   const activeParamsCount = editedParams.filter((p) => p.enabled && p.key.trim()).length;
 
@@ -203,102 +229,72 @@ export const InterceptViewer: React.FC = () => {
           {/* Master Intercept Toggle Button */}
           <button
             onClick={() => setInterceptEnabled(!interceptEnabled)}
-            className={`flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold tracking-wide transition-all shadow-2xs cursor-pointer ${
+            className={`h-7 px-3 rounded-lg text-xs font-semibold tracking-wide transition-all shadow-2xs cursor-pointer border ${
               interceptEnabled
-                ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40"
-                : "bg-surface text-muted-foreground border border-border hover:bg-neutral-subtle hover:text-foreground"
+                ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/40"
+                : "bg-surface text-muted-foreground border-border hover:bg-neutral-subtle hover:text-foreground"
             }`}
           >
-            <MingCuteIcon name="shield_line" size={14} className={interceptEnabled ? "text-amber-500 animate-pulse" : ""} />
-            <span>Intercept is {interceptEnabled ? "ON" : "OFF"}</span>
+            Intercept is {interceptEnabled ? "ON" : "OFF"}
           </button>
-
-          {/* Intercept Phase Selector */}
-          <div className="flex items-center bg-surface p-0.5 rounded-lg border border-border text-xs">
-            {(["request", "response", "both"] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setInterceptMode(mode)}
-                className={`px-2.5 py-0.5 rounded uppercase text-[11px] transition-colors cursor-pointer capitalize ${
-                  interceptMode === mode
-                    ? "bg-primary text-primary-foreground font-bold shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground hover:bg-neutral-subtle"
-                }`}
-              >
-                {mode === "both" ? "Both" : `${mode}s`}
-              </button>
-            ))}
-          </div>
-
-          {/* Focus on Intercepted Toggle Option */}
-          <label
-            className="flex items-center gap-1.5 px-2.5 py-1 bg-surface rounded-lg border border-border text-xs text-foreground cursor-pointer hover:bg-neutral-subtle transition-colors select-none"
-            title="Automatically bring MITM window to front and select intercepted request when traffic is paused"
-          >
-            <input
-              type="checkbox"
-              checked={focusOnIntercepted}
-              onChange={(e) => setFocusOnIntercepted(e.target.checked)}
-              className="rounded accent-primary text-primary cursor-pointer w-3.5 h-3.5"
-            />
-            <span className="font-medium text-[11px] whitespace-nowrap">Focus on Intercepted</span>
-          </label>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 font-mono">
           <button
-            onClick={() => setRulesModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1 bg-surface hover:bg-neutral-subtle text-foreground text-xs rounded-lg transition-colors border border-border font-medium cursor-pointer"
-          >
-            <MingCuteIcon name="tool_line" size={14} /> Rules ({rules.length})
-          </button>
-
-          <div className="h-4 w-px bg-border mx-1" />
-
-          <button
             disabled={!selectedFlow}
             onClick={forwardCurrentFlow}
-            className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-xs rounded-lg transition-colors font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="h-7 px-3 bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-xs rounded-lg transition-colors font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             title="Forward modified flow (⌘↵)"
           >
-            <MingCuteIcon name="play_line" size={14} /> Forward (⌘↵)
+            Forward (⌘↵)
           </button>
 
           <button
             disabled={!selectedFlow}
             onClick={dropCurrentFlow}
-            className="flex items-center gap-1.5 px-3 py-1 bg-rose-500/15 border border-rose-500/30 hover:bg-rose-500/25 text-rose-600 dark:text-rose-400 text-xs rounded-lg transition-colors font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="h-7 px-3 bg-rose-500/15 border border-rose-500/30 hover:bg-rose-500/25 text-rose-600 dark:text-rose-400 text-xs rounded-lg transition-colors font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             title="Drop flow and return 502"
           >
-            <MingCuteIcon name="close_line" size={14} /> Drop
+            Drop
           </button>
 
           <button
             disabled={pendingFlows.length === 0}
             onClick={forwardAllFlows}
-            className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/15 border border-sky-500/30 hover:bg-sky-500/25 text-sky-600 dark:text-sky-400 text-xs rounded-lg transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="h-7 px-3 bg-sky-500/15 border border-sky-500/30 hover:bg-sky-500/25 text-sky-600 dark:text-sky-400 text-xs rounded-lg transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
-            <MingCuteIcon name="fast_forward_line" size={14} /> Forward All
+            Forward All
           </button>
 
           <button
             disabled={pendingFlows.length === 0}
             onClick={dropAllFlows}
-            className="flex items-center gap-1.5 px-3 py-1 bg-surface hover:bg-neutral-subtle text-muted-foreground hover:text-foreground text-xs rounded-lg transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer border border-border"
+            className="h-7 px-3 bg-surface hover:bg-neutral-subtle text-muted-foreground hover:text-foreground text-xs rounded-lg transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer border border-border"
           >
-            <MingCuteIcon name="delete_2_line" size={14} /> Drop All
+            Drop All
+          </button>
+
+          <div className="h-4 w-px bg-border mx-1" />
+
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className={`h-7 w-7 flex items-center justify-center rounded-lg border transition-colors cursor-pointer ${
+              sidebarOpen
+                ? "bg-primary/15 border-primary/40 text-primary"
+                : "bg-surface border-border text-muted-foreground hover:text-foreground hover:bg-neutral-subtle"
+            }`}
+            title={sidebarOpen ? "Hide rules & settings" : "Show rules & settings"}
+          >
+            <MingCuteIcon name="layout_right_line" size={15} />
           </button>
         </div>
       </header>
 
       {/* Main Split Pane Layout */}
-      <div className="flex flex-1 overflow-hidden">
+      <div ref={containerRef} className="flex flex-1 overflow-hidden">
         {/* Left Drawer: Paused Flow Queue */}
-        <div className="w-80 flex flex-col border-r border-border bg-surface shrink-0">
-          <div className="p-2 border-b border-border bg-background">
-            <SourceScopeSection value={interceptSourceScope} onChange={setInterceptSourceScope} verb="intercept" />
-          </div>
+        <div style={{ width: queueWidthPx }} className="flex flex-col border-r border-border bg-surface shrink-0">
           <div className="px-3 py-2 bg-header border-b border-border flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider font-mono">
             <span>Paused Queue</span>
             <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-300 text-[10px] font-mono font-bold">
@@ -344,6 +340,14 @@ export const InterceptViewer: React.FC = () => {
               })
             )}
           </div>
+        </div>
+
+        <div
+          onMouseDown={startResize("left", setQueueWidthPx, 220, 560)}
+          className="w-1 cursor-col-resize -mx-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
+          title="Drag to adjust queue width"
+        >
+          <div className="h-8 w-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
         </div>
 
         {/* Right Pane: Editable Method/URL Bar, Params, Headers & Body */}
@@ -521,232 +525,302 @@ export const InterceptViewer: React.FC = () => {
             </div>
           )}
         </div>
-      </div>
 
-      {/* Intercept Rules Modal */}
-      <Dialog
-        isOpen={rulesModalOpen}
-        onClose={() => setRulesModalOpen(false)}
-        title="Intercept Rules Engine"
-        description="Configure whitelist and blacklist criteria to selectively pause and inspect traffic."
-        size="xl"
-      >
-        {/* Add/Edit Rule Form */}
-        <form onSubmit={handleCreateRule} className="pb-3 border-b border-border space-y-3">
-          <div className="flex items-center justify-between text-xs font-semibold">
-            <span className={editingRuleId ? "text-amber-500 font-bold flex items-center gap-1.5" : "text-muted-foreground"}>
-              {editingRuleId ? (
-                <>
-                  <MingCuteIcon name="edit_line" size={14} /> Editing Matching Rule
-                </>
-              ) : (
-                "Add New Matching Rule"
-              )}
-            </span>
-            {editingRuleId && (
-              <button
-                type="button"
-                onClick={handleCancelEditRule}
-                className="text-[11px] text-muted-foreground hover:text-foreground underline cursor-pointer"
-              >
-                Cancel Edit
-              </button>
-            )}
-          </div>
-          <div className="grid grid-cols-5 gap-2 text-xs">
-            <select
-              value={newRuleAction}
-              onChange={(e: any) => setNewRuleAction(e.target.value)}
-              className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none cursor-pointer font-semibold"
+        {/* Right Sidebar: Rules & Settings */}
+        {sidebarOpen && (
+          <>
+            <div
+              onMouseDown={startResize("right", setSidebarWidthPx, 280, 720)}
+              className="w-1 cursor-col-resize -mx-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
+              title="Drag to adjust sidebar width"
             >
-              <option value="intercept">Whitelist (Pause)</option>
-              <option value="pass">Blacklist (Pass)</option>
-            </select>
-            <select
-              value={newRulePhase}
-              onChange={(e: any) => setNewRulePhase(e.target.value)}
-              className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none cursor-pointer"
-            >
-              <option value="both">Both Phases</option>
-              <option value="request">Request</option>
-              <option value="response">Response</option>
-            </select>
-            <select
-              value={newRuleField}
-              onChange={(e: any) => setNewRuleField(e.target.value)}
-              className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none cursor-pointer"
-            >
-              <option value="url">URL</option>
-              <option value="host">Host</option>
-              <option value="path">Path</option>
-              <option value="method">Method</option>
-              <option value="header">Header</option>
-            </select>
-            <select
-              value={newRuleOperator}
-              onChange={(e: any) => setNewRuleOperator(e.target.value)}
-              className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none cursor-pointer"
-            >
-              <option value="contains">Contains</option>
-              <option value="equals">Equals</option>
-              <option value="regex">Regex</option>
-            </select>
-            <div className="flex items-center gap-1">
-              <button
-                type="submit"
-                disabled={!newRuleValue.trim()}
-                className={`flex-1 flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded px-3 py-1.5 transition-colors cursor-pointer ${
-                  editingRuleId
-                    ? "bg-sky-500 hover:bg-sky-600"
-                    : "bg-amber-500 hover:bg-amber-600"
-                }`}
-              >
-                <MingCuteIcon name={editingRuleId ? "check_line" : "plus_line"} size={14} />
-                {editingRuleId ? "Save" : "Add Rule"}
-              </button>
-              {editingRuleId && (
+              <div className="h-8 w-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
+            </div>
+            <aside style={{ width: sidebarWidthPx }} className="flex flex-col border-l border-border bg-surface shrink-0 min-h-0">
+              <div className="flex items-center gap-1 px-2 py-1.5 bg-header border-b border-border shrink-0">
+                {(["rules", "settings"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setSidebarTab(tab)}
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                      sidebarTab === tab
+                        ? "bg-primary text-primary-foreground font-bold shadow-2xs"
+                        : "text-muted-foreground hover:text-foreground hover:bg-neutral-subtle"
+                    }`}
+                  >
+                    {tab === "rules" ? `Rules (${rules.length})` : "Settings"}
+                  </button>
+                ))}
                 <button
-                  type="button"
-                  onClick={handleCancelEditRule}
-                  className="px-2 py-1.5 bg-surface hover:bg-neutral-subtle border border-border rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs"
-                  title="Cancel editing"
+                  onClick={() => setSidebarOpen(false)}
+                  className="ml-auto p-1 text-muted-foreground hover:text-foreground hover:bg-neutral-subtle rounded transition-colors cursor-pointer"
+                  title="Hide sidebar"
                 >
                   <MingCuteIcon name="close_line" size={14} />
                 </button>
-              )}
-            </div>
-          </div>
-          <input
-            type="text"
-            placeholder="Match pattern value (e.g. api.example.com or /v1/auth)..."
-            value={newRuleValue}
-            onChange={(e) => setNewRuleValue(e.target.value)}
-            className="w-full bg-background border border-border focus:border-primary rounded px-3 py-1.5 text-xs text-foreground outline-none font-mono"
-          />
-        </form>
+              </div>
 
-        {/* Filter Tabs & Counter */}
-        <div className="flex items-center justify-between pt-1 text-xs border-b border-border pb-2">
-          <div className="flex items-center gap-1 bg-surface p-0.5 rounded-lg border border-border">
-            <button
-              type="button"
-              onClick={() => setRuleFilterTab("all")}
-              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                ruleFilterTab === "all"
-                  ? "bg-primary text-primary-foreground font-bold shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              All ({rules.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setRuleFilterTab("intercept")}
-              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                ruleFilterTab === "intercept"
-                  ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 font-bold border border-amber-500/40 shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Whitelist ({rules.filter((r) => r.action !== "pass").length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setRuleFilterTab("pass")}
-              className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                ruleFilterTab === "pass"
-                  ? "bg-sky-500/20 text-sky-600 dark:text-sky-300 font-bold border border-sky-500/40 shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Blacklist ({rules.filter((r) => r.action === "pass").length})
-            </button>
-          </div>
-          <span className="text-[11px] text-muted-foreground font-mono">
-            {rules.filter((r) => r.isEnabled).length} active rule{rules.filter((r) => r.isEnabled).length === 1 ? "" : "s"}
-          </span>
-        </div>
-
-        {/* Existing Rules List */}
-        <div className="overflow-y-auto py-1 space-y-2 text-xs max-h-80">
-          {rules.length === 0 ? (
-            <div className="text-center py-6 text-muted-foreground italic">
-              No custom rules added. All traffic will be paused when interceptor is active.
-            </div>
-          ) : filteredRules.length === 0 ? (
-            <div className="text-center py-6 text-muted-foreground italic">
-              No rules in the selected filter tab.
-            </div>
-          ) : (
-            filteredRules.map((rule) => {
-              const isWhitelist = rule.action !== "pass";
-              return (
-                <div
-                  key={rule.id}
-                  className={`flex items-center justify-between p-2.5 rounded-lg border transition-colors ${
-                    editingRuleId === rule.id
-                      ? "bg-sky-500/10 border-sky-500/40"
-                      : "bg-background border-border hover:border-border/80"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    <input
-                      type="checkbox"
-                      checked={rule.isEnabled}
-                      onChange={() => toggleRule(rule.id)}
-                      className="rounded accent-amber-500 cursor-pointer"
-                      title={rule.isEnabled ? "Disable rule" : "Enable rule"}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => updateRuleAction(rule.id, isWhitelist ? "pass" : "intercept")}
-                      title="Click to toggle between Whitelist and Blacklist"
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-wide uppercase transition-colors cursor-pointer ${
-                        isWhitelist
-                          ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
-                          : "bg-sky-500/20 text-sky-600 dark:text-sky-300 border border-sky-500/40 hover:bg-sky-500/30"
-                      }`}
-                    >
-                      {isWhitelist ? "WHITELIST (PAUSE)" : "BLACKLIST (PASS)"}
-                    </button>
-                    <span className="font-mono text-muted-foreground font-semibold uppercase text-[10px] bg-surface px-1.5 py-0.5 rounded border border-border">
-                      {rule.targetPhase}
-                    </span>
-                    <span className="font-mono text-foreground text-xs truncate">
-                      <span className="font-semibold text-primary">{rule.matchField}</span> {rule.operator}{" "}
-                      <span className="bg-surface px-1.5 py-0.5 rounded border border-border font-mono text-amber-600 dark:text-amber-400">
-                        "{rule.matchValue}"
+              {sidebarTab === "rules" ? (
+                <div className="flex-1 flex flex-col min-h-0 p-3 gap-2">
+                  {/* Add/Edit Rule Form */}
+                  <form onSubmit={handleCreateRule} className="pb-3 border-b border-border space-y-3">
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <span className={editingRuleId ? "text-amber-500 font-bold flex items-center gap-1.5" : "text-muted-foreground"}>
+                        {editingRuleId ? (
+                          <>
+                            <MingCuteIcon name="edit_line" size={14} /> Editing Matching Rule
+                          </>
+                        ) : (
+                          "Add New Matching Rule"
+                        )}
                       </span>
+                      {editingRuleId && (
+                        <button
+                          type="button"
+                          onClick={handleCancelEditRule}
+                          className="text-[11px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+                        >
+                          Cancel Edit
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <select
+                        value={newRuleAction}
+                        onChange={(e: any) => setNewRuleAction(e.target.value)}
+                        className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none cursor-pointer font-semibold"
+                      >
+                        <option value="intercept">Whitelist (Pause)</option>
+                        <option value="pass">Blacklist (Pass)</option>
+                      </select>
+                      <select
+                        value={newRulePhase}
+                        onChange={(e: any) => setNewRulePhase(e.target.value)}
+                        className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none cursor-pointer"
+                      >
+                        <option value="both">Both Phases</option>
+                        <option value="request">Request</option>
+                        <option value="response">Response</option>
+                      </select>
+                      <select
+                        value={newRuleField}
+                        onChange={(e: any) => setNewRuleField(e.target.value)}
+                        className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none cursor-pointer"
+                      >
+                        <option value="url">URL</option>
+                        <option value="host">Host</option>
+                        <option value="path">Path</option>
+                        <option value="method">Method</option>
+                        <option value="header">Header</option>
+                      </select>
+                      <select
+                        value={newRuleOperator}
+                        onChange={(e: any) => setNewRuleOperator(e.target.value)}
+                        className="bg-background border border-border rounded px-2 py-1.5 text-foreground outline-none cursor-pointer"
+                      >
+                        <option value="contains">Contains</option>
+                        <option value="equals">Equals</option>
+                        <option value="regex">Regex</option>
+                      </select>
+                      <input
+                        type="text"
+                        placeholder="Match pattern (e.g. api.example.com or /v1/auth)..."
+                        value={newRuleValue}
+                        onChange={(e) => setNewRuleValue(e.target.value)}
+                        className="col-span-2 w-full bg-background border border-border focus:border-primary rounded px-3 py-1.5 text-xs text-foreground outline-none font-mono"
+                      />
+                      <div className="col-span-2 flex items-center gap-1">
+                        <button
+                          type="submit"
+                          disabled={!newRuleValue.trim()}
+                          className={`flex-1 flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded px-3 py-1.5 transition-colors cursor-pointer ${
+                            editingRuleId
+                              ? "bg-sky-500 hover:bg-sky-600"
+                              : "bg-amber-500 hover:bg-amber-600"
+                          }`}
+                        >
+                          <MingCuteIcon name={editingRuleId ? "check_line" : "plus_line"} size={14} />
+                          {editingRuleId ? "Save" : "Add Rule"}
+                        </button>
+                        {editingRuleId && (
+                          <button
+                            type="button"
+                            onClick={handleCancelEditRule}
+                            className="px-2 py-1.5 bg-surface hover:bg-neutral-subtle border border-border rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs"
+                            title="Cancel editing"
+                          >
+                            <MingCuteIcon name="close_line" size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </form>
+
+                  {/* Filter Tabs & Counter */}
+                  <div className="flex items-center justify-between pt-1 text-xs border-b border-border pb-2">
+                    <div className="flex items-center gap-1 bg-surface p-0.5 rounded-lg border border-border">
+                      <button
+                        type="button"
+                        onClick={() => setRuleFilterTab("all")}
+                        className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                          ruleFilterTab === "all"
+                            ? "bg-primary text-primary-foreground font-bold shadow-2xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        All ({rules.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRuleFilterTab("intercept")}
+                        className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                          ruleFilterTab === "intercept"
+                            ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 font-bold border border-amber-500/40 shadow-2xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Whitelist ({rules.filter((r) => r.action !== "pass").length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRuleFilterTab("pass")}
+                        className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                          ruleFilterTab === "pass"
+                            ? "bg-sky-500/20 text-sky-600 dark:text-sky-300 font-bold border border-sky-500/40 shadow-2xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Blacklist ({rules.filter((r) => r.action === "pass").length})
+                      </button>
+                    </div>
+                    <span className="text-[11px] text-muted-foreground font-mono">
+                      {rules.filter((r) => r.isEnabled).length} active rule{rules.filter((r) => r.isEnabled).length === 1 ? "" : "s"}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0 ml-2">
-                    <button
-                      type="button"
-                      onClick={() => handleStartEditRule(rule)}
-                      className={`transition-colors p-1 cursor-pointer rounded ${
-                        editingRuleId === rule.id
-                          ? "text-sky-500 bg-sky-500/15"
-                          : "text-muted-foreground hover:text-foreground hover:bg-neutral-subtle"
-                      }`}
-                      title="Edit rule"
-                    >
-                      <MingCuteIcon name="edit_line" size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteRule(rule.id)}
-                      className="text-muted-foreground hover:text-rose-500 hover:bg-rose-500/15 transition-colors p-1 cursor-pointer rounded"
-                      title="Delete rule"
-                    >
-                      <MingCuteIcon name="delete_2_line" size={14} />
-                    </button>
+
+                  {/* Existing Rules List */}
+                  <div className="flex-1 overflow-y-auto py-2 space-y-2 text-xs">
+                    {rules.length === 0 ? (
+                      <div className="text-center py-6 text-muted-foreground italic">
+                        No custom rules added. All traffic will be paused when interceptor is active.
+                      </div>
+                    ) : filteredRules.length === 0 ? (
+                      <div className="text-center py-6 text-muted-foreground italic">
+                        No rules in the selected filter tab.
+                      </div>
+                    ) : (
+                      filteredRules.map((rule) => {
+                        const isWhitelist = rule.action !== "pass";
+                        return (
+                          <div
+                            key={rule.id}
+                            className={`flex items-center justify-between p-2.5 rounded-lg border transition-colors ${
+                              editingRuleId === rule.id
+                                ? "bg-sky-500/10 border-sky-500/40"
+                                : "bg-background border-border hover:border-border/80"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={rule.isEnabled}
+                                onChange={() => toggleRule(rule.id)}
+                                className="rounded accent-amber-500 cursor-pointer"
+                                title={rule.isEnabled ? "Disable rule" : "Enable rule"}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updateRuleAction(rule.id, isWhitelist ? "pass" : "intercept")}
+                                title="Click to toggle between Whitelist and Blacklist"
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-wide uppercase transition-colors cursor-pointer ${
+                                  isWhitelist
+                                    ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
+                                    : "bg-sky-500/20 text-sky-600 dark:text-sky-300 border border-sky-500/40 hover:bg-sky-500/30"
+                                }`}
+                              >
+                                {isWhitelist ? "WHITELIST (PAUSE)" : "BLACKLIST (PASS)"}
+                              </button>
+                              <span className="font-mono text-muted-foreground font-semibold uppercase text-[10px] bg-surface px-1.5 py-0.5 rounded border border-border">
+                                {rule.targetPhase}
+                              </span>
+                              <span className="font-mono text-foreground text-xs truncate">
+                                <span className="font-semibold text-primary">{rule.matchField}</span> {rule.operator}{" "}
+                                <span className="bg-surface px-1.5 py-0.5 rounded border border-border font-mono text-amber-600 dark:text-amber-400">
+                                  "{rule.matchValue}"
+                                </span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0 ml-2">
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditRule(rule)}
+                                className={`transition-colors p-1 cursor-pointer rounded ${
+                                  editingRuleId === rule.id
+                                    ? "text-sky-500 bg-sky-500/15"
+                                    : "text-muted-foreground hover:text-foreground hover:bg-neutral-subtle"
+                                }`}
+                                title="Edit rule"
+                              >
+                                <MingCuteIcon name="edit_line" size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteRule(rule.id)}
+                                className="text-muted-foreground hover:text-rose-500 hover:bg-rose-500/15 transition-colors p-1 cursor-pointer rounded"
+                                title="Delete rule"
+                              >
+                                <MingCuteIcon name="delete_2_line" size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
-      </Dialog>
+              ) : (
+                <div className="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
+                  <div className="bg-surface border border-border rounded-lg px-3 py-2 space-y-2">
+                    <div>
+                      <div className="font-semibold text-foreground">Intercept Phase</div>
+                      <div className="text-[11px] text-muted-foreground">Which side of the exchange to pause</div>
+                    </div>
+                    <div className="flex items-center bg-background p-0.5 rounded-lg border border-border">
+                      {(["request", "response", "both"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setInterceptMode(mode)}
+                          className={`flex-1 px-2.5 py-1 rounded text-[11px] transition-colors cursor-pointer capitalize ${
+                            interceptMode === mode
+                              ? "bg-primary text-primary-foreground font-bold shadow-2xs"
+                              : "text-muted-foreground hover:text-foreground hover:bg-neutral-subtle"
+                          }`}
+                        >
+                          {mode === "both" ? "Both" : `${mode}s`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <label
+                    className="flex items-center justify-between gap-2 bg-surface border border-border rounded-lg px-3 py-2 cursor-pointer"
+                    title="Automatically bring MITM window to front and select intercepted request when traffic is paused"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-semibold text-foreground">Focus on Intercepted</div>
+                      <div className="text-[11px] text-muted-foreground">Bring the window to front when traffic is paused</div>
+                    </div>
+                    <Switch checked={focusOnIntercepted} onChange={() => setFocusOnIntercepted(!focusOnIntercepted)} />
+                  </label>
+
+                  <SourceScopeSection value={interceptSourceScope} onChange={setInterceptSourceScope} verb="intercept" />
+                </div>
+              )}
+            </aside>
+          </>
+        )}
+      </div>
+
     </div>
   );
 };

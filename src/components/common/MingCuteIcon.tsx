@@ -65,7 +65,8 @@ export type MingCuteIconName =
   | 'loading_line'
   | 'alert_line'
   | 'warning_line'
-  | 'file_import_line';
+  | 'file_import_line'
+  | 'layout_right_line';
 
 interface MingCuteIconProps {
   name: MingCuteIconName | string;
@@ -287,6 +288,10 @@ export const MingCuteIcon: React.FC<MingCuteIconProps> = ({
       case 'warning_line':
         return (
           <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-2h2zm0-4h-2V7h2z" />
+        );
+      case 'layout_right_line':
+        return (
+          <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14zm-5 2H5v14h9V5zm5 0h-3v14h3V5z" />
         );
       default:
         // Clean neutral circle fallback instead of warning sign
