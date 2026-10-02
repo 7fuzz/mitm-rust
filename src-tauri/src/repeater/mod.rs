@@ -164,8 +164,20 @@ pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<()
     let extract_rules_json = serde_json::to_string(&tab.extract_rules).unwrap_or_else(|_| "[]".to_string());
 
     conn.execute(
-        "INSERT OR REPLACE INTO repeaters (id, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, order_index, created_at_ms, updated_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        // Upsert in place: INSERT OR REPLACE deletes the old row first, which cascades
+        // (foreign keys are on by default in the bundled SQLite) and wipes the request's run history
+        "INSERT INTO repeaters (id, method, url, headers_json, params_json, body_type, body_content, extract_rules_json, order_index, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+            method = excluded.method,
+            url = excluded.url,
+            headers_json = excluded.headers_json,
+            params_json = excluded.params_json,
+            body_type = excluded.body_type,
+            body_content = excluded.body_content,
+            extract_rules_json = excluded.extract_rules_json,
+            order_index = excluded.order_index,
+            updated_at_ms = excluded.updated_at_ms",
         params![
             tab.id,
             tab.method,
@@ -318,4 +330,59 @@ pub fn get_repeater_history_db(
         .collect();
 
     Ok(history)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn updating_a_tab_keeps_its_run_history() {
+        let db_path = std::env::temp_dir().join(format!("repeater-test-{}.db", uuid::Uuid::new_v4()));
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(include_str!("../../migrations/20260825_0003_repeaters.sql")).unwrap();
+        drop(conn);
+
+        let mut tab = RepeaterTab {
+            id: "tab-1".into(),
+            method: "GET".into(),
+            url: "https://example.com".into(),
+            headers: vec![],
+            params: vec![],
+            body_type: "none".into(),
+            body_content: None,
+            extract_rules: vec![],
+            order_index: 0,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+            execution_count: 0,
+            last_status_code: None,
+            last_duration_ms: None,
+        };
+        create_repeater_tab_db(&db_path, &tab).unwrap();
+
+        for i in 0..3 {
+            let run = RepeaterHistoryItem {
+                id: 0,
+                repeater_id: tab.id.clone(),
+                method: "GET".into(),
+                url: tab.url.clone(),
+                request_headers: vec![],
+                request_body: None,
+                status_code: 200,
+                response_headers: vec![],
+                response_body: None,
+                duration_ms: 10,
+                executed_at_ms: i,
+            };
+            insert_repeater_history_db(&db_path, &run).unwrap();
+            // Every send saves the tab first; that must not drop earlier runs
+            tab.url = format!("https://example.com/{}", i);
+            update_repeater_tab_db(&db_path, &tab).unwrap();
+        }
+
+        let history = get_repeater_history_db(&db_path, &tab.id, 1, 100).unwrap();
+        let _ = std::fs::remove_file(&db_path);
+        assert_eq!(history.len(), 3);
+    }
 }
