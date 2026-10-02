@@ -99,6 +99,10 @@ export const UI_PREFS = {
     normalize: (stored, fallback) =>
       SETTINGS_SECTIONS.includes(stored as SettingsSectionId) ? (stored as SettingsSectionId) : fallback,
   }),
+  "workspace.sidebarOpen": pref<boolean>({
+    default: true,
+    normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),
+  }),
   "history.filterBarOpen": pref<boolean>({
     default: false,
     normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),

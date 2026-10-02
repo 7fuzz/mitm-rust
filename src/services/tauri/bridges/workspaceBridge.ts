@@ -188,6 +188,10 @@ export const saveWorkspaceEnvironment = async (
   return await invoke<void>("save_workspace_environment", { environment });
 };
 
+export const deleteWorkspaceEnvironment = async (id: string): Promise<void> => {
+  return await invoke<void>("delete_workspace_environment", { id });
+};
+
 export const getCollections = async (
   workspaceId: string
 ): Promise<CollectionTreeItem[]> => {

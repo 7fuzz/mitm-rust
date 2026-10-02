@@ -1,7 +1,7 @@
 use tauri::State;
 use crate::state::AppState;
 use crate::workspace::{
-    create_workspace_db, delete_workspace_db, get_workspace_environments_db,
+    create_workspace_db, delete_workspace_db, delete_workspace_environment_db, get_workspace_environments_db,
     get_workspaces_db, save_workspace_environment_db, set_active_workspace_db,
     update_workspace_db, Environment, Workspace,
 };
@@ -69,6 +69,14 @@ pub async fn get_workspace_environments(
     workspace_id: String,
 ) -> Result<Vec<Environment>, String> {
     get_workspace_environments_db(&state.db_path, &workspace_id)
+}
+
+#[tauri::command]
+pub async fn delete_workspace_environment(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    delete_workspace_environment_db(&state.db_path, &id)
 }
 
 #[tauri::command]

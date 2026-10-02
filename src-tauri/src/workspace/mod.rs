@@ -251,6 +251,44 @@ pub fn save_workspace_environment_db(
     Ok(())
 }
 
+/// Deleting the active environment hands "active" to the oldest remaining one, if any.
+pub fn delete_workspace_environment_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
+    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    let (workspace_id, was_active): (String, bool) = tx
+        .query_row(
+            "SELECT workspace_id, is_active FROM environments WHERE id = ?",
+            params![id],
+            |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)),
+        )
+        .map_err(|e| format!("Environment not found: {}", e))?;
+
+    tx.execute("DELETE FROM environments WHERE id = ?", params![id])
+        .map_err(|e| e.to_string())?;
+
+    if was_active {
+        let next: Option<String> = tx
+            .query_row(
+                "SELECT id FROM environments WHERE workspace_id = ? ORDER BY created_at_ms ASC LIMIT 1",
+                params![workspace_id],
+                |row| row.get(0),
+            )
+            .ok();
+        if let Some(next_id) = &next {
+            tx.execute("UPDATE environments SET is_active = 1 WHERE id = ?", params![next_id])
+                .map_err(|e| e.to_string())?;
+        }
+        tx.execute(
+            "UPDATE workspaces SET active_environment_id = ?, updated_at_ms = ? WHERE id = ?",
+            params![next, now_ms(), workspace_id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().map_err(|e| e.to_string())
+}
+
 pub fn resolve_dynamic_variable(key: &str) -> Option<String> {
     let lower = key.trim().to_lowercase();
     let norm = lower.trim_start_matches('$');

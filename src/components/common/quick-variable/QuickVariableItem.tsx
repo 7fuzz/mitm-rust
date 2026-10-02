@@ -1,6 +1,7 @@
 import React from 'react';
 import { MingCuteIcon } from '../MingCuteIcon';
-import type { EnvironmentVariable, VariableVariant } from '../../../services/tauri/bridge';
+import type { EnvironmentVariable } from '../../../services/tauri/bridge';
+import { getVariableVariants } from '../../../utils/envVariables';
 
 export type InlineEditType = 'value' | 'rename-var' | 'rename-variant' | 'new-variant';
 
@@ -24,13 +25,6 @@ interface QuickVariableItemProps {
   onDeleteVariant: (varIndex: number) => void;
   onDeleteVariable: (varKey: string) => void;
 }
-
-export const getVariableVariants = (v: EnvironmentVariable): VariableVariant[] => {
-  if (v.variants && v.variants.length > 0) {
-    return v.variants;
-  }
-  return [{ name: '(auto)', value: v.value || '' }];
-};
 
 export const QuickVariableItem: React.FC<QuickVariableItemProps> = ({
   variable,

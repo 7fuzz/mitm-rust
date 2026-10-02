@@ -4,7 +4,8 @@ import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { MingCuteIcon } from './MingCuteIcon';
 import type { EnvironmentVariable } from '../../services/tauri/bridge';
 import { QuickVariableEnvSelector } from './quick-variable/QuickVariableEnvSelector';
-import { QuickVariableItem, type InlineEditState, getVariableVariants } from './quick-variable/QuickVariableItem';
+import { QuickVariableItem, type InlineEditState } from './quick-variable/QuickVariableItem';
+import { getVariableVariants } from '../../utils/envVariables';
 import { QuickVariableFooter } from './quick-variable/QuickVariableFooter';
 import { useQuickVariableShortcuts } from './quick-variable/useQuickVariableShortcuts';
 

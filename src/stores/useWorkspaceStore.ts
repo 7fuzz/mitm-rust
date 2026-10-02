@@ -13,6 +13,7 @@ import {
   exportWorkspaceFile,
   getWorkspaceEnvironments,
   saveWorkspaceEnvironment,
+  deleteWorkspaceEnvironment,
   Workspace,
   Environment,
   ImportSummary,
@@ -49,8 +50,10 @@ interface WorkspaceState {
 
   // Legacy compatibility methods
   setActiveEnv: (id: string) => Promise<void>;
-  createEnv: (name: string, color?: string) => Promise<void>;
-  deleteEnv: (id: string) => Promise<void>;
+  createEnvironment: (name: string) => Promise<Environment | null>;
+  duplicateEnvironment: (id: string) => Promise<Environment | null>;
+  renameEnvironment: (id: string, name: string) => Promise<void>;
+  deleteEnvironment: (id: string) => Promise<void>;
   addVar: (v: Partial<VariableItem>) => Promise<void>;
   updateVar: (v: VariableItem) => Promise<void>;
   deleteVar: (id: string) => Promise<void>;
@@ -298,16 +301,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   saveEnvironmentVariables: async (env) => {
-    set((state) => ({
-      environmentsList: state.environmentsList.map((e) =>
-        e.id === env.id
-          ? { ...env }
-          : env.isActive
-          ? { ...e, isActive: false }
-          : e
-      ),
-      activeEnvironmentId: env.isActive ? env.id : state.activeEnvironmentId,
-    }));
+    set((state) => {
+      // Saving an id not in the list creates that environment (the backend upserts)
+      const list = state.environmentsList.some((e) => e.id === env.id)
+        ? state.environmentsList
+        : [...state.environmentsList, env];
+      return {
+        environmentsList: list.map((e) =>
+          e.id === env.id
+            ? { ...env }
+            : env.isActive
+            ? { ...e, isActive: false }
+            : e
+        ),
+        activeEnvironmentId: env.isActive ? env.id : state.activeEnvironmentId,
+      };
+    });
     if (isTauriAvailable()) {
       try {
         await saveWorkspaceEnvironment(env);
@@ -324,8 +333,54 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   // Legacy compatibility methods
   setActiveEnv: async (id) => set({ activeEnvironmentId: id }),
-  createEnv: async () => {},
-  deleteEnv: async () => {},
+  createEnvironment: async (name) => {
+    const workspaceId = get().activeWorkspaceId;
+    if (!workspaceId) return null;
+    const now = Date.now();
+    const env: Environment = {
+      id: `env-${crypto.randomUUID()}`,
+      workspaceId,
+      name,
+      isActive: get().environmentsList.length === 0,
+      variables: [],
+      createdAtMs: now,
+      updatedAtMs: now,
+    };
+    await get().saveEnvironmentVariables(env);
+    return env;
+  },
+
+  duplicateEnvironment: async (id) => {
+    const source = get().environmentsList.find((e) => e.id === id);
+    if (!source) return null;
+    const now = Date.now();
+    const copy: Environment = {
+      ...structuredClone(source),
+      id: `env-${crypto.randomUUID()}`,
+      name: `${source.name} copy`,
+      isActive: false,
+      createdAtMs: now,
+      updatedAtMs: now,
+    };
+    await get().saveEnvironmentVariables(copy);
+    return copy;
+  },
+
+  renameEnvironment: async (id, name) => {
+    const env = get().environmentsList.find((e) => e.id === id);
+    if (!env || !name.trim() || name.trim() === env.name) return;
+    await get().saveEnvironmentVariables({ ...env, name: name.trim(), updatedAtMs: Date.now() });
+  },
+
+  deleteEnvironment: async (id) => {
+    const workspaceId = get().activeWorkspaceId;
+    if (isTauriAvailable()) {
+      await deleteWorkspaceEnvironment(id);
+      if (workspaceId) await get().loadEnvironments(workspaceId);
+    } else {
+      set((state) => ({ environmentsList: state.environmentsList.filter((e) => e.id !== id) }));
+    }
+  },
   addVar: async () => {},
   updateVar: async () => {},
   deleteVar: async () => {},

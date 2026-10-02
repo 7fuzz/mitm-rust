@@ -137,6 +137,7 @@ pub fn run() {
             commands::workspace_cmd::import_workspace_json,
             commands::workspace_cmd::get_workspace_environments,
             commands::workspace_cmd::save_workspace_environment,
+            commands::workspace_cmd::delete_workspace_environment,
             commands::workspace_cmd::export_workspace_json,
             commands::workspace_cmd::export_workspace_file,
 

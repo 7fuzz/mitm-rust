@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { Environment, EnvironmentVariable } from '../../../services/tauri/bridge';
 import type { InlineEditState } from './QuickVariableItem';
-import { getVariableVariants } from './QuickVariableItem';
+import { getVariableVariants } from '../../../utils/envVariables';
 
 interface UseQuickVariableShortcutsParams {
   isOpen: boolean;
