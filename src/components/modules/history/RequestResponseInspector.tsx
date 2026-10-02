@@ -11,6 +11,8 @@ import { MediaResponsePreview } from '../../common/MediaResponsePreview';
 import { JsonTreeViewerRoot } from '../../common/JsonTreeViewer';
 import { detectMediaResponse } from '../../../utils/mediaDetector';
 import { isJsonString } from '../../../utils/bodyConverters';
+import { useUiPref } from '../../../stores/useUiPrefsStore';
+import { clampPercent, startDragResize } from '../../../utils/dragResize';
 
 const REQ_TABS = [
   { value: 'body', label: 'Body' },
@@ -25,16 +27,53 @@ const RES_TABS = [
   { value: 'cookies', label: 'Cookies' },
 ] as const;
 
+interface PaneHeaderProps {
+  title: string;
+  tabs: Array<{ value: string; label: string; count?: number }>;
+  activeTab: string;
+  onTabChange: (value: string) => void;
+  /** Controls aligned right, e.g. the body format switch */
+  right?: React.ReactNode;
+}
+
+/** Single header row per pane: title, underline tabs with counts, and optional right-aligned controls. */
+const PaneHeader: React.FC<PaneHeaderProps> = ({ title, tabs, activeTab, onTabChange, right }) => (
+  <div className="bg-header border-b border-border px-2 flex items-center gap-3 shrink-0 select-none h-8">
+    <span className="font-semibold text-muted-foreground text-[10px] uppercase tracking-wider shrink-0">{title}</span>
+    <div className="h-4 w-px bg-border shrink-0" />
+    <div className="flex items-stretch h-full gap-0.5 min-w-0 overflow-x-auto no-scrollbar">
+      {tabs.map((tab) => {
+        const isActive = tab.value === activeTab;
+        return (
+          <button
+            key={tab.value}
+            onClick={() => onTabChange(tab.value)}
+            className={`px-2.5 text-[11px] transition-colors cursor-pointer whitespace-nowrap rounded-t ${
+              isActive
+                ? // Inset shadow as the underline so the scroll container can't clip it
+                  'bg-surface text-foreground font-semibold shadow-[inset_0_-2px_0_var(--color-primary)]'
+                : 'text-muted-foreground font-medium hover:text-foreground hover:bg-neutral-subtle'
+            }`}
+          >
+            {tab.label}
+            {tab.count ? <span className="ml-1 text-[10px] text-muted-foreground font-mono">{tab.count}</span> : null}
+          </button>
+        );
+      })}
+    </div>
+    {right && <div className="ml-auto shrink-0">{right}</div>}
+  </div>
+);
+
 interface RequestResponseInspectorProps {
   item: TrafficItem | null;
-  layoutMode: 'horizontal' | 'vertical';
-  onToggleLayoutMode: () => void;
+  /** Hides the inspector; selecting a row opens it again */
+  onHide?: () => void;
 }
 
 export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> = ({
   item,
-  layoutMode,
-  onToggleLayoutMode,
+  onHide,
 }) => {
   const [reqTab, setReqTab] = useState<'headers' | 'body' | 'params' | 'cookies'>('body');
   const [resTab, setResTab] = useState<'headers' | 'body' | 'cookies'>('body');
@@ -127,37 +166,24 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
   }, [resMediaInfo, isResJson]);
 
   // Draggable width/height split between Request and Response panels
-  const [reqWidthPercent, setReqWidthPercent] = useState<number>(50);
+  const [reqWidthPercent, setReqWidthPercent, resetReqWidthPercent] = useUiPref('history.inspectorSplitPercent');
   const splitContainerRef = useRef<HTMLDivElement>(null);
-  const isResizingWidth = useRef(false);
+  const reqPaneRef = useRef<HTMLDivElement>(null);
+  const resPaneRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseDownSplit = (e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingWidth.current = true;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isResizingWidth.current || !splitContainerRef.current) return;
-      const rect = splitContainerRef.current.getBoundingClientRect();
-
-      if (layoutMode === 'vertical') {
-        const relativeX = moveEvent.clientX - rect.left;
-        const newPercent = (relativeX / rect.width) * 100;
-        setReqWidthPercent(Math.min(Math.max(newPercent, 15), 85));
-      } else {
-        const relativeY = moveEvent.clientY - rect.top;
-        const newPercent = (relativeY / rect.height) * 100;
-        setReqWidthPercent(Math.min(Math.max(newPercent, 15), 85));
-      }
-    };
-
-    const handleMouseUp = () => {
-      isResizingWidth.current = false;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+  const handleSplitPointerDown = (e: React.PointerEvent) => {
+    let percent = reqWidthPercent;
+    startDragResize(e, {
+      cursor: 'col-resize',
+      onMove: (ev) => {
+        if (!splitContainerRef.current || !reqPaneRef.current || !resPaneRef.current) return;
+        const rect = splitContainerRef.current.getBoundingClientRect();
+        percent = clampPercent(((ev.clientX - rect.left) / rect.width) * 100);
+        reqPaneRef.current.style.width = `${percent}%`;
+        resPaneRef.current.style.width = `${100 - percent}%`;
+      },
+      onEnd: () => setReqWidthPercent(percent),
+    });
   };
 
   // Parse params from URL
@@ -195,6 +221,16 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
     });
   }, [item?.responseHeaders]);
 
+  const reqCounts: Record<string, number | undefined> = {
+    headers: item?.requestHeaders?.length,
+    params: parsedParams.length,
+    cookies: reqCookies.length,
+  };
+  const resCounts: Record<string, number | undefined> = {
+    headers: item?.responseHeaders?.length,
+    cookies: resCookies.length,
+  };
+
   if (!item) {
     return (
       <div className="h-full flex flex-col items-center justify-center bg-surface text-muted-foreground p-6 text-xs italic">
@@ -227,8 +263,8 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
       try {
         const parsed = JSON.parse(bodyText);
         return (
-          <div className="h-full flex flex-col gap-2 overflow-hidden p-1">
-            <div className="flex items-center gap-2 font-mono text-xs">
+          <div className="h-full flex flex-col overflow-hidden">
+            <div className="flex items-center gap-2 font-mono text-xs px-2 py-1.5 border-b border-border">
               <input
                 type="text"
                 placeholder="Search JSON tree..."
@@ -249,33 +285,30 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
                 {filterMode ? 'Filter On' : 'Filter Off'}
               </button>
             </div>
-            <div className="flex-1 overflow-auto bg-background p-2 rounded border border-border font-mono">
+            <div className="flex-1 overflow-auto p-2 font-mono">
               <JsonTreeViewerRoot value={parsed} searchTerm={search} filterMode={filterMode} />
             </div>
           </div>
         );
       } catch {
-        return <CodeEditor value={bodyText} language="plaintext" readOnly />;
+        return <CodeEditor value={bodyText} language="plaintext" readOnly bare />;
       }
     } else if (format === 'pretty') {
       try {
         const parsed = JSON.parse(bodyText);
         const prettyJson = JSON.stringify(parsed, null, 2);
-        return <CodeEditor value={prettyJson} language="json" readOnly />;
+        return <CodeEditor value={prettyJson} language="json" readOnly bare />;
       } catch (e) {
-        return <CodeEditor value={bodyText} language="plaintext" readOnly />;
+        return <CodeEditor value={bodyText} language="plaintext" readOnly bare />;
       }
     } else if (format === 'hex') {
       return <HexViewer content={bodyText} />;
     } else if (format === 'html') {
-      return (
-        <div className="w-full h-full bg-white text-black p-4 overflow-auto text-xs font-sans border rounded">
-          <div dangerouslySetInnerHTML={{ __html: bodyText }} />
-        </div>
-      );
+      // Empty sandbox: no scripts, no same-origin access to the app or its Tauri bridge
+      return <iframe sandbox="" srcDoc={bodyText} title="HTML preview" className="w-full h-full bg-white border-0" />;
     }
 
-    return <CodeEditor value={bodyText} language="plaintext" readOnly />;
+    return <CodeEditor value={bodyText} language="plaintext" readOnly bare />;
   };
 
   const isPendingResponse = item.phase === 'request';
@@ -336,46 +369,45 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
             {isPendingResponse || isPendingIntercept ? '...' : item.durationMs != null ? `${item.durationMs}ms` : '-'}
           </span>
           <span className="text-muted-foreground text-[11px]">
-            {isPendingResponse || isPendingIntercept ? '-' : `${item.size} bytes`}
+            {isPendingResponse || isPendingIntercept ? '-' : `${item.size} B`}
           </span>
 
-          {/* Layout Split Mode Switcher */}
-          <button
-            onClick={onToggleLayoutMode}
-            className="p-1 rounded bg-surface border border-border text-muted-foreground hover:text-foreground"
-            title={`Switch to ${layoutMode === 'vertical' ? 'Horizontal' : 'Vertical'} split`}
-          >
-            <MingCuteIcon name={layoutMode === 'vertical' ? 'grid_line' : 'storage_line'} size={14} />
-          </button>
+          {onHide && (
+            <button
+              onClick={onHide}
+              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-neutral-subtle cursor-pointer"
+              title="Hide panel (select a request to show it again)"
+            >
+              <MingCuteIcon name="close_line" size={14} />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Main Split Body: Request vs Response (With Resizer Handle) */}
       <div
         ref={splitContainerRef}
-        className={`flex-1 flex ${layoutMode === 'vertical' ? 'flex-row' : 'flex-col'} overflow-hidden`}
+        className="flex-1 flex flex-row overflow-hidden"
       >
         {/* REQUEST PANEL */}
         <div
-          className={`flex flex-col overflow-hidden min-h-[120px] min-w-[120px] ${
-            layoutMode === 'vertical' ? 'border-r border-border' : 'border-b border-border'
-          }`}
-          style={
-            layoutMode === 'vertical'
-              ? { width: `${reqWidthPercent}%` }
-              : { height: `${reqWidthPercent}%` }
-          }
+          ref={reqPaneRef}
+          className="flex flex-col overflow-hidden min-w-[120px] border-r border-border"
+          style={{ width: `${reqWidthPercent}%` }}
         >
-          <div className="bg-header border-b border-border px-2 py-1 flex items-center justify-between shrink-0 select-none">
-            <span className="font-semibold text-foreground text-[11px] uppercase tracking-wider">Request</span>
-            <SegmentedControl
-              value={reqTab}
-              onChange={(val) => setReqTab(val as any)}
-              options={REQ_TABS}
-            />
-          </div>
+          <PaneHeader
+            title="Request"
+            tabs={REQ_TABS.map((t) => ({ ...t, count: reqCounts[t.value] }))}
+            activeTab={reqTab}
+            onTabChange={(val) => setReqTab(val as typeof reqTab)}
+            right={
+              reqTab === 'body' && (
+                <SegmentedControl value={reqBodyFormat} onChange={setReqBodyFormat} options={reqBodyFormats} />
+              )
+            }
+          />
 
-          <div className="flex-1 p-2 overflow-auto bg-surface">
+          <div className={`flex-1 bg-surface ${reqTab === 'body' ? 'overflow-hidden' : 'p-2 overflow-auto'}`}>
             {reqTab === 'headers' && (
               <KeyValueEditor
                 items={(item.requestHeaders || []).map((h, i) => ({ id: `rh-${i}`, key: h.key, value: h.value, enabled: true }))}
@@ -383,18 +415,7 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
                 readOnly
               />
             )}
-            {reqTab === 'body' && (
-              <div className="h-full flex flex-col gap-1">
-                <div className="flex items-center gap-1 mb-1">
-                  <SegmentedControl
-                    value={reqBodyFormat}
-                    onChange={(val) => setReqBodyFormat(val)}
-                    options={reqBodyFormats}
-                  />
-                </div>
-                <div className="flex-1 overflow-hidden">{renderBodyContent(item.requestBody, reqBodyFormat, reqMediaInfo)}</div>
-              </div>
-            )}
+            {reqTab === 'body' && renderBodyContent(item.requestBody, reqBodyFormat, reqMediaInfo)}
             {reqTab === 'params' && (
               <KeyValueEditor items={parsedParams} onChange={() => {}} readOnly />
             )}
@@ -406,40 +427,33 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
 
         {/* INVISIBLE DRAGGABLE RESIZER HANDLE BETWEEN REQUEST & RESPONSE */}
         <div
-          onMouseDown={handleMouseDownSplit}
-          className={`${
-            layoutMode === 'vertical'
-              ? 'w-1 cursor-col-resize -mx-0.5'
-              : 'h-1 cursor-row-resize -my-0.5'
-          } bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative`}
-          title="Drag to adjust Request vs Response split size"
+          onPointerDown={handleSplitPointerDown}
+          onDoubleClick={resetReqWidthPercent}
+          className="w-1 cursor-col-resize -mx-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
+          title="Drag to resize, double-click to reset"
         >
-          {layoutMode === 'vertical' ? (
-            <div className="h-8 w-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
-          ) : (
-            <div className="w-8 h-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
-          )}
+          <div className="h-8 w-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
         </div>
 
         {/* RESPONSE PANEL */}
         <div
-          className="flex flex-col overflow-hidden min-h-[120px] min-w-[120px]"
-          style={
-            layoutMode === 'vertical'
-              ? { width: `${100 - reqWidthPercent}%` }
-              : { height: `${100 - reqWidthPercent}%` }
-          }
+          ref={resPaneRef}
+          className="flex flex-col overflow-hidden min-w-[120px]"
+          style={{ width: `${100 - reqWidthPercent}%` }}
         >
-          <div className="bg-header border-b border-border px-2 py-1 flex items-center justify-between shrink-0 select-none">
-            <span className="font-semibold text-foreground text-[11px] uppercase tracking-wider">Response</span>
-            <SegmentedControl
-              value={resTab}
-              onChange={(val) => setResTab(val as any)}
-              options={RES_TABS}
-            />
-          </div>
+          <PaneHeader
+            title="Response"
+            tabs={RES_TABS.map((t) => ({ ...t, count: resCounts[t.value] }))}
+            activeTab={resTab}
+            onTabChange={(val) => setResTab(val as typeof resTab)}
+            right={
+              resTab === 'body' && (
+                <SegmentedControl value={resBodyFormat} onChange={setResBodyFormat} options={resBodyFormats} />
+              )
+            }
+          />
 
-          <div className="flex-1 p-2 overflow-auto bg-surface">
+          <div className={`flex-1 bg-surface ${resTab === 'body' ? 'overflow-hidden' : 'p-2 overflow-auto'}`}>
             {resTab === 'headers' && (
               <KeyValueEditor
                 items={(item.responseHeaders || []).map((h, i) => ({ id: `resh-${i}`, key: h.key, value: h.value, enabled: true }))}
@@ -447,18 +461,7 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
                 readOnly
               />
             )}
-            {resTab === 'body' && (
-              <div className="h-full flex flex-col gap-1">
-                <div className="flex items-center gap-1 mb-1">
-                  <SegmentedControl
-                    value={resBodyFormat}
-                    onChange={(val) => setResBodyFormat(val)}
-                    options={resBodyFormats}
-                  />
-                </div>
-                <div className="flex-1 overflow-hidden">{renderBodyContent(item.responseBody, resBodyFormat, resMediaInfo)}</div>
-              </div>
-            )}
+            {resTab === 'body' && renderBodyContent(item.responseBody, resBodyFormat, resMediaInfo)}
             {resTab === 'cookies' && (
               <KeyValueEditor items={resCookies} onChange={() => {}} readOnly />
             )}

@@ -265,7 +265,6 @@ export interface ProxyStatus {
 
 export interface AppPreferences {
   theme: 'dark' | 'light';
-  layoutMode: 'horizontal' | 'vertical';
   fontSize: 'sm' | 'md' | 'lg';
   webhookPort: number;
   proxyPort: number;

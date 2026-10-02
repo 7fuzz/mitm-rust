@@ -17,6 +17,8 @@ interface CodeEditorProps {
   height?: string | number;
   minHeight?: string;
   className?: string;
+  /** Drop the border and rounding so the editor sits flush inside a panel */
+  bare?: boolean;
 }
 
 export const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -27,6 +29,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   height = '100%',
   minHeight = '150px',
   className = '',
+  bare = false,
 }) => {
   const { theme } = useSettingsStore();
   const editorTheme = theme === 'dark' ? 'vs-dark' : 'light';
@@ -39,7 +42,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   return (
     <div
-      className={`relative w-full h-full min-h-[${minHeight}] border border-border rounded overflow-hidden bg-surface ${className}`}
+      className={`relative w-full h-full min-h-[${minHeight}] overflow-hidden bg-surface ${bare ? '' : 'border border-border rounded'} ${className}`}
     >
       <Editor
         height={height}

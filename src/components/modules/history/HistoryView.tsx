@@ -13,6 +13,13 @@ import { CopyCustomModal } from './CopyCustomModal';
 import { useUiPref } from '../../../stores/useUiPrefsStore';
 import { HISTORY_COLUMN_DEFAULTS } from '../../../stores/uiPrefs/registry';
 import { moveColumn } from '../../../utils/columnLayout';
+import { clampPercent, startDragResize } from '../../../utils/dragResize';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+/** Inspector visibility for this app session; HistoryView unmounts when switching modules */
+let inspectorOpenThisSession = false;
 
 const ROW_HEIGHT = 29;
 const OVERSCAN = 10;
@@ -188,6 +195,42 @@ const HISTORY_COLUMN_DEFAULT_WIDTHS: Record<string, number> = Object.fromEntries
   HISTORY_COLUMN_DEFAULTS.map((c) => [c.id, c.width])
 );
 
+const SortableHeaderCell: React.FC<{
+  column: HistoryColumn;
+  onResizeStart: (e: React.PointerEvent) => void;
+  onResetWidth: () => void;
+}> = ({ column, onResizeStart, onResetWidth }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: column.id });
+
+  return (
+    <th
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      style={{
+        // Horizontal only; the default sortable transform also scales, which distorts table cells
+        transform: transform ? CSS.Translate.toString({ ...transform, y: 0 }) : undefined,
+        transition,
+      }}
+      title="Drag to reorder, right-click to show or hide columns"
+      className={`relative py-2 px-2 truncate cursor-grab active:cursor-grabbing outline-none ${ALIGN_CLASS[column.align ?? 'left']} ${
+        isDragging ? 'z-20 bg-neutral-subtle text-foreground shadow-md' : ''
+      }`}
+    >
+      {column.label}
+      <div
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          onResizeStart(e);
+        }}
+        onDoubleClick={onResetWidth}
+        className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-primary/50 active:bg-primary"
+        title="Drag to resize, double-click to reset width"
+      />
+    </th>
+  );
+};
+
 export const HistoryView: React.FC = () => {
   const {
     traffic,
@@ -214,7 +257,7 @@ export const HistoryView: React.FC = () => {
     deloadInactiveTraffic,
   } = useProxyStore();
   const { sendToRepeater } = useRepeaterStore();
-  const { layoutMode, setLayoutMode, setActiveModule } = useSettingsStore();
+  const { setActiveModule } = useSettingsStore();
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: TrafficItem } | null>(null);
   const [customCopyItem, setCustomCopyItem] = useState<TrafficItem | null>(null);
@@ -224,31 +267,37 @@ export const HistoryView: React.FC = () => {
     initStore();
   }, [initStore]);
 
+  // Inspector starts hidden at launch and stays as the user left it while switching modules;
+  // selecting a row shows it again
+  const [inspectorOpen, setInspectorOpenState] = useState(inspectorOpenThisSession);
+  const setInspectorOpen = (open: boolean) => {
+    inspectorOpenThisSession = open;
+    setInspectorOpenState(open);
+  };
+  const handleSelectRow = (id: string) => {
+    selectTrafficItem(id);
+    setInspectorOpen(true);
+  };
+
   // Resizable top vs bottom split height percentage
-  const [topHeightPercent, setTopHeightPercent] = useState<number>(50);
+  const [topHeightPercent, setTopHeightPercent, resetTopHeightPercent] = useUiPref('history.tableHeightPercent');
   const mainSplitRef = useRef<HTMLDivElement>(null);
-  const isResizingVertical = useRef(false);
+  const tablePaneRef = useRef<HTMLDivElement>(null);
+  const inspectorPaneRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseDownVerticalSplit = (e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingVertical.current = true;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isResizingVertical.current || !mainSplitRef.current) return;
-      const rect = mainSplitRef.current.getBoundingClientRect();
-      const relativeY = moveEvent.clientY - rect.top;
-      const newPercent = (relativeY / rect.height) * 100;
-      setTopHeightPercent(Math.min(Math.max(newPercent, 15), 85));
-    };
-
-    const handleMouseUp = () => {
-      isResizingVertical.current = false;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+  const handleVerticalSplitPointerDown = (e: React.PointerEvent) => {
+    let percent = topHeightPercent;
+    startDragResize(e, {
+      cursor: 'row-resize',
+      onMove: (ev) => {
+        if (!mainSplitRef.current || !tablePaneRef.current || !inspectorPaneRef.current) return;
+        const rect = mainSplitRef.current.getBoundingClientRect();
+        percent = clampPercent(((ev.clientY - rect.top) / rect.height) * 100);
+        tablePaneRef.current.style.height = `${percent}%`;
+        inspectorPaneRef.current.style.height = `${100 - percent}%`;
+      },
+      onEnd: () => setTopHeightPercent(percent),
+    });
   };
 
   // Filter traffic items cleanly
@@ -366,31 +415,43 @@ export const HistoryView: React.FC = () => {
   const layoutRef = useRef(columnLayout);
   layoutRef.current = columnLayout;
 
-  const startColumnResize = (id: string) => (e: React.MouseEvent) => {
-    e.preventDefault();
+  const tableRef = useRef<HTMLTableElement>(null);
+  const colRefs = useRef<Record<string, HTMLTableColElement | null>>({});
+
+  const startColumnResize = (id: string) => (e: React.PointerEvent) => {
     e.stopPropagation();
     const startX = e.clientX;
     const startWidth = layoutRef.current.widths[id];
+    const otherColumnsWidth = tableWidth - startWidth;
+    let width = startWidth;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const width = Math.max(MIN_COLUMN_WIDTH, Math.round(startWidth + moveEvent.clientX - startX));
-      const current = layoutRef.current;
-      setColumnLayout({ ...current, widths: { ...current.widths, [id]: width } });
-    };
-
-    const handleMouseUp = () => {
-      document.body.style.cursor = '';
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.body.style.cursor = 'col-resize';
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    startDragResize(e, {
+      cursor: 'col-resize',
+      onMove: (ev) => {
+        width = Math.max(MIN_COLUMN_WIDTH, Math.round(startWidth + ev.clientX - startX));
+        const col = colRefs.current[id];
+        if (col) col.style.width = `${width}px`;
+        if (tableRef.current) {
+          tableRef.current.style.width = `${otherColumnsWidth + width}px`;
+          tableRef.current.style.minWidth = `${otherColumnsWidth + width}px`;
+        }
+      },
+      onEnd: () => {
+        const current = layoutRef.current;
+        if (width !== current.widths[id]) setColumnLayout({ ...current, widths: { ...current.widths, [id]: width } });
+      },
+    });
   };
 
-  const dragColumnId = useRef<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<{ id: string; after: boolean } | null>(null);
+  // Small activation distance so clicks and the resize handle don't start a drag
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleColumnDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const order = columnLayout.order;
+    const after = order.indexOf(String(active.id)) < order.indexOf(String(over.id));
+    setColumnLayout({ ...columnLayout, order: moveColumn(order, String(active.id), String(over.id), after) });
+  };
 
   const toggleColumn = (id: string) => {
     const hidden = columnLayout.hidden.includes(id)
@@ -512,6 +573,7 @@ export const HistoryView: React.FC = () => {
   }, [traffic, selectedTrafficId]);
 
   const selectedDetail = selectedTrafficId ? trafficDetails[selectedTrafficId] : null;
+  const showInspector = inspectorOpen && selectedBaseItem !== null;
 
   const selectedItemWithDetail = useMemo(() => {
     if (!selectedBaseItem) return null;
@@ -621,75 +683,46 @@ export const HistoryView: React.FC = () => {
       <div ref={mainSplitRef} className="flex-1 flex flex-col overflow-hidden">
         {/* Traffic Table (Resizable Height) */}
         <div
+          ref={tablePaneRef}
           className="flex flex-col border-b border-border bg-surface overflow-hidden min-h-[100px]"
-          style={{ height: `${topHeightPercent}%` }}
+          style={{ height: showInspector ? `${topHeightPercent}%` : '100%' }}
         >
           {/* Virtualized Table Container */}
           <div ref={tableContainerRef} onScroll={handleScroll} className="flex-1 overflow-auto">
             <table
+              ref={tableRef}
               className="text-left text-xs border-collapse table-fixed font-mono"
               style={{ width: tableWidth, minWidth: tableWidth }}
             >
               <colgroup>
                 {visibleColumns.map((col) => (
-                  <col key={col.id} style={{ width: columnLayout.widths[col.id] }} />
+                  <col
+                    key={col.id}
+                    ref={(el) => {
+                      colRefs.current[col.id] = el;
+                    }}
+                    style={{ width: columnLayout.widths[col.id] }}
+                  />
                 ))}
               </colgroup>
               <thead className="bg-header sticky top-0 border-b border-border text-[11px] font-medium text-muted-foreground select-none z-10 shadow-sm">
-                <tr onContextMenu={openColumnMenu}>
-                  {visibleColumns.map((col) => {
-                    const dropSide = dropTarget?.id === col.id ? (dropTarget.after ? 'after' : 'before') : null;
-                    return (
-                      <th
-                        key={col.id}
-                        draggable
-                        onDragStart={(e) => {
-                          dragColumnId.current = col.id;
-                          e.dataTransfer.effectAllowed = 'move';
-                        }}
-                        onDragOver={(e) => {
-                          if (!dragColumnId.current) return;
-                          e.preventDefault();
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const after = e.clientX > rect.left + rect.width / 2;
-                          if (dropTarget?.id !== col.id || dropTarget.after !== after) setDropTarget({ id: col.id, after });
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          if (dragColumnId.current && dropTarget) {
-                            setColumnLayout({
-                              ...columnLayout,
-                              order: moveColumn(columnLayout.order, dragColumnId.current, dropTarget.id, dropTarget.after),
-                            });
-                          }
-                          dragColumnId.current = null;
-                          setDropTarget(null);
-                        }}
-                        onDragEnd={() => {
-                          dragColumnId.current = null;
-                          setDropTarget(null);
-                        }}
-                        title="Drag to reorder, right-click to show or hide columns"
-                        className={`relative py-2 px-2 truncate cursor-grab active:cursor-grabbing ${ALIGN_CLASS[col.align ?? 'left']} ${
-                          dropSide === 'before' ? 'shadow-[inset_2px_0_0_var(--color-primary)]' : dropSide === 'after' ? 'shadow-[inset_-2px_0_0_var(--color-primary)]' : ''
-                        }`}
-                      >
-                        {col.label}
-                        <div
-                          onMouseDown={startColumnResize(col.id)}
-                          onDoubleClick={() => setColumnLayout({
+                <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
+                  <SortableContext items={visibleColumns.map((c) => c.id)} strategy={horizontalListSortingStrategy}>
+                    <tr onContextMenu={openColumnMenu}>
+                      {visibleColumns.map((col) => (
+                        <SortableHeaderCell
+                          key={col.id}
+                          column={col}
+                          onResizeStart={startColumnResize(col.id)}
+                          onResetWidth={() => setColumnLayout({
                             ...columnLayout,
                             widths: { ...columnLayout.widths, [col.id]: HISTORY_COLUMN_DEFAULT_WIDTHS[col.id] },
                           })}
-                          draggable={false}
-                          onDragStart={(e) => e.preventDefault()}
-                          className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-primary/50 active:bg-primary"
-                          title="Drag to resize, double-click to reset width"
                         />
-                      </th>
-                    );
-                  })}
-                </tr>
+                      ))}
+                    </tr>
+                  </SortableContext>
+                </DndContext>
               </thead>
               <tbody className="divide-y divide-border/50">
                 {totalRows === 0 ? (
@@ -735,7 +768,7 @@ export const HistoryView: React.FC = () => {
                         <tr
                           key={item.id}
                           style={{ height: `${ROW_HEIGHT}px` }}
-                          onClick={() => selectTrafficItem(item.id)}
+                          onClick={() => handleSelectRow(item.id)}
                           onContextMenu={(e) => handleContextMenu(e, item)}
                           className={`cursor-pointer transition-colors ${rowClass}`}
                         >
@@ -770,26 +803,31 @@ export const HistoryView: React.FC = () => {
           </div>
         </div>
 
-        {/* INVISIBLE DRAGGABLE RESIZER HANDLE (Visible on hover/drag) */}
-        <div
-          onMouseDown={handleMouseDownVerticalSplit}
-          className="h-1 bg-transparent hover:bg-primary/50 active:bg-primary cursor-row-resize shrink-0 transition-colors flex items-center justify-center group z-10 relative -my-0.5"
-          title="Drag to adjust height of top table and bottom inspector"
-        >
-          <div className="w-10 h-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
-        </div>
+        {showInspector && (
+          <>
+          {/* INVISIBLE DRAGGABLE RESIZER HANDLE (Visible on hover/drag) */}
+          <div
+            onPointerDown={handleVerticalSplitPointerDown}
+            onDoubleClick={resetTopHeightPercent}
+            className="h-1 bg-transparent hover:bg-primary/50 active:bg-primary cursor-row-resize shrink-0 transition-colors flex items-center justify-center group z-10 relative -my-0.5"
+            title="Drag to resize, double-click to reset"
+          >
+            <div className="w-10 h-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
+          </div>
 
-        {/* Bottom Request / Response Inspector (Resizable Height) */}
-        <div
-          className="flex flex-col overflow-hidden min-h-[100px]"
-          style={{ height: `${100 - topHeightPercent}%` }}
-        >
-          <RequestResponseInspector
-            item={selectedItemWithDetail}
-            layoutMode={layoutMode}
-            onToggleLayoutMode={() => setLayoutMode(layoutMode === 'vertical' ? 'horizontal' : 'vertical')}
-          />
-        </div>
+          {/* Bottom Request / Response Inspector (Resizable Height) */}
+          <div
+            ref={inspectorPaneRef}
+            className="flex flex-col overflow-hidden min-h-[100px]"
+            style={{ height: `${100 - topHeightPercent}%` }}
+          >
+            <RequestResponseInspector
+              item={selectedItemWithDetail}
+              onHide={() => setInspectorOpen(false)}
+            />
+          </div>
+          </>
+        )}
       </div>
 
       {/* Context Menu */}

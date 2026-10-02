@@ -12,8 +12,6 @@ export const SettingsView: React.FC = () => {
   const {
     theme,
     toggleTheme,
-    layoutMode,
-    setLayoutMode,
     fontSize,
     setFontSize,
     caPem,
@@ -310,28 +308,6 @@ export const SettingsView: React.FC = () => {
           </div>
 
           <div className="space-y-2 font-mono">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Default Split Mode:</span>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setLayoutMode('vertical')}
-                  className={`px-2 py-0.5 rounded text-xs ${
-                    layoutMode === 'vertical' ? 'bg-primary text-primary-foreground font-bold' : 'bg-neutral-subtle text-muted-foreground'
-                  }`}
-                >
-                  Vertical
-                </button>
-                <button
-                  onClick={() => setLayoutMode('horizontal')}
-                  className={`px-2 py-0.5 rounded text-xs ${
-                    layoutMode === 'horizontal' ? 'bg-primary text-primary-foreground font-bold' : 'bg-neutral-subtle text-muted-foreground'
-                  }`}
-                >
-                  Horizontal
-                </button>
-              </div>
-            </div>
-
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">UI Font Scale:</span>
               <div className="flex items-center gap-1">
