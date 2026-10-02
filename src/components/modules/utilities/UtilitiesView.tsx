@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { CvssCalculator } from './CvssCalculator';
 import { JsonToolkit } from './JsonToolkit';
-import { EncodingHashingTool } from './EncodingHashingTool';
+import { EncodingTool } from './EncodingTool';
+import { HashingTool } from './HashingTool';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 
 export const UtilitiesView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'cvss' | 'json' | 'encoding'>('cvss');
+  const [activeTab, setActiveTab] = useState<'cvss' | 'json' | 'encoding' | 'hashing'>('cvss');
 
   return (
     <div className="h-full flex flex-col bg-background p-4 overflow-hidden">
@@ -43,16 +44,33 @@ export const UtilitiesView: React.FC = () => {
               : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
           }`}
         >
+          <MingCuteIcon name="transfer_line" size={15} />
+          <span>Encoding & Decoding</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('hashing')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-md font-medium transition-all ${
+            activeTab === 'hashing'
+              ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+              : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
+          }`}
+        >
           <MingCuteIcon name="hash_line" size={15} />
-          <span>Encoding & Hashing Tool</span>
+          <span>Hashing & Bcrypt</span>
         </button>
       </div>
 
       {/* Main Tool Content Container */}
-      <div className="flex-1 overflow-y-auto">
-        {activeTab === 'cvss' && <CvssCalculator />}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {activeTab === 'cvss' && (
+          <div className="h-full overflow-y-auto">
+            <CvssCalculator />
+          </div>
+        )}
         {activeTab === 'json' && <JsonToolkit />}
-        {activeTab === 'encoding' && <EncodingHashingTool />}
+        {activeTab === 'encoding' && <EncodingTool />}
+        {activeTab === 'hashing' && <HashingTool />}
       </div>
     </div>
   );
