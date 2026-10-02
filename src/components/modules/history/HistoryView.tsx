@@ -10,9 +10,183 @@ import { ContextMenu, ContextMenuItem } from '../../common/ContextMenu';
 import type { TrafficItem } from '../../../types';
 import { formatReqAndRes, formatRawCurl, formatUrlBodyAndRes } from '../../../utils/reqResFormatter';
 import { CopyCustomModal } from './CopyCustomModal';
+import { useUiPref } from '../../../stores/useUiPrefsStore';
+import { HISTORY_COLUMN_DEFAULTS } from '../../../stores/uiPrefs/registry';
+import { moveColumn } from '../../../utils/columnLayout';
 
 const ROW_HEIGHT = 29;
 const OVERSCAN = 10;
+const MIN_COLUMN_WIDTH = 40;
+
+interface RowState {
+  isPendingResponse: boolean;
+  isPendingIntercept: boolean;
+  isFailed: boolean;
+  isIntercepted: boolean;
+  isRewritten: boolean;
+}
+
+interface HistoryColumn {
+  id: string;
+  label: string;
+  /** Label in the show/hide menu when the header label is too terse */
+  menuLabel?: string;
+  align?: 'left' | 'center' | 'right';
+  cellClass?: string;
+  render: (item: TrafficItem, row: RowState) => React.ReactNode;
+}
+
+const ALIGN_CLASS = { left: 'text-left', center: 'text-center', right: 'text-right' } as const;
+
+const pad = (n: number, len = 2) => String(n).padStart(len, '0');
+
+/** Local wall-clock time with milliseconds, e.g. 14:03:27.512 */
+const formatClock = (ms: number) => {
+  const d = new Date(ms);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+};
+
+const ClockCell: React.FC<{ ms: number | null | undefined }> = ({ ms }) =>
+  ms != null ? <span title={new Date(ms).toLocaleString()}>{formatClock(ms)}</span> : <>-</>;
+
+const PendingDots: React.FC<{ row: RowState }> = ({ row }) => (
+  <span
+    className={`font-mono animate-pulse ${
+      row.isPendingIntercept ? 'text-amber-500 dark:text-amber-400' : 'text-rose-500 dark:text-rose-400'
+    }`}
+  >
+    ...
+  </span>
+);
+
+const HISTORY_COLUMNS: HistoryColumn[] = [
+  {
+    id: 'id',
+    label: '#',
+    menuLabel: '# (ID)',
+    align: 'center',
+    cellClass: 'text-muted-foreground text-[10px]',
+    render: (item) => item.id,
+  },
+  {
+    id: 'method',
+    label: 'Method',
+    render: (item, row) => (
+      <div className="flex items-center gap-1">
+        <MethodBadge method={item.method} />
+        {(row.isIntercepted || row.isPendingIntercept) && (
+          <span
+            className={`px-1 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 select-none ${
+              row.isPendingIntercept ? 'animate-pulse' : ''
+            }`}
+            title={row.isPendingIntercept ? 'Paused in Interceptor' : 'Intercepted manually'}
+          >
+            INT
+          </span>
+        )}
+        {row.isRewritten && (
+          <span
+            className="px-1 py-0.2 rounded text-[9px] font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 shrink-0 select-none"
+            title="Rewritten automatically"
+          >
+            RW
+          </span>
+        )}
+      </div>
+    ),
+  },
+  {
+    id: 'source',
+    label: 'Source',
+    cellClass: 'text-muted-foreground text-[10px]',
+    render: (item) =>
+      item.listenerLabel && item.listenerLabel !== 'Default' ? (
+        <span
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary border border-primary/20 truncate max-w-full select-none"
+          title={`Source: ${item.listenerLabel}`}
+        >
+          <span className="w-1 h-1 rounded-full bg-primary shrink-0" />
+          <span className="truncate">{item.listenerLabel}</span>
+        </span>
+      ) : (
+        <span className="text-muted-foreground/50 text-[10px] font-mono" title="Default proxy listener">
+          {item.listenerLabel || 'Default'}
+        </span>
+      ),
+  },
+  {
+    id: 'host',
+    label: 'Host',
+    cellClass: 'text-foreground font-medium',
+    render: (item) => <div className="truncate" title={item.host}>{item.host}</div>,
+  },
+  {
+    id: 'path',
+    label: 'Path',
+    cellClass: 'text-muted-foreground',
+    render: (item) => <div className="truncate" title={item.path}>{item.path}</div>,
+  },
+  {
+    id: 'status',
+    label: 'Status',
+    align: 'center',
+    render: (item, row) => (
+      <StatusBadge
+        code={item.statusCode}
+        isFailed={row.isFailed}
+        isPending={row.isPendingResponse}
+        isInterceptedPending={row.isPendingIntercept}
+      />
+    ),
+  },
+  {
+    id: 'contentType',
+    label: 'Content-Type',
+    cellClass: 'text-muted-foreground text-[11px]',
+    render: (item) => <div className="truncate" title={item.contentType}>{item.contentType || '-'}</div>,
+  },
+  {
+    id: 'size',
+    label: 'Size',
+    align: 'right',
+    cellClass: 'text-muted-foreground text-[11px]',
+    render: (item, row) => (row.isPendingResponse || row.isPendingIntercept ? '-' : item.size),
+  },
+  {
+    id: 'duration',
+    label: 'Duration',
+    align: 'right',
+    cellClass: 'text-muted-foreground text-[11px]',
+    render: (item, row) =>
+      row.isPendingResponse || row.isPendingIntercept ? (
+        <PendingDots row={row} />
+      ) : item.durationMs != null ? (
+        `${item.durationMs}ms`
+      ) : (
+        '-'
+      ),
+  },
+  {
+    id: 'requestAt',
+    label: 'Request Time',
+    align: 'right',
+    cellClass: 'text-muted-foreground text-[11px]',
+    render: (item) => <ClockCell ms={item.requestAt} />,
+  },
+  {
+    id: 'responseAt',
+    label: 'Response Time',
+    align: 'right',
+    cellClass: 'text-muted-foreground text-[11px]',
+    render: (item, row) =>
+      row.isPendingResponse || row.isPendingIntercept ? <PendingDots row={row} /> : <ClockCell ms={item.responseAt} />,
+  },
+];
+
+const COLUMNS_BY_ID: Record<string, HistoryColumn> = Object.fromEntries(HISTORY_COLUMNS.map((c) => [c.id, c]));
+const HISTORY_COLUMN_DEFAULT_WIDTHS: Record<string, number> = Object.fromEntries(
+  HISTORY_COLUMN_DEFAULTS.map((c) => [c.id, c.width])
+);
 
 export const HistoryView: React.FC = () => {
   const {
@@ -180,6 +354,74 @@ export const HistoryView: React.FC = () => {
       return true;
     });
   }, [traffic, searchQuery, selectedMethods, methodFilters, statusFilters, statusCodeRange, flagFilters, onlyIntercepted, onlyRewritten, onlyFailed, listenerFilter]);
+
+  // Column layout (order, widths, visibility), persisted as a UI preference
+  const [columnLayout, setColumnLayout, resetColumnLayout] = useUiPref('history.columns');
+  const visibleColumns = useMemo(
+    () => columnLayout.order.filter((id) => !columnLayout.hidden.includes(id)).map((id) => COLUMNS_BY_ID[id]),
+    [columnLayout]
+  );
+  const tableWidth = visibleColumns.reduce((sum, col) => sum + columnLayout.widths[col.id], 0);
+
+  const layoutRef = useRef(columnLayout);
+  layoutRef.current = columnLayout;
+
+  const startColumnResize = (id: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startWidth = layoutRef.current.widths[id];
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const width = Math.max(MIN_COLUMN_WIDTH, Math.round(startWidth + moveEvent.clientX - startX));
+      const current = layoutRef.current;
+      setColumnLayout({ ...current, widths: { ...current.widths, [id]: width } });
+    };
+
+    const handleMouseUp = () => {
+      document.body.style.cursor = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const dragColumnId = useRef<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; after: boolean } | null>(null);
+
+  const toggleColumn = (id: string) => {
+    const hidden = columnLayout.hidden.includes(id)
+      ? columnLayout.hidden.filter((h) => h !== id)
+      : [...columnLayout.hidden, id];
+    setColumnLayout({ ...columnLayout, hidden });
+  };
+
+  const [columnMenu, setColumnMenu] = useState<{ x: number; y: number } | null>(null);
+  const columnMenuRef = useRef<HTMLDivElement>(null);
+
+  const openColumnMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setColumnMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  useEffect(() => {
+    if (!columnMenu) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      if (columnMenuRef.current && !columnMenuRef.current.contains(e.target as Node)) setColumnMenu(null);
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setColumnMenu(null);
+    };
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [columnMenu]);
 
   // Virtualization state & refs
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -384,24 +626,75 @@ export const HistoryView: React.FC = () => {
         >
           {/* Virtualized Table Container */}
           <div ref={tableContainerRef} onScroll={handleScroll} className="flex-1 overflow-auto">
-            <table className="w-full text-left text-xs border-collapse table-fixed font-mono">
+            <table
+              className="text-left text-xs border-collapse table-fixed font-mono"
+              style={{ width: tableWidth, minWidth: tableWidth }}
+            >
+              <colgroup>
+                {visibleColumns.map((col) => (
+                  <col key={col.id} style={{ width: columnLayout.widths[col.id] }} />
+                ))}
+              </colgroup>
               <thead className="bg-header sticky top-0 border-b border-border text-[11px] font-medium text-muted-foreground select-none z-10 shadow-sm">
-                <tr>
-                  <th className="py-2 px-2 w-12 text-center text-muted-foreground">#</th>
-                  <th className="py-2 px-2 w-24">Method</th>
-                  <th className="py-2 px-2 w-20">Source</th>
-                  <th className="py-2 px-2 w-48">Host</th>
-                  <th className="py-2 px-2">Path</th>
-                  <th className="py-2 px-2 w-16 text-center">Status</th>
-                  <th className="py-2 px-2 w-32">Content-Type</th>
-                  <th className="py-2 px-2 w-20 text-right">Size</th>
-                  <th className="py-2 px-2 w-20 text-right">Time</th>
+                <tr onContextMenu={openColumnMenu}>
+                  {visibleColumns.map((col) => {
+                    const dropSide = dropTarget?.id === col.id ? (dropTarget.after ? 'after' : 'before') : null;
+                    return (
+                      <th
+                        key={col.id}
+                        draggable
+                        onDragStart={(e) => {
+                          dragColumnId.current = col.id;
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragOver={(e) => {
+                          if (!dragColumnId.current) return;
+                          e.preventDefault();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const after = e.clientX > rect.left + rect.width / 2;
+                          if (dropTarget?.id !== col.id || dropTarget.after !== after) setDropTarget({ id: col.id, after });
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (dragColumnId.current && dropTarget) {
+                            setColumnLayout({
+                              ...columnLayout,
+                              order: moveColumn(columnLayout.order, dragColumnId.current, dropTarget.id, dropTarget.after),
+                            });
+                          }
+                          dragColumnId.current = null;
+                          setDropTarget(null);
+                        }}
+                        onDragEnd={() => {
+                          dragColumnId.current = null;
+                          setDropTarget(null);
+                        }}
+                        title="Drag to reorder, right-click to show or hide columns"
+                        className={`relative py-2 px-2 truncate cursor-grab active:cursor-grabbing ${ALIGN_CLASS[col.align ?? 'left']} ${
+                          dropSide === 'before' ? 'shadow-[inset_2px_0_0_var(--color-primary)]' : dropSide === 'after' ? 'shadow-[inset_-2px_0_0_var(--color-primary)]' : ''
+                        }`}
+                      >
+                        {col.label}
+                        <div
+                          onMouseDown={startColumnResize(col.id)}
+                          onDoubleClick={() => setColumnLayout({
+                            ...columnLayout,
+                            widths: { ...columnLayout.widths, [col.id]: HISTORY_COLUMN_DEFAULT_WIDTHS[col.id] },
+                          })}
+                          draggable={false}
+                          onDragStart={(e) => e.preventDefault()}
+                          className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-primary/50 active:bg-primary"
+                          title="Drag to resize, double-click to reset width"
+                        />
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
                 {totalRows === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-muted-foreground italic text-xs">
+                    <td colSpan={visibleColumns.length} className="py-12 text-center text-muted-foreground italic text-xs">
                       {isLoadingMore ? 'Loading traffic logs...' : 'No traffic items match the current filters'}
                     </td>
                   </tr>
@@ -410,7 +703,7 @@ export const HistoryView: React.FC = () => {
                     {/* Top Spacer Row */}
                     {topSpacer > 0 && (
                       <tr style={{ height: `${topSpacer}px`, pointerEvents: 'none' }}>
-                        <td colSpan={9} className="p-0 border-0" />
+                        <td colSpan={visibleColumns.length} className="p-0 border-0" />
                       </tr>
                     )}
 
@@ -419,9 +712,10 @@ export const HistoryView: React.FC = () => {
                       const isSelected = selectedTrafficId === item.id;
                       const isPendingResponse = item.phase === 'request';
                       const isPendingIntercept = item.phase === 'intercepted_request' || item.phase === 'intercepted_response';
-                      const isFailed = item.isFailed && !isPendingResponse && !isPendingIntercept;
-                      const isIntercepted = item.isIntercepted && !isPendingIntercept;
-                      const isRewritten = item.isRewritten;
+                      const isFailed = Boolean(item.isFailed && !isPendingResponse && !isPendingIntercept);
+                      const isIntercepted = Boolean(item.isIntercepted && !isPendingIntercept);
+                      const isRewritten = Boolean(item.isRewritten);
+                      const row: RowState = { isPendingResponse, isPendingIntercept, isFailed, isIntercepted, isRewritten };
 
                       const rowClass = isSelected
                         ? 'bg-primary/15 text-foreground font-semibold ring-1 ring-inset ring-primary'
@@ -445,76 +739,11 @@ export const HistoryView: React.FC = () => {
                           onContextMenu={(e) => handleContextMenu(e, item)}
                           className={`cursor-pointer transition-colors ${rowClass}`}
                         >
-                          <td className="py-1 px-2 text-center text-muted-foreground text-[10px]">{item.id}</td>
-                          <td className="py-1 px-2">
-                            <div className="flex items-center gap-1">
-                              <MethodBadge method={item.method} />
-                              {(isIntercepted || isPendingIntercept) && (
-                                <span
-                                  className={`px-1 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 select-none ${
-                                    isPendingIntercept ? 'animate-pulse' : ''
-                                  }`}
-                                  title={isPendingIntercept ? 'Paused in Interceptor' : 'Intercepted manually'}
-                                >
-                                  INT
-                                </span>
-                              )}
-                              {isRewritten && (
-                                <span
-                                  className="px-1 py-0.2 rounded text-[9px] font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 shrink-0 select-none"
-                                  title="Rewritten automatically"
-                                >
-                                  RW
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-1 px-2 text-muted-foreground text-[10px] overflow-hidden">
-                            {item.listenerLabel && item.listenerLabel !== 'Default' ? (
-                              <span
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary border border-primary/20 truncate max-w-full select-none"
-                                title={`Source: ${item.listenerLabel}`}
-                              >
-                                <span className="w-1 h-1 rounded-full bg-primary shrink-0" />
-                                <span className="truncate">{item.listenerLabel}</span>
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground/50 text-[10px] font-mono" title="Default proxy listener">
-                                {item.listenerLabel || 'Default'}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-1 px-2 text-foreground font-medium overflow-hidden">
-                            <div className="truncate" title={item.host}>{item.host}</div>
-                          </td>
-                          <td className="py-1 px-2 text-muted-foreground overflow-hidden">
-                            <div className="truncate" title={item.path}>{item.path}</div>
-                          </td>
-                          <td className="py-1 px-2 text-center">
-                            <StatusBadge
-                              code={item.statusCode}
-                              isFailed={isFailed}
-                              isPending={isPendingResponse}
-                              isInterceptedPending={isPendingIntercept}
-                            />
-                          </td>
-                          <td className="py-1 px-2 text-muted-foreground text-[11px] overflow-hidden">
-                            <div className="truncate" title={item.contentType}>{item.contentType || '-'}</div>
-                          </td>
-                          <td className="py-1 px-2 text-right text-muted-foreground text-[11px]">
-                            {isPendingResponse || isPendingIntercept ? '-' : item.size}
-                          </td>
-                          <td className="py-1 px-2 text-right text-muted-foreground text-[11px]">
-                            {isPendingResponse ? (
-                              <span className="text-rose-500 dark:text-rose-400 font-mono animate-pulse">...</span>
-                            ) : isPendingIntercept ? (
-                              <span className="text-amber-500 dark:text-amber-400 font-mono animate-pulse">...</span>
-                            ) : item.durationMs != null ? (
-                              `${item.durationMs}ms`
-                            ) : (
-                              '-'
-                            )}
-                          </td>
+                          {visibleColumns.map((col) => (
+                            <td key={col.id} className={`py-1 px-2 overflow-hidden ${ALIGN_CLASS[col.align ?? 'left']} ${col.cellClass ?? ''}`}>
+                              {col.render(item, row)}
+                            </td>
+                          ))}
                         </tr>
                       );
                     })}
@@ -522,14 +751,14 @@ export const HistoryView: React.FC = () => {
                     {/* Bottom Spacer Row */}
                     {bottomSpacer > 0 && (
                       <tr style={{ height: `${bottomSpacer}px`, pointerEvents: 'none' }}>
-                        <td colSpan={9} className="p-0 border-0" />
+                        <td colSpan={visibleColumns.length} className="p-0 border-0" />
                       </tr>
                     )}
 
                     {/* Infinite Loading Indicator */}
                     {isLoadingMore && (
                       <tr>
-                        <td colSpan={9} className="py-2 text-center text-muted-foreground text-[11px] italic bg-surface/50 animate-pulse">
+                        <td colSpan={visibleColumns.length} className="py-2 text-center text-muted-foreground text-[11px] italic bg-surface/50 animate-pulse">
                           Loading more records from SQLite...
                         </td>
                       </tr>
@@ -571,6 +800,47 @@ export const HistoryView: React.FC = () => {
           items={getContextMenuItems(contextMenu.item)}
           onClose={() => setContextMenu(null)}
         />
+      )}
+
+      {/* Column visibility menu (header right-click) */}
+      {columnMenu && (
+        <div
+          ref={columnMenuRef}
+          style={{ left: columnMenu.x, top: columnMenu.y }}
+          className="fixed z-50 min-w-[180px] py-1 bg-surface border border-border rounded-lg shadow-lg text-xs select-none"
+        >
+          <div className="px-3 py-1 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Columns</div>
+          {columnLayout.order.map((id) => {
+            const col = COLUMNS_BY_ID[id];
+            const isVisible = !columnLayout.hidden.includes(id);
+            const isLastVisible = isVisible && visibleColumns.length === 1;
+            return (
+              <label
+                key={id}
+                className={`flex items-center gap-2 px-3 py-1 hover:bg-neutral-subtle ${isLastVisible ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isVisible}
+                  disabled={isLastVisible}
+                  onChange={() => toggleColumn(id)}
+                  className="rounded accent-primary cursor-pointer w-3.5 h-3.5"
+                />
+                <span className="text-foreground">{col.menuLabel ?? col.label}</span>
+              </label>
+            );
+          })}
+          <div className="my-1 border-t border-border" />
+          <button
+            onClick={() => {
+              resetColumnLayout();
+              setColumnMenu(null);
+            }}
+            className="w-full text-left px-3 py-1 text-foreground hover:bg-neutral-subtle cursor-pointer"
+          >
+            Reset columns
+          </button>
+        </div>
       )}
 
       {/* Copy Custom Modal */}

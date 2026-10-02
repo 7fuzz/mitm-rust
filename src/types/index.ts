@@ -34,6 +34,10 @@ export interface TrafficItem {
   size: number;
   durationMs: number | null;
   timestamp: number;
+  /** Epoch ms when the proxy received the request */
+  requestAt?: number | null;
+  /** Epoch ms when the exchange finished; null while still in flight */
+  responseAt?: number | null;
   requestHeaders: HeaderPair[];
   requestBody: string;
   responseHeaders: HeaderPair[];

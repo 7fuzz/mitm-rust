@@ -138,8 +138,8 @@ fn flush_history_batch(db_path: &PathBuf, buffer: &mut Vec<HistoryEntry>) {
                         let res_headers = serde_json::to_string(&entry.response_headers).unwrap_or_else(|_| "[]".to_string());
 
                         let res = tx.execute(
-                            "INSERT OR REPLACE INTO history (id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, is_intercepted, is_rewritten, is_failed, listener_label) 
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            "INSERT OR REPLACE INTO history (id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, is_intercepted, is_rewritten, is_failed, listener_label, request_at, response_at) 
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             rusqlite::params![
                                 entry.id,
                                 entry.method,
@@ -159,6 +159,8 @@ fn flush_history_batch(db_path: &PathBuf, buffer: &mut Vec<HistoryEntry>) {
                                 if entry.is_rewritten { 1 } else { 0 },
                                 if entry.is_failed { 1 } else { 0 },
                                 entry.listener_label,
+                                entry.request_at,
+                                entry.response_at,
                             ],
                         );
                         if let Err(e) = res {

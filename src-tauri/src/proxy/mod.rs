@@ -220,6 +220,7 @@ async fn handle_http(
         let request_headers = headers_to_vec(req.headers());
         let subprotocol = req.headers().get("sec-websocket-protocol").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
         let entry_id = (state.next_history_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1).to_string();
+        let request_at = now_rfc3339_ms();
 
         let mut new_req = Request::builder()
             .method(method.clone())
@@ -245,6 +246,7 @@ async fn handle_http(
 
                     log_and_emit_history(
                         &entry_id,
+                        &request_at,
                         &app_handle,
                         &state,
                         method.as_str(),
@@ -335,11 +337,14 @@ async fn handle_http(
 
     let entry_id = (state.next_history_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1).to_string();
 
+    let request_at = now_rfc3339_ms();
+
     let proxy_mode = { state.proxy_config.read().await.proxy_mode.clone() };
 
     if proxy_mode == "block" {
         log_and_emit_history(
             &entry_id,
+            &request_at,
             &app_handle,
             &state,
             method.as_str(),
@@ -388,6 +393,7 @@ async fn handle_http(
         let final_path = parse_path_from_url(&req_url_str);
         log_and_emit_history(
             &entry_id,
+            &request_at,
             &app_handle,
             &state,
             &req_method_str,
@@ -442,6 +448,8 @@ async fn handle_http(
             is_rewritten: was_rewritten,
             is_failed: false,
             listener_label: listener_label.clone(),
+            request_at: Some(request_at.clone()),
+            response_at: None,
         };
         let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: initial_entry });
     }
@@ -449,6 +457,7 @@ async fn handle_http(
     // 2. Request Intercept Hook (Manual pause)
     let (final_req_url, final_req_method, final_req_headers, final_req_body) = match handle_intercept_hook(
         Some(&entry_id),
+        &request_at,
         &app_handle,
         &state,
         InterceptPhase::Request,
@@ -464,6 +473,7 @@ async fn handle_http(
             let final_path = parse_path_from_url(&req_url_str);
             log_and_emit_history(
                 &entry_id,
+                &request_at,
                 &app_handle,
                 &state,
                 &req_method_str,
@@ -520,6 +530,8 @@ async fn handle_http(
                 is_rewritten: was_rewritten,
                 is_failed: false,
                 listener_label: listener_label.clone(),
+                request_at: Some(request_at.clone()),
+                response_at: None,
             };
             let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: in_flight_entry });
 
@@ -599,6 +611,7 @@ async fn handle_http(
             // 4. Response Intercept Hook (Manual pause)
             let (final_res_headers, final_res_body) = match handle_intercept_hook(
                 Some(&entry_id),
+                &request_at,
                 &app_handle,
                 &state,
                 InterceptPhase::Response,
@@ -613,6 +626,7 @@ async fn handle_http(
                 Some(InterceptAction::Drop) => {
                     log_and_emit_history(
                         &entry_id,
+                        &request_at,
                         &app_handle,
                         &state,
                         &final_req_method.to_string(),
@@ -653,6 +667,7 @@ async fn handle_http(
 
             log_and_emit_history(
                 &entry_id,
+                &request_at,
                 &app_handle,
                 &state,
                 &final_req_method.to_string(),
@@ -693,6 +708,7 @@ async fn handle_http(
             let err_msg = format!("Proxy error: {}", e);
             log_and_emit_history(
                 &entry_id,
+                &request_at,
                 &app_handle,
                 &state,
                 &final_req_method.to_string(),
@@ -721,6 +737,7 @@ async fn handle_http(
 
 async fn log_and_emit_history(
     entry_id: &str,
+    request_at: &str,
     app_handle: &AppHandle,
     state: &Arc<AppState>,
     method: &str,
@@ -786,10 +803,21 @@ async fn log_and_emit_history(
         is_rewritten,
         is_failed,
         listener_label: listener_label.to_string(),
+        request_at: Some(request_at.to_string()),
+        response_at: Some(now_rfc3339_ms()),
     };
 
     let _ = state.history_tx.send(history_entry.clone()).await;
     let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: history_entry });
+}
+
+/// Current UTC time as RFC3339 truncated to milliseconds, which every JS engine parses
+pub(crate) fn now_rfc3339_ms() -> String {
+    let now = time::OffsetDateTime::now_utc();
+    now.replace_nanosecond(now.millisecond() as u32 * 1_000_000)
+        .unwrap_or(now)
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_default()
 }
 
 fn headers_to_vec(headers: &hyper::HeaderMap) -> Vec<(String, String)> {

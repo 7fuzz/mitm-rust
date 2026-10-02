@@ -61,9 +61,9 @@ pub async fn get_history_logs(
     let should_include_bodies = include_bodies.unwrap_or(false);
 
     let select_fields = if should_include_bodies {
-        "id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, '')"
+        "id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at"
     } else {
-        "id, method, url, host, path, content_type, response_size, status_code, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, '')"
+        "id, method, url, host, path, content_type, response_size, status_code, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at"
     };
 
     let mut query = format!("SELECT {} FROM history WHERE 1=1", select_fields);
@@ -166,6 +166,8 @@ pub async fn get_history_logs(
                 is_rewritten: is_rewritten_int != 0,
                 is_failed: is_failed_int != 0,
                 listener_label,
+                request_at: row.get(19)?,
+                response_at: row.get(20)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -198,6 +200,8 @@ pub async fn get_history_logs(
                 is_rewritten: is_rewritten_int != 0,
                 is_failed: is_failed_int != 0,
                 listener_label,
+                request_at: row.get(15)?,
+                response_at: row.get(16)?,
             })
         })
         .map_err(|e| e.to_string())?

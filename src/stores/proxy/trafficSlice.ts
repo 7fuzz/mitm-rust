@@ -13,6 +13,7 @@ import {
   HistoryDetail,
   HistoryFilterOptions,
 } from '../../services/tauri/bridge';
+import { getUiPref, useUiPrefsStore } from '../useUiPrefsStore';
 
 export const mapHeaders = (headers: any): { key: string; value: string }[] => {
   if (!headers) return [];
@@ -28,6 +29,12 @@ export const mapHeaders = (headers: any): { key: string; value: string }[] => {
     });
   }
   return [];
+};
+
+const parseTimestamp = (value: unknown): number | null => {
+  if (typeof value !== 'string' || !value) return null;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : ms;
 };
 
 export const mapHistoryEntryToTrafficItem = (item: any): TrafficItem => {
@@ -54,6 +61,8 @@ export const mapHistoryEntryToTrafficItem = (item: any): TrafficItem => {
     size: item.responseSize ?? item.size ?? 0,
     durationMs: item.durationMs ?? item.duration_ms ?? null,
     timestamp: item.createdAt ? Date.parse(item.createdAt) : item.timestamp || Date.now(),
+    requestAt: parseTimestamp(item.requestAt ?? item.request_at),
+    responseAt: parseTimestamp(item.responseAt ?? item.response_at),
     requestHeaders: reqHeaders,
     responseHeaders: resHeaders,
     requestBody: item.requestBody ?? item.request_body ?? '',
@@ -166,6 +175,38 @@ export const createTrafficSlice: StateCreator<
     }
   };
 
+  // Filter bar state (except search) survives restarts as the "history.filters" UI preference
+  const persistFilters = () => {
+    const { methodFilters, statusFilters, flagFilters, listenerFilter } = get();
+    const activeOnly = (m: Record<string, string>) =>
+      Object.fromEntries(Object.entries(m).filter(([, st]) => st !== 'neutral')) as Record<string, 'include' | 'exclude'>;
+    useUiPrefsStore.getState().setPref('history.filters', {
+      methods: activeOnly(methodFilters),
+      statuses: activeOnly(statusFilters),
+      flags: activeOnly(flagFilters),
+      listener: listenerFilter,
+    });
+  };
+
+  let filtersRestored = false;
+  const restoreFilters = async () => {
+    if (filtersRestored) return;
+    filtersRestored = true;
+    await useUiPrefsStore.getState().load();
+    const f = getUiPref('history.filters');
+    const includedStatuses = Object.entries(f.statuses).filter(([, st]) => st === 'include');
+    set({
+      methodFilters: f.methods,
+      statusFilters: f.statuses,
+      flagFilters: f.flags,
+      listenerFilter: f.listener,
+      statusCodeRange: includedStatuses.length === 1 ? (includedStatuses[0][0] as '2xx' | '3xx' | '4xx' | '5xx') : 'all',
+      onlyIntercepted: f.flags['intercepted'] === 'include',
+      onlyRewritten: f.flags['rewritten'] === 'include',
+      onlyFailed: f.flags['failed'] === 'include',
+    });
+  };
+
   return {
     traffic: SAMPLE_TRAFFIC,
     selectedTrafficId: 'req-101',
@@ -193,6 +234,7 @@ export const createTrafficSlice: StateCreator<
     listenerFilter: '',
 
     initTraffic: async () => {
+      await restoreFilters();
       if (isTauriAvailable()) {
         try {
           await get().fetchHistorySettings();
@@ -563,6 +605,7 @@ export const createTrafficSlice: StateCreator<
         }
         return { methodFilters: nextFilters };
       });
+      persistFilters();
       get().loadInitialTraffic();
     },
     setFlagFilter: (flag, filterState) => {
@@ -580,6 +623,7 @@ export const createTrafficSlice: StateCreator<
           onlyFailed: nextFilters['failed'] === 'include',
         };
       });
+      persistFilters();
       get().loadInitialTraffic();
     },
     setStatusFilter: (status, filterState) => {
@@ -592,6 +636,7 @@ export const createTrafficSlice: StateCreator<
         }
         return { statusFilters: nextFilters };
       });
+      persistFilters();
       get().loadInitialTraffic();
     },
     setStatusCodeRange: (statusCodeRange) => {
@@ -603,6 +648,7 @@ export const createTrafficSlice: StateCreator<
         });
         return { statusCodeRange, statusFilters: nextFilters };
       });
+      persistFilters();
       get().loadInitialTraffic();
     },
     setOnlyIntercepted: (val) => {
@@ -612,6 +658,7 @@ export const createTrafficSlice: StateCreator<
         else delete nextFilters['intercepted'];
         return { onlyIntercepted: val, flagFilters: nextFilters };
       });
+      persistFilters();
       get().loadInitialTraffic();
     },
     setOnlyRewritten: (val) => {
@@ -621,6 +668,7 @@ export const createTrafficSlice: StateCreator<
         else delete nextFilters['rewritten'];
         return { onlyRewritten: val, flagFilters: nextFilters };
       });
+      persistFilters();
       get().loadInitialTraffic();
     },
     setOnlyFailed: (val) => {
@@ -630,10 +678,12 @@ export const createTrafficSlice: StateCreator<
         else delete nextFilters['failed'];
         return { onlyFailed: val, flagFilters: nextFilters };
       });
+      persistFilters();
       get().loadInitialTraffic();
     },
     setListenerFilter: (listenerFilter) => {
       set({ listenerFilter });
+      persistFilters();
       get().loadInitialTraffic();
     },
   };

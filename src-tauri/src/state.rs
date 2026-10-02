@@ -69,6 +69,12 @@ pub struct HistoryEntry {
     pub is_failed: bool,
     #[serde(default)]
     pub listener_label: String,
+    /// When the proxy received the request
+    #[serde(default)]
+    pub request_at: Option<String>,
+    /// When the exchange finished (response delivered, dropped, or failed)
+    #[serde(default)]
+    pub response_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

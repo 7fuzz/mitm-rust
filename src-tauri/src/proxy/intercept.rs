@@ -8,6 +8,7 @@ use crate::state::{AppState, HistoryEntry, InterceptAction, InterceptPhase, Pend
 
 pub async fn handle_intercept_hook(
     entry_id: Option<&str>,
+    request_at: &str,
     app_handle: &AppHandle,
     state: &Arc<AppState>,
     phase: InterceptPhase,
@@ -103,6 +104,8 @@ pub async fn handle_intercept_hook(
             is_rewritten: false,
             is_failed: false,
             listener_label: listener_label.to_string(),
+            request_at: Some(request_at.to_string()),
+            response_at: None,
         };
         let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: intercepted_entry });
     }
