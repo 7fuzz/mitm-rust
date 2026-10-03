@@ -67,8 +67,10 @@ export const RUN_COPY_ACTIONS: Array<{
   iconClass: string;
   format: (item: TrafficItem) => string;
   message: string;
+  /** Copies only the request, so a menu that already copies the request can skip it */
+  requestOnly?: boolean;
 }> = [
-  { label: 'Copy cURL', icon: 'terminal_line', iconClass: 'text-blue-500', format: formatRawCurl, message: 'Copied cURL!' },
+  { label: 'Copy cURL', icon: 'terminal_line', iconClass: 'text-blue-500', format: formatRawCurl, message: 'Copied cURL!', requestOnly: true },
   { label: 'Copy cURL and Response', icon: 'transfer_line', iconClass: 'text-sky-500', format: formatReqAndRes, message: 'Copied cURL & Response!' },
   { label: 'Copy URL, Body, and Response', icon: 'file_code_line', iconClass: 'text-amber-500', format: formatUrlBodyAndRes, message: 'Copied!' },
 ];

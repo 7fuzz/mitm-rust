@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { RepeaterTab, ParamItem } from '../../../services/tauri/bridge';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
@@ -42,31 +42,8 @@ const countActive = (items?: Array<{ key: string; enabled: boolean }>) =>
 export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
   const { updateTab, executeActiveRequest, isExecuting, toggleHistoryDrawer } = useRepeaterStore();
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auto-extract'>('body');
-  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
-  const [copyNotification, setCopyNotification] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   const executing = isExecuting[request.id] || false;
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setCopyMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const showNotification = (msg: string) => {
-    setCopyNotification(msg);
-    setCopyMenuOpen(false);
-    setTimeout(() => setCopyNotification(null), 1800);
-  };
-
-  const getEffectiveUrl = (): string => {
-    return buildUrlWithParams(request.url, request.params || []);
-  };
 
   useEffect(() => {
     if (!request) return;
@@ -84,50 +61,6 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
       }
     }
   }, [request.id]);
-
-  const handleCopyBody = () => {
-    const body = request.bodyContent || '';
-    navigator.clipboard.writeText(body);
-    showNotification('Copied Body!');
-  };
-
-  const handleCopyHeaders = () => {
-    const rawHeaders = (request.headers || [])
-      .filter((h) => h.enabled && h.key.trim())
-      .map((h) => `${h.key}: ${h.value}`)
-      .join('\n');
-    navigator.clipboard.writeText(rawHeaders);
-    showNotification('Copied Headers!');
-  };
-
-  const handleCopyUrl = () => {
-    const effectiveUrl = getEffectiveUrl();
-    navigator.clipboard.writeText(effectiveUrl);
-    showNotification('Copied URL!');
-  };
-
-  const handleCopyAll = () => {
-    const effectiveUrl = getEffectiveUrl();
-    const rawHeaders = (request.headers || [])
-      .filter((h) => h.enabled && h.key.trim())
-      .map((h) => `${h.key}: ${h.value}`)
-      .join('\n');
-    const fullReq = `${request.method} ${effectiveUrl}\n${rawHeaders}${request.bodyContent ? `\n\n${request.bodyContent}` : ''}`;
-    navigator.clipboard.writeText(fullReq);
-    showNotification('Copied Full Request!');
-  };
-
-  const handleCopyCurl = () => {
-    const effectiveUrl = getEffectiveUrl();
-    const headersStr = (request.headers || [])
-      .filter((h) => h.enabled && h.key.trim())
-      .map((h) => `-H '${h.key}: ${h.value}'`)
-      .join(' ');
-    const bodyStr = request.bodyContent ? `-d '${request.bodyContent.replace(/'/g, "'\\''")}'` : '';
-    const curlCmd = `curl -X ${request.method} '${effectiveUrl}' ${headersStr ? headersStr + ' ' : ''}${bodyStr}`.trim();
-    navigator.clipboard.writeText(curlCmd);
-    showNotification('Copied as cURL!');
-  };
 
   const handleMethodChange = (method: string) => {
     updateTab({ ...request, method });
@@ -274,7 +207,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         </button>
       </div>
 
-      {/* Request Config Tabs, Body Type & Copy Dropdown */}
+      {/* Request Config Tabs & Body Type */}
       <PaneHeader
         tabs={[
           { value: 'params', label: 'Params', count: countActive(request.params) },
@@ -306,58 +239,6 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
                 <span>Format</span>
               </button>
             )}
-            {/* Copy Request Actions Dropdown */}
-            <div className="relative" ref={menuRef}>
-              <button
-                onClick={() => setCopyMenuOpen(!copyMenuOpen)}
-                className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs font-medium"
-                title="Copy Request Options"
-              >
-                <MingCuteIcon name={copyNotification ? 'check_line' : 'copy_line'} size={13} className={copyNotification ? 'text-emerald-400' : ''} />
-                <span>{copyNotification || 'Copy'}</span>
-                <MingCuteIcon name="down_line" size={12} className="opacity-60" />
-              </button>
-
-              {copyMenuOpen && (
-                <div className="absolute right-0 mt-1 w-44 bg-surface border border-border rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
-                  <button
-                    onClick={handleCopyUrl}
-                    className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <MingCuteIcon name="link_line" size={14} className="text-sky-500" />
-                    <span>Copy URL</span>
-                  </button>
-                  <button
-                    onClick={handleCopyBody}
-                    className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <MingCuteIcon name="file_text_line" size={14} className="text-primary" />
-                    <span>Copy Body</span>
-                  </button>
-                  <button
-                    onClick={handleCopyHeaders}
-                    className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <MingCuteIcon name="list_check_line" size={14} className="text-emerald-500" />
-                    <span>Copy Headers</span>
-                  </button>
-                  <button
-                    onClick={handleCopyAll}
-                    className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer border-t border-border/80"
-                  >
-                    <MingCuteIcon name="copy_line" size={14} className="text-amber-500" />
-                    <span>Copy All (Full Req)</span>
-                  </button>
-                  <button
-                    onClick={handleCopyCurl}
-                    className="px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <MingCuteIcon name="code_line" size={14} className="text-blue-500" />
-                    <span>Copy as cURL</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </>
         }
       />

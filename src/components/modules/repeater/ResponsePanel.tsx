@@ -10,15 +10,37 @@ import { PaneHeader } from '../../common/PaneHeader';
 import { BodyView, useBodyFormat } from '../../common/BodyView';
 import { SegmentedControl } from '../../common/ui';
 import { CopyCustomModal } from '../history/CopyCustomModal';
+import type { CopyAction } from '../../../utils/repeaterCopy';
 
 interface ResponsePanelProps {
   /** A recorded run, or a fresh Repeater / Collection execution result */
   response: (RunRecord & { statusText?: string }) | RepeaterExecutionResult | ExecutionResult | null;
   /** Extra controls in the status bar, before the copy menu */
   toolbar?: React.ReactNode;
+  /** Copies of the request in the editor, listed first in the copy menu; also keeps the menu available before the first send */
+  requestCopy?: CopyAction[];
 }
 
-export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, toolbar }) => {
+const formatBytes = (bytes: number) => {
+  if (bytes === 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const menuItemClass =
+  'px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed';
+
+const MenuSection: React.FC<{ label: string; title?: string; first?: boolean }> = ({ label, title, first }) => (
+  <>
+    {!first && <div className="my-1 border-t border-border/80" />}
+    <div className="px-3 pt-1 pb-0.5 text-3xs uppercase tracking-wider font-sans font-semibold text-muted-foreground" title={title}>
+      {label}
+    </div>
+  </>
+);
+
+export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, toolbar, requestCopy }) => {
   const [activeTab, setActiveTab] = useState<'body' | 'headers'>('body');
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const [copyNotification, setCopyNotification] = useState<string | null>(null);
@@ -55,22 +77,6 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, toolbar 
     responseHeaders
   );
 
-  if (!response) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-surface text-muted-foreground p-6 text-xs italic select-none">
-        <MingCuteIcon name="send_plane_line" size={36} className="mb-2 opacity-30" />
-        Click "Send" above to execute the request and view response headers & payload here.
-      </div>
-    );
-  }
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
   const showNotification = (msg: string) => {
     setCopyNotification(msg);
     setCopyMenuOpen(false);
@@ -83,8 +89,9 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, toolbar 
     showNotification('Copied Body!');
   };
 
+  const statusLine = `HTTP/1.1 ${response?.statusCode ?? ''} ${statusText}`.trim();
+
   const handleCopyHeaders = () => {
-    const statusLine = `HTTP/1.1 ${response.statusCode} ${statusText}`.trim();
     const rawHeaders = (responseHeaders || [])
       .map((h) => `${h.key}: ${h.value}`)
       .join('\n');
@@ -93,7 +100,6 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, toolbar 
   };
 
   const handleCopyAll = () => {
-    const statusLine = `HTTP/1.1 ${response.statusCode} ${statusText}`.trim();
     const rawHeaders = (responseHeaders || [])
       .map((h) => `${h.key}: ${h.value}`)
       .join('\n');
@@ -108,8 +114,100 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, toolbar 
     showNotification(message);
   };
 
-  const menuItemClass =
-    'px-3 py-1.5 text-left text-foreground hover:bg-neutral-subtle flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed';
+  const copyMenu = (
+    <div className="relative shrink-0" ref={menuRef}>
+      <button
+        onClick={() => setCopyMenuOpen(!copyMenuOpen)}
+        className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs font-medium"
+        title="Copy request or response"
+      >
+        <MingCuteIcon name={copyNotification ? 'check_line' : 'copy_line'} size={13} className={copyNotification ? 'text-emerald-400' : ''} />
+        <span>{copyNotification || 'Copy'}</span>
+        <MingCuteIcon name="down_line" size={12} className="opacity-60" />
+      </button>
+
+      {copyMenuOpen && (
+        <div className="absolute right-0 mt-1 w-56 bg-surface border border-border rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
+          {requestCopy && (
+            <>
+              <MenuSection label="Request" first />
+              {requestCopy.map((action) => (
+                <button
+                  key={action.label}
+                  onClick={() => {
+                    navigator.clipboard.writeText(action.text());
+                    showNotification(action.message);
+                  }}
+                  className={menuItemClass}
+                >
+                  <MingCuteIcon name={action.icon} size={14} className={action.iconClass} />
+                  <span>{action.label}</span>
+                </button>
+              ))}
+            </>
+          )}
+
+          <MenuSection label="Response" first={!requestCopy} />
+          <button onClick={handleCopyBody} disabled={!responseBody} className={menuItemClass}>
+            <MingCuteIcon name="file_text_line" size={14} className="text-primary" />
+            <span>Copy Body</span>
+          </button>
+          <button onClick={handleCopyHeaders} disabled={!response} className={menuItemClass}>
+            <MingCuteIcon name="list_check_line" size={14} className="text-emerald-500" />
+            <span>Copy Headers</span>
+          </button>
+          <button onClick={handleCopyAll} disabled={!response} className={menuItemClass}>
+            <MingCuteIcon name="copy_line" size={14} className="text-amber-500" />
+            <span>Copy Full Response</span>
+          </button>
+
+          <MenuSection
+            label="Request + Response"
+            title={sentRun ? 'As sent, with variables filled in' : 'The request for this response is not in the run history yet'}
+          />
+          {RUN_COPY_ACTIONS.filter((action) => !(requestCopy && action.requestOnly)).map((action) => (
+            <button
+              key={action.label}
+              onClick={() => copyWithRequest(action.format, action.message)}
+              disabled={!sentRun}
+              className={menuItemClass}
+            >
+              <MingCuteIcon name={action.icon} size={14} className={action.iconClass} />
+              <span>{action.label}</span>
+            </button>
+          ))}
+          <button
+            onClick={() => {
+              setCopyMenuOpen(false);
+              if (sentRun) setCustomCopyItem(historyItemToTrafficItem(sentRun));
+            }}
+            disabled={!sentRun}
+            className={menuItemClass}
+          >
+            <MingCuteIcon name="settings_3_line" size={14} className="text-muted-foreground" />
+            <span>Copy custom...</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  if (!response) {
+    return (
+      <div className="flex-1 flex flex-col bg-surface overflow-hidden text-xs">
+        {requestCopy && (
+          <div className="h-12 px-3 bg-header border-b border-border flex items-center justify-between gap-3 font-mono shrink-0">
+            <span className="text-muted-foreground text-2xs">No response yet</span>
+            {copyMenu}
+          </div>
+        )}
+        <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-6 italic select-none">
+          <MingCuteIcon name="send_plane_line" size={36} className="mb-2 opacity-30" />
+          Click "Send" above to execute the request and view response headers & payload here.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col bg-surface overflow-hidden text-xs">
@@ -126,66 +224,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, toolbar 
         <div className="flex items-center gap-2 shrink-0">
           {toolbar}
 
-          {/* Copy Response Actions Dropdown */}
-          <div className="relative shrink-0" ref={menuRef}>
-            <button
-              onClick={() => setCopyMenuOpen(!copyMenuOpen)}
-              className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs font-medium"
-              title="Copy Response Options"
-            >
-              <MingCuteIcon name={copyNotification ? 'check_line' : 'copy_line'} size={13} className={copyNotification ? 'text-emerald-400' : ''} />
-              <span>{copyNotification || 'Copy'}</span>
-              <MingCuteIcon name="down_line" size={12} className="opacity-60" />
-            </button>
-
-            {copyMenuOpen && (
-              <div className="absolute right-0 mt-1 w-56 bg-surface border border-border rounded-lg shadow-xl py-1 z-50 font-mono text-xs flex flex-col">
-                <div className="px-3 pt-1 pb-0.5 text-3xs uppercase tracking-wider font-sans font-semibold text-muted-foreground">Response</div>
-                <button onClick={handleCopyBody} disabled={!responseBody} className={menuItemClass}>
-                  <MingCuteIcon name="file_text_line" size={14} className="text-primary" />
-                  <span>Copy Body</span>
-                </button>
-                <button onClick={handleCopyHeaders} className={menuItemClass}>
-                  <MingCuteIcon name="list_check_line" size={14} className="text-emerald-500" />
-                  <span>Copy Headers</span>
-                </button>
-                <button onClick={handleCopyAll} className={menuItemClass}>
-                  <MingCuteIcon name="copy_line" size={14} className="text-amber-500" />
-                  <span>Copy Full Response</span>
-                </button>
-
-                <div className="my-1 border-t border-border/80" />
-                <div
-                  className="px-3 pt-0.5 pb-0.5 text-3xs uppercase tracking-wider font-sans font-semibold text-muted-foreground"
-                  title={sentRun ? undefined : 'The request for this response is not in the run history yet'}
-                >
-                  Request + Response
-                </div>
-                {RUN_COPY_ACTIONS.map((action) => (
-                  <button
-                    key={action.label}
-                    onClick={() => copyWithRequest(action.format, action.message)}
-                    disabled={!sentRun}
-                    className={menuItemClass}
-                  >
-                    <MingCuteIcon name={action.icon} size={14} className={action.iconClass} />
-                    <span>{action.label}</span>
-                  </button>
-                ))}
-                <button
-                  onClick={() => {
-                    setCopyMenuOpen(false);
-                    if (sentRun) setCustomCopyItem(historyItemToTrafficItem(sentRun));
-                  }}
-                  disabled={!sentRun}
-                  className={menuItemClass}
-                >
-                  <MingCuteIcon name="settings_3_line" size={14} className="text-muted-foreground" />
-                  <span>Copy custom...</span>
-                </button>
-              </div>
-            )}
-          </div>
+          {copyMenu}
         </div>
       </div>
 

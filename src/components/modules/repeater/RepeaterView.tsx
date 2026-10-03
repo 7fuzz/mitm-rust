@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
 import { RequestBuilder } from './RequestBuilder';
 import { ResponsePanel } from './ResponsePanel';
+import { requestCopyActions } from '../../../utils/repeaterCopy';
 import { ExecutionHistoryDrawer } from './ExecutionHistoryDrawer';
 import { RepeaterSidebar } from './RepeaterSidebar';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
@@ -129,7 +130,7 @@ export const RepeaterView: React.FC = () => {
                 className="flex flex-col overflow-hidden min-w-[200px]"
                 style={{ width: `${100 - reqWidthPercent}%` }}
               >
-                <ResponsePanel response={activeResponse} />
+                <ResponsePanel response={activeResponse} requestCopy={requestCopyActions(activeTab)} />
               </div>
 
               {/* Draggable Resizer Handle for Execution History Drawer */}
