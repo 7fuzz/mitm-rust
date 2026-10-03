@@ -16,6 +16,7 @@ import {
 } from '../services/tauri/bridge';
 import { isTauriAvailable } from '../services/tauri/ipc';
 import { parseUrlQueryParams } from '../utils/urlParams';
+import { tryPrettifyJson } from '../utils/prettifyJson';
 
 interface RepeaterState {
   tabs: RepeaterTab[];
@@ -212,6 +213,7 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     let bodyContent = item.requestBody || '';
     if (bodyContent.trim()) {
       bodyType = (bodyContent.trim().startsWith('{') || bodyContent.trim().startsWith('[')) ? 'json' : 'raw';
+      if (bodyType === 'json') bodyContent = tryPrettifyJson(bodyContent);
     }
 
     const nowMs = Date.now();

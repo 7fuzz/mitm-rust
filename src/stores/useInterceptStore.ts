@@ -21,6 +21,7 @@ import {
 import { UnlistenFn } from "@tauri-apps/api/event";
 import { useSettingsStore } from "./useSettingsStore";
 import { ALL_SOURCES, type SourceScope } from "../types";
+import { tryPrettifyJson } from '../utils/prettifyJson';
 
 export interface InterceptParam {
   id: string;
@@ -82,23 +83,6 @@ export const rebuildUrlWithParams = (baseUrlOrFullUrl: string, params: Intercept
       .join("&");
     return activeParams ? `${base}?${activeParams}` : base;
   }
-};
-
-export const tryPrettifyJson = (text: string): string => {
-  if (!text || !text.trim()) return text;
-  const trimmed = text.trim();
-  if (
-    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-    (trimmed.startsWith("[") && trimmed.endsWith("]"))
-  ) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      return JSON.stringify(parsed, null, 2);
-    } catch {
-      return text;
-    }
-  }
-  return text;
 };
 
 interface InterceptState {

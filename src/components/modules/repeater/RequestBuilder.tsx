@@ -10,6 +10,7 @@ import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Select } from '../../common/ui';
 import { PaneHeader } from '../../common/PaneHeader';
 import { buildUrlWithParams, parseUrlQueryParams } from '../../../utils/urlParams';
+import { tryPrettifyJson } from '../../../utils/prettifyJson';
 
 interface RequestBuilderProps {
   request: RepeaterTab;
@@ -294,6 +295,16 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
                 className="py-0.5"
                 title="Body type (Multipart = multipart/form-data, URL-Encoded = x-www-form-urlencoded)"
               />
+            )}
+            {activeTab === 'body' && request.bodyType === 'json' && (
+              <button
+                onClick={() => updateTab({ ...request, bodyContent: tryPrettifyJson(request.bodyContent || '') })}
+                className="flex items-center gap-1 px-2 py-0.5 rounded bg-background hover:bg-neutral-subtle border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-xs font-medium"
+                title="Format JSON with 2-space indentation"
+              >
+                <MingCuteIcon name="code_line" size={13} />
+                <span>Format</span>
+              </button>
             )}
             {/* Copy Request Actions Dropdown */}
             <div className="relative" ref={menuRef}>
