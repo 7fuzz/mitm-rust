@@ -88,6 +88,10 @@ export const UI_PREFS = {
   /** Request pane share of the Collections work area */
   "collections.requestSplitPercent": splitPercent(50),
   "fuzzer.configHeight": panelWidth(300, 160, 700),
+  "fuzzer.resultsHidden": pref<boolean>({
+    default: false,
+    normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),
+  }),
   /** Whole-UI zoom factor, one of ZOOM_LEVELS */
   "appearance.zoom": pref<number>({
     default: 1,

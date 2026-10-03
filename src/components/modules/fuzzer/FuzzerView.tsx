@@ -40,6 +40,7 @@ export const FuzzerView: React.FC = () => {
   const [tab, setTab] = useState<ConfigTab>('request');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; run: FuzzRunMeta } | null>(null);
   const [configHeight, setConfigHeight] = useUiPref('fuzzer.configHeight');
+  const [resultsHidden, setResultsHidden] = useUiPref('fuzzer.resultsHidden');
   const configRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -207,8 +208,8 @@ export const FuzzerView: React.FC = () => {
 
         <div
           ref={configRef}
-          className="shrink-0 overflow-auto p-3"
-          style={{ height: `${configHeight}px` }}
+          className={`overflow-auto p-3 ${resultsHidden ? 'flex-1 min-h-0' : 'shrink-0'}`}
+          style={resultsHidden ? undefined : { height: `${configHeight}px` }}
         >
           {tab === 'request' && <FuzzerRequestEditor />}
           {tab === 'payloads' && <PayloadsConfig />}
@@ -216,17 +217,44 @@ export const FuzzerView: React.FC = () => {
           {tab === 'options' && <OptionsConfig />}
         </div>
 
-        <div
-          onPointerDown={handleSplitPointerDown}
-          className="h-1 cursor-row-resize -my-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
-          title="Drag to resize"
-        >
-          <div className="w-8 h-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
+        {!resultsHidden && (
+          <div
+            onPointerDown={handleSplitPointerDown}
+            className="h-1 cursor-row-resize -my-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
+            title="Drag to resize"
+          >
+            <div className="w-8 h-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
+          </div>
+        )}
+
+        {/* Kept mounted while hidden so search and filters survive toggling */}
+        <div className={`flex-1 min-h-0 border-t border-border ${resultsHidden ? 'hidden' : ''}`}>
+          <FuzzerResultsTable onHide={() => setResultsHidden(true)} />
         </div>
 
-        <div className="flex-1 min-h-0 border-t border-border">
-          <FuzzerResultsTable />
-        </div>
+        {resultsHidden && (
+          <button
+            onClick={() => setResultsHidden(false)}
+            className="h-7 px-3 shrink-0 border-t border-border bg-header flex items-center gap-2 text-2xs font-mono text-muted-foreground hover:text-foreground hover:bg-neutral-subtle cursor-pointer"
+            title="Show results"
+          >
+            <MingCuteIcon name="up_line" size={13} />
+            <span className="font-sans font-semibold uppercase tracking-wider text-3xs">Results</span>
+            <span className="tabular-nums">
+              <span className="text-foreground font-semibold">{rows.length}</span>
+              {total > 0 ? ` / ${total}` : ''}
+            </span>
+            {isRunning && (
+              <>
+                <MingCuteIcon name="loading_line" size={12} className="animate-spin text-primary" />
+                <div className="flex-1 max-w-xs h-1 rounded-full bg-neutral-subtle overflow-hidden">
+                  <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+                </div>
+              </>
+            )}
+            {phase === 'stopped' && <span className="text-amber-500">stopped</span>}
+          </button>
+        )}
       </div>
 
       <FuzzerRunDialog

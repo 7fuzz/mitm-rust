@@ -112,6 +112,9 @@ export const stopFuzz = (): Promise<void> => invoke<void>("stop_fuzz");
 export const getFuzzResult = (runId: string, idx: number): Promise<FuzzResult | null> =>
   invoke<FuzzResult | null>("get_fuzz_result", { runId, idx });
 
+export const searchFuzzResponses = (runId: string, query: string): Promise<number[]> =>
+  invoke<number[]>("search_fuzz_responses", { runId, query });
+
 export const saveCurrentFuzz = (name: string): Promise<string> =>
   invoke<string>("save_current_fuzz", { name });
 

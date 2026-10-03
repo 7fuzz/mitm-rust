@@ -70,6 +70,35 @@ pub async fn get_fuzz_result(
     Ok(results.into_iter().find(|r| r.idx == idx))
 }
 
+/// Indices of results whose response headers or body contain `query` (case-insensitive).
+#[tauri::command]
+pub async fn search_fuzz_responses(
+    state: State<'_, AppState>,
+    run_id: String,
+    query: String,
+) -> Result<Vec<u32>, String> {
+    let needle = query.to_lowercase();
+    if needle.is_empty() {
+        return Ok(Vec::new());
+    }
+    let matches = |r: &FuzzResult| {
+        r.response_body.as_deref().is_some_and(|b| b.to_lowercase().contains(&needle))
+            || r.response_headers.iter().any(|h| {
+                h.key.to_lowercase().contains(&needle) || h.value.to_lowercase().contains(&needle)
+            })
+    };
+    {
+        let buf = state.fuzz_buffer.read().await;
+        if let Some(b) = buf.as_ref() {
+            if b.run_id == run_id {
+                return Ok(b.results.iter().filter(|r| matches(r)).map(|r| r.idx).collect());
+            }
+        }
+    }
+    let results = fuzzer::get_run_results_db(&state.db_path, &run_id)?;
+    Ok(results.iter().filter(|r| matches(r)).map(|r| r.idx).collect())
+}
+
 /// Persists the current in-memory run (for a temporary run the user chose to keep).
 #[tauri::command]
 pub async fn save_current_fuzz(state: State<'_, AppState>, name: String) -> Result<String, String> {

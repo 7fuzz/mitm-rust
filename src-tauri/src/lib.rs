@@ -84,6 +84,7 @@ pub fn run() {
             commands::fuzzer_cmd::start_fuzz,
             commands::fuzzer_cmd::stop_fuzz,
             commands::fuzzer_cmd::get_fuzz_result,
+            commands::fuzzer_cmd::search_fuzz_responses,
             commands::fuzzer_cmd::save_current_fuzz,
             commands::fuzzer_cmd::list_fuzz_runs,
             commands::fuzzer_cmd::get_fuzz_run_config,
