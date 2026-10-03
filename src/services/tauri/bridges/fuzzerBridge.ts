@@ -3,7 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { HeaderItem, ParamItem } from "./repeaterBridge";
 import { isTauriAvailable } from "../ipc";
 
-export type AttackType = "sniper" | "clusterbomb";
+export type AttackType = "sniper" | "pitchfork" | "clusterbomb";
 export type PayloadKind = "list" | "numbers";
 export type MatchKind = "contains" | "regex";
 
@@ -34,19 +34,19 @@ export interface MatchRule {
   pattern: string;
 }
 
+/** A named `{{placeholder}}` paired with the payloads it draws from. */
+export interface FuzzVariable {
+  name: string;
+  set: PayloadSet;
+}
+
 export interface FuzzConfig {
   template: FuzzTemplate;
   attackType: AttackType;
-  payloadSets: PayloadSet[];
+  variables: FuzzVariable[];
   matchRules: MatchRule[];
   concurrency: number;
   delayMs: number;
-}
-
-export interface FuzzPosition {
-  index: number;
-  field: string;
-  base: string;
 }
 
 export interface MatchResult {

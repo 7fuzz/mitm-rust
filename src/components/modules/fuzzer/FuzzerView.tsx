@@ -17,7 +17,7 @@ export const FuzzerView: React.FC = () => {
     phase,
     estimate,
     estimateError,
-    positions,
+    variables,
     rows,
     total,
     savedToDb,
@@ -56,7 +56,7 @@ export const FuzzerView: React.FC = () => {
   }, [startMenuOpen]);
 
   const isRunning = phase === 'running';
-  const canRun = positions.length > 0 && !estimateError && (estimate ?? 0) > 0;
+  const canRun = variables.length > 0 && !estimateError && (estimate ?? 0) > 0;
   const progress = total > 0 ? Math.round((rows.length / total) * 100) : 0;
 
   const handleSplitPointerDown = (e: React.PointerEvent) => {

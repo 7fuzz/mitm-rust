@@ -3,10 +3,10 @@ import type { UnlistenFn } from '@tauri-apps/api/event';
 import type {
   AttackType,
   FuzzConfig,
-  FuzzPosition,
   FuzzResult,
   FuzzRunMeta,
   FuzzTemplate,
+  FuzzVariable,
   MatchResult,
   PayloadSet,
 } from '../services/tauri/bridge';
@@ -25,7 +25,7 @@ import {
   stopFuzz,
 } from '../services/tauri/bridge';
 import { isTauriAvailable } from '../services/tauri/ipc';
-import { parsePositions } from '../utils/fuzzerMarkers';
+import { parseVariables } from '../utils/fuzzerMarkers';
 import type { TrafficItem } from '../types';
 
 /** One table row, filled from the lightweight result stream. */
@@ -65,10 +65,9 @@ type RunPhase = 'idle' | 'running' | 'done' | 'stopped';
 interface FuzzerState {
   template: FuzzTemplate;
   attackType: AttackType;
-  payloadSets: PayloadSet[];
+  variables: FuzzVariable[];
   config: Pick<FuzzConfig, 'matchRules' | 'concurrency' | 'delayMs'>;
 
-  positions: FuzzPosition[];
   estimate: number | null;
   estimateError: string | null;
 
@@ -84,7 +83,7 @@ interface FuzzerState {
 
   setTemplate: (patch: Partial<FuzzTemplate>) => void;
   setAttackType: (t: AttackType) => void;
-  setPayloadSet: (index: number, patch: Partial<PayloadSet>) => void;
+  setVariableSet: (name: string, patch: Partial<PayloadSet>) => void;
   setConfig: (patch: Partial<Pick<FuzzConfig, 'matchRules' | 'concurrency' | 'delayMs'>>) => void;
   loadFromTraffic: (item: TrafficItem) => void;
 
@@ -104,31 +103,18 @@ interface FuzzerState {
 
 let unlisteners: UnlistenFn[] = [];
 
-const recomputePositions = (template: FuzzTemplate, attackType: AttackType, payloadSets: PayloadSet[]) => {
-  const positions = parsePositions(template);
-  // Cluster bomb needs one set per position; keep the array sized to match
-  let nextSets = payloadSets;
-  if (attackType === 'clusterbomb') {
-    if (positions.length === 0) {
-      nextSets = [];
-    } else if (payloadSets.length < positions.length) {
-      nextSets = [...payloadSets, ...Array.from({ length: positions.length - payloadSets.length }, emptyPayloadSet)];
-    } else if (payloadSets.length > positions.length) {
-      nextSets = payloadSets.slice(0, positions.length);
-    }
-  } else {
-    nextSets = payloadSets.length > 0 ? [payloadSets[0]] : [emptyPayloadSet()];
-  }
-  return { positions, payloadSets: nextSets };
+/** Variable list for a template: one entry per unique {{name}}, reusing existing payload sets. */
+const reconcileVariables = (template: FuzzTemplate, previous: FuzzVariable[]): FuzzVariable[] => {
+  const byName = new Map(previous.map((v) => [v.name, v]));
+  return parseVariables(template).map((name) => byName.get(name) ?? { name, set: emptyPayloadSet() });
 };
 
 export const useFuzzerStore = create<FuzzerState>((set, get) => ({
   template: defaultTemplate(),
   attackType: 'sniper',
-  payloadSets: [emptyPayloadSet()],
+  variables: [],
   config: { matchRules: [], concurrency: 10, delayMs: 0 },
 
-  positions: [],
   estimate: null,
   estimateError: null,
 
@@ -144,20 +130,17 @@ export const useFuzzerStore = create<FuzzerState>((set, get) => ({
 
   setTemplate: (patch) => {
     const template = { ...get().template, ...patch };
-    const { positions, payloadSets } = recomputePositions(template, get().attackType, get().payloadSets);
-    set({ template, positions, payloadSets });
+    set({ template, variables: reconcileVariables(template, get().variables) });
     get().refreshEstimate();
   },
 
   setAttackType: (attackType) => {
-    const { positions, payloadSets } = recomputePositions(get().template, attackType, get().payloadSets);
-    set({ attackType, positions, payloadSets });
+    set({ attackType });
     get().refreshEstimate();
   },
 
-  setPayloadSet: (index, patch) => {
-    const payloadSets = get().payloadSets.map((s, i) => (i === index ? { ...s, ...patch } : s));
-    set({ payloadSets });
+  setVariableSet: (name, patch) => {
+    set({ variables: get().variables.map((v) => (v.name === name ? { ...v, set: { ...v.set, ...patch } } : v)) });
     get().refreshEstimate();
   },
 
@@ -172,14 +155,13 @@ export const useFuzzerStore = create<FuzzerState>((set, get) => ({
       bodyType: 'raw',
       body: item.requestBody || '',
     };
-    const { positions, payloadSets } = recomputePositions(template, get().attackType, get().payloadSets);
-    set({ template, positions, payloadSets });
+    set({ template, variables: reconcileVariables(template, get().variables) });
     get().refreshEstimate();
   },
 
   buildConfig: () => {
-    const { template, attackType, payloadSets, config } = get();
-    return { template, attackType, payloadSets, ...config };
+    const { template, attackType, variables, config } = get();
+    return { template, attackType, variables, ...config };
   },
 
   refreshEstimate: async () => {
@@ -240,12 +222,10 @@ export const useFuzzerStore = create<FuzzerState>((set, get) => ({
 
   openSavedRun: async (runId) => {
     const [config, results] = await Promise.all([getFuzzRunConfig(runId), getFuzzRunResults(runId)]);
-    const { positions, payloadSets } = recomputePositions(config.template, config.attackType, config.payloadSets);
     set({
       template: config.template,
       attackType: config.attackType,
-      payloadSets,
-      positions,
+      variables: reconcileVariables(config.template, config.variables ?? []),
       config: { matchRules: config.matchRules, concurrency: config.concurrency, delayMs: config.delayMs },
       runId,
       phase: 'done',

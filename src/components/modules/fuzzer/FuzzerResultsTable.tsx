@@ -10,8 +10,11 @@ type SortKey = 'idx' | 'payloads' | 'statusCode' | 'responseSize' | 'durationMs'
 const formatSize = (b: number) => (b < 1024 ? `${b} B` : `${(b / 1024).toFixed(1)} KB`);
 
 export const FuzzerResultsTable: React.FC = () => {
-  const { rows, total, phase, config, fetchResultDetail } = useFuzzerStore();
+  const { rows, total, phase, config, variables, fetchResultDetail } = useFuzzerStore();
   const matchNames = config.matchRules.map((r) => r.name);
+  const varNames = variables.map((v) => v.name);
+  const labelPayloads = (payloads: string[]) =>
+    payloads.map((value, i) => (varNames[i] ? `${varNames[i]}=${value}` : value)).join('  ');
 
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'idx', desc: false });
   const [detail, setDetail] = useState<RunRecord | null>(null);
@@ -91,7 +94,7 @@ export const FuzzerResultsTable: React.FC = () => {
             {sorted.length === 0 ? (
               <tr>
                 <td colSpan={5 + matchNames.length} className="px-3 py-12 text-center text-muted-foreground italic font-sans">
-                  {phase === 'running' ? 'Running...' : 'No results yet. Configure positions and payloads, then Start.'}
+                  {phase === 'running' ? 'Running...' : 'No results yet. Add {{variables}} and payloads, then Start.'}
                 </td>
               </tr>
             ) : (
@@ -102,8 +105,8 @@ export const FuzzerResultsTable: React.FC = () => {
                   className="border-b border-border/50 cursor-pointer hover:bg-neutral-subtle/60"
                 >
                   <td className="px-2 py-1 text-muted-foreground tabular-nums">{row.idx + 1}</td>
-                  <td className="px-2 py-1 text-foreground max-w-[280px] truncate" title={row.payloads.join(' , ')}>
-                    {row.payloads.join(' , ')}
+                  <td className="px-2 py-1 text-foreground max-w-[280px] truncate font-mono" title={labelPayloads(row.payloads)}>
+                    {labelPayloads(row.payloads)}
                   </td>
                   <td className="px-2 py-1">
                     {row.error ? <span className="text-rose-500" title={row.error}>ERR</span> : <StatusBadge code={row.statusCode} />}

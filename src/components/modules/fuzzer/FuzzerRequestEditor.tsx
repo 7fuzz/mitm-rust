@@ -5,21 +5,21 @@ import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { Select } from '../../common/ui';
 import { PaneHeader } from '../../common/PaneHeader';
 import { HTTP_METHODS } from '../collections/tab/CollectionAddressBar';
-import { insertMarkerInFocused } from '../../../utils/fuzzerMarkers';
+import { countOccurrences, insertMarkerInFocused, parseVariables, stripMarkers } from '../../../utils/fuzzerMarkers';
 
 type Tab = 'params' | 'headers' | 'body';
 
-const fieldLabel = (field: string) => field.replace(/^param:/, '').replace(/^header:/, '');
-
 export const FuzzerRequestEditor: React.FC = () => {
-  const { template, setTemplate, positions } = useFuzzerStore();
+  const { template, setTemplate, variables } = useFuzzerStore();
   const [tab, setTab] = useState<Tab>('body');
   const readOnly = useFuzzerStore((s) => s.phase === 'running');
 
   const addMarker = () => {
-    if (!insertMarkerInFocused()) {
-      // No field focused: wrap the whole URL as a convenient default
-      setTemplate({ url: `§${template.url}§` });
+    // insertMarkerInFocused fires an input event the field's onChange handles; if no
+    // field is focused, wrap the whole URL as a convenient default.
+    if (insertMarkerInFocused(template) === null) {
+      const name = parseVariables(template).includes('var1') ? `var${parseVariables(template).length + 1}` : 'var1';
+      setTemplate({ url: `${template.url}{{${name}}}` });
     }
   };
 
@@ -45,9 +45,9 @@ export const FuzzerRequestEditor: React.FC = () => {
             addMarker();
           }}
           className="flex items-center gap-1 px-2 py-1.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-500 font-semibold text-xs cursor-pointer hover:bg-amber-500/25 shrink-0"
-          title="Wrap the selected text in a §payload§ position"
+          title="Wrap the selected text in a {{variable}} placeholder"
         >
-          <span>Add §</span>
+          <span>Mark {'{{ }}'}</span>
         </button>
       </div>
 
@@ -67,7 +67,7 @@ export const FuzzerRequestEditor: React.FC = () => {
             items={template.params}
             onChange={(params) => setTemplate({ params })}
             keyPlaceholder="Param key"
-            valuePlaceholder="Value (select, then Add §)"
+            valuePlaceholder="Value with {{var}}"
             readOnly={readOnly}
           />
         )}
@@ -76,7 +76,7 @@ export const FuzzerRequestEditor: React.FC = () => {
             items={template.headers}
             onChange={(headers) => setTemplate({ headers })}
             keyPlaceholder="Header name"
-            valuePlaceholder="Value (select, then Add §)"
+            valuePlaceholder="Value with {{var}}"
             readOnly={readOnly}
           />
         )}
@@ -93,34 +93,35 @@ export const FuzzerRequestEditor: React.FC = () => {
 
       <div className="px-2 py-1.5 border-t border-border flex items-center gap-2 flex-wrap text-2xs">
         <span className="text-muted-foreground">
-          {positions.length === 0 ? (
-            <>Select text and press <span className="text-amber-500 font-semibold">Add §</span> to mark a payload position</>
+          {variables.length === 0 ? (
+            <>Type <span className="text-amber-500 font-mono font-semibold">{'{{name}}'}</span> or select text and press <span className="text-amber-500 font-semibold">Mark</span></>
           ) : (
             <>
-              <span className="text-foreground font-semibold">{positions.length}</span> position{positions.length === 1 ? '' : 's'}
+              <span className="text-foreground font-semibold">{variables.length}</span> variable{variables.length === 1 ? '' : 's'}
             </>
           )}
         </span>
-        {positions.map((p) => (
-          <span key={p.index} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-mono">
-            <span className="text-3xs text-amber-500/70">{p.index + 1}</span>
-            <span className="text-muted-foreground">{fieldLabel(p.field)}</span>
-            {p.base && <span className="text-foreground">= {p.base}</span>}
-          </span>
-        ))}
-        {positions.length > 0 && (
+        {variables.map((v) => {
+          const uses = countOccurrences(template, v.name);
+          return (
+            <span key={v.name} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-mono">
+              <span className="text-foreground">{`{{${v.name}}}`}</span>
+              {uses > 1 && <span className="text-3xs text-amber-500/70">×{uses}</span>}
+            </span>
+          );
+        })}
+        {variables.length > 0 && (
           <button
-            onClick={() => {
-              const strip = (v: string) => v.split('§').join('');
+            onClick={() =>
               setTemplate({
-                url: strip(template.url),
-                body: strip(template.body ?? ''),
-                params: template.params.map((p) => ({ ...p, value: strip(p.value) })),
-                headers: template.headers.map((h) => ({ ...h, value: strip(h.value) })),
-              });
-            }}
+                url: stripMarkers(template.url),
+                body: stripMarkers(template.body ?? ''),
+                params: template.params.map((p) => ({ ...p, value: stripMarkers(p.value) })),
+                headers: template.headers.map((h) => ({ ...h, value: stripMarkers(h.value) })),
+              })
+            }
             className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-rose-500 cursor-pointer"
-            title="Remove all § markers"
+            title="Remove all {{ }} markers"
           >
             <MingCuteIcon name="close_line" size={11} />
             Clear

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
@@ -69,8 +70,18 @@ fn template_to_tab(idx: u32, t: &super::FuzzTemplate) -> RepeaterTab {
     }
 }
 
-async fn run_one(idx: u32, config: Arc<FuzzConfig>, payloads: Vec<String>) -> FuzzResult {
-    let applied = apply_payloads(&config.template, &payloads);
+async fn run_one(
+    idx: u32,
+    config: Arc<FuzzConfig>,
+    names: Arc<Vec<String>>,
+    payloads: Vec<String>,
+) -> FuzzResult {
+    let values: HashMap<String, String> = names
+        .iter()
+        .cloned()
+        .zip(payloads.iter().cloned())
+        .collect();
+    let applied = apply_payloads(&config.template, &values);
     let tab = template_to_tab(idx, &applied);
     match send_tab_request(&tab).await {
         Ok(sent) => {
@@ -131,7 +142,8 @@ pub async fn run_attack(
     config: FuzzConfig,
     save: bool,
 ) -> Result<(), String> {
-    let combos = generate_combos(&config)?;
+    let (names, combos) = generate_combos(&config)?;
+    let names = Arc::new(names);
     let total = combos.len() as u32;
     let concurrency = config.concurrency.clamp(1, 200) as usize;
     let delay_ms = config.delay_ms;
@@ -163,6 +175,7 @@ pub async fn run_attack(
         .map(|(i, payloads)| {
             let config = config.clone();
             let cancel = cancel.clone();
+            let names = names.clone();
             async move {
                 if cancel.load(Ordering::SeqCst) {
                     return None;
@@ -170,7 +183,7 @@ pub async fn run_attack(
                 if delay_ms > 0 {
                     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                 }
-                Some(run_one(i as u32, config, payloads).await)
+                Some(run_one(i as u32, config, names, payloads).await)
             }
         })
         .buffer_unordered(concurrency);

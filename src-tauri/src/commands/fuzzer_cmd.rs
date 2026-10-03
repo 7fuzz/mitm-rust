@@ -5,19 +5,20 @@ use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 use crate::fuzzer::{
-    self, execute::run_attack, FuzzConfig, FuzzPosition, FuzzResult, FuzzRunMeta, FuzzTemplate,
+    self, execute::run_attack, FuzzConfig, FuzzResult, FuzzRunMeta, FuzzTemplate,
 };
 use crate::state::AppState;
 
+/// Unique `{{variable}}` names in the template, in first-appearance order.
 #[tauri::command]
-pub fn parse_fuzz_positions(template: FuzzTemplate) -> Vec<FuzzPosition> {
-    fuzzer::parse_positions(&template)
+pub fn parse_fuzz_variables(template: FuzzTemplate) -> Vec<String> {
+    fuzzer::parse_variables(&template)
 }
 
 /// Number of requests this config would send, or an error (e.g. over the cap).
 #[tauri::command]
 pub fn count_fuzz_requests(config: FuzzConfig) -> Result<u32, String> {
-    Ok(fuzzer::generate_combos(&config)?.len() as u32)
+    Ok(fuzzer::generate_combos(&config)?.1.len() as u32)
 }
 
 #[tauri::command]

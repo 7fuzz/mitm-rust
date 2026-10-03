@@ -79,7 +79,7 @@ pub fn run() {
             commands::db_browser_cmd::get_db_row,
             commands::db_browser_cmd::run_db_query,
 
-            commands::fuzzer_cmd::parse_fuzz_positions,
+            commands::fuzzer_cmd::parse_fuzz_variables,
             commands::fuzzer_cmd::count_fuzz_requests,
             commands::fuzzer_cmd::start_fuzz,
             commands::fuzzer_cmd::stop_fuzz,

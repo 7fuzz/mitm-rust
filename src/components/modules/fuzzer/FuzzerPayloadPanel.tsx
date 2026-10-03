@@ -2,7 +2,7 @@ import React from 'react';
 import { useFuzzerStore } from '../../../stores/useFuzzerStore';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { SegmentedControl, Switch } from '../../common/ui';
-import type { PayloadSet } from '../../../services/tauri/bridge';
+import type { AttackType, PayloadSet } from '../../../services/tauri/bridge';
 import { FuzzerSection, fieldInputClass } from './FuzzerSection';
 
 const countValues = (set: PayloadSet): number => {
@@ -15,20 +15,25 @@ const countValues = (set: PayloadSet): number => {
   return set.list.length;
 };
 
-const PayloadSetEditor: React.FC<{ index: number; label: string }> = ({ index, label }) => {
-  const set = useFuzzerStore((s) => s.payloadSets[index]);
-  const setPayloadSet = useFuzzerStore((s) => s.setPayloadSet);
-  if (!set) return null;
+const ATTACK_HELP: Record<AttackType, string> = {
+  sniper: 'Sniper: each variable is fuzzed in turn while the others hold their first payload.',
+  pitchfork: 'Pitchfork: all variables advance together, stopping at the shortest list.',
+  clusterbomb: 'Cluster bomb: every combination of the variables’ payloads.',
+};
+
+const PayloadSetEditor: React.FC<{ name: string; set: PayloadSet }> = ({ name, set }) => {
+  const setVariableSet = useFuzzerStore((s) => s.setVariableSet);
+  const update = (patch: Partial<PayloadSet>) => setVariableSet(name, patch);
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <span className="flex-1 truncate text-2xs font-semibold text-foreground">{label}</span>
+        <span className="flex-1 truncate text-2xs font-mono font-semibold text-amber-500">{`{{${name}}}`}</span>
         <span className="text-3xs font-mono text-muted-foreground tabular-nums">{countValues(set)} values</span>
         <SegmentedControl
           sizeVariant="xs"
           value={set.kind}
-          onChange={(kind) => setPayloadSet(index, { kind: kind as PayloadSet['kind'] })}
+          onChange={(kind) => update({ kind: kind as PayloadSet['kind'] })}
           options={[
             { value: 'list', label: 'List' },
             { value: 'numbers', label: 'Numbers' },
@@ -39,7 +44,7 @@ const PayloadSetEditor: React.FC<{ index: number; label: string }> = ({ index, l
       {set.kind === 'list' ? (
         <textarea
           value={set.list.join('\n')}
-          onChange={(e) => setPayloadSet(index, { list: e.target.value.split('\n').filter((l) => l.length > 0) })}
+          onChange={(e) => update({ list: e.target.value.split('\n').filter((l) => l.length > 0) })}
           placeholder={'admin\nroot\ntest'}
           rows={5}
           className={`${fieldInputClass} p-2 resize-y`}
@@ -52,7 +57,7 @@ const PayloadSetEditor: React.FC<{ index: number; label: string }> = ({ index, l
               <input
                 type="number"
                 value={set[field]}
-                onChange={(e) => setPayloadSet(index, { [field]: Number(e.target.value) } as Partial<PayloadSet>)}
+                onChange={(e) => update({ [field]: Number(e.target.value) } as Partial<PayloadSet>)}
                 className={fieldInputClass}
               />
             </label>
@@ -64,19 +69,19 @@ const PayloadSetEditor: React.FC<{ index: number; label: string }> = ({ index, l
         <input
           type="text"
           value={set.prefix}
-          onChange={(e) => setPayloadSet(index, { prefix: e.target.value })}
+          onChange={(e) => update({ prefix: e.target.value })}
           placeholder="Prefix"
           className={`${fieldInputClass} flex-1 min-w-0`}
         />
         <input
           type="text"
           value={set.suffix}
-          onChange={(e) => setPayloadSet(index, { suffix: e.target.value })}
+          onChange={(e) => update({ suffix: e.target.value })}
           placeholder="Suffix"
           className={`${fieldInputClass} flex-1 min-w-0`}
         />
         <label className="flex items-center gap-1.5 text-2xs text-muted-foreground cursor-pointer select-none shrink-0">
-          <Switch checked={set.urlEncode} onChange={() => setPayloadSet(index, { urlEncode: !set.urlEncode })} />
+          <Switch checked={set.urlEncode} onChange={() => update({ urlEncode: !set.urlEncode })} />
           URL-encode
         </label>
       </div>
@@ -85,7 +90,7 @@ const PayloadSetEditor: React.FC<{ index: number; label: string }> = ({ index, l
 };
 
 export const FuzzerPayloadPanel: React.FC = () => {
-  const { attackType, setAttackType, positions, payloadSets, config, setConfig } = useFuzzerStore();
+  const { attackType, setAttackType, variables, config, setConfig } = useFuzzerStore();
 
   const updateRule = (i: number, patch: Partial<(typeof config.matchRules)[number]>) =>
     setConfig({ matchRules: config.matchRules.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
@@ -101,28 +106,22 @@ export const FuzzerPayloadPanel: React.FC = () => {
             onChange={(v) => setAttackType(v as typeof attackType)}
             options={[
               { value: 'sniper', label: 'Sniper' },
+              { value: 'pitchfork', label: 'Pitchfork' },
               { value: 'clusterbomb', label: 'Cluster bomb' },
             ]}
           />
         }
         bodyClassName="p-2.5 space-y-3"
       >
-        <p className="text-3xs text-muted-foreground">
-          {attackType === 'sniper'
-            ? 'Sniper: one payload set, applied to each position in turn.'
-            : 'Cluster bomb: one set per position, every combination.'}
-        </p>
-        {attackType === 'sniper' ? (
-          <PayloadSetEditor index={0} label="Payload set" />
-        ) : positions.length === 0 ? (
-          <p className="text-2xs text-muted-foreground italic">Add positions to configure payload sets.</p>
+        <p className="text-3xs text-muted-foreground">{ATTACK_HELP[attackType]}</p>
+        {variables.length === 0 ? (
+          <p className="text-2xs text-muted-foreground italic">
+            Add a <span className="font-mono text-amber-500">{'{{variable}}'}</span> to the request to configure its payloads.
+          </p>
         ) : (
-          payloadSets.map((_, i) => (
-            <div key={i} className={i > 0 ? 'pt-3 border-t border-border' : ''}>
-              <PayloadSetEditor
-                index={i}
-                label={`Position ${i + 1}${positions[i] ? ` · ${positions[i].field.replace(/^(param|header):/, '')}` : ''}`}
-              />
+          variables.map((v, i) => (
+            <div key={v.name} className={i > 0 ? 'pt-3 border-t border-border' : ''}>
+              <PayloadSetEditor name={v.name} set={v.set} />
             </div>
           ))
         )}

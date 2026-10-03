@@ -1,16 +1,24 @@
 pub mod execute;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
+use regex::{Captures, Regex};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::repeater::{HeaderItem, ParamItem};
 
-pub const MARKER: char = '§';
 pub const MAX_REQUESTS: usize = 100_000;
 
-/// A request with §payload§ markers in its field values.
+/// Matches a `{{name}}` fuzz placeholder; the capture group is the variable name.
+pub fn marker_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\{\{\s*([A-Za-z0-9_.\-]+)\s*\}\}").unwrap())
+}
+
+/// A request with `{{name}}` placeholders in its field values.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FuzzTemplate {
@@ -60,13 +68,22 @@ pub struct MatchRule {
     pub pattern: String,
 }
 
+/// A named placeholder (`{{name}}`) paired with the payloads it draws from.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FuzzVariable {
+    pub name: String,
+    pub set: PayloadSet,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FuzzConfig {
     pub template: FuzzTemplate,
-    /// "sniper" | "clusterbomb"
+    /// "sniper" | "pitchfork" | "clusterbomb"
     pub attack_type: String,
-    pub payload_sets: Vec<PayloadSet>,
+    #[serde(default)]
+    pub variables: Vec<FuzzVariable>,
     #[serde(default)]
     pub match_rules: Vec<MatchRule>,
     #[serde(default = "default_concurrency")]
@@ -77,15 +94,6 @@ pub struct FuzzConfig {
 
 fn default_concurrency() -> u32 {
     10
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FuzzPosition {
-    pub index: usize,
-    /// "url" | "param:Key" | "header:Key" | "body"
-    pub field: String,
-    pub base: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,75 +131,58 @@ pub struct FuzzRunMeta {
     pub created_at_ms: i64,
 }
 
-/// Replaces each §marker§ in `s` with the next value from `values`, sharing `cursor` across fields.
-fn replace_markers(s: &str, values: &[String], cursor: &mut usize) -> String {
-    let parts: Vec<&str> = s.split(MARKER).collect();
-    let mut out = String::new();
-    for (i, part) in parts.iter().enumerate() {
-        if i % 2 == 0 {
-            out.push_str(part);
-        } else {
-            if let Some(v) = values.get(*cursor) {
-                out.push_str(v);
-            } else {
-                out.push_str(part);
-            }
-            *cursor += 1;
-        }
-    }
-    out
+/// Replaces every `{{name}}` in `s` with its value from `values`; unknown names are left as-is.
+fn replace_markers(s: &str, values: &HashMap<String, String>) -> String {
+    marker_re()
+        .replace_all(s, |caps: &Captures| {
+            values
+                .get(&caps[1])
+                .cloned()
+                .unwrap_or_else(|| caps[0].to_string())
+        })
+        .into_owned()
 }
 
-/// Fields that may hold markers, in the order positions are numbered.
-fn marked_fields(t: &FuzzTemplate) -> Vec<(String, String)> {
-    let mut fields = vec![("url".to_string(), t.url.clone())];
+/// Fields that may hold placeholders, in the order variables are discovered.
+fn marked_fields(t: &FuzzTemplate) -> Vec<String> {
+    let mut fields = vec![t.url.clone()];
     for p in &t.params {
         if p.enabled {
-            fields.push((format!("param:{}", p.key), p.value.clone()));
+            fields.push(p.value.clone());
         }
     }
     for h in &t.headers {
         if h.enabled {
-            fields.push((format!("header:{}", h.key), h.value.clone()));
+            fields.push(h.value.clone());
         }
     }
-    fields.push(("body".to_string(), t.body.clone().unwrap_or_default()));
+    fields.push(t.body.clone().unwrap_or_default());
     fields
 }
 
-pub fn parse_positions(t: &FuzzTemplate) -> Vec<FuzzPosition> {
-    let mut positions = Vec::new();
-    for (field, value) in marked_fields(t) {
-        let parts: Vec<&str> = value.split(MARKER).collect();
-        for (i, part) in parts.iter().enumerate() {
-            if i % 2 == 1 {
-                positions.push(FuzzPosition {
-                    index: positions.len(),
-                    field: field.clone(),
-                    base: part.to_string(),
-                });
+/// Unique variable names, in first-appearance order (url, params, headers, body).
+pub fn parse_variables(t: &FuzzTemplate) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for value in marked_fields(t) {
+        for caps in marker_re().captures_iter(&value) {
+            let name = caps[1].to_string();
+            if !names.contains(&name) {
+                names.push(name);
             }
         }
     }
-    positions
+    names
 }
 
-/// Base value of each position, in order.
-fn base_values(t: &FuzzTemplate) -> Vec<String> {
-    parse_positions(t).into_iter().map(|p| p.base).collect()
-}
-
-/// A template with its markers replaced by one payload per position.
-pub fn apply_payloads(t: &FuzzTemplate, payloads: &[String]) -> FuzzTemplate {
-    let mut cursor = 0usize;
-    let url = replace_markers(&t.url, payloads, &mut cursor);
+/// A template with every `{{name}}` replaced by the assigned value.
+pub fn apply_payloads(t: &FuzzTemplate, values: &HashMap<String, String>) -> FuzzTemplate {
     let params = t
         .params
         .iter()
         .map(|p| {
             if p.enabled {
                 ParamItem {
-                    value: replace_markers(&p.value, payloads, &mut cursor),
+                    value: replace_markers(&p.value, values),
                     ..p.clone()
                 }
             } else {
@@ -205,7 +196,7 @@ pub fn apply_payloads(t: &FuzzTemplate, payloads: &[String]) -> FuzzTemplate {
         .map(|h| {
             if h.enabled {
                 HeaderItem {
-                    value: replace_markers(&h.value, payloads, &mut cursor),
+                    value: replace_markers(&h.value, values),
                     ..h.clone()
                 }
             } else {
@@ -213,17 +204,13 @@ pub fn apply_payloads(t: &FuzzTemplate, payloads: &[String]) -> FuzzTemplate {
             }
         })
         .collect();
-    let body = t
-        .body
-        .as_ref()
-        .map(|b| replace_markers(b, payloads, &mut cursor));
     FuzzTemplate {
         method: t.method.clone(),
-        url,
+        url: replace_markers(&t.url, values),
         headers,
         params,
         body_type: t.body_type.clone(),
-        body,
+        body: t.body.as_ref().map(|b| replace_markers(b, values)),
     }
 }
 
@@ -269,62 +256,80 @@ fn expand_payload_set(set: &PayloadSet) -> Vec<String> {
         .collect()
 }
 
-/// Every payload tuple to send, one inner vec of length `positions`.
-pub fn generate_combos(config: &FuzzConfig) -> Result<Vec<Vec<String>>, String> {
-    let bases = base_values(&config.template);
-    let n = bases.len();
+/// The expanded payload list for each variable, in `names` order.
+fn variable_lists(config: &FuzzConfig, names: &[String]) -> Vec<Vec<String>> {
+    names
+        .iter()
+        .map(|name| {
+            config
+                .variables
+                .iter()
+                .find(|v| &v.name == name)
+                .map(|v| expand_payload_set(&v.set))
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+fn too_many(total: usize) -> String {
+    format!(
+        "That is {} requests; the limit is {}. Trim the payload lists.",
+        total, MAX_REQUESTS
+    )
+}
+
+/// The ordered variable names and the per-request value rows (one value per name).
+pub fn generate_combos(config: &FuzzConfig) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
+    let names = parse_variables(&config.template);
+    let n = names.len();
     if n == 0 {
-        return Err("Add at least one payload position (§marker§) to the request.".to_string());
-    }
-    if config.payload_sets.is_empty() {
-        return Err("Add at least one payload set.".to_string());
+        return Err("Add at least one {{variable}} to the request.".to_string());
     }
 
-    let combos: Vec<Vec<String>> = match config.attack_type.as_str() {
+    let lists = variable_lists(config, &names);
+    if let Some(i) = lists.iter().position(|l| l.is_empty()) {
+        return Err(format!("Variable {{{{{}}}}} has no payloads.", names[i]));
+    }
+
+    let rows: Vec<Vec<String>> = match config.attack_type.as_str() {
+        // Each variable fuzzed in turn; the others hold their first payload.
         "sniper" => {
-            let values = expand_payload_set(&config.payload_sets[0]);
-            if values.is_empty() {
-                return Err("The payload set is empty.".to_string());
+            let baseline: Vec<String> = lists.iter().map(|l| l[0].clone()).collect();
+            let total: usize = lists.iter().map(|l| l.len()).sum();
+            if total > MAX_REQUESTS {
+                return Err(too_many(total));
             }
-            let mut out = Vec::with_capacity(n * values.len());
-            for pos in 0..n {
-                for v in &values {
-                    let mut combo = bases.clone();
-                    combo[pos] = v.clone();
-                    out.push(combo);
+            let mut out = Vec::with_capacity(total);
+            for (pos, list) in lists.iter().enumerate() {
+                for v in list {
+                    let mut row = baseline.clone();
+                    row[pos] = v.clone();
+                    out.push(row);
                 }
             }
             out
         }
+        // All variables advance together; stops at the shortest list.
+        "pitchfork" => {
+            let len = lists.iter().map(|l| l.len()).min().unwrap_or(0);
+            (0..len)
+                .map(|i| lists.iter().map(|l| l[i].clone()).collect())
+                .collect()
+        }
+        // Every combination of the variables' payloads.
         "clusterbomb" => {
-            if config.payload_sets.len() < n {
-                return Err(format!(
-                    "Cluster bomb needs one payload set per position ({} needed, {} given).",
-                    n,
-                    config.payload_sets.len()
-                ));
-            }
-            let sets: Vec<Vec<String>> = (0..n)
-                .map(|i| expand_payload_set(&config.payload_sets[i]))
-                .collect();
-            if let Some(empty) = sets.iter().position(|s| s.is_empty()) {
-                return Err(format!("Payload set {} is empty.", empty + 1));
-            }
-            let total: usize = sets.iter().map(|s| s.len()).product();
+            let total: usize = lists.iter().map(|l| l.len()).product();
             if total > MAX_REQUESTS {
-                return Err(format!(
-                    "That is {} requests; the limit is {}. Trim the payload sets.",
-                    total, MAX_REQUESTS
-                ));
+                return Err(too_many(total));
             }
             let mut out: Vec<Vec<String>> = vec![vec![]];
-            for set in &sets {
-                let mut next = Vec::with_capacity(out.len() * set.len());
+            for list in &lists {
+                let mut next = Vec::with_capacity(out.len() * list.len());
                 for prefix in &out {
-                    for v in set {
-                        let mut combo = prefix.clone();
-                        combo.push(v.clone());
-                        next.push(combo);
+                    for v in list {
+                        let mut row = prefix.clone();
+                        row.push(v.clone());
+                        next.push(row);
                     }
                 }
                 out = next;
@@ -334,14 +339,10 @@ pub fn generate_combos(config: &FuzzConfig) -> Result<Vec<Vec<String>>, String> 
         other => return Err(format!("Unknown attack type '{}'.", other)),
     };
 
-    if combos.len() > MAX_REQUESTS {
-        return Err(format!(
-            "That is {} requests; the limit is {}. Trim the payload sets.",
-            combos.len(),
-            MAX_REQUESTS
-        ));
+    if rows.len() > MAX_REQUESTS {
+        return Err(too_many(rows.len()));
     }
-    Ok(combos)
+    Ok((names, rows))
 }
 
 pub fn evaluate_matches(rules: &[MatchRule], body: &str) -> Vec<MatchResult> {
@@ -493,4 +494,98 @@ pub fn delete_run_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
     conn.execute("DELETE FROM fuzz_runs WHERE id = ?", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmpl(url: &str, body: &str) -> FuzzTemplate {
+        FuzzTemplate {
+            method: "GET".into(),
+            url: url.into(),
+            headers: vec![],
+            params: vec![],
+            body_type: "raw".into(),
+            body: Some(body.into()),
+        }
+    }
+
+    fn list(name: &str, values: &[&str]) -> FuzzVariable {
+        FuzzVariable {
+            name: name.into(),
+            set: PayloadSet {
+                kind: "list".into(),
+                list: values.iter().map(|s| s.to_string()).collect(),
+                from: 0.0,
+                to: 0.0,
+                step: 1.0,
+                pad: 0,
+                url_encode: false,
+                prefix: String::new(),
+                suffix: String::new(),
+            },
+        }
+    }
+
+    fn cfg(template: FuzzTemplate, attack: &str, vars: Vec<FuzzVariable>) -> FuzzConfig {
+        FuzzConfig {
+            template,
+            attack_type: attack.into(),
+            variables: vars,
+            match_rules: vec![],
+            concurrency: 10,
+            delay_ms: 0,
+        }
+    }
+
+    #[test]
+    fn dedupes_repeated_variable() {
+        let t = tmpl("/u/{{id}}/{{id}}", "role={{role}}");
+        assert_eq!(parse_variables(&t), vec!["id", "role"]);
+    }
+
+    #[test]
+    fn repeated_variable_shares_value() {
+        let t = tmpl("/u/{{id}}/{{id}}", "");
+        let mut map = HashMap::new();
+        map.insert("id".to_string(), "7".to_string());
+        assert_eq!(apply_payloads(&t, &map).url, "/u/7/7");
+    }
+
+    #[test]
+    fn sniper_holds_others_at_first() {
+        let t = tmpl("/{{a}}/{{b}}", "");
+        let (names, rows) = generate_combos(&cfg(t, "sniper", vec![list("a", &["1", "2"]), list("b", &["9"])])).unwrap();
+        assert_eq!(names, vec!["a", "b"]);
+        // a: [1,2] with b held at 9, then b: [9] with a held at 1
+        assert_eq!(rows, vec![vec!["1", "9"], vec!["2", "9"], vec!["1", "9"]]);
+    }
+
+    #[test]
+    fn pitchfork_lockstep_min_length() {
+        let t = tmpl("/{{a}}/{{b}}", "");
+        let (_, rows) = generate_combos(&cfg(t, "pitchfork", vec![list("a", &["1", "2", "3"]), list("b", &["x", "y"])])).unwrap();
+        assert_eq!(rows, vec![vec!["1", "x"], vec!["2", "y"]]);
+    }
+
+    #[test]
+    fn clusterbomb_product() {
+        let t = tmpl("/{{a}}/{{b}}", "");
+        let (_, rows) = generate_combos(&cfg(t, "clusterbomb", vec![list("a", &["1", "2"]), list("b", &["x", "y"])])).unwrap();
+        assert_eq!(rows.len(), 4);
+        assert_eq!(rows[0], vec!["1", "x"]);
+        assert_eq!(rows[3], vec!["2", "y"]);
+    }
+
+    #[test]
+    fn errors_without_variables() {
+        assert!(generate_combos(&cfg(tmpl("/static", ""), "sniper", vec![])).is_err());
+    }
+
+    #[test]
+    fn errors_on_empty_list() {
+        let t = tmpl("/{{a}}", "");
+        assert!(generate_combos(&cfg(t, "sniper", vec![list("a", &[])])).is_err());
+    }
 }
