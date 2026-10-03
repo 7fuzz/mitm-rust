@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useProxyStore } from '../../../stores/useProxyStore';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
+import { useFuzzerStore } from '../../../stores/useFuzzerStore';
 import { useSettingsStore } from '../../../stores/useSettingsStore';
 import { TrafficFilterBar } from './TrafficFilterBar';
 import { RequestResponseInspector } from './RequestResponseInspector';
@@ -257,6 +258,7 @@ export const HistoryView: React.FC = () => {
     deloadInactiveTraffic,
   } = useProxyStore();
   const { sendToRepeater } = useRepeaterStore();
+  const loadFuzzerFromTraffic = useFuzzerStore((s) => s.loadFromTraffic);
   const { setActiveModule } = useSettingsStore();
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: TrafficItem } | null>(null);
@@ -614,6 +616,12 @@ export const HistoryView: React.FC = () => {
     setActiveModule('repeater');
   };
 
+  const handleSendToFuzzer = async (item: TrafficItem) => {
+    const full = await ensureFullItem(item);
+    loadFuzzerFromTraffic(full);
+    setActiveModule('fuzzer');
+  };
+
   const handleAddToCollection = async (item: TrafficItem) => {
     const full = await ensureFullItem(item);
     await sendToRepeater(full);
@@ -655,6 +663,7 @@ export const HistoryView: React.FC = () => {
 
   const getContextMenuItems = (item: TrafficItem): ContextMenuItem[] => [
     { label: 'Send to Repeater', icon: 'send_plane_line', action: () => handleSendToRepeater(item) },
+    { label: 'Send to Fuzzer', icon: 'fast_forward_line', action: () => handleSendToFuzzer(item) },
     { label: 'Add to Collection', icon: 'folder_line', action: () => handleAddToCollection(item) },
     { label: 'Add to Intercept Rules', icon: 'shield_line', action: () => handleAddInterceptRule(item) },
     {
