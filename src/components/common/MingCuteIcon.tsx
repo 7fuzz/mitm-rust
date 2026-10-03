@@ -68,7 +68,10 @@ export type MingCuteIconName =
   | 'file_import_line'
   | 'layout_right_line'
   | 'chevron_left_line'
-  | 'expand_line';
+  | 'expand_line'
+  | 'swap_line'
+  | 'binary_line'
+  | 'clipboard_line';
 
 interface MingCuteIconProps {
   name: MingCuteIconName | string;
@@ -130,8 +133,23 @@ export const MingCuteIcon: React.FC<MingCuteIconProps> = ({
         return (
           <path d="M1.923 9.37c-.51-.205-.504-.51.034-.689l19.086-6.362c.529-.176.832.12.684.638l-5.454 19.086c-.15.529-.475.535-.731.008l-4.28-8.798l-6.26-6.26l-3.079 2.377z" />
         );
-      case 'transfer_line':
       case 'websocket_line':
+        return (
+          <path d="M9 7.539L15 21.539L18.659 13H23V11H17.341L15 16.461L9 2.461L5.341 11H1V13H6.659L9 7.539Z" />
+        );
+      case 'swap_line':
+        return (
+          <path d="M16.05 12.05L21 17l-4.95 4.95-1.414-1.414 2.536-2.537L4 18v-2h13.172l-2.536-2.536 1.414-1.414zm-8.1-10l1.414 1.414L6.828 6 20 6v2H6.828l2.536 2.536L7.95 11.95 3 7l4.95-4.95z" />
+        );
+      case 'binary_line':
+        return (
+          <path d="M7 5a3 3 0 0 1 3 3v8a3 3 0 0 1-6 0V8a3 3 0 0 1 3-3zm0 2a1 1 0 0 0-1 1v8a1 1 0 0 0 2 0V8a1 1 0 0 0-1-1zm9-2h2v12h2v2h-6v-2h2V7.8l-1.5.9-1-1.7L16 5z" />
+        );
+      case 'clipboard_line':
+        return (
+          <path d="M7 4V2h10v2h3.007c.548 0 .993.445.993.993v16.014a.994.994 0 0 1-.993.993H3.993A.994.994 0 0 1 3 21.007V4.993C3 4.445 3.445 4 3.993 4H7zm0 2H5v14h14V6h-2v2H7V6zm2-2v2h6V4H9z" />
+        );
+      case 'transfer_line':
         return (
           <path d="M7 4V2h2v2h10a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1h3zm-2 4h13V6H5v2zm0 12v-2h2v2H5zm4-2h10a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1v-4a1 1 0 011-1h5zm-4 4h13v-2H5v2z" />
         );

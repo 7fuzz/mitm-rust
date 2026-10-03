@@ -44,7 +44,7 @@ export const UtilitiesView: React.FC = () => {
               : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'
           }`}
         >
-          <MingCuteIcon name="transfer_line" size={15} />
+          <MingCuteIcon name="binary_line" size={15} />
           <span>Encoding & Decoding</span>
         </button>
 
