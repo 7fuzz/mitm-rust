@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::state::AppState;
 use crate::repeater::{
     create_repeater_tab_db, delete_repeater_tab_db, get_repeater_history_db,
-    get_repeater_tabs_db, insert_repeater_history_db, update_repeater_tab_db, HeaderItem,
+    get_repeater_tabs_db, insert_repeater_history_db, top_order_index_db, update_repeater_tab_db, HeaderItem,
     RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab,
 };
 use crate::repeater::execute::execute_tab_request;
@@ -94,7 +94,7 @@ pub async fn create_repeater_tab(
         body_type: "none".to_string(),
         body_content: None,
         extract_rules: vec![],
-        order_index: 0,
+        order_index: top_order_index_db(&state.db_path)?,
         created_at_ms: now_ms,
         updated_at_ms: now_ms,
         execution_count: 0,

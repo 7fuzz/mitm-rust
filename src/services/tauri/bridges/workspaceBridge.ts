@@ -176,6 +176,9 @@ export const exportWorkspaceFile = async (
   });
 };
 
+/** Reserved workspace holding the Repeater's tabs and environments; hidden from the workspace list. */
+export const REPEATER_WORKSPACE_ID = '00000000-0000-4000-8000-000000000001';
+
 export const getWorkspaceEnvironments = async (
   workspaceId: string
 ): Promise<Environment[]> => {

@@ -5,7 +5,8 @@ use reqwest::Method;
 use uuid::Uuid;
 
 use super::{HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab};
-use crate::repeater::{get_repeater_tab_by_id, insert_repeater_history_db};
+use crate::repeater::{get_repeater_tab_by_id, insert_repeater_history_db, REPEATER_WORKSPACE_ID};
+use crate::workspace::{get_workspace_environments_db, interpolate_dynamic_variables, interpolate_variables_with_env};
 use crate::encoding::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
 
 pub async fn execute_tab_request(
@@ -249,11 +250,36 @@ pub async fn send_tab_request(tab: &RepeaterTab) -> Result<SentRequest, String> 
     }
 }
 
+/// Fills `{{vars}}` from the Repeater workspace's active environment.
+fn interpolate_tab(db_path: &PathBuf, tab: &RepeaterTab) -> RepeaterTab {
+    let env = get_workspace_environments_db(db_path, REPEATER_WORKSPACE_ID)
+        .unwrap_or_default()
+        .into_iter()
+        .find(|e| e.is_active);
+    let fill = |s: &str| match &env {
+        Some(env) => interpolate_variables_with_env(env, s),
+        None => interpolate_dynamic_variables(s),
+    };
+
+    let mut out = tab.clone();
+    out.url = fill(&tab.url);
+    for p in &mut out.params {
+        p.key = fill(&p.key);
+        p.value = fill(&p.value);
+    }
+    for h in &mut out.headers {
+        h.key = fill(&h.key);
+        h.value = fill(&h.value);
+    }
+    out.body_content = tab.body_content.as_deref().map(fill);
+    out
+}
+
 pub async fn execute_repeater_tab(
     db_path: &PathBuf,
     tab: &RepeaterTab,
 ) -> Result<RepeaterExecutionResult, String> {
-    let sent = send_tab_request(tab).await?;
+    let sent = send_tab_request(&interpolate_tab(db_path, tab)).await?;
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)

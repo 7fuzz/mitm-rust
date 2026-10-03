@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
+import { useRepeaterEnvStore } from '../../stores/useRepeaterEnvStore';
 import { MingCuteIcon } from './MingCuteIcon';
 import type { EnvironmentVariable } from '../../services/tauri/bridge';
 import { QuickVariableEnvSelector } from './quick-variable/QuickVariableEnvSelector';
@@ -10,14 +11,18 @@ import { QuickVariableFooter } from './quick-variable/QuickVariableFooter';
 import { useQuickVariableShortcuts } from './quick-variable/useQuickVariableShortcuts';
 
 export const QuickVariableModal: React.FC = () => {
-  const { isQuickVarModalOpen, setQuickVarModalOpen } = useSettingsStore();
-  const {
-    activeEnvironmentId,
-    environmentsList,
-    environments,
-    saveEnvironmentVariables,
-    setActiveEnv,
-  } = useWorkspaceStore();
+  const { isQuickVarModalOpen, setQuickVarModalOpen, quickVarScope } = useSettingsStore();
+  const workspaceEnvs = useWorkspaceStore();
+  const repeaterEnvs = useRepeaterEnvStore();
+  const isRepeater = quickVarScope === 'repeater';
+  const { activeEnvironmentId, environmentsList, saveEnvironmentVariables } = isRepeater ? repeaterEnvs : workspaceEnvs;
+  const environments = isRepeater ? [] : workspaceEnvs.environments;
+  const setActiveEnv = workspaceEnvs.setActiveEnv;
+  const loadRepeaterEnvs = repeaterEnvs.loadEnvironments;
+
+  useEffect(() => {
+    if (isQuickVarModalOpen && isRepeater) loadRepeaterEnvs();
+  }, [isQuickVarModalOpen, isRepeater, loadRepeaterEnvs]);
 
   const [search, setSearch] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -315,7 +320,7 @@ export const QuickVariableModal: React.FC = () => {
         <div className="p-3 border-b border-border flex items-center justify-between bg-header shrink-0">
           <div className="flex items-center gap-2 font-semibold text-sm">
             <MingCuteIcon name="earth_line" size={18} className="text-primary" />
-            <span>Quick Environment & Variable Switcher</span>
+            <span>{isRepeater ? 'Repeater Variables' : 'Quick Environment & Variable Switcher'}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-2xs font-mono text-muted-foreground">Press <kbd className="px-1 py-0.5 rounded bg-background border border-border text-foreground font-bold">Esc</kbd> to close</span>
@@ -335,6 +340,7 @@ export const QuickVariableModal: React.FC = () => {
           environments={environments}
           activeEnvironmentId={activeEnvironmentId}
           onSelectEnvironment={handleSelectEnvironment}
+          label={isRepeater ? 'Repeater Environments' : 'Active Workspace Environments'}
         />
 
         {/* Filter Input Bar */}

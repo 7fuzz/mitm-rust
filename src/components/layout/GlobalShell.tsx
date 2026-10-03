@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
-import { useSettingsStore } from '../../stores/useSettingsStore';
+import { useSettingsStore, quickVarScopeFor } from '../../stores/useSettingsStore';
 import { TopNav } from './TopNav';
-import { StatusBar } from './StatusBar';
+import { WorkspaceBar } from './WorkspaceBar';
 import { QuickVariableModal } from '../common/QuickVariableModal';
 
 import { HistoryView } from '../modules/history/HistoryView';
@@ -25,7 +25,8 @@ export const GlobalShell: React.FC = () => {
   const { activeModule, setActiveModule, theme } = useSettingsStore();
   const [zoom, setZoom] = useUiPref('appearance.zoom');
 
-  const { isQuickVarModalOpen, setQuickVarModalOpen } = useSettingsStore();
+  const { isQuickVarModalOpen, setQuickVarModalOpen, openQuickVarModal } = useSettingsStore();
+  const quickVarScope = quickVarScopeFor(activeModule);
   const initWorkspaceStore = useWorkspaceStore((state) => state.initStore);
   const initInterceptStore = useInterceptStore((state) => state.initInterceptStore);
 
@@ -35,7 +36,11 @@ export const GlobalShell: React.FC = () => {
     initInterceptStore();
   }, [initWorkspaceStore, initInterceptStore]);
 
-  // Number keys switch modules (see navModules) and V opens the Quick Env Switcher
+  useEffect(() => {
+    setQuickVarModalOpen(false);
+  }, [activeModule, setQuickVarModalOpen]);
+
+  // Number keys switch modules (see navModules) and V opens the variable switcher on pages that send requests
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger when inside inputs or textareas
@@ -45,9 +50,10 @@ export const GlobalShell: React.FC = () => {
       }
 
       if (!e.metaKey && !e.ctrlKey && !e.altKey) {
-        if (e.key === 'v' || e.key === 'V') {
+        if ((e.key === 'v' || e.key === 'V') && quickVarScope) {
           e.preventDefault();
-          setQuickVarModalOpen(!isQuickVarModalOpen);
+          if (isQuickVarModalOpen) setQuickVarModalOpen(false);
+          else openQuickVarModal(quickVarScope);
           return;
         }
 
@@ -60,7 +66,7 @@ export const GlobalShell: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setActiveModule, isQuickVarModalOpen, setQuickVarModalOpen]);
+  }, [setActiveModule, isQuickVarModalOpen, setQuickVarModalOpen, openQuickVarModal, quickVarScope]);
 
   // Saved zoom, applied on startup and whenever it changes
   useEffect(() => {
@@ -134,10 +140,8 @@ export const GlobalShell: React.FC = () => {
       {/* Main Module View */}
       <main className="flex-1 overflow-hidden relative bg-background">{renderActiveModuleView()}</main>
 
-      {/* Bottom Status Bar */}
-      <StatusBar />
+      {quickVarScope === 'workspace' && <WorkspaceBar />}
 
-      {/* Quick Variable Switcher Modal (Cmd+K) */}
       <QuickVariableModal />
     </div>
   );

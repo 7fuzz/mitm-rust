@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::repeater::REPEATER_WORKSPACE_ID;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VariableVariant {
@@ -76,11 +78,12 @@ pub fn get_workspaces_db(db_path: &PathBuf) -> Result<Vec<Workspace>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
     let mut stmt = conn
-        .prepare("SELECT id, name, description, active_environment_id, created_at_ms, updated_at_ms FROM workspaces ORDER BY updated_at_ms DESC")
+        .prepare("SELECT id, name, description, active_environment_id, created_at_ms, updated_at_ms FROM workspaces WHERE id != ? ORDER BY updated_at_ms DESC")
         .map_err(|e| e.to_string())?;
 
+    // The Repeater workspace belongs to the Repeater view, not the workspace switcher
     let workspaces = stmt
-        .query_map([], |row| {
+        .query_map([REPEATER_WORKSPACE_ID], |row| {
             Ok(Workspace {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -127,6 +130,15 @@ pub fn update_workspace_db(db_path: &PathBuf, workspace: Workspace) -> Result<()
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let ts = now_ms();
 
+    if workspace.id == REPEATER_WORKSPACE_ID {
+        conn.execute(
+            "UPDATE workspaces SET active_environment_id = ?, updated_at_ms = ? WHERE id = ?",
+            params![workspace.active_environment_id, ts, workspace.id],
+        )
+        .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
     conn.execute(
         "UPDATE workspaces SET name = ?, description = ?, active_environment_id = ?, updated_at_ms = ? WHERE id = ?",
         params![workspace.name, workspace.description, workspace.active_environment_id, ts, workspace.id],
@@ -137,6 +149,9 @@ pub fn update_workspace_db(db_path: &PathBuf, workspace: Workspace) -> Result<()
 }
 
 pub fn delete_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
+    if id == REPEATER_WORKSPACE_ID {
+        return Err("The Repeater workspace can't be deleted.".to_string());
+    }
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let _ = conn.execute("PRAGMA foreign_keys = ON;", []);
 

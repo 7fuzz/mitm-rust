@@ -19,6 +19,7 @@ import {
   ImportSummary,
 } from '../services/tauri/bridge';
 import { isTauriAvailable } from '../services/tauri/ipc';
+import { applyEnvironmentSave } from '../utils/envVariables';
 
 interface WorkspaceState {
   workspaces: Workspace[];
@@ -301,22 +302,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   saveEnvironmentVariables: async (env) => {
-    set((state) => {
-      // Saving an id not in the list creates that environment (the backend upserts)
-      const list = state.environmentsList.some((e) => e.id === env.id)
-        ? state.environmentsList
-        : [...state.environmentsList, env];
-      return {
-        environmentsList: list.map((e) =>
-          e.id === env.id
-            ? { ...env }
-            : env.isActive
-            ? { ...e, isActive: false }
-            : e
-        ),
-        activeEnvironmentId: env.isActive ? env.id : state.activeEnvironmentId,
-      };
-    });
+    set((state) => ({
+      environmentsList: applyEnvironmentSave(state.environmentsList, env),
+      activeEnvironmentId: env.isActive ? env.id : state.activeEnvironmentId,
+    }));
     if (isTauriAvailable()) {
       try {
         await saveWorkspaceEnvironment(env);

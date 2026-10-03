@@ -1,4 +1,4 @@
-import type { EnvironmentVariable, VariableVariant } from '../services/tauri/bridge';
+import type { Environment, EnvironmentVariable, VariableVariant } from '../services/tauri/bridge';
 
 /**
  * A variable's `value` always mirrors its active variant. Variables saved before variants
@@ -62,3 +62,9 @@ export const newVariable = (key = '', value = ''): EnvironmentVariable => ({
   activeIndex: 0,
   variants: [{ name: '(auto)', value }],
 });
+
+/** The environment list after saving `env`. Saving an id not in the list adds it; an active save deactivates the rest. */
+export const applyEnvironmentSave = (list: Environment[], env: Environment): Environment[] => {
+  const withEnv = list.some((e) => e.id === env.id) ? list : [...list, env];
+  return withEnv.map((e) => (e.id === env.id ? { ...env } : env.isActive ? { ...e, isActive: false } : e));
+};

@@ -2,10 +2,20 @@ import { create } from 'zustand';
 import type { NavModule, AppPreferences } from '../types';
 import { getRootCaPem, exportRootCa, regenerateRootCa, updatePrefs } from '../services/tauri/ipc';
 
+/** Which environments the variable switcher edits: the active workspace's, or the Repeater's own. */
+export type QuickVarScope = 'workspace' | 'repeater';
+
+export const quickVarScopeFor = (module: NavModule): QuickVarScope | null => {
+  if (module === 'repeater') return 'repeater';
+  if (module === 'collections' || module === 'workspace') return 'workspace';
+  return null;
+};
+
 interface SettingsState {
   activeModule: NavModule;
   theme: 'dark' | 'light';
   isQuickVarModalOpen: boolean;
+  quickVarScope: QuickVarScope;
   caPem: string;
   isCaLoading: boolean;
 
@@ -13,6 +23,7 @@ interface SettingsState {
   setTheme: (theme: 'dark' | 'light') => void;
   toggleTheme: () => void;
   setQuickVarModalOpen: (open: boolean) => void;
+  openQuickVarModal: (scope: QuickVarScope) => void;
   fetchCaCert: () => Promise<void>;
   exportCaCert: (destinationPath: string) => Promise<void>;
   regenerateCaCert: () => Promise<void>;
@@ -23,6 +34,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   activeModule: 'http-history',
   theme: 'dark',
   isQuickVarModalOpen: false,
+  quickVarScope: 'workspace',
   caPem: '',
   isCaLoading: false,
 
@@ -45,6 +57,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setQuickVarModalOpen: (isQuickVarModalOpen) => set({ isQuickVarModalOpen }),
+  openQuickVarModal: (quickVarScope) => set({ isQuickVarModalOpen: true, quickVarScope }),
 
   fetchCaCert: async () => {
     set({ isCaLoading: true });

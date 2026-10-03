@@ -7,6 +7,7 @@ interface QuickVariableEnvSelectorProps {
   environments: Array<{ id: string; name: string; isActive?: boolean }>;
   activeEnvironmentId: string | null;
   onSelectEnvironment: (envId: string) => void;
+  label: string;
 }
 
 export const QuickVariableEnvSelector: React.FC<QuickVariableEnvSelectorProps> = ({
@@ -14,6 +15,7 @@ export const QuickVariableEnvSelector: React.FC<QuickVariableEnvSelectorProps> =
   environments,
   activeEnvironmentId,
   onSelectEnvironment,
+  label,
 }) => {
   const envsToRender = environmentsList.length > 0 ? environmentsList : environments;
 
@@ -21,7 +23,7 @@ export const QuickVariableEnvSelector: React.FC<QuickVariableEnvSelectorProps> =
     <div className="p-2.5 bg-background border-b border-border flex flex-col gap-1.5 shrink-0">
       <div className="flex items-center justify-between">
         <label className="text-3xs font-semibold text-muted-foreground uppercase tracking-wider block font-mono">
-          Active Workspace Environments (Press <kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">e</kbd>/<kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">E</kbd> to cycle)
+          {label} (Press <kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">e</kbd>/<kbd className="px-1 py-0.2 rounded bg-surface border border-border text-foreground font-bold">E</kbd> to cycle)
         </label>
       </div>
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">

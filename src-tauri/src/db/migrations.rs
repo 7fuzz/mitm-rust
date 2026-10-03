@@ -84,6 +84,11 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         name: "20261003_0015_fuzzer",
         sql: include_str!("../../migrations/20261003_0015_fuzzer.sql"),
     },
+    MigrationSpec {
+        version: 16,
+        name: "20261003_0016_repeater_workspace",
+        sql: include_str!("../../migrations/20261003_0016_repeater_workspace.sql"),
+    },
 ];
 
 #[derive(Clone, Serialize, Debug)]
@@ -107,9 +112,9 @@ pub fn run_all(app_handle: &AppHandle, conn: &Connection) -> Result<(), String> 
     let latest_version = MIGRATIONS.last().map(|m| m.version).unwrap_or(0);
 
     // If pragma_user_version is corrupted or artificially inflated above latest schema (e.g. version 13 from plugin conflict)
-    // AND essential tables like 'repeaters' are missing, raise a explicit schema mismatch error so recovery modal activates!
-    let repeaters_exists = conn.prepare("SELECT 1 FROM repeaters LIMIT 1").is_ok();
-    if pragma_user_version > latest_version && !repeaters_exists {
+    // AND essential tables like 'requests' are missing, raise a explicit schema mismatch error so recovery modal activates!
+    let requests_exists = conn.prepare("SELECT 1 FROM requests LIMIT 1").is_ok();
+    if pragma_user_version > latest_version && !requests_exists {
         let err_msg = format!(
             "Database version mismatch detected (PRAGMA user_version is {} but latest schema is {}). Essential tables are missing.",
             pragma_user_version, latest_version
@@ -163,6 +168,9 @@ pub fn run_all(app_handle: &AppHandle, conn: &Connection) -> Result<(), String> 
                 },
             );
 
+            // One transaction per migration so a copy-then-drop can't be half applied
+            conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
+
             // Execute SQL statements individually to safely handle ALTER TABLE errors
             for statement in m.sql.split(';') {
                 let trimmed = statement.trim();
@@ -185,15 +193,22 @@ pub fn run_all(app_handle: &AppHandle, conn: &Connection) -> Result<(), String> 
                                 error_message: Some(full_err.clone()),
                             },
                         );
+                        let _ = conn.execute_batch("ROLLBACK");
                         return Err(full_err);
                     }
                 }
             }
 
-            conn.execute(
-                "INSERT OR REPLACE INTO _schema_migrations (name) VALUES (?)",
-                [m.name],
-            ).map_err(|e| e.to_string())?;
+            let marked = conn
+                .execute(
+                    "INSERT OR REPLACE INTO _schema_migrations (name) VALUES (?)",
+                    [m.name],
+                )
+                .and_then(|_| conn.execute_batch("COMMIT"));
+            if let Err(e) = marked {
+                let _ = conn.execute_batch("ROLLBACK");
+                return Err(e.to_string());
+            }
         }
     }
 

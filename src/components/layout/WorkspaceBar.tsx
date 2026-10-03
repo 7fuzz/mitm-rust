@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
-import { useProxyStore } from '../../stores/useProxyStore';
 import { MingCuteIcon } from '../common/MingCuteIcon';
 
-export const StatusBar: React.FC = () => {
-  const { setQuickVarModalOpen, setActiveModule } = useSettingsStore();
+/** Environment and workspace switchers, shown only on the pages that use the active workspace. */
+export const WorkspaceBar: React.FC = () => {
+  const { openQuickVarModal, setActiveModule } = useSettingsStore();
   const {
     activeWorkspaceId,
     workspaces,
@@ -16,7 +16,6 @@ export const StatusBar: React.FC = () => {
     createNewWorkspace,
     openImportModalForWorkspace,
   } = useWorkspaceStore();
-  const { pendingQueue } = useProxyStore();
 
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
   const [workspaceSearch, setWorkspaceSearch] = useState('');
@@ -34,7 +33,6 @@ export const StatusBar: React.FC = () => {
   const workspaceName = activeWorkspace?.name || 'Default Workspace';
 
   const envName = activeEnvFromList?.name || activeEnvFromLegacy?.name || 'No Environment';
-  const pendingCount = pendingQueue.length;
 
   const filteredWorkspaces = workspaces.filter((w) =>
     w.name.toLowerCase().includes(workspaceSearch.toLowerCase()) ||
@@ -108,7 +106,7 @@ export const StatusBar: React.FC = () => {
       <div className="flex items-center gap-3">
         {/* Quick Env Switcher Trigger Button (Corner Left Bottom) */}
         <button
-          onClick={() => setQuickVarModalOpen(true)}
+          onClick={() => openQuickVarModal('workspace')}
           className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary font-sans font-bold transition-colors cursor-pointer"
           title="Click or press 'V' to open Quick Environment Switcher"
         >
@@ -118,16 +116,8 @@ export const StatusBar: React.FC = () => {
         </button>
       </div>
 
-      {/* Right Badges & Workspace Combobox Trigger */}
+      {/* Workspace Combobox Trigger */}
       <div className="flex items-center gap-3">
-        {/* Pending Intercept Counter Badge */}
-        {pendingCount > 0 && (
-          <div className="flex items-center gap-1 text-rose-500 font-semibold animate-pulse">
-            <MingCuteIcon name="shield_line" size={12} />
-            <span>{pendingCount} Pending Intercept</span>
-          </div>
-        )}
-
         {/* Active Workspace Interactive Trigger Button (Bottom Right Corner) */}
         <button
           ref={triggerRef}
