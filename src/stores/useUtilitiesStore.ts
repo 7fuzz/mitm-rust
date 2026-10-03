@@ -21,12 +21,34 @@ export type HashAlgorithm =
   | 'hmac-sha256'
   | 'hmac-md5';
 
+export type JsonMode = 'format' | 'diff';
+export type JsonOperation = 'pretty' | 'minify' | 'escape' | 'unescape';
+export type JsonIndent = '2' | '4' | 'tab';
+
 export type Direction = 'encode' | 'decode';
 export type HashMode = 'generate' | 'verify';
 
 interface UtilitiesState {
   activeTab: UtilityTab;
   setActiveTab: (tab: UtilityTab) => void;
+
+  // JSON
+  jsonMode: JsonMode;
+  setJsonMode: (mode: JsonMode) => void;
+  jsonInput: string;
+  setJsonInput: (input: string) => void;
+  jsonOperation: JsonOperation;
+  setJsonOperation: (op: JsonOperation) => void;
+  jsonIndent: JsonIndent;
+  setJsonIndent: (indent: JsonIndent) => void;
+  jsonSortKeys: boolean;
+  setJsonSortKeys: (sort: boolean) => void;
+  jsonDiffLeft: string;
+  setJsonDiffLeft: (text: string) => void;
+  jsonDiffRight: string;
+  setJsonDiffRight: (text: string) => void;
+  jsonDiffInline: boolean;
+  setJsonDiffInline: (inline: boolean) => void;
 
   // Encoding & Decoding
   encodingInput: string;
@@ -64,6 +86,23 @@ interface UtilitiesState {
 export const useUtilitiesStore = create<UtilitiesState>((set) => ({
   activeTab: 'encoding',
   setActiveTab: (activeTab) => set({ activeTab }),
+
+  jsonMode: 'format',
+  setJsonMode: (jsonMode) => set({ jsonMode }),
+  jsonInput: '',
+  setJsonInput: (jsonInput) => set({ jsonInput }),
+  jsonOperation: 'pretty',
+  setJsonOperation: (jsonOperation) => set({ jsonOperation }),
+  jsonIndent: '2',
+  setJsonIndent: (jsonIndent) => set({ jsonIndent }),
+  jsonSortKeys: false,
+  setJsonSortKeys: (jsonSortKeys) => set({ jsonSortKeys }),
+  jsonDiffLeft: '',
+  setJsonDiffLeft: (jsonDiffLeft) => set({ jsonDiffLeft }),
+  jsonDiffRight: '',
+  setJsonDiffRight: (jsonDiffRight) => set({ jsonDiffRight }),
+  jsonDiffInline: false,
+  setJsonDiffInline: (jsonDiffInline) => set({ jsonDiffInline }),
 
   // Encoding state: initial empty string
   encodingInput: '',
