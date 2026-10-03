@@ -3,6 +3,7 @@ import { useFuzzerStore } from '../../../stores/useFuzzerStore';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { Select } from '../../common/ui';
+import { PaneHeader } from '../../common/PaneHeader';
 import { HTTP_METHODS } from '../collections/tab/CollectionAddressBar';
 import { insertMarkerInFocused } from '../../../utils/fuzzerMarkers';
 
@@ -24,6 +25,9 @@ export const FuzzerRequestEditor: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-0 border border-border rounded-lg bg-surface overflow-hidden">
+      <div className="h-8 px-2.5 bg-header border-b border-border flex items-center select-none">
+        <span className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground">Request</span>
+      </div>
       <div className="flex items-center gap-2 p-2 border-b border-border">
         <div className="w-28 shrink-0">
           <Select value={template.method} onChange={(e) => setTemplate({ method: e.target.value })} options={HTTP_METHODS} />
@@ -43,26 +47,19 @@ export const FuzzerRequestEditor: React.FC = () => {
           className="flex items-center gap-1 px-2 py-1.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-500 font-semibold text-xs cursor-pointer hover:bg-amber-500/25 shrink-0"
           title="Wrap the selected text in a §payload§ position"
         >
-          <span className="font-mono">§</span>
           <span>Add §</span>
         </button>
       </div>
 
-      <div className="flex items-center gap-1 px-2 pt-1.5 border-b border-border">
-        {(['params', 'headers', 'body'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-2.5 py-1 rounded-t text-2xs font-medium capitalize cursor-pointer ${
-              tab === t ? 'bg-surface text-foreground font-semibold border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {t}
-            {t === 'params' && template.params.length > 0 ? ` (${template.params.length})` : ''}
-            {t === 'headers' && template.headers.length > 0 ? ` (${template.headers.length})` : ''}
-          </button>
-        ))}
-      </div>
+      <PaneHeader
+        tabs={[
+          { value: 'params', label: 'Params', count: template.params.length },
+          { value: 'headers', label: 'Headers', count: template.headers.length },
+          { value: 'body', label: 'Body' },
+        ]}
+        activeTab={tab}
+        onTabChange={(t) => setTab(t as Tab)}
+      />
 
       <div className="flex-1 min-h-0 overflow-auto p-2">
         {tab === 'params' && (
@@ -88,7 +85,7 @@ export const FuzzerRequestEditor: React.FC = () => {
             value={template.body ?? ''}
             onChange={(e) => setTemplate({ body: e.target.value })}
             readOnly={readOnly}
-            placeholder={'{\n  "role": "user"\n}\n\nSelect text and press Add § to mark a position.'}
+            placeholder={'{\n  "role": "user"\n}'}
             className="w-full h-full min-h-[140px] bg-background border border-border rounded p-2 font-mono text-xs text-foreground focus:outline-none focus:border-primary resize-none"
           />
         )}
@@ -97,7 +94,7 @@ export const FuzzerRequestEditor: React.FC = () => {
       <div className="px-2 py-1.5 border-t border-border flex items-center gap-2 flex-wrap text-2xs">
         <span className="text-muted-foreground">
           {positions.length === 0 ? (
-            <span className="text-amber-500">No positions yet — select text and press Add §</span>
+            <>Select text and press <span className="text-amber-500 font-semibold">Add §</span> to mark a payload position</>
           ) : (
             <>
               <span className="text-foreground font-semibold">{positions.length}</span> position{positions.length === 1 ? '' : 's'}
