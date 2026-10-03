@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import type { UnlistenFn } from '@tauri-apps/api/event';
 import type {
   AttackType,
   FuzzConfig,
@@ -26,6 +25,7 @@ import {
 } from '../services/tauri/bridge';
 import { isTauriAvailable } from '../services/tauri/ipc';
 import { parseVariables } from '../utils/fuzzerMarkers';
+import { tryPrettifyJson } from '../utils/prettifyJson';
 import type { TrafficItem } from '../types';
 
 /** One table row, filled from the lightweight result stream. */
@@ -98,10 +98,9 @@ interface FuzzerState {
   openSavedRun: (runId: string) => Promise<void>;
   removeSavedRun: (runId: string) => Promise<void>;
 
-  initListeners: () => Promise<void>;
+  /** Registers event listeners and returns a disposer; call it once per mount and dispose on unmount. */
+  initListeners: () => Promise<() => void>;
 }
-
-let unlisteners: UnlistenFn[] = [];
 
 /** Variable list for a template: one entry per unique {{name}}, reusing existing payload sets. */
 const reconcileVariables = (template: FuzzTemplate, previous: FuzzVariable[]): FuzzVariable[] => {
@@ -153,7 +152,7 @@ export const useFuzzerStore = create<FuzzerState>((set, get) => ({
       headers: (item.requestHeaders || []).map((h, i) => ({ id: `h-${i}`, key: h.key, value: h.value, enabled: true })),
       params: [],
       bodyType: 'raw',
-      body: item.requestBody || '',
+      body: tryPrettifyJson(item.requestBody || ''),
     };
     set({ template, variables: reconcileVariables(template, get().variables) });
     get().refreshEstimate();
@@ -250,8 +249,8 @@ export const useFuzzerStore = create<FuzzerState>((set, get) => ({
   },
 
   initListeners: async () => {
-    if (unlisteners.length > 0 || !isTauriAvailable()) return;
-    unlisteners = await Promise.all([
+    if (!isTauriAvailable()) return () => {};
+    const unlisteners = await Promise.all([
       listenFuzzStarted((e) => {
         if (e.runId === get().runId) set({ total: e.total, rows: [] });
       }),
@@ -278,5 +277,6 @@ export const useFuzzerStore = create<FuzzerState>((set, get) => ({
         if (get().savedToDb) get().fetchSavedRuns();
       }),
     ]);
+    return () => unlisteners.forEach((u) => u());
   },
 }));

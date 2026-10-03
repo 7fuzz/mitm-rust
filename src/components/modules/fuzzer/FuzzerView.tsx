@@ -5,19 +5,23 @@ import { clamp, startDragResize } from '../../../utils/dragResize';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { ContextMenu, type ContextMenuItem } from '../../common/ContextMenu';
 import { FuzzerRequestEditor } from './FuzzerRequestEditor';
-import { FuzzerPayloadPanel } from './FuzzerPayloadPanel';
+import { MatchRulesConfig, OptionsConfig, PayloadsConfig } from './FuzzerPayloadPanel';
 import { FuzzerResultsTable } from './FuzzerResultsTable';
+import { FuzzerRunDialog } from './FuzzerRunDialog';
 import type { FuzzRunMeta } from '../../../services/tauri/bridge';
 
-const COL = { min: 360, max: 760 };
+const CONFIG_H = { min: 160, max: 700 };
+
+type ConfigTab = 'request' | 'payloads' | 'match' | 'options';
 
 export const FuzzerView: React.FC = () => {
   const {
-    runName,
     phase,
     estimate,
     estimateError,
     variables,
+    attackType,
+    config,
     rows,
     total,
     savedToDb,
@@ -31,45 +35,43 @@ export const FuzzerView: React.FC = () => {
     openSavedRun,
     removeSavedRun,
   } = useFuzzerStore();
-  const setRunName = (name: string) => useFuzzerStore.setState({ runName: name });
-
-  const [startMenuOpen, setStartMenuOpen] = useState(false);
+  const [runDialog, setRunDialog] = useState<'start' | 'save' | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [tab, setTab] = useState<ConfigTab>('request');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; run: FuzzRunMeta } | null>(null);
-  const [configWidth, setConfigWidth] = useUiPref('fuzzer.configWidth');
+  const [configHeight, setConfigHeight] = useUiPref('fuzzer.configHeight');
   const configRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const startMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    initListeners();
+    let active = true;
+    let dispose: (() => void) | undefined;
+    initListeners().then((d) => {
+      if (active) dispose = d;
+      else d();
+    });
     fetchSavedRuns();
-  }, [initListeners, fetchSavedRuns]);
-
-  useEffect(() => {
-    if (!startMenuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (startMenuRef.current && !startMenuRef.current.contains(e.target as Node)) setStartMenuOpen(false);
+    return () => {
+      active = false;
+      dispose?.();
     };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [startMenuOpen]);
+  }, [initListeners, fetchSavedRuns]);
 
   const isRunning = phase === 'running';
   const canRun = variables.length > 0 && !estimateError && (estimate ?? 0) > 0;
   const progress = total > 0 ? Math.round((rows.length / total) * 100) : 0;
 
   const handleSplitPointerDown = (e: React.PointerEvent) => {
-    let width = configWidth;
+    const panel = configRef.current;
+    if (!panel) return;
+    const top = panel.getBoundingClientRect().top;
+    let height = configHeight;
     startDragResize(e, {
-      cursor: 'col-resize',
+      cursor: 'row-resize',
       onMove: (ev) => {
-        if (!containerRef.current || !configRef.current) return;
-        const rect = containerRef.current.getBoundingClientRect();
-        width = Math.round(clamp(ev.clientX - rect.left - (sidebarOpen ? 224 : 0), COL.min, COL.max));
-        configRef.current.style.width = `${width}px`;
+        height = Math.round(clamp(ev.clientY - top, CONFIG_H.min, CONFIG_H.max));
+        panel.style.height = `${height}px`;
       },
-      onEnd: () => setConfigWidth(width),
+      onEnd: () => setConfigHeight(height),
     });
   };
 
@@ -78,13 +80,20 @@ export const FuzzerView: React.FC = () => {
     { label: 'Delete', icon: 'delete_2_line', danger: true, action: () => removeSavedRun(run.id) },
   ];
 
-  const promptSave = async () => {
-    const name = window.prompt('Save this run as:', runName || 'Fuzz run');
-    if (name !== null) await saveRun(name);
+  const startRun = (name: string, save: boolean) => {
+    useFuzzerStore.setState({ runName: name });
+    start(save);
   };
 
+  const tabs: { value: ConfigTab; label: string; count?: number }[] = [
+    { value: 'request', label: 'Request' },
+    { value: 'payloads', label: 'Payloads', count: variables.length },
+    { value: 'match', label: 'Match', count: config.matchRules.length },
+    { value: 'options', label: 'Options' },
+  ];
+
   return (
-    <div ref={containerRef} className="h-full flex bg-background overflow-hidden text-xs">
+    <div className="h-full flex bg-background overflow-hidden text-xs">
       {sidebarOpen && (
         <div className="w-56 shrink-0 bg-surface border-r border-border flex flex-col">
           <div className="h-10 px-3 flex items-center border-b border-border">
@@ -121,21 +130,33 @@ export const FuzzerView: React.FC = () => {
       )}
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <div className="h-12 px-3 bg-header border-b border-border flex items-center gap-2 shrink-0">
+        <div className="h-10 px-2 bg-header border-b border-border flex items-center gap-1 shrink-0">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className={`p-1.5 rounded border cursor-pointer ${sidebarOpen ? 'bg-primary/10 border-primary/40 text-primary' : 'bg-background border-border text-muted-foreground hover:text-foreground'}`}
+            className={`p-1.5 rounded cursor-pointer ${sidebarOpen ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-neutral-subtle'}`}
             title="Saved runs"
           >
             <MingCuteIcon name="history_line" size={15} />
           </button>
-          <input
-            type="text"
-            value={runName}
-            onChange={(e) => setRunName(e.target.value)}
-            placeholder="Fuzz run name"
-            className="w-48 bg-background border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
-          />
+
+          <div className="w-px h-5 bg-border mx-1" />
+
+          <div className="flex items-center gap-0.5">
+            {tabs.map((t) => (
+              <button
+                key={t.value}
+                onClick={() => setTab(t.value)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium cursor-pointer transition-colors ${
+                  tab === t.value ? 'bg-background text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t.label}
+                {t.count !== undefined && t.count > 0 && (
+                  <span className="text-3xs font-mono text-muted-foreground tabular-nums">{t.count}</span>
+                )}
+              </button>
+            ))}
+          </div>
 
           <div className="ml-auto flex items-center gap-2">
             {estimateError ? (
@@ -158,40 +179,14 @@ export const FuzzerView: React.FC = () => {
                 </button>
               </>
             ) : (
-              <div className="relative" ref={startMenuRef}>
-                <div className="flex items-center">
-                  <button
-                    onClick={() => start(true)}
-                    disabled={!canRun}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-l bg-primary text-primary-foreground font-semibold cursor-pointer hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Start and save this run to the database"
-                  >
-                    <MingCuteIcon name="play_line" size={13} />
-                    <span>Start &amp; save</span>
-                  </button>
-                  <button
-                    onClick={() => setStartMenuOpen(!startMenuOpen)}
-                    disabled={!canRun}
-                    className="px-1 py-1.5 rounded-r bg-primary text-primary-foreground border-l border-primary-foreground/20 cursor-pointer hover:bg-primary-hover disabled:opacity-50"
-                  >
-                    <MingCuteIcon name="down_line" size={13} />
-                  </button>
-                </div>
-                {startMenuOpen && (
-                  <div className="absolute right-0 top-full mt-1 w-48 bg-surface border border-border rounded-lg shadow-xl py-1 z-50">
-                    <button
-                      onClick={() => {
-                        setStartMenuOpen(false);
-                        start(false);
-                      }}
-                      className="w-full px-3 py-1.5 text-left text-xs text-foreground hover:bg-neutral-subtle cursor-pointer flex items-center gap-2"
-                    >
-                      <MingCuteIcon name="play_line" size={13} />
-                      <span>Start temporary</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={() => setRunDialog('start')}
+                disabled={!canRun}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary text-primary-foreground font-semibold cursor-pointer hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <MingCuteIcon name="play_line" size={13} />
+                <span>Start</span>
+              </button>
             )}
           </div>
         </div>
@@ -203,32 +198,46 @@ export const FuzzerView: React.FC = () => {
           <div className="px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/30 text-2xs flex items-center gap-2">
             <MingCuteIcon name="alert_line" size={13} className="text-amber-500 shrink-0" />
             <span className="text-foreground">This run is only in memory and will be lost on restart.</span>
-            <button onClick={promptSave} className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500 text-black font-semibold cursor-pointer hover:bg-amber-400">
+            <button onClick={() => setRunDialog('save')} className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500 text-black font-semibold cursor-pointer hover:bg-amber-400">
               <MingCuteIcon name="download_line" size={12} />
               Save run
             </button>
           </div>
         )}
 
-        <div className="flex-1 min-h-0 flex">
-          <div ref={configRef} className="shrink-0 border-r border-border overflow-y-auto p-3 space-y-3" style={{ width: `${configWidth}px` }}>
-            <FuzzerRequestEditor />
-            <FuzzerPayloadPanel />
-          </div>
+        <div
+          ref={configRef}
+          className="shrink-0 overflow-auto p-3"
+          style={{ height: `${configHeight}px` }}
+        >
+          {tab === 'request' && <FuzzerRequestEditor />}
+          {tab === 'payloads' && <PayloadsConfig />}
+          {tab === 'match' && <MatchRulesConfig />}
+          {tab === 'options' && <OptionsConfig />}
+        </div>
 
-          <div
-            onPointerDown={handleSplitPointerDown}
-            className="w-1 cursor-col-resize -mx-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
-            title="Drag to resize"
-          >
-            <div className="h-8 w-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
-          </div>
+        <div
+          onPointerDown={handleSplitPointerDown}
+          className="h-1 cursor-row-resize -my-0.5 bg-transparent hover:bg-primary/50 active:bg-primary shrink-0 transition-colors flex items-center justify-center group z-10 relative"
+          title="Drag to resize"
+        >
+          <div className="w-8 h-0.5 bg-primary opacity-0 group-hover:opacity-100 transition-opacity rounded" />
+        </div>
 
-          <div className="flex-1 min-w-0">
-            <FuzzerResultsTable />
-          </div>
+        <div className="flex-1 min-h-0 border-t border-border">
+          <FuzzerResultsTable />
         </div>
       </div>
+
+      <FuzzerRunDialog
+        mode={runDialog}
+        estimate={estimate}
+        variableCount={variables.length}
+        attackType={attackType}
+        onClose={() => setRunDialog(null)}
+        onStart={startRun}
+        onSave={saveRun}
+      />
 
       {contextMenu && (
         <ContextMenu x={contextMenu.x} y={contextMenu.y} items={runMenuItems(contextMenu.run)} onClose={() => setContextMenu(null)} />

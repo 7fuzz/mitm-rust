@@ -87,7 +87,7 @@ export const UI_PREFS = {
   "collections.historyDrawerWidth": panelWidth(288, COLLECTIONS_HISTORY_DRAWER_WIDTH.min, COLLECTIONS_HISTORY_DRAWER_WIDTH.max),
   /** Request pane share of the Collections work area */
   "collections.requestSplitPercent": splitPercent(50),
-  "fuzzer.configWidth": panelWidth(440, 360, 760),
+  "fuzzer.configHeight": panelWidth(300, 160, 700),
   /** Whole-UI zoom factor, one of ZOOM_LEVELS */
   "appearance.zoom": pref<number>({
     default: 1,

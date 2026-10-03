@@ -17,5 +17,7 @@ export const FuzzerSection: React.FC<FuzzerSectionProps> = ({ title, right, chil
   </section>
 );
 
-export const fieldInputClass =
-  'w-full bg-background border border-border rounded px-2 py-1 font-mono text-2xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary';
+export const inputBaseClass =
+  'bg-background border border-border rounded px-2 py-1 font-mono text-2xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary';
+
+export const fieldInputClass = `w-full ${inputBaseClass}`;

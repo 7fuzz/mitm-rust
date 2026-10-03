@@ -24,10 +24,7 @@ export const FuzzerRequestEditor: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-0 border border-border rounded-lg bg-surface overflow-hidden">
-      <div className="h-8 px-2.5 bg-header border-b border-border flex items-center select-none">
-        <span className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground">Request</span>
-      </div>
+    <div className="flex flex-col h-full min-h-0 border border-border rounded-lg bg-surface overflow-hidden">
       <div className="flex items-center gap-2 p-2 border-b border-border">
         <div className="w-28 shrink-0">
           <Select value={template.method} onChange={(e) => setTemplate({ method: e.target.value })} options={HTTP_METHODS} />
