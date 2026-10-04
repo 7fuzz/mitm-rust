@@ -1,8 +1,10 @@
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useInterceptStore } from "../../stores/useInterceptStore";
 import { MingCuteIcon } from "../common/MingCuteIcon";
 import { Select, SourceScopeSection, Switch } from "../common/ui";
 import { KeyValueEditor } from "../common/KeyValueEditor";
+import { RawBodyEditor } from "../common/body/RawBodyEditor";
+import { findHeader } from "../../utils/bodyFormat";
 
 const METHOD_OPTIONS = [
   { value: "GET", label: "GET" },
@@ -180,31 +182,6 @@ export const InterceptViewer: React.FC = () => {
     };
 
   const activeParamsCount = editedParams.filter((p) => p.enabled && p.key.trim()).length;
-
-  const handlePrettifyBody = () => {
-    try {
-      const parsed = JSON.parse(editedBodyText.trim());
-      setEditedBodyText(JSON.stringify(parsed, null, 2));
-    } catch {
-      // Not valid JSON, keep as is
-    }
-  };
-
-  const isJsonBody = useMemo(() => {
-    const trimmed = editedBodyText.trim();
-    if (
-      (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-      (trimmed.startsWith("[") && trimmed.endsWith("]"))
-    ) {
-      try {
-        JSON.parse(trimmed);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-    return false;
-  }, [editedBodyText]);
 
   const filteredRules = rules.filter((rule) => {
     if (ruleFilterTab === "intercept") return rule.action !== "pass";
@@ -486,35 +463,12 @@ export const InterceptViewer: React.FC = () => {
                     ))}
                   </div>
                 ) : (
-                  <div className="flex flex-col h-full space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground font-sans text-xs font-semibold">
-                          Edit Body Content
-                        </span>
-                        {isJsonBody && (
-                          <span className="px-1.5 py-0.5 rounded text-3xs font-mono font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                            JSON
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handlePrettifyBody}
-                        className="flex items-center gap-1.5 px-2.5 py-1 bg-surface hover:bg-neutral-subtle border border-border text-foreground rounded text-xs transition-colors cursor-pointer font-sans font-medium"
-                        title="Format / Prettify JSON with 2-space indentation"
-                      >
-                        <MingCuteIcon name="code_line" size={13} className="text-amber-500" />
-                        <span>Prettify JSON</span>
-                      </button>
-                    </div>
-                    <textarea
-                      value={editedBodyText}
-                      onChange={(e) => setEditedBodyText(e.target.value)}
-                      placeholder="Enter raw request/response body payload..."
-                      className="flex-1 min-h-[350px] w-full bg-surface border border-border focus:border-primary rounded-lg p-3 text-foreground outline-none resize-none font-mono text-xs leading-relaxed"
-                    />
-                  </div>
+                  <RawBodyEditor
+                    key={selectedFlowId}
+                    value={editedBodyText}
+                    contentType={findHeader(editedHeaders, "content-type")}
+                    onChange={setEditedBodyText}
+                  />
                 )}
               </div>
             </div>

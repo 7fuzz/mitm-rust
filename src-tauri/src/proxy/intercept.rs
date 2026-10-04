@@ -46,8 +46,10 @@ pub async fn handle_intercept_hook(
         .unwrap_or("");
 
     let decompressed_body = crate::encoding::decompress_body(&body, content_encoding);
-    let body_text = String::from_utf8(decompressed_body)
-        .unwrap_or_else(|_| format!("<binary data {} bytes>", body.len()));
+    let body_text = String::from_utf8(decompressed_body).unwrap_or_else(|e| {
+        use base64::Engine;
+        format!("base64:{}", base64::engine::general_purpose::STANDARD.encode(e.into_bytes()))
+    });
 
     let payload = PendingFlowPayload {
         flow_id: flow_id.clone(),

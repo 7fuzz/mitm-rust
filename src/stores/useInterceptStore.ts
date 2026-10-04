@@ -22,6 +22,7 @@ import { UnlistenFn } from "@tauri-apps/api/event";
 import { useSettingsStore } from "./useSettingsStore";
 import { ALL_SOURCES, type SourceScope } from "../types";
 import { tryPrettifyJson } from '../utils/prettifyJson';
+import { bodyToBytes } from '../utils/bodyFormat';
 
 export interface InterceptParam {
   id: string;
@@ -396,11 +397,7 @@ export const useInterceptStore = create<InterceptState>((set, get) => ({
       const modifiedMethod = isMethodModified ? editedMethod : undefined;
       const headersJson = isHeadersModified ? JSON.stringify(editedHeaders) : undefined;
 
-      let bodyBytes: number[] | undefined = undefined;
-      if (isBodyModified) {
-        const encoder = new TextEncoder();
-        bodyBytes = Array.from(encoder.encode(editedBodyText));
-      }
+      const bodyBytes = isBodyModified ? Array.from(bodyToBytes(editedBodyText)) : undefined;
 
       await forwardInterceptedFlow(selectedFlowId, modifiedUrl, modifiedMethod, headersJson, bodyBytes);
 

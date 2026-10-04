@@ -3,14 +3,14 @@ import type { RepeaterTab, ParamItem } from '../../../services/tauri/bridge';
 import { useRepeaterStore } from '../../../stores/useRepeaterStore';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
-import { MultipartEditor } from '../../common/MultipartEditor';
-import { UrlEncodedEditor } from '../../common/UrlEncodedEditor';
+import { StructuredBodyEditor } from '../../common/body/StructuredBodyEditor';
 import { ExtractRulesEditor } from '../../common/ExtractRulesEditor';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Select } from '../../common/ui';
 import { PaneHeader } from '../../common/PaneHeader';
 import { buildUrlWithParams, parseUrlQueryParams } from '../../../utils/urlParams';
 import { tryPrettifyJson } from '../../../utils/prettifyJson';
+import { BODY_TYPE_OPTIONS, convertBodyContent, isMultipartType, isUrlEncodedType } from '../../../utils/bodyFormat';
 
 interface RequestBuilderProps {
   request: RepeaterTab;
@@ -25,15 +25,6 @@ const METHOD_OPTIONS = [
   { value: 'OPTIONS', label: 'OPTIONS' },
   { value: 'HEAD', label: 'HEAD' },
 ] as const;
-
-// Short labels: a native select is as wide as its longest option, and it sits in the tab row
-const BODY_TYPE_OPTIONS = [
-  { value: 'none', label: 'None' },
-  { value: 'json', label: 'JSON' },
-  { value: 'raw', label: 'Raw' },
-  { value: 'form', label: 'Multipart' },
-  { value: 'urlencoded', label: 'URL-Encoded' },
-];
 
 /** Enabled rows with a key; what actually gets sent */
 const countActive = (items?: Array<{ key: string; enabled: boolean }>) =>
@@ -93,9 +84,10 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
     } else {
       let targetCt = 'application/json';
       if (newBodyType === 'json') targetCt = 'application/json';
-      else if (newBodyType === 'urlencoded' || newBodyType === 'x-www-form-urlencoded') targetCt = 'application/x-www-form-urlencoded';
-      else if (newBodyType === 'form' || newBodyType === 'form-data' || newBodyType === 'multipart') targetCt = 'multipart/form-data';
+      else if (isUrlEncodedType(newBodyType)) targetCt = 'application/x-www-form-urlencoded';
+      else if (isMultipartType(newBodyType)) targetCt = 'multipart/form-data';
       else if (newBodyType === 'raw') targetCt = 'text/plain';
+      else if (newBodyType === 'binary') targetCt = 'application/octet-stream';
 
       if (ctIdx >= 0) {
         headers[ctIdx] = {
@@ -113,17 +105,19 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
       }
     }
 
-    updateTab({ ...request, bodyType: newBodyType, headers });
+    const bodyContent = convertBodyContent(request.bodyType, newBodyType, request.bodyContent || '');
+    updateTab({ ...request, bodyType: newBodyType, bodyContent, headers });
   };
 
-  const contentTypeForBody =
-    request.bodyType === 'urlencoded'
-      ? 'application/x-www-form-urlencoded'
-      : request.bodyType === 'form'
-      ? 'multipart/form-data'
-      : request.bodyType === 'raw'
-      ? 'text/plain'
-      : 'application/json';
+  const contentTypeForBody = isUrlEncodedType(request.bodyType)
+    ? 'application/x-www-form-urlencoded'
+    : isMultipartType(request.bodyType)
+    ? 'multipart/form-data'
+    : request.bodyType === 'raw'
+    ? 'text/plain'
+    : request.bodyType === 'binary'
+    ? 'application/octet-stream'
+    : 'application/json';
 
   const standardHeaders = [
     { key: 'Accept', value: '*/*' },
@@ -275,53 +269,19 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
         )}
 
         {activeTab === 'body' && (
-          <div className="h-full flex flex-col overflow-hidden">
-            {request.bodyType === 'urlencoded' || request.bodyType === 'x-www-form-urlencoded' ? (
-              <div className="flex-1 overflow-y-auto p-2">
-                <UrlEncodedEditor
-                  params={(() => {
-                    try {
-                      const parsed = JSON.parse(request.bodyContent || '');
-                      if (Array.isArray(parsed)) return parsed;
-                    } catch {}
-                    return [];
-                  })()}
-                  onChange={(newParams) => {
-                    const jsonStr = JSON.stringify(newParams, null, 2);
-                    updateTab({ ...request, bodyContent: jsonStr });
-                  }}
-                />
-              </div>
-            ) : request.bodyType === 'form' || request.bodyType === 'form-data' || request.bodyType === 'multipart' ? (
-              <div className="flex-1 overflow-y-auto p-2">
-                <MultipartEditor
-                  fields={(() => {
-                    try {
-                      const parsed = JSON.parse(request.bodyContent || '');
-                      if (parsed && Array.isArray(parsed.__form_data)) return parsed.__form_data;
-                      if (Array.isArray(parsed)) return parsed;
-                    } catch {}
-                    return [];
-                  })()}
-                  onChange={(fields) => {
-                    const jsonStr = JSON.stringify({ __form_data: fields }, null, 2);
-                    updateTab({ ...request, bodyContent: jsonStr });
-                  }}
-                />
-              </div>
-            ) : request.bodyType !== 'none' ? (
-              <div className="flex-1 overflow-hidden">
-                <CodeEditor
-                  value={request.bodyContent || ''}
-                  onChange={(bodyContent) => updateTab({ ...request, bodyContent })}
-                  language={request.bodyType === 'json' ? 'json' : 'plaintext'}
-                  bare
-                />
-              </div>
-            ) : (
-              <div className="p-4 text-muted-foreground italic">This request has no body.</div>
+          <StructuredBodyEditor
+            bodyType={request.bodyType}
+            content={request.bodyContent || ''}
+            onChange={(bodyContent) => updateTab({ ...request, bodyContent })}
+            renderText={() => (
+              <CodeEditor
+                value={request.bodyContent || ''}
+                onChange={(bodyContent) => updateTab({ ...request, bodyContent })}
+                language={request.bodyType === 'json' ? 'json' : 'plaintext'}
+                bare
+              />
             )}
-          </div>
+          />
         )}
 
         {activeTab === 'auto-extract' && (

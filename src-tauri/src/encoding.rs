@@ -211,6 +211,10 @@ pub fn format_body_for_ui(body: &[u8], content_type: &str, content_encoding: &st
         content_type.contains("font/")
     );
 
+    // Multipart uploads mix text fields with raw file bytes; a lossy UTF-8 decode would corrupt the files.
+    let is_binary = is_binary
+        || (content_type.contains("multipart/") && std::str::from_utf8(&decompressed).is_err());
+
     if is_binary {
         let encoded = base64::engine::general_purpose::STANDARD.encode(&decompressed);
         format!("base64:{}", encoded)

@@ -3,6 +3,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::Method;
 use uuid::Uuid;
+use base64::Engine;
 
 use super::{HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab};
 use crate::repeater::{get_repeater_tab_by_id, insert_repeater_history_db, REPEATER_WORKSPACE_ID};
@@ -168,6 +169,23 @@ pub async fn send_tab_request(tab: &RepeaterTab) -> Result<SentRequest, String> 
                     });
                 }
             }
+        }
+    } else if tab.body_type == "binary" {
+        if let Some(ref body) = req_body_str {
+            let encoded: String = body.trim().trim_start_matches("base64:").split_whitespace().collect();
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .map_err(|e| format!("Invalid base64 binary body: {}", e))?;
+            if !has_explicit_content_type {
+                req_builder = req_builder.header(reqwest::header::CONTENT_TYPE, "application/octet-stream");
+                logged_headers.push(HeaderItem {
+                    id: Uuid::new_v4().to_string(),
+                    key: "Content-Type".to_string(),
+                    value: "application/octet-stream".to_string(),
+                    enabled: true,
+                });
+            }
+            req_builder = req_builder.body(bytes);
         }
     } else if let Some(ref body) = req_body_str {
         if !has_explicit_content_type {

@@ -143,6 +143,28 @@ fn replace_markers(s: &str, values: &HashMap<String, String>) -> String {
         .into_owned()
 }
 
+/// Form bodies are stored as JSON, so payloads are substituted inside its strings to keep quotes and
+/// backslashes in a payload from breaking the JSON.
+fn replace_body_markers(body_type: &str, body: &str, values: &HashMap<String, String>) -> String {
+    let is_form = matches!(body_type, "form" | "form-data" | "multipart" | "urlencoded" | "x-www-form-urlencoded");
+    match serde_json::from_str::<serde_json::Value>(body) {
+        Ok(mut json) if is_form => {
+            replace_json_markers(&mut json, values);
+            json.to_string()
+        }
+        _ => replace_markers(body, values),
+    }
+}
+
+fn replace_json_markers(value: &mut serde_json::Value, values: &HashMap<String, String>) {
+    match value {
+        serde_json::Value::String(s) => *s = replace_markers(s, values),
+        serde_json::Value::Array(items) => items.iter_mut().for_each(|v| replace_json_markers(v, values)),
+        serde_json::Value::Object(map) => map.values_mut().for_each(|v| replace_json_markers(v, values)),
+        _ => {}
+    }
+}
+
 /// Fields that may hold placeholders, in the order variables are discovered.
 fn marked_fields(t: &FuzzTemplate) -> Vec<String> {
     let mut fields = vec![t.url.clone()];
@@ -210,7 +232,7 @@ pub fn apply_payloads(t: &FuzzTemplate, values: &HashMap<String, String>) -> Fuz
         headers,
         params,
         body_type: t.body_type.clone(),
-        body: t.body.as_ref().map(|b| replace_markers(b, values)),
+        body: t.body.as_ref().map(|b| replace_body_markers(&t.body_type, b, values)),
     }
 }
 
@@ -509,6 +531,16 @@ mod tests {
             body_type: "raw".into(),
             body: Some(body.into()),
         }
+    }
+
+    #[test]
+    fn form_body_payloads_stay_valid_json() {
+        let mut t = tmpl("http://x", r#"[{"key":"q","value":"{{p}}","enabled":true}]"#);
+        t.body_type = "urlencoded".into();
+        let values = HashMap::from([("p".to_string(), r#"a"b\c"#.to_string())]);
+        let body = apply_payloads(&t, &values).body.unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(parsed[0]["value"], r#"a"b\c"#);
     }
 
     fn list(name: &str, values: &[&str]) -> FuzzVariable {

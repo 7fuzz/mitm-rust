@@ -16,7 +16,7 @@ import {
 } from '../services/tauri/bridge';
 import { isTauriAvailable } from '../services/tauri/ipc';
 import { parseUrlQueryParams } from '../utils/urlParams';
-import { tryPrettifyJson } from '../utils/prettifyJson';
+import { findHeader, toStructuredBody } from '../utils/bodyFormat';
 
 interface RepeaterState {
   tabs: RepeaterTab[];
@@ -209,12 +209,7 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
     }));
 
     // 3. Determine bodyType & bodyContent
-    let bodyType = 'none';
-    let bodyContent = item.requestBody || '';
-    if (bodyContent.trim()) {
-      bodyType = (bodyContent.trim().startsWith('{') || bodyContent.trim().startsWith('[')) ? 'json' : 'raw';
-      if (bodyType === 'json') bodyContent = tryPrettifyJson(bodyContent);
-    }
+    const { bodyType, bodyContent } = toStructuredBody(findHeader(item.requestHeaders, 'content-type'), item.requestBody || '');
 
     const nowMs = Date.now();
 
@@ -512,13 +507,9 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
 
       const dataMatch = clean.match(/(?:-d|--data|--data-raw|--data-binary)\s+(?:"([\s\S]*?)"|'([\s\S]*?)'|(\S+))/);
       if (dataMatch) {
-        bodyContent = dataMatch[1] ?? dataMatch[2] ?? dataMatch[3] ?? '';
+        const rawBody = dataMatch[1] ?? dataMatch[2] ?? dataMatch[3] ?? '';
         if (!methodMatch) method = 'POST';
-        if (bodyContent.trim().startsWith('{') || bodyContent.trim().startsWith('[')) {
-          bodyType = 'json';
-        } else {
-          bodyType = 'raw';
-        }
+        ({ bodyType, bodyContent } = toStructuredBody(findHeader(headers, 'content-type'), rawBody));
       }
 
       const urlMatch = clean.match(/https?:\/\/[^\s"']+/i);

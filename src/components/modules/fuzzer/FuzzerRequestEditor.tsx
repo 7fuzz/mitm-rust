@@ -5,6 +5,8 @@ import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { Select } from '../../common/ui';
 import { PaneHeader } from '../../common/PaneHeader';
 import { HTTP_METHODS } from '../collections/tab/CollectionAddressBar';
+import { StructuredBodyEditor } from '../../common/body/StructuredBodyEditor';
+import { BODY_TYPE_OPTIONS, convertBodyContent } from '../../../utils/bodyFormat';
 import { countOccurrences, insertMarkerInFocused, parseVariables, stripMarkers } from '../../../utils/fuzzerMarkers';
 
 type Tab = 'params' | 'headers' | 'body';
@@ -56,9 +58,26 @@ export const FuzzerRequestEditor: React.FC = () => {
         ]}
         activeTab={tab}
         onTabChange={(t) => setTab(t as Tab)}
+        right={
+          tab === 'body' && (
+            <Select
+              value={template.bodyType}
+              onChange={(e) =>
+                setTemplate({
+                  bodyType: e.target.value,
+                  body: convertBodyContent(template.bodyType, e.target.value, template.body ?? ''),
+                })
+              }
+              options={BODY_TYPE_OPTIONS}
+              sizeVariant="xs"
+              className="py-0.5"
+              disabled={readOnly}
+            />
+          )
+        }
       />
 
-      <div className="flex-1 min-h-0 overflow-auto p-2">
+      <div className={`flex-1 min-h-0 ${tab === 'body' ? 'overflow-hidden' : 'overflow-auto p-2'}`}>
         {tab === 'params' && (
           <KeyValueEditor
             items={template.params}
@@ -78,12 +97,22 @@ export const FuzzerRequestEditor: React.FC = () => {
           />
         )}
         {tab === 'body' && (
-          <textarea
-            value={template.body ?? ''}
-            onChange={(e) => setTemplate({ body: e.target.value })}
+          <StructuredBodyEditor
+            bodyType={template.bodyType}
+            content={template.body ?? ''}
+            onChange={(body) => setTemplate({ body })}
             readOnly={readOnly}
-            placeholder={'{\n  "role": "user"\n}'}
-            className="w-full h-full min-h-[140px] bg-background border border-border rounded p-2 font-mono text-xs text-foreground focus:outline-none focus:border-primary resize-none"
+            renderText={() => (
+              <div className="h-full p-2">
+                <textarea
+                  value={template.body ?? ''}
+                  onChange={(e) => setTemplate({ body: e.target.value })}
+                  readOnly={readOnly}
+                  placeholder={'{\n  "role": "user"\n}'}
+                  className="w-full h-full min-h-[140px] bg-background border border-border rounded p-2 font-mono text-xs text-foreground focus:outline-none focus:border-primary resize-none"
+                />
+              </div>
+            )}
           />
         )}
       </div>

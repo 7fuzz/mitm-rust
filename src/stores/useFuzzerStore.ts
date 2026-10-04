@@ -25,7 +25,7 @@ import {
 } from '../services/tauri/bridge';
 import { isTauriAvailable } from '../services/tauri/ipc';
 import { parseVariables } from '../utils/fuzzerMarkers';
-import { tryPrettifyJson } from '../utils/prettifyJson';
+import { findHeader, toStructuredBody } from '../utils/bodyFormat';
 import type { TrafficItem } from '../types';
 
 /** One table row, filled from the lightweight result stream. */
@@ -146,13 +146,14 @@ export const useFuzzerStore = create<FuzzerState>((set, get) => ({
   setConfig: (patch) => set({ config: { ...get().config, ...patch } }),
 
   loadFromTraffic: (item) => {
+    const { bodyType, bodyContent } = toStructuredBody(findHeader(item.requestHeaders, 'content-type'), item.requestBody || '');
     const template: FuzzTemplate = {
       method: item.method,
       url: item.url,
       headers: (item.requestHeaders || []).map((h, i) => ({ id: `h-${i}`, key: h.key, value: h.value, enabled: true })),
       params: [],
-      bodyType: 'raw',
-      body: tryPrettifyJson(item.requestBody || ''),
+      bodyType,
+      body: bodyContent,
     };
     set({ template, variables: reconcileVariables(template, get().variables) });
     get().refreshEstimate();
