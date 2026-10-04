@@ -117,6 +117,10 @@ export const UI_PREFS = {
   }),
   /** Delivery list share of the Webhooks work area */
   "webhooks.listSplitPercent": splitPercent(40),
+  "intercept.sidebarOpen": pref<boolean>({
+    default: true,
+    normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),
+  }),
   "workspace.sidebarOpen": pref<boolean>({
     default: true,
     normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),

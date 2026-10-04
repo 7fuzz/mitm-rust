@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useInterceptStore } from "../../stores/useInterceptStore";
+import { useUiPref } from "../../stores/useUiPrefsStore";
 import { MingCuteIcon } from "../common/MingCuteIcon";
 import { Select, SourceScopeSection, Switch } from "../common/ui";
 import { KeyValueEditor } from "../common/KeyValueEditor";
@@ -53,7 +54,7 @@ export const InterceptViewer: React.FC = () => {
   } = useInterceptStore();
 
   const [activeTab, setActiveTab] = useState<"params" | "headers" | "body">("params");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useUiPref("intercept.sidebarOpen");
   const [sidebarTab, setSidebarTab] = useState<"rules" | "settings">("rules");
   const [queueWidthPx, setQueueWidthPx] = useState(320);
   const [sidebarWidthPx, setSidebarWidthPx] = useState(384);
