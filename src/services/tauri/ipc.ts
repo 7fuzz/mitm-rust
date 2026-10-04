@@ -59,17 +59,12 @@ export async function regenerateRootCa(): Promise<string> {
 export async function getProxyStatus(): Promise<ProxyStatus> {
   return safeInvoke<ProxyStatus>('get_proxy_status', undefined, {
     mode: 'normal',
-    bindings: ['0.0.0.0:8080'],
     activeCount: 1,
   });
 }
 
 export async function setProxyMode(mode: string): Promise<void> {
   return safeInvoke<void>('set_proxy_mode', { mode });
-}
-
-export async function updateNetworkSettings(bindings: string[]): Promise<void> {
-  return safeInvoke<void>('update_network_settings', { bindings });
 }
 
 // HTTP Traffic History Commands
@@ -265,8 +260,6 @@ export async function setWsMitmEnabled(enabled: boolean): Promise<ProxyConfig> {
     interceptEnabled: false,
     interceptMode: 'request',
     proxyMode: 'on',
-    port: 8080,
-    host: '0.0.0.0',
     wsMitmEnabled: enabled,
   });
 }
@@ -277,8 +270,6 @@ export async function getProxyState(): Promise<ProxyConfig> {
     interceptEnabled: false,
     interceptMode: 'request',
     proxyMode: 'on',
-    port: 8080,
-    host: '0.0.0.0',
     wsMitmEnabled: false,
   });
 }

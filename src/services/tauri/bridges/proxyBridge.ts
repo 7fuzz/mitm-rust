@@ -5,20 +5,12 @@ export interface ProxyConfig {
   interceptEnabled: boolean;
   interceptMode: "request" | "response" | "both";
   proxyMode: "on" | "off" | "block_client" | "block";
-  port: number;
-  host: string;
   /** Which listeners' traffic may be intercepted */
   interceptSourceScope?: SourceScope;
 }
 
 export const getProxyState = async (): Promise<ProxyConfig> => {
   return await invoke<ProxyConfig>("get_proxy_state");
-};
-
-export const updateNetworkSettings = async (
-  bindings: string[]
-): Promise<ProxyConfig> => {
-  return await invoke<ProxyConfig>("update_network_settings", { bindings });
 };
 
 export const setProxyMode = async (

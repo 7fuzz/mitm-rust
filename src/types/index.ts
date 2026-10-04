@@ -233,8 +233,6 @@ export interface ProxyConfig {
   interceptEnabled: boolean;
   interceptMode: string;
   proxyMode: string;
-  port: number;
-  host: string;
   wsMitmEnabled?: boolean;
   interceptSourceScope?: SourceScope;
 }
@@ -258,7 +256,6 @@ export interface ListenerConfig {
 
 export interface ProxyStatus {
   mode: 'normal' | 'intercept' | 'off';
-  bindings: string[];
   activeCount?: number;
   wsMitmEnabled?: boolean;
   listeners?: ListenerConfig[];

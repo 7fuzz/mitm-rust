@@ -113,7 +113,6 @@ pub fn run() {
             commands::proxy_cmd::stop_proxy,
             commands::proxy_cmd::toggle_proxy_legacy,
             commands::proxy_cmd::get_proxy_status,
-            commands::proxy_cmd::update_network_settings,
             commands::proxy_cmd::set_ws_mitm_enabled,
             commands::proxy_cmd::get_listener_configs,
             commands::proxy_cmd::list_host_ips,

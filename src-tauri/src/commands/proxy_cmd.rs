@@ -124,15 +124,7 @@ pub async fn toggle_proxy(
 pub async fn start_proxy(
     app_handle: AppHandle,
     state: State<'_, AppState>,
-    port: Option<u16>,
-    host: Option<String>,
 ) -> Result<ProxyConfig, String> {
-    if let Some(p) = port {
-        state.proxy_config.write().await.port = p;
-    }
-    if let Some(h) = host {
-        state.proxy_config.write().await.host = h;
-    }
     set_proxy_mode(app_handle, state, "on".to_string()).await
 }
 
@@ -158,19 +150,6 @@ pub async fn get_proxy_status(
     state: State<'_, AppState>,
 ) -> Result<ProxyConfig, String> {
     get_proxy_state(state).await
-}
-
-/// Legacy entry point: updates the address of listener #0.
-#[tauri::command]
-pub async fn update_network_settings(
-    app_handle: AppHandle,
-    state: State<'_, AppState>,
-    bindings: Vec<String>,
-) -> Result<ProxyConfig, String> {
-    let raw = bindings.first().ok_or_else(|| "No listener bindings specified".to_string())?;
-    update_listener(app_handle, state.clone(), 0, None, Some(raw.clone()), None).await?;
-    let cfg = state.proxy_config.read().await;
-    Ok(cfg.clone())
 }
 
 #[tauri::command]
@@ -298,7 +277,6 @@ pub async fn update_listener(
     };
 
     persist_listener_configs(&state).await;
-    sync_legacy_primary(&state).await;
 
     if needs_restart && enabled {
         reload_listeners(&app_handle, &state).await;
@@ -356,24 +334,6 @@ async fn persist_listener_configs(state: &AppState) {
     let configs = state.listener_configs.read().await;
     let json = serde_json::to_string(&*configs).unwrap_or_else(|_| "[]".to_string());
     let _ = set_preference(&state.db_path, "proxy_listeners", &json);
-}
-
-/// Mirrors listener #0 into the legacy proxy_host/proxy_port fields.
-async fn sync_legacy_primary(state: &AppState) {
-    let primary = {
-        let configs = state.listener_configs.read().await;
-        configs.iter().find(|c| c.id == 0).and_then(|c| c.address.parse::<SocketAddr>().ok())
-    };
-    if let Some(addr) = primary {
-        let host = addr.ip().to_string();
-        {
-            let mut cfg = state.proxy_config.write().await;
-            cfg.host = host.clone();
-            cfg.port = addr.port();
-        }
-        let _ = set_preference(&state.db_path, "proxy_host", &host);
-        let _ = set_preference(&state.db_path, "proxy_port", &addr.port().to_string());
-    }
 }
 
 pub async fn start_all_listeners(app_handle: &AppHandle, state: &AppState) {

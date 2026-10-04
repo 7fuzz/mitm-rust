@@ -5,7 +5,6 @@ export interface ProxyServerSlice {
   proxyStatus: ProxyStatus;
   listeners: ListenerConfig[];
   setProxyMode: (mode: 'normal' | 'intercept' | 'off') => Promise<void>;
-  updateProxyBindings: (bindings: string[]) => Promise<void>;
   initProxyServer: () => Promise<void>;
   fetchListeners: () => Promise<void>;
   applyListeners: (listeners: ListenerConfig[]) => void;

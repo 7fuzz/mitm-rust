@@ -2,8 +2,6 @@ import { StateCreator } from 'zustand';
 import type { ProxyServerSlice, ProxyState } from './types';
 import { setProxyMode as ipcSetProxyMode, isTauriAvailable } from '../../services/tauri/ipc';
 import {
-  getProxyState,
-  updateNetworkSettings,
   getListenerConfigs,
   addListener as ipcAddListener,
   removeListener as ipcRemoveListener,
@@ -19,28 +17,12 @@ export const createProxyServerSlice: StateCreator<
 > = (set, get) => ({
   proxyStatus: {
     mode: 'normal',
-    bindings: ['0.0.0.0:8080'],
     activeCount: 1,
   },
   listeners: [],
 
   initProxyServer: async () => {
-    if (isTauriAvailable()) {
-      try {
-        const proxyConfig = await getProxyState();
-        if (proxyConfig) {
-          set((state) => ({
-            proxyStatus: {
-              ...state.proxyStatus,
-              bindings: [`${proxyConfig.host || '0.0.0.0'}:${proxyConfig.port || 8080}`],
-            },
-          }));
-        }
-      } catch (e) {
-        console.warn('Failed to fetch proxy state via IPC:', e);
-      }
-      await get().fetchListeners();
-    }
+    if (isTauriAvailable()) await get().fetchListeners();
   },
 
   fetchListeners: async () => {
@@ -54,14 +36,7 @@ export const createProxyServerSlice: StateCreator<
     }
   },
 
-  // Keeps proxyStatus.bindings mirroring listener #0
-  applyListeners: (listeners) => {
-    const primary = listeners.find((l) => l.id === 0);
-    set((state) => ({
-      listeners,
-      ...(primary ? { proxyStatus: { ...state.proxyStatus, bindings: [primary.address] } } : {}),
-    }));
-  },
+  applyListeners: (listeners) => set({ listeners }),
 
   addListener: async (label, address, replaceConflicts = false) => {
     if (isTauriAvailable()) {
@@ -109,30 +84,6 @@ export const createProxyServerSlice: StateCreator<
       }));
     } catch (err) {
       console.error('Failed to set proxy mode:', err);
-    }
-  },
-
-  updateProxyBindings: async (bindings: string[]) => {
-    if (!bindings || bindings.length === 0) return;
-    set((state) => ({
-      proxyStatus: { ...state.proxyStatus, bindings },
-    }));
-
-    if (isTauriAvailable()) {
-      try {
-        const updated = await updateNetworkSettings(bindings);
-        if (updated) {
-          set((state) => ({
-            proxyStatus: {
-              ...state.proxyStatus,
-              bindings: [`${updated.host}:${updated.port}`],
-            },
-          }));
-        }
-      } catch (err) {
-        console.error('Failed to update network settings via IPC:', err);
-        throw err;
-      }
     }
   },
 });

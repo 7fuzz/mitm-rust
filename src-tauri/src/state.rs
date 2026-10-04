@@ -116,8 +116,6 @@ pub struct ProxyConfig {
     pub intercept_enabled: bool,
     pub intercept_mode: String, // 'request', 'response', 'both'
     pub proxy_mode: String,     // 'on', 'off', 'block_client', 'block'
-    pub port: u16,
-    pub host: String,
     #[serde(default)]
     pub ws_mitm_enabled: bool,
     /// Which listeners' traffic may be intercepted
@@ -150,8 +148,6 @@ impl Default for ProxyConfig {
             intercept_enabled: false,
             intercept_mode: "request".to_string(),
             proxy_mode: "on".to_string(),
-            port: 8080,
-            host: "0.0.0.0".to_string(),
             ws_mitm_enabled: false,
             intercept_source_scope: SourceScope::default(),
         }
@@ -369,9 +365,9 @@ pub fn normalize_listener_address(input: &str) -> Result<String, String> {
         .map_err(|_| format!("Invalid bind address '{}': host must be an IP address or 'localhost'", raw))
 }
 
-/// Loads listener configs from preferences, migrating older formats (non-numeric ids,
-/// missing Default listener stored as proxy_host/proxy_port).
-fn load_listener_configs(db_path: &PathBuf, legacy_host: &str, legacy_port: u16) -> Vec<ListenerConfig> {
+/// Loads listener configs from preferences, assigning ids to entries saved without one
+/// and recreating listener #0 when it's missing.
+fn load_listener_configs(db_path: &PathBuf) -> Vec<ListenerConfig> {
     let raw: Vec<serde_json::Value> = crate::db::get_preference(db_path, "proxy_listeners")
         .and_then(|json| serde_json::from_str(&json).ok())
         .unwrap_or_default();
@@ -399,9 +395,7 @@ fn load_listener_configs(db_path: &PathBuf, legacy_host: &str, legacy_port: u16)
     }
 
     if !configs.iter().any(|c| c.id == 0) {
-        let address = normalize_listener_address(&format!("{}:{}", legacy_host, legacy_port))
-            .unwrap_or_else(|_| format!("0.0.0.0:{}", legacy_port));
-        configs.insert(0, ListenerConfig { id: 0, label: "Default".to_string(), address, enabled: true });
+        configs.insert(0, ListenerConfig { id: 0, label: "default".to_string(), address: "127.0.0.1:8080".to_string(), enabled: true });
         pending_ids.iter_mut().for_each(|i| *i += 1);
     }
 
@@ -502,12 +496,6 @@ impl AppState {
             .map(|v| v == "true")
             .unwrap_or(true);
 
-        let initial_host = crate::db::get_preference(&db_path, "proxy_host")
-            .unwrap_or_else(|| "0.0.0.0".to_string());
-        let initial_port = crate::db::get_preference(&db_path, "proxy_port")
-            .and_then(|v| v.parse::<u16>().ok())
-            .unwrap_or(8080);
-
         let initial_webhook_port = crate::db::get_preference(&db_path, "webhook_port")
             .and_then(|v| v.parse::<u16>().ok())
             .unwrap_or(9000);
@@ -526,22 +514,13 @@ impl AppState {
         let initial_rules = crate::db::load_intercept_rules(&db_path).unwrap_or_default();
         let initial_rewrite_rules = crate::db::load_rewrite_rules(&db_path).unwrap_or_default();
 
-        let initial_listener_configs = load_listener_configs(&db_path, &initial_host, initial_port);
-        // Keep the legacy host/port fields mirroring listener #0
-        let (initial_host, initial_port) = initial_listener_configs
-            .iter()
-            .find(|c| c.id == 0)
-            .and_then(|c| c.address.parse::<std::net::SocketAddr>().ok())
-            .map(|a| (a.ip().to_string(), a.port()))
-            .unwrap_or((initial_host, initial_port));
+        let initial_listener_configs = load_listener_configs(&db_path);
 
         let proxy_config = ProxyConfig {
             proxy_enabled: initial_proxy_enabled,
             intercept_enabled: initial_intercept_enabled,
             intercept_mode: initial_intercept_mode,
             proxy_mode: initial_proxy_mode,
-            port: initial_port,
-            host: initial_host,
             ws_mitm_enabled: initial_ws_mitm_enabled,
             intercept_source_scope: load_source_scope(&db_path, "intercept_source_scope"),
         };
