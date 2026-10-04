@@ -214,13 +214,13 @@ export async function getWsConnections(): Promise<WebSocketConn[]> {
   return safeInvoke<WebSocketConn[]>('get_ws_connections', undefined, []);
 }
 
-export async function getWsMessages(connectionId: string, limit?: number): Promise<WebSocketMessage[]> {
+export async function getWsMessages(connectionId: number, limit?: number): Promise<WebSocketMessage[]> {
   return safeInvoke<WebSocketMessage[]>('get_ws_messages', { connectionId, limit }, []);
 }
 
 export async function connectWsClient(url: string, headers?: [string, string][]): Promise<WebSocketConn> {
   return safeInvoke<WebSocketConn>('connect_ws_client', { url, headers }, {
-    connectionId: 'ws-cli-' + Date.now(),
+    connectionId: Date.now(),
     url,
     status: 'connected',
     handshakeTime: Date.now(),
@@ -229,18 +229,18 @@ export async function connectWsClient(url: string, headers?: [string, string][])
   });
 }
 
-export async function disconnectWsClient(connectionId: string): Promise<void> {
+export async function disconnectWsClient(connectionId: number): Promise<void> {
   return safeInvoke<void>('disconnect_ws_client', { connectionId });
 }
 
 export async function sendWsMessage(
-  connectionId: string,
+  connectionId: number,
   direction: 'to_server' | 'to_client',
   msgType: 'text' | 'json' | 'binary',
   payload: string,
 ): Promise<WebSocketMessage> {
   return safeInvoke<WebSocketMessage>('send_ws_message', { connectionId, direction, msgType, payload }, {
-    id: 'ws-msg-' + Date.now(),
+    id: Date.now(),
     connection_id: connectionId,
     direction,
     msg_type: msgType,
@@ -251,11 +251,11 @@ export async function sendWsMessage(
   });
 }
 
-export async function clearWsMessages(connectionId?: string): Promise<void> {
+export async function clearWsMessages(connectionId?: number): Promise<void> {
   return safeInvoke<void>('clear_ws_messages', { connectionId });
 }
 
-export async function deleteWsConnection(connectionId: string): Promise<void> {
+export async function deleteWsConnection(connectionId: number): Promise<void> {
   return safeInvoke<void>('delete_ws_connection', { connectionId });
 }
 
@@ -335,7 +335,7 @@ export async function calculateWebhookSignature(secret: string, body: string, pr
   });
 }
 
-export async function replayWebhookDelivery(id: string, targetUrl: string): Promise<WebhookReplayResult> {
+export async function replayWebhookDelivery(id: number, targetUrl: string): Promise<WebhookReplayResult> {
   return safeInvoke<WebhookReplayResult>('replay_webhook_delivery', { id, targetUrl }, {
     success: true,
     statusCode: 200,

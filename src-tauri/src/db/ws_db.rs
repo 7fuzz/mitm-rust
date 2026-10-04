@@ -39,13 +39,13 @@ pub fn load_ws_connections(db_path: &PathBuf) -> Result<Vec<WebSocketConn>, Stri
     Ok(connections)
 }
 
-pub fn save_ws_connection(db_path: &PathBuf, conn_info: &WebSocketConn) -> Result<(), String> {
+/// Inserts the connection and returns its new id
+pub fn insert_ws_connection(db_path: &PathBuf, conn_info: &WebSocketConn) -> Result<i64, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute(
-        "INSERT OR REPLACE INTO ws_connections (id, url, status, handshake_time, closed_at, protocol, client_addr, is_client_session, message_count, listener_label)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO ws_connections (url, status, handshake_time, closed_at, protocol, client_addr, is_client_session, message_count, listener_label)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
-            conn_info.connection_id,
             conn_info.url,
             conn_info.status,
             conn_info.handshake_time,
@@ -57,12 +57,12 @@ pub fn save_ws_connection(db_path: &PathBuf, conn_info: &WebSocketConn) -> Resul
             conn_info.listener_label,
         ],
     ).map_err(|e| e.to_string())?;
-    Ok(())
+    Ok(conn.last_insert_rowid())
 }
 
 pub fn update_ws_connection_status(
     db_path: &PathBuf,
-    connection_id: &str,
+    connection_id: i64,
     status: &str,
     closed_at: Option<i64>,
 ) -> Result<(), String> {
@@ -74,7 +74,7 @@ pub fn update_ws_connection_status(
     Ok(())
 }
 
-pub fn increment_ws_message_count(db_path: &PathBuf, connection_id: &str) -> Result<u64, String> {
+pub fn increment_ws_message_count(db_path: &PathBuf, connection_id: i64) -> Result<u64, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute(
         "UPDATE ws_connections SET message_count = message_count + 1 WHERE id = ?",
@@ -90,20 +90,20 @@ pub fn increment_ws_message_count(db_path: &PathBuf, connection_id: &str) -> Res
     Ok(count)
 }
 
-pub fn delete_ws_connection(db_path: &PathBuf, id: &str) -> Result<(), String> {
+pub fn delete_ws_connection(db_path: &PathBuf, id: i64) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM ws_connections WHERE id = ?", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
 }
 
-pub fn save_ws_message(db_path: &PathBuf, msg: &WebSocketMessage) -> Result<(), String> {
+/// Inserts the message and sets its id to the new row's id
+pub fn save_ws_message(db_path: &PathBuf, msg: &mut WebSocketMessage) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute(
-        "INSERT INTO ws_messages (id, connection_id, direction, msg_type, payload, timestamp, length, is_injected)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO ws_messages (connection_id, direction, msg_type, payload, timestamp, length, is_injected)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
         params![
-            msg.id,
             msg.connection_id,
             msg.direction,
             msg.msg_type,
@@ -113,12 +113,13 @@ pub fn save_ws_message(db_path: &PathBuf, msg: &WebSocketMessage) -> Result<(), 
             if msg.is_injected { 1 } else { 0 },
         ],
     ).map_err(|e| e.to_string())?;
+    msg.id = conn.last_insert_rowid();
     Ok(())
 }
 
 pub fn load_ws_messages(
     db_path: &PathBuf,
-    connection_id: &str,
+    connection_id: i64,
     limit: Option<u32>,
 ) -> Result<Vec<WebSocketMessage>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
@@ -128,7 +129,7 @@ pub fn load_ws_messages(
             "SELECT id, connection_id, direction, msg_type, payload, timestamp, length, is_injected
              FROM ws_messages
              WHERE connection_id = ?
-             ORDER BY timestamp ASC
+             ORDER BY id ASC
              LIMIT ?",
         )
         .map_err(|e| e.to_string())?;
@@ -158,7 +159,7 @@ pub fn load_ws_messages(
     Ok(messages)
 }
 
-pub fn clear_ws_messages(db_path: &PathBuf, connection_id: Option<&str>) -> Result<(), String> {
+pub fn clear_ws_messages(db_path: &PathBuf, connection_id: Option<i64>) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     if let Some(cid) = connection_id {
         conn.execute("DELETE FROM ws_messages WHERE connection_id = ?", params![cid])

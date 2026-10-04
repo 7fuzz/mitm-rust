@@ -7,7 +7,7 @@ use crate::proxy::rules::should_intercept;
 use crate::state::{AppState, HistoryEntry, InterceptAction, InterceptPhase, PendingFlow, PendingFlowPayload, TrafficCapturedEvent};
 
 pub async fn handle_intercept_hook(
-    entry_id: Option<&str>,
+    entry_id: Option<i64>,
     request_at: &str,
     app_handle: &AppHandle,
     state: &Arc<AppState>,
@@ -87,7 +87,7 @@ pub async fn handle_intercept_hook(
             InterceptPhase::Response => "intercepted_response",
         };
         let intercepted_entry = HistoryEntry {
-            id: eid.to_string(),
+            id: eid,
             method: method.to_string(),
             url: url.to_string(),
             host: host.to_string(),

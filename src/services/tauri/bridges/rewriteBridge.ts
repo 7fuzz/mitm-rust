@@ -23,7 +23,7 @@ export interface RewriteRule {
 }
 
 export interface RewriteHistoryEntry {
-  id: string;
+  id: number;
   ruleId?: string;
   ruleName: string;
   actionType: string;

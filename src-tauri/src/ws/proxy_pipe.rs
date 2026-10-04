@@ -6,7 +6,6 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
-use uuid::Uuid;
 
 use crate::state::{AppState, WebSocketConn, WebSocketConnectionEvent, WebSocketMessage, WebSocketMessageCapturedEvent};
 
@@ -23,11 +22,10 @@ pub async fn bridge_proxied_websocket<C, S>(
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    let conn_id = format!("ws-prox-{}", Uuid::new_v4());
     let now = chrono::Local::now().timestamp_millis();
 
-    let conn_info = WebSocketConn {
-        connection_id: conn_id.clone(),
+    let mut conn_info = WebSocketConn {
+        connection_id: 0,
         url: url.clone(),
         status: "connected".to_string(),
         handshake_time: now,
@@ -39,7 +37,11 @@ pub async fn bridge_proxied_websocket<C, S>(
         listener_label,
     };
 
-    let _ = crate::db::ws_db::save_ws_connection(&state.db_path, &conn_info);
+    match crate::db::ws_db::insert_ws_connection(&state.db_path, &conn_info) {
+        Ok(id) => conn_info.connection_id = id,
+        Err(e) => eprintln!("[WS Proxy] Failed to save connection {}: {}", url, e),
+    }
+    let conn_id = conn_info.connection_id;
     let _ = app_handle.emit(
         "websocket_connection_event",
         WebSocketConnectionEvent {
@@ -58,9 +60,8 @@ pub async fn bridge_proxied_websocket<C, S>(
     let (to_server_tx, mut to_server_rx) = mpsc::unbounded_channel::<Message>();
     let (to_client_tx, mut to_client_rx) = mpsc::unbounded_channel::<Message>();
 
-    state.ws_stream_senders.insert(conn_id.clone(), (to_server_tx, to_client_tx));
+    state.ws_stream_senders.insert(conn_id, (to_server_tx, to_client_tx));
 
-    let conn_id_c2s = conn_id.clone();
     let db_path_c2s = state.db_path.clone();
     let app_c2s = app_handle.clone();
 
@@ -71,7 +72,7 @@ pub async fn bridge_proxied_websocket<C, S>(
                 // Injected message from user interface to server
                 Some(injected_msg) = to_server_rx.recv() => {
                     if let Err(e) = server_write.send(injected_msg).await {
-                        eprintln!("[WS Proxy {}] Failed to send injected frame to server: {}", conn_id_c2s, e);
+                        eprintln!("[WS Proxy {}] Failed to send injected frame to server: {}", conn_id, e);
                         break;
                     }
                 }
@@ -90,9 +91,9 @@ pub async fn bridge_proxied_websocket<C, S>(
                             let len = msg.len();
                             let (msg_type, payload_str) = extract_message_info(&msg);
 
-                            let msg_record = WebSocketMessage {
-                                id: format!("ws-msg-{}", Uuid::new_v4()),
-                                connection_id: conn_id_c2s.clone(),
+                            let mut msg_record = WebSocketMessage {
+                                id: 0,
+                                connection_id: conn_id,
                                 direction: "to_server".to_string(),
                                 msg_type: msg_type.to_string(),
                                 payload: payload_str,
@@ -100,12 +101,12 @@ pub async fn bridge_proxied_websocket<C, S>(
                                 length: len,
                                 is_injected: false,
                             };
-                            let _ = crate::db::ws_db::save_ws_message(&db_path_c2s, &msg_record);
-                            let count = crate::db::ws_db::increment_ws_message_count(&db_path_c2s, &conn_id_c2s).unwrap_or(1);
+                            let _ = crate::db::ws_db::save_ws_message(&db_path_c2s, &mut msg_record);
+                            let count = crate::db::ws_db::increment_ws_message_count(&db_path_c2s, conn_id).unwrap_or(1);
                             let _ = app_c2s.emit("websocket_message_event", WebSocketMessageCapturedEvent { message: msg_record, message_count: count });
 
                             if let Err(e) = server_write.send(msg).await {
-                                eprintln!("[WS Proxy {}] Forward to server failed: {}", conn_id_c2s, e);
+                                eprintln!("[WS Proxy {}] Forward to server failed: {}", conn_id, e);
                                 break;
                             }
                         }
@@ -116,7 +117,6 @@ pub async fn bridge_proxied_websocket<C, S>(
         }
     });
 
-    let conn_id_s2c = conn_id.clone();
     let db_path_s2c = state.db_path.clone();
     let app_s2c = app_handle.clone();
 
@@ -127,7 +127,7 @@ pub async fn bridge_proxied_websocket<C, S>(
                 // Injected message from user interface to client
                 Some(injected_msg) = to_client_rx.recv() => {
                     if let Err(e) = client_write.send(injected_msg).await {
-                        eprintln!("[WS Proxy {}] Failed to send injected frame to client: {}", conn_id_s2c, e);
+                        eprintln!("[WS Proxy {}] Failed to send injected frame to client: {}", conn_id, e);
                         break;
                     }
                 }
@@ -146,9 +146,9 @@ pub async fn bridge_proxied_websocket<C, S>(
                             let len = msg.len();
                             let (msg_type, payload_str) = extract_message_info(&msg);
 
-                            let msg_record = WebSocketMessage {
-                                id: format!("ws-msg-{}", Uuid::new_v4()),
-                                connection_id: conn_id_s2c.clone(),
+                            let mut msg_record = WebSocketMessage {
+                                id: 0,
+                                connection_id: conn_id,
                                 direction: "to_client".to_string(),
                                 msg_type: msg_type.to_string(),
                                 payload: payload_str,
@@ -156,12 +156,12 @@ pub async fn bridge_proxied_websocket<C, S>(
                                 length: len,
                                 is_injected: false,
                             };
-                            let _ = crate::db::ws_db::save_ws_message(&db_path_s2c, &msg_record);
-                            let count = crate::db::ws_db::increment_ws_message_count(&db_path_s2c, &conn_id_s2c).unwrap_or(1);
+                            let _ = crate::db::ws_db::save_ws_message(&db_path_s2c, &mut msg_record);
+                            let count = crate::db::ws_db::increment_ws_message_count(&db_path_s2c, conn_id).unwrap_or(1);
                             let _ = app_s2c.emit("websocket_message_event", WebSocketMessageCapturedEvent { message: msg_record, message_count: count });
 
                             if let Err(e) = client_write.send(msg).await {
-                                eprintln!("[WS Proxy {}] Forward to client failed: {}", conn_id_s2c, e);
+                                eprintln!("[WS Proxy {}] Forward to client failed: {}", conn_id, e);
                                 break;
                             }
                         }
@@ -176,7 +176,7 @@ pub async fn bridge_proxied_websocket<C, S>(
 
     // Stream finished / disconnected
     let close_time = chrono::Local::now().timestamp_millis();
-    let _ = crate::db::ws_db::update_ws_connection_status(&state.db_path, &conn_id, "disconnected", Some(close_time));
+    let _ = crate::db::ws_db::update_ws_connection_status(&state.db_path, conn_id, "disconnected", Some(close_time));
     state.ws_stream_senders.remove(&conn_id);
 
     let mut closed_conn = conn_info;

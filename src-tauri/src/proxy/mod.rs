@@ -219,7 +219,7 @@ async fn handle_http(
         let path = parse_path_from_url(&url);
         let request_headers = headers_to_vec(req.headers());
         let subprotocol = req.headers().get("sec-websocket-protocol").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
-        let entry_id = (state.next_history_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1).to_string();
+        let entry_id = state.next_history_id();
         let request_at = now_rfc3339_ms();
 
         let mut new_req = Request::builder()
@@ -245,7 +245,7 @@ async fn handle_http(
                     let client_res = client_res_builder.body(Full::new(Bytes::new())).unwrap();
 
                     log_and_emit_history(
-                        &entry_id,
+                        entry_id,
                         &request_at,
                         &app_handle,
                         &state,
@@ -335,7 +335,7 @@ async fn handle_http(
 
     let path = parse_path_from_url(&url);
 
-    let entry_id = (state.next_history_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1).to_string();
+    let entry_id = state.next_history_id();
 
     let request_at = now_rfc3339_ms();
 
@@ -343,7 +343,7 @@ async fn handle_http(
 
     if proxy_mode == "block" {
         log_and_emit_history(
-            &entry_id,
+            entry_id,
             &request_at,
             &app_handle,
             &state,
@@ -392,7 +392,7 @@ async fn handle_http(
     ).await {
         let final_path = parse_path_from_url(&req_url_str);
         log_and_emit_history(
-            &entry_id,
+            entry_id,
             &request_at,
             &app_handle,
             &state,
@@ -429,7 +429,7 @@ async fn handle_http(
             .format(&time::format_description::well_known::Rfc3339)
             .unwrap_or_default();
         let initial_entry = HistoryEntry {
-            id: entry_id.clone(),
+            id: entry_id,
             method: req_method_str.clone(),
             url: req_url_str.clone(),
             host: req_host_str.clone(),
@@ -456,7 +456,7 @@ async fn handle_http(
 
     // 2. Request Intercept Hook (Manual pause)
     let (final_req_url, final_req_method, final_req_headers, final_req_body) = match handle_intercept_hook(
-        Some(&entry_id),
+        Some(entry_id),
         &request_at,
         &app_handle,
         &state,
@@ -472,7 +472,7 @@ async fn handle_http(
         Some(InterceptAction::Drop) => {
             let final_path = parse_path_from_url(&req_url_str);
             log_and_emit_history(
-                &entry_id,
+                entry_id,
                 &request_at,
                 &app_handle,
                 &state,
@@ -511,7 +511,7 @@ async fn handle_http(
                 .format(&time::format_description::well_known::Rfc3339)
                 .unwrap_or_default();
             let in_flight_entry = HistoryEntry {
-                id: entry_id.clone(),
+                id: entry_id,
                 method: m.to_string(),
                 url: u.clone(),
                 host: u.parse::<hyper::Uri>().ok().and_then(|uri| uri.host().map(|h| h.to_string())).unwrap_or_else(|| host.clone()),
@@ -610,7 +610,7 @@ async fn handle_http(
 
             // 4. Response Intercept Hook (Manual pause)
             let (final_res_headers, final_res_body) = match handle_intercept_hook(
-                Some(&entry_id),
+                Some(entry_id),
                 &request_at,
                 &app_handle,
                 &state,
@@ -625,7 +625,7 @@ async fn handle_http(
             ).await {
                 Some(InterceptAction::Drop) => {
                     log_and_emit_history(
-                        &entry_id,
+                        entry_id,
                         &request_at,
                         &app_handle,
                         &state,
@@ -666,7 +666,7 @@ async fn handle_http(
             };
 
             log_and_emit_history(
-                &entry_id,
+                entry_id,
                 &request_at,
                 &app_handle,
                 &state,
@@ -707,7 +707,7 @@ async fn handle_http(
             let duration_ms = start_time.elapsed().as_millis() as u64;
             let err_msg = format!("Proxy error: {}", e);
             log_and_emit_history(
-                &entry_id,
+                entry_id,
                 &request_at,
                 &app_handle,
                 &state,
@@ -736,7 +736,7 @@ async fn handle_http(
 }
 
 async fn log_and_emit_history(
-    entry_id: &str,
+    entry_id: i64,
     request_at: &str,
     app_handle: &AppHandle,
     state: &Arc<AppState>,
@@ -784,7 +784,7 @@ async fn log_and_emit_history(
         .unwrap_or_default();
 
     let history_entry = HistoryEntry {
-        id: entry_id.to_string(),
+        id: entry_id,
         method: method.to_string(),
         url: full_url.to_string(),
         host: host.to_string(),

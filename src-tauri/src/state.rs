@@ -49,7 +49,7 @@ pub struct PendingFlowPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryEntry {
-    pub id: String,
+    pub id: i64,
     pub method: String,
     pub url: String,
     pub host: String,
@@ -80,7 +80,7 @@ pub struct HistoryEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryDetail {
-    pub id: String,
+    pub id: i64,
     pub request_headers: Vec<(String, String)>,
     pub response_headers: Vec<(String, String)>,
     pub request_body: String,
@@ -183,7 +183,7 @@ pub struct RewriteRule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RewriteHistoryEntry {
-    pub id: String,
+    pub id: i64,
     pub rule_id: Option<String>,
     pub rule_name: String,
     pub action_type: String,
@@ -224,7 +224,7 @@ pub struct WebhookEndpoint {
 #[serde(rename_all = "camelCase")]
 pub struct WebhookDelivery {
     #[serde(default)]
-    pub id: String,
+    pub id: i64,
     #[serde(default)]
     pub endpoint_id: String,
     pub endpoint_path: String,
@@ -262,7 +262,7 @@ pub struct WebhookDeliveryCapturedEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebSocketConn {
-    pub connection_id: String,
+    pub connection_id: i64,
     pub url: String,
     pub status: String,
     pub handshake_time: i64,
@@ -282,8 +282,8 @@ pub struct WebSocketConn {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebSocketMessage {
-    pub id: String,
-    pub connection_id: String,
+    pub id: i64,
+    pub connection_id: i64,
     pub direction: String, // "to_client" | "to_server"
     pub msg_type: String,  // "text" | "json" | "binary"
     pub payload: String,
@@ -455,13 +455,25 @@ pub struct AppState {
     pub webhook_running: Arc<AtomicBool>,
     pub webhook_port: Arc<RwLock<u16>>,
     pub webhook_stop_signal: Arc<Mutex<Option<oneshot::Sender<()>>>>,
-    pub ws_stream_senders: Arc<DashMap<String, (tokio::sync::mpsc::UnboundedSender<tungstenite::Message>, tokio::sync::mpsc::UnboundedSender<tungstenite::Message>)>>,
-    pub ws_client_senders: Arc<DashMap<String, tokio::sync::mpsc::UnboundedSender<tungstenite::Message>>>,
-    pub ws_client_stops: Arc<DashMap<String, Arc<Mutex<Option<oneshot::Sender<()>>>>>>,
+    pub ws_stream_senders: Arc<DashMap<i64, (tokio::sync::mpsc::UnboundedSender<tungstenite::Message>, tokio::sync::mpsc::UnboundedSender<tungstenite::Message>)>>,
+    pub ws_client_senders: Arc<DashMap<i64, tokio::sync::mpsc::UnboundedSender<tungstenite::Message>>>,
+    pub ws_client_stops: Arc<DashMap<i64, Arc<Mutex<Option<oneshot::Sender<()>>>>>>,
     pub next_history_id: Arc<AtomicU64>,
+    pub next_rewrite_history_id: Arc<AtomicU64>,
+    pub next_fuzz_run_id: Arc<AtomicU64>,
     pub fuzz_cancel: Arc<AtomicBool>,
     pub fuzz_running: Arc<AtomicBool>,
     pub fuzz_buffer: Arc<RwLock<Option<crate::fuzzer::execute::FuzzRunBuffer>>>,
+}
+
+/// Highest id in `table`, so in-memory id counters resume after it
+fn max_id(db_path: &PathBuf, table: &str) -> u64 {
+    rusqlite::Connection::open(db_path)
+        .and_then(|conn| {
+            conn.query_row(&format!("SELECT COALESCE(MAX(id), 0) FROM {}", table), [], |row| row.get::<_, i64>(0))
+        })
+        .map(|id| id.max(0) as u64)
+        .unwrap_or(0)
 }
 
 impl AppState {
@@ -472,19 +484,9 @@ impl AppState {
     ) -> Self {
         let (broadcast_tx, _) = broadcast::channel(500);
 
-        let initial_next_history_id = match rusqlite::Connection::open(&db_path) {
-            Ok(conn) => {
-                let max_id: Option<i64> = conn
-                    .query_row(
-                        "SELECT MAX(CAST(id AS INTEGER)) FROM history",
-                        [],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or(None);
-                max_id.unwrap_or(0).max(0) as u64
-            }
-            Err(_) => 0,
-        };
+        let initial_next_history_id = max_id(&db_path, "history");
+        let initial_next_rewrite_history_id = max_id(&db_path, "rewrite_history");
+        let initial_next_fuzz_run_id = max_id(&db_path, "fuzz_runs");
 
         let initial_proxy_mode = crate::db::get_preference(&db_path, "proxy_mode")
             .unwrap_or_else(|| "on".to_string());
@@ -577,7 +579,21 @@ impl AppState {
             ws_client_senders: Arc::new(DashMap::new()),
             ws_client_stops: Arc::new(DashMap::new()),
             next_history_id: Arc::new(AtomicU64::new(initial_next_history_id)),
+            next_rewrite_history_id: Arc::new(AtomicU64::new(initial_next_rewrite_history_id)),
+            next_fuzz_run_id: Arc::new(AtomicU64::new(initial_next_fuzz_run_id)),
         }
+    }
+
+    pub fn next_history_id(&self) -> i64 {
+        self.next_history_id.fetch_add(1, Ordering::SeqCst) as i64 + 1
+    }
+
+    pub fn next_rewrite_history_id(&self) -> i64 {
+        self.next_rewrite_history_id.fetch_add(1, Ordering::SeqCst) as i64 + 1
+    }
+
+    pub fn next_fuzz_run_id(&self) -> i64 {
+        self.next_fuzz_run_id.fetch_add(1, Ordering::SeqCst) as i64 + 1
     }
 
     pub fn set_proxy_active(&self, active: bool) {

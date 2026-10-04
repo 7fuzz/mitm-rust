@@ -74,7 +74,7 @@ pub fn prune_history_logs_conn(conn: &Connection, max_rows: u32) -> Result<usize
         return Ok(0);
     }
     conn.execute(
-        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY CAST(id AS INTEGER) DESC, created_at DESC LIMIT ?)",
+        "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY id DESC LIMIT ?)",
         params![max_rows],
     ).map_err(|e| e.to_string())
 }
@@ -216,7 +216,7 @@ pub fn save_rewrite_rules(db_path: &PathBuf, rules: &[crate::state::RewriteRule]
 pub fn get_rewrite_history_logs(db_path: &PathBuf, limit: u32) -> Result<Vec<crate::state::RewriteHistoryEntry>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, rule_id, rule_name, action_type, method, original_url, rewritten_url, original_headers, rewritten_headers, original_body, rewritten_body, status_code, duration_ms, created_at FROM rewrite_history ORDER BY created_at DESC, rowid DESC LIMIT ?")
+        .prepare("SELECT id, rule_id, rule_name, action_type, method, original_url, rewritten_url, original_headers, rewritten_headers, original_body, rewritten_body, status_code, duration_ms, created_at FROM rewrite_history ORDER BY id DESC LIMIT ?")
         .map_err(|e| e.to_string())?;
 
     let rows = stmt

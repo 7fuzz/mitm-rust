@@ -124,7 +124,7 @@ pub async fn get_history_logs(
         }
     }
 
-    query.push_str(" ORDER BY CAST(id AS INTEGER) DESC, created_at DESC LIMIT ? OFFSET ?");
+    query.push_str(" ORDER BY id DESC LIMIT ? OFFSET ?");
     params.push(Box::new(limit));
     params.push(Box::new(offset));
 
@@ -215,7 +215,7 @@ pub async fn get_history_logs(
 #[tauri::command]
 pub async fn get_history_detail(
     state: State<'_, AppState>,
-    id: String,
+    id: i64,
 ) -> Result<Option<crate::state::HistoryDetail>, String> {
     let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
@@ -223,7 +223,7 @@ pub async fn get_history_detail(
         .map_err(|e| e.to_string())?;
 
     let mut rows = stmt
-        .query_map([&id], |row| {
+        .query_map([id], |row| {
             let req_headers_json: String = row.get(1)?;
             let res_headers_json: String = row.get(2)?;
             let request_body: String = row.get(3)?;
@@ -334,7 +334,6 @@ pub async fn clear_history_logs(
 ) -> Result<(), String> {
     let conn = Connection::open(&state.db_path).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM history", []).map_err(|e| e.to_string())?;
-    let _ = conn.execute("DELETE FROM sqlite_sequence WHERE name = 'history'", []);
     state.next_history_id.store(0, std::sync::atomic::Ordering::SeqCst);
     Ok(())
 }

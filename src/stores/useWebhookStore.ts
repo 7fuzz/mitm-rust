@@ -20,7 +20,7 @@ interface WebhookState {
   listenerConfig: WebhookListenerConfig;
   endpoints: WebhookEndpoint[];
   deliveries: WebhookDelivery[];
-  selectedDeliveryId: string | null;
+  selectedDeliveryId: number | null;
   isLoading: boolean;
   isInitialized: boolean;
 
@@ -46,8 +46,8 @@ interface WebhookState {
 
   fetchDeliveries: () => Promise<void>;
   clearDeliveries: () => Promise<void>;
-  selectDelivery: (id: string | null) => void;
-  replayDelivery: (id: string, targetUrl: string) => Promise<WebhookReplayResult | null>;
+  selectDelivery: (id: number | null) => void;
+  replayDelivery: (id: number, targetUrl: string) => Promise<WebhookReplayResult | null>;
 
   setHmacSecret: (s: string) => void;
   setHmacBody: (b: string) => void;

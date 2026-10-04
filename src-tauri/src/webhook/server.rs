@@ -106,11 +106,10 @@ async fn handle_webhook_request(
 
     let (signature_status, computed_hmac, provided_hmac) = verify_signature(&headers, &body_bytes, &secret_key);
 
-    let delivery_id = format!("del-{}", uuid::Uuid::new_v4());
     let now = chrono::Local::now().timestamp_millis();
 
-    let delivery = WebhookDelivery {
-        id: delivery_id.clone(),
+    let mut delivery = WebhookDelivery {
+        id: 0,
         endpoint_id: endpoint_id.clone(),
         endpoint_path: endpoint_path.clone(),
         timestamp: now,
@@ -121,7 +120,10 @@ async fn handle_webhook_request(
         provided_hmac,
     };
 
-    let _ = crate::db::webhook_db::save_webhook_delivery(&state.db_path, &delivery);
+    match crate::db::webhook_db::save_webhook_delivery(&state.db_path, &delivery) {
+        Ok(id) => delivery.id = id,
+        Err(e) => eprintln!("[Webhook] Failed to save delivery: {}", e),
+    }
 
     let mut hit_count = 0;
     if is_matched {
@@ -140,7 +142,7 @@ async fn handle_webhook_request(
 
     let response_body = serde_json::json!({
         "status": "received",
-        "deliveryId": delivery_id,
+        "deliveryId": delivery.id,
         "matched": is_matched,
         "endpoint": endpoint_path,
     });

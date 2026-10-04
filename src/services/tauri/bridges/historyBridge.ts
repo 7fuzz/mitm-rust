@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export interface HistoryEntry {
-  id: string;
+  id: number;
   method: string;
   url: string;
   host: string;
@@ -24,7 +24,7 @@ export interface HistoryEntry {
 }
 
 export interface HistoryDetail {
-  id: string;
+  id: number;
   requestHeaders: [string, string][];
   responseHeaders: [string, string][];
   requestBody: string;
@@ -97,7 +97,7 @@ export const getHistoryLogs = async (
   });
 };
 
-export const getHistoryDetail = async (id: string): Promise<HistoryDetail | null> => {
+export const getHistoryDetail = async (id: number): Promise<HistoryDetail | null> => {
   return await invoke<HistoryDetail | null>("get_history_detail", { id });
 };
 

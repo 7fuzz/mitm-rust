@@ -19,7 +19,7 @@ interface HistoryState {
   searchTerm: string;
   methodFilter: string;
   statusFilter: number | null;
-  selectedLogId: string | null;
+  selectedLogId: number | null;
   autoScroll: boolean;
   proxyConfig: ProxyConfig;
   limiterEnabled: boolean;
@@ -33,7 +33,7 @@ interface HistoryState {
   setSearchTerm: (term: string) => void;
   setMethodFilter: (method: string) => void;
   setStatusFilter: (status: number | null) => void;
-  selectLog: (id: string | null) => void;
+  selectLog: (id: number | null) => void;
   clearLogs: () => Promise<void>;
   toggleAutoScroll: () => void;
   fetchProxyStatus: () => Promise<void>;
@@ -100,7 +100,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     get().fetchLogs();
   },
 
-  selectLog: (id: string | null) => {
+  selectLog: (id: number | null) => {
     set({ selectedLogId: id });
   },
 

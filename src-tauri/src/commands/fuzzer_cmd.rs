@@ -2,7 +2,6 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use tauri::{AppHandle, State};
-use uuid::Uuid;
 
 use crate::fuzzer::{
     self, execute::run_attack, FuzzConfig, FuzzResult, FuzzRunMeta, FuzzTemplate,
@@ -28,18 +27,17 @@ pub async fn start_fuzz(
     name: String,
     config: FuzzConfig,
     save: bool,
-) -> Result<String, String> {
+) -> Result<i64, String> {
     if state.fuzz_running.load(Ordering::SeqCst) {
         return Err("A fuzz run is already in progress.".to_string());
     }
     // Fail fast on an invalid config before spawning
     fuzzer::generate_combos(&config)?;
 
-    let run_id = format!("fuzz-{}", Uuid::new_v4());
+    let run_id = state.next_fuzz_run_id();
     let state_arc = Arc::new((*state).clone());
-    let run_id_spawn = run_id.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = run_attack(app, (*state_arc).clone(), run_id_spawn, name, config, save).await {
+        if let Err(e) = run_attack(app, (*state_arc).clone(), run_id, name, config, save).await {
             eprintln!("[Fuzzer] run failed: {}", e);
         }
     });
@@ -55,7 +53,7 @@ pub fn stop_fuzz(state: State<'_, AppState>) {
 #[tauri::command]
 pub async fn get_fuzz_result(
     state: State<'_, AppState>,
-    run_id: String,
+    run_id: i64,
     idx: u32,
 ) -> Result<Option<FuzzResult>, String> {
     {
@@ -66,7 +64,7 @@ pub async fn get_fuzz_result(
             }
         }
     }
-    let results = fuzzer::get_run_results_db(&state.db_path, &run_id)?;
+    let results = fuzzer::get_run_results_db(&state.db_path, run_id)?;
     Ok(results.into_iter().find(|r| r.idx == idx))
 }
 
@@ -74,7 +72,7 @@ pub async fn get_fuzz_result(
 #[tauri::command]
 pub async fn search_fuzz_responses(
     state: State<'_, AppState>,
-    run_id: String,
+    run_id: i64,
     query: String,
 ) -> Result<Vec<u32>, String> {
     let needle = query.to_lowercase();
@@ -95,20 +93,20 @@ pub async fn search_fuzz_responses(
             }
         }
     }
-    let results = fuzzer::get_run_results_db(&state.db_path, &run_id)?;
+    let results = fuzzer::get_run_results_db(&state.db_path, run_id)?;
     Ok(results.iter().filter(|r| matches(r)).map(|r| r.idx).collect())
 }
 
 /// Persists the current in-memory run (for a temporary run the user chose to keep).
 #[tauri::command]
-pub async fn save_current_fuzz(state: State<'_, AppState>, name: String) -> Result<String, String> {
+pub async fn save_current_fuzz(state: State<'_, AppState>, name: String) -> Result<i64, String> {
     let (run_id, config, mut results) = {
         let buf = state.fuzz_buffer.read().await;
         let b = buf.as_ref().ok_or("No fuzz run to save.")?;
-        (b.run_id.clone(), b.config.clone(), b.results.clone())
+        (b.run_id, b.config.clone(), b.results.clone())
     };
     results.sort_by_key(|r| r.idx);
-    fuzzer::save_run_db(&state.db_path, &run_id, &name, &config, &results)?;
+    fuzzer::save_run_db(&state.db_path, run_id, &name, &config, &results)?;
     if let Some(b) = state.fuzz_buffer.write().await.as_mut() {
         b.saved = true;
     }
@@ -121,16 +119,16 @@ pub fn list_fuzz_runs(state: State<'_, AppState>) -> Result<Vec<FuzzRunMeta>, St
 }
 
 #[tauri::command]
-pub fn get_fuzz_run_config(state: State<'_, AppState>, run_id: String) -> Result<FuzzConfig, String> {
-    fuzzer::get_run_config_db(&state.db_path, &run_id)
+pub fn get_fuzz_run_config(state: State<'_, AppState>, run_id: i64) -> Result<FuzzConfig, String> {
+    fuzzer::get_run_config_db(&state.db_path, run_id)
 }
 
 #[tauri::command]
-pub fn get_fuzz_run_results(state: State<'_, AppState>, run_id: String) -> Result<Vec<FuzzResult>, String> {
-    fuzzer::get_run_results_db(&state.db_path, &run_id)
+pub fn get_fuzz_run_results(state: State<'_, AppState>, run_id: i64) -> Result<Vec<FuzzResult>, String> {
+    fuzzer::get_run_results_db(&state.db_path, run_id)
 }
 
 #[tauri::command]
-pub fn delete_fuzz_run(state: State<'_, AppState>, run_id: String) -> Result<(), String> {
-    fuzzer::delete_run_db(&state.db_path, &run_id)
+pub fn delete_fuzz_run(state: State<'_, AppState>, run_id: i64) -> Result<(), String> {
+    fuzzer::delete_run_db(&state.db_path, run_id)
 }

@@ -51,7 +51,7 @@ export const mapHistoryEntryToTrafficItem = (item: any): TrafficItem => {
   );
 
   return {
-    id: String(item.id),
+    id: Number(item.id),
     method: item.method || 'GET',
     host: item.host || '',
     path: item.path || item.url || '/',
@@ -77,7 +77,7 @@ export const mapHistoryEntryToTrafficItem = (item: any): TrafficItem => {
 
 const SAMPLE_TRAFFIC: TrafficItem[] = [
   {
-    id: 'req-101',
+    id: 101,
     method: 'POST',
     host: 'api.github.com',
     path: '/graphql',
@@ -136,7 +136,7 @@ if (typeof window !== 'undefined' && window.__MITM_TRAFFIC_UNLISTEN__) {
   window.__MITM_TRAFFIC_UNLISTEN__ = null;
 }
 
-let incomingBatchMap = new Map<string, TrafficItem>();
+let incomingBatchMap = new Map<number, TrafficItem>();
 let batchTimer: ReturnType<typeof setTimeout> | null = null;
 let isTrafficSubscribing = false;
 
@@ -209,7 +209,7 @@ export const createTrafficSlice: StateCreator<
 
   return {
     traffic: SAMPLE_TRAFFIC,
-    selectedTrafficId: 'req-101',
+    selectedTrafficId: 101,
     historySettings: {
       limiterEnabled: true,
       maxRows: 500,
@@ -253,7 +253,7 @@ export const createTrafficSlice: StateCreator<
               const mappedItem = mapHistoryEntryToTrafficItem(raw);
               if (raw.requestBody || raw.responseBody || raw.request_body || raw.response_body) {
                 get().cacheTrafficDetail({
-                  id: String(raw.id),
+                  id: Number(raw.id),
                   requestHeaders: mappedItem.requestHeaders.map((h) => [h.key, h.value]),
                   responseHeaders: mappedItem.responseHeaders.map((h) => [h.key, h.value]),
                   requestBody: mappedItem.requestBody,
@@ -381,7 +381,7 @@ export const createTrafficSlice: StateCreator<
       }
     },
 
-    fetchTrafficDetail: async (id: string) => {
+    fetchTrafficDetail: async (id: number) => {
       if (!id) return null;
       const cached = get().trafficDetails[id];
       if (cached) return cached;
@@ -422,7 +422,7 @@ export const createTrafficSlice: StateCreator<
         const next = { ...state.trafficDetails, [detail.id]: detail };
         const keys = Object.keys(next);
         if (keys.length > 50) {
-          delete next[keys[0]];
+          delete next[Number(keys[0])];
         }
         return { trafficDetails: next };
       });
@@ -487,13 +487,13 @@ export const createTrafficSlice: StateCreator<
         const itemsToPrepend: TrafficItem[] = [];
 
         // Fast index map of existing items in traffic
-        const existingMap = new Map<string, number>();
+        const existingMap = new Map<number, number>();
         for (let i = 0; i < nextTraffic.length; i++) {
           existingMap.set(nextTraffic[i].id, i);
         }
 
         // Intra-batch deduplication: resolve any duplicate items within the batch itself
-        const incomingMap = new Map<string, TrafficItem>();
+        const incomingMap = new Map<number, TrafficItem>();
         for (const item of items) {
           const prev = incomingMap.get(item.id);
           if (prev) {
@@ -523,18 +523,11 @@ export const createTrafficSlice: StateCreator<
         }
 
         // Sort itemsToPrepend descending (highest numeric ID / newest timestamp at the top)
-        itemsToPrepend.sort((a, b) => {
-          const numA = Number(a.id);
-          const numB = Number(b.id);
-          if (!Number.isNaN(numA) && !Number.isNaN(numB)) {
-            return numB - numA;
-          }
-          return (b.timestamp || 0) - (a.timestamp || 0);
-        });
+        itemsToPrepend.sort((a, b) => b.id - a.id);
 
         // Combine and guarantee absolute ID uniqueness
         const combined = [...itemsToPrepend, ...nextTraffic];
-        const seen = new Set<string>();
+        const seen = new Set<number>();
         const uniqueCombined: TrafficItem[] = [];
         for (const it of combined) {
           if (!seen.has(it.id)) {

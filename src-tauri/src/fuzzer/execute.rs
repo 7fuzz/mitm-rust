@@ -16,7 +16,7 @@ use crate::state::AppState;
 
 /// The current run's full results, kept in memory for row detail and later saving.
 pub struct FuzzRunBuffer {
-    pub run_id: String,
+    pub run_id: i64,
     pub config: FuzzConfig,
     pub results: Vec<FuzzResult>,
     pub saved: bool,
@@ -25,7 +25,7 @@ pub struct FuzzRunBuffer {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FuzzResultEvent {
-    pub run_id: String,
+    pub run_id: i64,
     pub idx: u32,
     pub payloads: Vec<String>,
     pub status_code: u16,
@@ -38,7 +38,7 @@ pub struct FuzzResultEvent {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FuzzDoneEvent {
-    pub run_id: String,
+    pub run_id: i64,
     pub completed: u32,
     pub total: u32,
     pub stopped: bool,
@@ -47,7 +47,7 @@ pub struct FuzzDoneEvent {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FuzzStartedEvent {
-    pub run_id: String,
+    pub run_id: i64,
     pub total: u32,
 }
 
@@ -137,7 +137,7 @@ async fn run_one(
 pub async fn run_attack(
     app: AppHandle,
     state: AppState,
-    run_id: String,
+    run_id: i64,
     name: String,
     config: FuzzConfig,
     save: bool,
@@ -153,7 +153,7 @@ pub async fn run_attack(
     {
         let mut buf = state.fuzz_buffer.write().await;
         *buf = Some(FuzzRunBuffer {
-            run_id: run_id.clone(),
+            run_id,
             config: config.clone(),
             results: Vec::with_capacity(total as usize),
             saved: false,
@@ -163,7 +163,7 @@ pub async fn run_attack(
     let _ = app.emit(
         "fuzz-started",
         FuzzStartedEvent {
-            run_id: run_id.clone(),
+            run_id,
             total,
         },
     );
@@ -196,7 +196,7 @@ pub async fn run_attack(
         let _ = app.emit(
             "fuzz-result",
             FuzzResultEvent {
-                run_id: run_id.clone(),
+                run_id,
                 idx: result.idx,
                 payloads: result.payloads.clone(),
                 status_code: result.status_code,
@@ -219,7 +219,7 @@ pub async fn run_attack(
         if let Some(buf) = state.fuzz_buffer.read().await.as_ref() {
             let mut sorted = buf.results.clone();
             sorted.sort_by_key(|r| r.idx);
-            super::save_run_db(&state.db_path, &run_id, &name, &config, &sorted)?;
+            super::save_run_db(&state.db_path, run_id, &name, &config, &sorted)?;
         }
         if let Some(buf) = state.fuzz_buffer.write().await.as_mut() {
             buf.saved = true;
@@ -229,7 +229,7 @@ pub async fn run_attack(
     let _ = app.emit(
         "fuzz-done",
         FuzzDoneEvent {
-            run_id: run_id.clone(),
+            run_id,
             completed,
             total,
             stopped,

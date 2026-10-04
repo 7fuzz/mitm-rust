@@ -71,7 +71,7 @@ export interface FuzzResult {
 }
 
 export interface FuzzRunMeta {
-  id: string;
+  id: number;
   name: string;
   attackType: AttackType;
   total: number;
@@ -79,7 +79,7 @@ export interface FuzzRunMeta {
 }
 
 export interface FuzzResultEvent {
-  runId: string;
+  runId: number;
   idx: number;
   payloads: string[];
   statusCode: number;
@@ -90,12 +90,12 @@ export interface FuzzResultEvent {
 }
 
 export interface FuzzStartedEvent {
-  runId: string;
+  runId: number;
   total: number;
 }
 
 export interface FuzzDoneEvent {
-  runId: string;
+  runId: number;
   completed: number;
   total: number;
   stopped: boolean;
@@ -104,29 +104,29 @@ export interface FuzzDoneEvent {
 export const countFuzzRequests = (config: FuzzConfig): Promise<number> =>
   invoke<number>("count_fuzz_requests", { config });
 
-export const startFuzz = (name: string, config: FuzzConfig, save: boolean): Promise<string> =>
-  invoke<string>("start_fuzz", { name, config, save });
+export const startFuzz = (name: string, config: FuzzConfig, save: boolean): Promise<number> =>
+  invoke<number>("start_fuzz", { name, config, save });
 
 export const stopFuzz = (): Promise<void> => invoke<void>("stop_fuzz");
 
-export const getFuzzResult = (runId: string, idx: number): Promise<FuzzResult | null> =>
+export const getFuzzResult = (runId: number, idx: number): Promise<FuzzResult | null> =>
   invoke<FuzzResult | null>("get_fuzz_result", { runId, idx });
 
-export const searchFuzzResponses = (runId: string, query: string): Promise<number[]> =>
+export const searchFuzzResponses = (runId: number, query: string): Promise<number[]> =>
   invoke<number[]>("search_fuzz_responses", { runId, query });
 
-export const saveCurrentFuzz = (name: string): Promise<string> =>
-  invoke<string>("save_current_fuzz", { name });
+export const saveCurrentFuzz = (name: string): Promise<number> =>
+  invoke<number>("save_current_fuzz", { name });
 
 export const listFuzzRuns = (): Promise<FuzzRunMeta[]> => invoke<FuzzRunMeta[]>("list_fuzz_runs");
 
-export const getFuzzRunConfig = (runId: string): Promise<FuzzConfig> =>
+export const getFuzzRunConfig = (runId: number): Promise<FuzzConfig> =>
   invoke<FuzzConfig>("get_fuzz_run_config", { runId });
 
-export const getFuzzRunResults = (runId: string): Promise<FuzzResult[]> =>
+export const getFuzzRunResults = (runId: number): Promise<FuzzResult[]> =>
   invoke<FuzzResult[]>("get_fuzz_run_results", { runId });
 
-export const deleteFuzzRun = (runId: string): Promise<void> =>
+export const deleteFuzzRun = (runId: number): Promise<void> =>
   invoke<void>("delete_fuzz_run", { runId });
 
 export const listenFuzzStarted = async (cb: (e: FuzzStartedEvent) => void): Promise<UnlistenFn> =>

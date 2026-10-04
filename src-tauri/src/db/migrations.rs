@@ -89,6 +89,11 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         name: "20261003_0016_repeater_workspace",
         sql: include_str!("../../migrations/20261003_0016_repeater_workspace.sql"),
     },
+    MigrationSpec {
+        version: 17,
+        name: "20261004_0017_integer_ids",
+        sql: include_str!("../../migrations/20261004_0017_integer_ids.sql"),
+    },
 ];
 
 #[derive(Clone, Serialize, Debug)]

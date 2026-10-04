@@ -71,7 +71,7 @@ interface FuzzerState {
   estimate: number | null;
   estimateError: string | null;
 
-  runId: string | null;
+  runId: number | null;
   runName: string;
   phase: RunPhase;
   savedToDb: boolean;
@@ -95,8 +95,8 @@ interface FuzzerState {
   fetchResultDetail: (idx: number) => Promise<FuzzResult | null>;
 
   fetchSavedRuns: () => Promise<void>;
-  openSavedRun: (runId: string) => Promise<void>;
-  removeSavedRun: (runId: string) => Promise<void>;
+  openSavedRun: (runId: number) => Promise<void>;
+  removeSavedRun: (runId: number) => Promise<void>;
 
   /** Registers event listeners and returns a disposer; call it once per mount and dispose on unmount. */
   initListeners: () => Promise<() => void>;

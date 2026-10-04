@@ -276,7 +276,7 @@ export const HistoryView: React.FC = () => {
     inspectorOpenThisSession = open;
     setInspectorOpenState(open);
   };
-  const handleSelectRow = (id: string) => {
+  const handleSelectRow = (id: number) => {
     selectTrafficItem(id);
     setInspectorOpen(true);
   };

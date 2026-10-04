@@ -9,8 +9,8 @@ interface WebSocketMessageListProps {
   tableHeightPercent: number;
   filteredMessages: WebSocketMessage[];
   totalMessageCount: number;
-  selectedMessageId: string | null;
-  onSelectMessage: (id: string) => void;
+  selectedMessageId: number | null;
+  onSelectMessage: (id: number) => void;
 }
 
 export const WebSocketMessageList: React.FC<WebSocketMessageListProps> = ({

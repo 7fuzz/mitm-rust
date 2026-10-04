@@ -9,7 +9,7 @@ This document describes the complete SQLite database schema for `mitm.db`.
 ```mermaid
 erDiagram
     history {
-        TEXT id PK
+        INTEGER id PK
         TEXT method
         TEXT url
         TEXT host
@@ -135,7 +135,7 @@ erDiagram
     }
 
     webhook_deliveries {
-        TEXT id PK
+        INTEGER id PK
         TEXT endpoint_id FK
         TEXT method
         TEXT path
@@ -176,7 +176,7 @@ Copy and paste the code block below into [dbdiagram.io](https://dbdiagram.io):
 // Database Schema: mitm.db (SQLite)
 
 Table history {
-  id varchar [pk]
+  id integer [pk]
   method varchar
   url varchar
   host varchar
@@ -306,7 +306,7 @@ Table webhook_endpoints {
 }
 
 Table webhook_deliveries {
-  id varchar [pk]
+  id integer [pk, increment]
   endpoint_id varchar [ref: > webhook_endpoints.id]
   method varchar [not null]
   path varchar [not null]
@@ -332,7 +332,7 @@ Table app_state {
 
 ### 1. `history`
 Captured HTTP/1.1 & HTTP/2 MITM traffic log entries.
-- **id**: Primary Key (UUID/String)
+- **id**: Integer primary key, assigned in order by the proxy
 - **method**: HTTP verb (`GET`, `POST`, `PUT`, `DELETE`, etc.)
 - **url**: Complete target URL string
 - **host**: Domain or IP address

@@ -127,15 +127,15 @@ pub fn load_webhook_deliveries(db_path: &PathBuf, limit: Option<u32>) -> Result<
     Ok(deliveries)
 }
 
-pub fn save_webhook_delivery(db_path: &PathBuf, delivery: &WebhookDelivery) -> Result<(), String> {
+/// Inserts the delivery and returns its new id
+pub fn save_webhook_delivery(db_path: &PathBuf, delivery: &WebhookDelivery) -> Result<i64, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let headers_json = serde_json::to_string(&delivery.headers).unwrap_or_else(|_| "[]".to_string());
 
     conn.execute(
-        "INSERT INTO webhook_deliveries (id, endpoint_id, endpoint_path, headers, payload, signature_status, computed_hmac, provided_hmac, timestamp)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO webhook_deliveries (endpoint_id, endpoint_path, headers, payload, signature_status, computed_hmac, provided_hmac, timestamp)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         params![
-            delivery.id,
             delivery.endpoint_id,
             delivery.endpoint_path,
             headers_json,
@@ -146,7 +146,7 @@ pub fn save_webhook_delivery(db_path: &PathBuf, delivery: &WebhookDelivery) -> R
             delivery.timestamp,
         ],
     ).map_err(|e| e.to_string())?;
-    Ok(())
+    Ok(conn.last_insert_rowid())
 }
 
 pub fn clear_webhook_deliveries(db_path: &PathBuf) -> Result<(), String> {

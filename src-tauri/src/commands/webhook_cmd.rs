@@ -138,7 +138,7 @@ pub async fn calculate_webhook_signature(
 #[tauri::command]
 pub async fn replay_webhook_delivery(
     state: State<'_, AppState>,
-    id: String,
+    id: i64,
     target_url: String,
 ) -> Result<WebhookReplayResult, String> {
     let deliveries = crate::db::webhook_db::load_webhook_deliveries(&state.db_path, Some(500))?;

@@ -281,7 +281,7 @@ pub async fn apply_request_rewrite_pipeline(
                 let redirect_body = format!("Redirecting to {}...", redirect_url).into_bytes();
 
                 let entry = RewriteHistoryEntry {
-                    id: format!("rw-{}", uuid::Uuid::new_v4()),
+                    id: state.next_rewrite_history_id(),
                     rule_id: Some(rule.id.clone()),
                     rule_name: rule.name.clone(),
                     action_type: format!("redirect ({})", status),
@@ -317,7 +317,7 @@ pub async fn apply_request_rewrite_pipeline(
                 let mock_body_bytes = rule.mock_body.as_deref().unwrap_or("").as_bytes().to_vec();
 
                 let entry = RewriteHistoryEntry {
-                    id: format!("rw-{}", uuid::Uuid::new_v4()),
+                    id: state.next_rewrite_history_id(),
                     rule_id: Some(rule.id.clone()),
                     rule_name: rule.name.clone(),
                     action_type: "full_response (Mock)".to_string(),
@@ -348,7 +348,7 @@ pub async fn apply_request_rewrite_pipeline(
         if changed {
             let rewr_body_text = String::from_utf8_lossy(body).to_string();
             let entry = RewriteHistoryEntry {
-                id: format!("rw-{}", uuid::Uuid::new_v4()),
+                id: state.next_rewrite_history_id(),
                 rule_id: Some(rule.id.clone()),
                 rule_name: rule.name.clone(),
                 action_type: rule.action_type.clone(),
@@ -491,7 +491,7 @@ pub async fn apply_response_rewrite_pipeline(
             any_changed = true;
             let rewr_body_text = String::from_utf8_lossy(body).to_string();
             let entry = RewriteHistoryEntry {
-                id: format!("rw-{}", uuid::Uuid::new_v4()),
+                id: state.next_rewrite_history_id(),
                 rule_id: Some(rule.id.clone()),
                 rule_name: rule.name.clone(),
                 action_type: rule.action_type.clone(),

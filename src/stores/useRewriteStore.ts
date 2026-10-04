@@ -20,7 +20,7 @@ interface RewriteState {
   logs: RewriteHistoryEntry[];
   isRewriteEnabled: boolean;
   sourceScope: SourceScope;
-  selectedLogId: string | null;
+  selectedLogId: number | null;
   searchQuery: string;
   isRuleModalOpen: boolean;
   editingRule: RewriteRule | null;
@@ -39,7 +39,7 @@ interface RewriteState {
   moveRule: (index: number, direction: "up" | "down") => Promise<void>;
   fetchLogs: () => Promise<void>;
   clearLogs: () => Promise<void>;
-  selectLog: (id: string | null) => void;
+  selectLog: (id: number | null) => void;
   setSearchQuery: (query: string) => void;
   openRuleModal: (rule?: RewriteRule) => void;
   closeRuleModal: () => void;
@@ -244,7 +244,7 @@ export const useRewriteStore = create<RewriteState>((set, get) => ({
     }
   },
 
-  selectLog: (id: string | null) => {
+  selectLog: (id: number | null) => {
     set({ selectedLogId: id });
   },
 

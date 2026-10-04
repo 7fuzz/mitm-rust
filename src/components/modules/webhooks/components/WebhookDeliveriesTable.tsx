@@ -3,8 +3,8 @@ import type { WebhookDelivery } from '../../../../types';
 
 interface WebhookDeliveriesTableProps {
   deliveries: WebhookDelivery[];
-  selectedDeliveryId: string | null;
-  onSelectDelivery: (id: string) => void;
+  selectedDeliveryId: number | null;
+  onSelectDelivery: (id: number) => void;
   emptyMessage: string;
 }
 

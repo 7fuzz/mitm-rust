@@ -17,7 +17,7 @@ export interface ProxyServerSlice {
 
 export interface TrafficSlice {
   traffic: TrafficItem[];
-  selectedTrafficId: string | null;
+  selectedTrafficId: number | null;
   historySettings: HistorySettings;
   listenerFilter: string;
 
@@ -27,7 +27,7 @@ export interface TrafficSlice {
   hasMore: boolean;
   isLoadingMore: boolean;
   totalDbCount: number;
-  trafficDetails: Record<string, HistoryDetail>;
+  trafficDetails: Record<number, HistoryDetail>;
 
   // Filtering
   searchQuery: string;
@@ -46,16 +46,16 @@ export interface TrafficSlice {
   initTraffic: () => Promise<void>;
   loadInitialTraffic: () => Promise<void>;
   loadNextPage: () => Promise<void>;
-  fetchTrafficDetail: (id: string) => Promise<HistoryDetail | null>;
+  fetchTrafficDetail: (id: number) => Promise<HistoryDetail | null>;
   cacheTrafficDetail: (detail: HistoryDetail) => void;
   deloadInactiveTraffic: () => void;
   fetchHistorySettings: () => Promise<void>;
   updateHistorySettings: (limiterEnabled: boolean, maxRows: number) => Promise<void>;
   addTrafficItem: (item: TrafficItem) => void;
   addTrafficBatch: (items: TrafficItem[]) => void;
-  selectTrafficItem: (id: string | null) => void;
+  selectTrafficItem: (id: number | null) => void;
   clearTraffic: () => Promise<void>;
-  deleteTrafficItem: (id: string) => void;
+  deleteTrafficItem: (id: number) => void;
   setSearchQuery: (query: string) => void;
   setSelectedMethods: (methods: string[]) => void;
   setMethodFilter: (method: string, state: 'include' | 'exclude' | 'neutral') => void;

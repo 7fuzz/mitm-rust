@@ -124,7 +124,7 @@ pub struct FuzzResult {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FuzzRunMeta {
-    pub id: String,
+    pub id: i64,
     pub name: String,
     pub attack_type: String,
     pub total: u32,
@@ -395,7 +395,7 @@ pub fn evaluate_matches(rules: &[MatchRule], body: &str) -> Vec<MatchResult> {
 
 pub fn save_run_db(
     db_path: &PathBuf,
-    id: &str,
+    id: i64,
     name: &str,
     config: &FuzzConfig,
     results: &[FuzzResult],
@@ -418,7 +418,7 @@ pub fn save_run_db(
     tx.commit().map_err(|e| e.to_string())
 }
 
-fn insert_result(conn: &Connection, run_id: &str, r: &FuzzResult) -> Result<(), String> {
+fn insert_result(conn: &Connection, run_id: i64, r: &FuzzResult) -> Result<(), String> {
     conn.execute(
         "INSERT INTO fuzz_results
             (run_id, idx, payloads_json, method, url, request_headers_json, request_body,
@@ -465,7 +465,7 @@ pub fn list_runs_db(db_path: &PathBuf) -> Result<Vec<FuzzRunMeta>, String> {
     Ok(rows)
 }
 
-pub fn get_run_config_db(db_path: &PathBuf, id: &str) -> Result<FuzzConfig, String> {
+pub fn get_run_config_db(db_path: &PathBuf, id: i64) -> Result<FuzzConfig, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let json: String = conn
         .query_row("SELECT config_json FROM fuzz_runs WHERE id = ?", params![id], |row| row.get(0))
@@ -473,7 +473,7 @@ pub fn get_run_config_db(db_path: &PathBuf, id: &str) -> Result<FuzzConfig, Stri
     serde_json::from_str(&json).map_err(|e| e.to_string())
 }
 
-pub fn get_run_results_db(db_path: &PathBuf, id: &str) -> Result<Vec<FuzzResult>, String> {
+pub fn get_run_results_db(db_path: &PathBuf, id: i64) -> Result<Vec<FuzzResult>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
@@ -509,7 +509,7 @@ pub fn get_run_results_db(db_path: &PathBuf, id: &str) -> Result<Vec<FuzzResult>
     Ok(rows)
 }
 
-pub fn delete_run_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
+pub fn delete_run_db(db_path: &PathBuf, id: i64) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM fuzz_results WHERE run_id = ?", params![id])
         .map_err(|e| e.to_string())?;

@@ -39,7 +39,7 @@ export const historyItemToTrafficItem = (hist: RunRecord): TrafficItem => {
   const contentType = ctHeader ? ctHeader.value : '';
 
   return {
-    id: `rep-hist-${hist.id}`,
+    id: hist.id,
     method: hist.method,
     url: hist.url,
     host,

@@ -304,7 +304,7 @@ export const HistoryViewer: React.FC = () => {
                   </button>
                 </div>
                 <div className="text-2xs font-mono text-zinc-400">
-                  ID: {selectedLogDetail.id.slice(0, 8)}...
+                  ID: {selectedLogDetail.id}
                 </div>
               </div>
 

@@ -25,7 +25,7 @@ export interface HeaderPair {
 }
 
 export interface TrafficItem {
-  id: string;
+  id: number;
   method: string;
   host: string;
   path: string;
@@ -157,7 +157,7 @@ export interface CollectionLink {
 }
 
 export interface WebSocketConn {
-  connectionId: string;
+  connectionId: number;
   url: string;
   status: 'connected' | 'disconnected' | 'connecting';
   handshakeTime: number;
@@ -170,8 +170,8 @@ export interface WebSocketConn {
 }
 
 export interface WebSocketMessage {
-  id: string;
-  connection_id: string;
+  id: number;
+  connection_id: number;
   direction: 'to_server' | 'to_client';
   msg_type: 'text' | 'json' | 'binary';
   payload: string;
@@ -200,7 +200,7 @@ export interface WebhookEndpoint {
 }
 
 export interface WebhookDelivery {
-  id: string;
+  id: number;
   endpointId: string;
   endpointPath: string;
   timestamp: number;

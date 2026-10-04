@@ -5,7 +5,6 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio_tungstenite::tungstenite::handshake::client::Request;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
-use uuid::Uuid;
 
 use crate::state::{AppState, WebSocketConn, WebSocketConnectionEvent, WebSocketMessage, WebSocketMessageCapturedEvent};
 
@@ -50,11 +49,10 @@ pub async fn connect_client_session(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
-    let conn_id = format!("ws-cli-{}", Uuid::new_v4());
     let now = chrono::Local::now().timestamp_millis();
 
-    let conn_info = WebSocketConn {
-        connection_id: conn_id.clone(),
+    let mut conn_info = WebSocketConn {
+        connection_id: 0,
         url: url_str.clone(),
         status: "connected".to_string(),
         handshake_time: now,
@@ -66,7 +64,8 @@ pub async fn connect_client_session(
         listener_label: String::new(),
     };
 
-    crate::db::ws_db::save_ws_connection(&state.db_path, &conn_info)?;
+    conn_info.connection_id = crate::db::ws_db::insert_ws_connection(&state.db_path, &conn_info)?;
+    let conn_id = conn_info.connection_id;
 
     let _ = app_handle.emit(
         "websocket_connection_event",
@@ -80,20 +79,18 @@ pub async fn connect_client_session(
     let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
     let (stop_tx, mut stop_rx) = oneshot::channel::<()>();
 
-    state.ws_client_senders.insert(conn_id.clone(), tx);
-    state.ws_client_stops.insert(conn_id.clone(), Arc::new(Mutex::new(Some(stop_tx))));
+    state.ws_client_senders.insert(conn_id, tx);
+    state.ws_client_stops.insert(conn_id, Arc::new(Mutex::new(Some(stop_tx))));
 
-    let conn_id_clone = conn_id.clone();
     let db_path_clone = state.db_path.clone();
     let app_handle_clone = app_handle.clone();
     let state_clone = Arc::clone(&state);
 
     // Writer Task (outgoing to remote server)
-    let conn_id_writer = conn_id.clone();
     tauri::async_runtime::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if let Err(e) = write_half.send(msg).await {
-                eprintln!("[WS Client {}] Send error: {}", conn_id_writer, e);
+                eprintln!("[WS Client {}] Send error: {}", conn_id, e);
                 break;
             }
         }
@@ -121,9 +118,9 @@ pub async fn connect_client_session(
                                 Message::Frame(_) => continue,
                             };
 
-                            let msg_record = WebSocketMessage {
-                                id: format!("ws-msg-{}", Uuid::new_v4()),
-                                connection_id: conn_id_clone.clone(),
+                            let mut msg_record = WebSocketMessage {
+                                id: 0,
+                                connection_id: conn_id,
                                 direction: "to_client".to_string(),
                                 msg_type: msg_type.to_string(),
                                 payload: payload_str,
@@ -132,8 +129,8 @@ pub async fn connect_client_session(
                                 is_injected: false,
                             };
 
-                            let _ = crate::db::ws_db::save_ws_message(&db_path_clone, &msg_record);
-                            let count = crate::db::ws_db::increment_ws_message_count(&db_path_clone, &conn_id_clone).unwrap_or(1);
+                            let _ = crate::db::ws_db::save_ws_message(&db_path_clone, &mut msg_record);
+                            let count = crate::db::ws_db::increment_ws_message_count(&db_path_clone, conn_id).unwrap_or(1);
 
                             let _ = app_handle_clone.emit(
                                 "websocket_message_event",
@@ -144,7 +141,7 @@ pub async fn connect_client_session(
                             );
                         }
                         Err(e) => {
-                            eprintln!("[WS Client {}] Read error: {}", conn_id_clone, e);
+                            eprintln!("[WS Client {}] Read error: {}", conn_id, e);
                             break;
                         }
                     }
@@ -155,10 +152,10 @@ pub async fn connect_client_session(
 
         // Connection cleanup
         let close_time = chrono::Local::now().timestamp_millis();
-        let _ = crate::db::ws_db::update_ws_connection_status(&db_path_clone, &conn_id_clone, "disconnected", Some(close_time));
+        let _ = crate::db::ws_db::update_ws_connection_status(&db_path_clone, conn_id, "disconnected", Some(close_time));
 
-        state_clone.ws_client_senders.remove(&conn_id_clone);
-        state_clone.ws_client_stops.remove(&conn_id_clone);
+        state_clone.ws_client_senders.remove(&conn_id);
+        state_clone.ws_client_stops.remove(&conn_id);
 
         let mut closed_conn = conn_info_task;
         closed_conn.status = "disconnected".to_string();
@@ -176,14 +173,14 @@ pub async fn connect_client_session(
     Ok(conn_info)
 }
 
-pub async fn disconnect_client_session(state: Arc<AppState>, connection_id: &str) -> Result<(), String> {
-    if let Some((_, stop_mutex)) = state.ws_client_stops.remove(connection_id) {
+pub async fn disconnect_client_session(state: Arc<AppState>, connection_id: i64) -> Result<(), String> {
+    if let Some((_, stop_mutex)) = state.ws_client_stops.remove(&connection_id) {
         let mut lock = stop_mutex.lock().await;
         if let Some(stop_tx) = lock.take() {
             let _ = stop_tx.send(());
         }
     }
-    state.ws_client_senders.remove(connection_id);
+    state.ws_client_senders.remove(&connection_id);
     let now = chrono::Local::now().timestamp_millis();
     crate::db::ws_db::update_ws_connection_status(&state.db_path, connection_id, "disconnected", Some(now))?;
     Ok(())

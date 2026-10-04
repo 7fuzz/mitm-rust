@@ -19,30 +19,30 @@ interface WebSocketState {
   isLoading: boolean;
   wsMitmEnabled: boolean;
   connections: WebSocketConn[];
-  selectedConnectionId: string | null;
-  messages: Record<string, WebSocketMessage[]>;
+  selectedConnectionId: number | null;
+  messages: Record<number, WebSocketMessage[]>;
   directionFilter: 'all' | 'in' | 'out';
   searchQuery: string;
   messageBuilderType: 'text' | 'json' | 'binary';
   messageBuilderContent: string;
-  selectedMessageId: string | null;
+  selectedMessageId: number | null;
   isConnecting: boolean;
 
   initialize: () => Promise<void>;
   fetchStatus: () => Promise<void>;
   fetchConnections: () => Promise<void>;
   toggleWsMitm: (enabled?: boolean) => Promise<void>;
-  selectConnection: (id: string | null) => Promise<void>;
+  selectConnection: (id: number | null) => Promise<void>;
   createClientConnection: (url: string, headers?: [string, string][]) => Promise<WebSocketConn | undefined>;
-  disconnectConnection: (id: string) => Promise<void>;
-  deleteConnection: (id: string) => Promise<void>;
+  disconnectConnection: (id: number) => Promise<void>;
+  deleteConnection: (id: number) => Promise<void>;
   sendMessage: (direction: 'to_server' | 'to_client') => Promise<void>;
-  clearMessages: (connId?: string) => Promise<void>;
+  clearMessages: (connId?: number) => Promise<void>;
   setDirectionFilter: (filter: 'all' | 'in' | 'out') => void;
   setSearchQuery: (query: string) => void;
   setMessageBuilderType: (type: 'text' | 'json' | 'binary') => void;
   setMessageBuilderContent: (content: string) => void;
-  selectMessage: (id: string | null) => void;
+  selectMessage: (id: number | null) => void;
 }
 
 export const useWebSocketStore = create<WebSocketState>((set, get) => ({
