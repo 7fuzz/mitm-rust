@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { NavModule, AppPreferences } from '../types';
+import { PINNED_ITEMS, isPinned, tabItem } from '../components/layout/navModules';
 import { getRootCaPem, exportRootCa, regenerateRootCa, updatePrefs } from '../services/tauri/ipc';
 
 /** Which environments the variable switcher edits: the active workspace's, or the Repeater's own. */
@@ -13,6 +14,7 @@ export const quickVarScopeFor = (module: NavModule): QuickVarScope | null => {
 
 interface SettingsState {
   activeModule: NavModule;
+  openTabs: NavModule[];
   theme: 'dark' | 'light';
   isQuickVarModalOpen: boolean;
   quickVarScope: QuickVarScope;
@@ -20,6 +22,8 @@ interface SettingsState {
   isCaLoading: boolean;
 
   setActiveModule: (module: NavModule) => void;
+  closeTab: (module: NavModule) => void;
+  moveTab: (module: NavModule, target: NavModule) => void;
   setTheme: (theme: 'dark' | 'light') => void;
   toggleTheme: () => void;
   setQuickVarModalOpen: (open: boolean) => void;
@@ -32,13 +36,37 @@ interface SettingsState {
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   activeModule: 'http-history',
+  openTabs: PINNED_ITEMS.map((item) => item.id),
   theme: 'dark',
   isQuickVarModalOpen: false,
   quickVarScope: 'workspace',
   caPem: '',
   isCaLoading: false,
 
-  setActiveModule: (module) => set({ activeModule: module }),
+  setActiveModule: (module) =>
+    set(({ openTabs }) => ({
+      activeModule: module,
+      openTabs: openTabs.includes(module) || !tabItem(module) ? openTabs : [...openTabs, module],
+    })),
+
+  closeTab: (module) => {
+    if (isPinned(module)) return;
+    const { openTabs, activeModule } = get();
+    const index = openTabs.indexOf(module);
+    const remaining = openTabs.filter((id) => id !== module);
+    set({
+      openTabs: remaining,
+      activeModule: activeModule === module ? remaining[Math.min(index, remaining.length - 1)] : activeModule,
+    });
+  },
+
+  moveTab: (module, target) => {
+    const tabs = get().openTabs.filter((id) => id !== module);
+    const targetIndex = tabs.indexOf(target);
+    const after = get().openTabs.indexOf(module) < get().openTabs.indexOf(target);
+    tabs.splice(targetIndex + (after ? 1 : 0), 0, module);
+    set({ openTabs: tabs });
+  },
   
   setTheme: (theme) => {
     set({ theme });

@@ -17,7 +17,7 @@ import { UtilitiesView } from '../modules/utilities/UtilitiesView';
 import { SettingsView } from '../modules/settings/SettingsView';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useInterceptStore } from '../../stores/useInterceptStore';
-import { MODULE_BY_SHORTCUT } from './navModules';
+import { SETTINGS_ITEM, SETTINGS_SHORTCUT } from './navModules';
 import { useUiPref } from '../../stores/useUiPrefsStore';
 import { applyUiZoom, stepZoom } from '../../utils/uiZoom';
 
@@ -40,7 +40,7 @@ export const GlobalShell: React.FC = () => {
     setQuickVarModalOpen(false);
   }, [activeModule, setQuickVarModalOpen]);
 
-  // Number keys switch modules (see navModules) and V opens the variable switcher on pages that send requests
+  // Number keys switch to the tab at that position (0 is Settings) and V opens the variable switcher on pages that send requests
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger when inside inputs or textareas
@@ -57,10 +57,10 @@ export const GlobalShell: React.FC = () => {
           return;
         }
 
-        const module = MODULE_BY_SHORTCUT[e.key];
-        if (module) {
-          setActiveModule(module);
-        }
+        if (e.key === SETTINGS_SHORTCUT) return setActiveModule(SETTINGS_ITEM.id);
+        const tabIndex = /^[1-9]$/.test(e.key) ? Number(e.key) - 1 : -1;
+        const module = useSettingsStore.getState().openTabs[tabIndex];
+        if (module) setActiveModule(module);
       }
     };
 
