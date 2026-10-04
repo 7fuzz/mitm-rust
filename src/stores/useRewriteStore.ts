@@ -28,6 +28,7 @@ interface RewriteState {
 
   // Actions
   initStore: () => Promise<void>;
+  fetchStatus: () => Promise<void>;
   toggleEnabled: () => Promise<void>;
   setSourceScope: (scope: SourceScope) => Promise<void>;
   fetchRules: () => Promise<void>;
@@ -54,6 +55,15 @@ export const useRewriteStore = create<RewriteState>((set, get) => ({
   isRuleModalOpen: false,
   editingRule: null,
   unsubFn: null,
+
+  fetchStatus: async () => {
+    try {
+      const [isRewriteEnabled, rules] = await Promise.all([getRewriteEnabled(), getRewriteRules()]);
+      set({ isRewriteEnabled, rules });
+    } catch (e) {
+      console.error("Failed to fetch rewrite status:", e);
+    }
+  },
 
   initStore: async () => {
     try {

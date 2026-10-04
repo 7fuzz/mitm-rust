@@ -29,6 +29,7 @@ interface WebSocketState {
   isConnecting: boolean;
 
   initialize: () => Promise<void>;
+  fetchStatus: () => Promise<void>;
   fetchConnections: () => Promise<void>;
   toggleWsMitm: (enabled?: boolean) => Promise<void>;
   selectConnection: (id: string | null) => Promise<void>;
@@ -66,6 +67,15 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
     } catch (err) {
       console.error('Failed to toggle WS MITM:', err);
       set({ wsMitmEnabled: nextVal });
+    }
+  },
+
+  fetchStatus: async () => {
+    try {
+      const proxyCfg = await getProxyState();
+      set({ wsMitmEnabled: Boolean(proxyCfg.wsMitmEnabled) });
+    } catch (err) {
+      console.error('Failed to fetch WebSocket MITM status:', err);
     }
   },
 

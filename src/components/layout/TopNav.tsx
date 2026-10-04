@@ -2,10 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 import { useHistoryStore } from '../../stores/useHistoryStore';
 import { useInterceptStore } from '../../stores/useInterceptStore';
+import { useRewriteStore } from '../../stores/useRewriteStore';
+import { useWebSocketStore } from '../../stores/useWebSocketStore';
+import { useWebhookStore } from '../../stores/useWebhookStore';
 import { MingCuteIcon } from '../common/MingCuteIcon';
 import { ProxyPowerButton } from '../common/ProxyPowerButton';
 import type { NavModule } from '../../types';
 import { MORE_GROUPS, MORE_ITEMS, PRIMARY_GROUPS, SETTINGS_ITEM, type NavItem } from './navModules';
+
+const ActiveDot: React.FC = () => <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="Active" />;
 
 const isPrimary = (id: NavModule) => PRIMARY_GROUPS.some((group) => group.some((item) => item.id === id));
 
@@ -13,6 +18,11 @@ export const TopNav: React.FC = () => {
   const { activeModule, setActiveModule, theme, toggleTheme } = useSettingsStore();
   const { fetchProxyStatus } = useHistoryStore();
   const { pendingFlows } = useInterceptStore();
+  const rewriteActive = useRewriteStore((s) => s.isRewriteEnabled && s.rules.some((r) => r.enabled));
+  const wsActive = useWebSocketStore((s) => s.wsMitmEnabled);
+  const webhooksActive = useWebhookStore((s) => s.listenerConfig.is_running);
+  const isModuleActive = (id: NavModule) =>
+    (id === 'rewrite' && rewriteActive) || (id === 'websockets' && wsActive) || (id === 'webhooks' && webhooksActive);
 
   const [moreMenuPos, setMoreMenuPos] = useState<{ left: number; top: number } | null>(null);
   const isMoreOpen = moreMenuPos !== null;
@@ -23,6 +33,9 @@ export const TopNav: React.FC = () => {
 
   useEffect(() => {
     fetchProxyStatus();
+    useRewriteStore.getState().fetchStatus();
+    useWebSocketStore.getState().fetchStatus();
+    useWebhookStore.getState().fetchStatus();
   }, []);
 
   useEffect(() => {
@@ -64,6 +77,7 @@ export const TopNav: React.FC = () => {
       >
         <MingCuteIcon name={item.icon} size={14} />
         <span>{item.label}</span>
+        {isModuleActive(item.id) && <ActiveDot />}
         {item.shortcut && <span className="text-3xs opacity-50 font-mono">{item.shortcut}</span>}
         {pendingCount > 0 && (
           <span className="ml-0.5 px-1.5 bg-amber-500 text-zinc-950 rounded-full text-3xs font-mono font-bold animate-pulse">
@@ -107,6 +121,7 @@ export const TopNav: React.FC = () => {
           }`}
         >
           <span>More</span>
+          {MORE_ITEMS.some((item) => item.id !== activeModule && isModuleActive(item.id)) && <ActiveDot />}
           <MingCuteIcon name="down_line" size={12} className="opacity-60" />
         </button>
 
@@ -130,7 +145,10 @@ export const TopNav: React.FC = () => {
                     }`}
                   >
                     <MingCuteIcon name={item.icon} size={14} />
-                    <span className="flex-1">{item.label}</span>
+                    <span className="flex-1 flex items-center gap-1.5">
+                      {item.label}
+                      {isModuleActive(item.id) && <ActiveDot />}
+                    </span>
                     {item.shortcut && <span className="text-3xs font-mono text-muted-foreground">{item.shortcut}</span>}
                   </button>
                 ))}
