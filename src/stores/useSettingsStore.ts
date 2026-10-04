@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { NavModule, AppPreferences } from '../types';
-import { PINNED_ITEMS, isPinned, tabItem } from '../components/layout/navModules';
+import { isPinned, tabItem } from '../components/layout/navModules';
+import { getUiPref, useUiPrefsStore } from './useUiPrefsStore';
 import { getRootCaPem, exportRootCa, regenerateRootCa, updatePrefs } from '../services/tauri/ipc';
 
 /** Which environments the variable switcher edits: the active workspace's, or the Repeater's own. */
@@ -14,7 +15,6 @@ export const quickVarScopeFor = (module: NavModule): QuickVarScope | null => {
 
 interface SettingsState {
   activeModule: NavModule;
-  openTabs: NavModule[];
   theme: 'dark' | 'light';
   isQuickVarModalOpen: boolean;
   quickVarScope: QuickVarScope;
@@ -34,38 +34,38 @@ interface SettingsState {
   updatePreferences: (newPrefs: Partial<AppPreferences>) => Promise<void>;
 }
 
+const setOpenTabs = (tabs: NavModule[]) => useUiPrefsStore.getState().setPref('nav.tabs', tabs);
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   activeModule: 'http-history',
-  openTabs: PINNED_ITEMS.map((item) => item.id),
   theme: 'dark',
   isQuickVarModalOpen: false,
   quickVarScope: 'workspace',
   caPem: '',
   isCaLoading: false,
 
-  setActiveModule: (module) =>
-    set(({ openTabs }) => ({
-      activeModule: module,
-      openTabs: openTabs.includes(module) || !tabItem(module) ? openTabs : [...openTabs, module],
-    })),
+  setActiveModule: (module) => {
+    const openTabs = getUiPref('nav.tabs');
+    if (tabItem(module) && !openTabs.includes(module)) setOpenTabs([...openTabs, module]);
+    set({ activeModule: module });
+  },
 
   closeTab: (module) => {
     if (isPinned(module)) return;
-    const { openTabs, activeModule } = get();
+    const openTabs = getUiPref('nav.tabs');
+    const { activeModule } = get();
     const index = openTabs.indexOf(module);
     const remaining = openTabs.filter((id) => id !== module);
-    set({
-      openTabs: remaining,
-      activeModule: activeModule === module ? remaining[Math.min(index, remaining.length - 1)] : activeModule,
-    });
+    setOpenTabs(remaining);
+    if (activeModule === module) set({ activeModule: remaining[Math.min(index, remaining.length - 1)] });
   },
 
   moveTab: (module, target) => {
-    const tabs = get().openTabs.filter((id) => id !== module);
-    const targetIndex = tabs.indexOf(target);
-    const after = get().openTabs.indexOf(module) < get().openTabs.indexOf(target);
-    tabs.splice(targetIndex + (after ? 1 : 0), 0, module);
-    set({ openTabs: tabs });
+    const openTabs = getUiPref('nav.tabs');
+    const tabs = openTabs.filter((id) => id !== module);
+    const after = openTabs.indexOf(module) < openTabs.indexOf(target);
+    tabs.splice(tabs.indexOf(target) + (after ? 1 : 0), 0, module);
+    setOpenTabs(tabs);
   },
   
   setTheme: (theme) => {

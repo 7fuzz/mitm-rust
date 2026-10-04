@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '../../stores/useSettingsStore';
+import { useUiPref } from '../../stores/useUiPrefsStore';
 import { useHistoryStore } from '../../stores/useHistoryStore';
 import { useInterceptStore } from '../../stores/useInterceptStore';
 import { useRewriteStore } from '../../stores/useRewriteStore';
@@ -76,7 +77,8 @@ const NavTab: React.FC<{
 };
 
 export const TopNav: React.FC = () => {
-  const { activeModule, setActiveModule, openTabs, closeTab, moveTab, theme, toggleTheme } = useSettingsStore();
+  const { activeModule, setActiveModule, closeTab, moveTab, theme, toggleTheme } = useSettingsStore();
+  const [openTabs] = useUiPref('nav.tabs');
   const { fetchProxyStatus } = useHistoryStore();
   const { pendingFlows } = useInterceptStore();
   const rewriteActive = useRewriteStore((s) => s.isRewriteEnabled && s.rules.some((r) => r.enabled));

@@ -18,7 +18,7 @@ import { SettingsView } from '../modules/settings/SettingsView';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useInterceptStore } from '../../stores/useInterceptStore';
 import { SETTINGS_ITEM, SETTINGS_SHORTCUT } from './navModules';
-import { useUiPref } from '../../stores/useUiPrefsStore';
+import { getUiPref, useUiPref } from '../../stores/useUiPrefsStore';
 import { applyUiZoom, stepZoom } from '../../utils/uiZoom';
 
 export const GlobalShell: React.FC = () => {
@@ -59,7 +59,7 @@ export const GlobalShell: React.FC = () => {
 
         if (e.key === SETTINGS_SHORTCUT) return setActiveModule(SETTINGS_ITEM.id);
         const tabIndex = /^[1-9]$/.test(e.key) ? Number(e.key) - 1 : -1;
-        const module = useSettingsStore.getState().openTabs[tabIndex];
+        const module = getUiPref('nav.tabs')[tabIndex];
         if (module) setActiveModule(module);
       }
     };

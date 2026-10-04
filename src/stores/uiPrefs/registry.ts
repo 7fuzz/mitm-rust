@@ -1,4 +1,6 @@
 import { buildDefaultColumnLayout, normalizeColumnLayout, type ColumnLayout } from "../../utils/columnLayout";
+import { PINNED_ITEMS, tabItem } from "../../components/layout/navModules";
+import type { NavModule } from "../../types";
 
 /**
  * Registry of persisted UI preferences. To add one, add an entry here with its default
@@ -71,6 +73,15 @@ export const SETTINGS_SECTIONS = ["proxy", "certificate", "appearance", "data", 
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number];
 
 export const UI_PREFS = {
+  /** Open top-nav tabs, in display order; pinned tabs are always present */
+  "nav.tabs": pref<NavModule[]>({
+    default: PINNED_ITEMS.map((item) => item.id),
+    normalize: (stored, fallback) => {
+      if (!Array.isArray(stored)) return fallback;
+      const tabs = [...new Set(stored)].filter((id): id is NavModule => typeof id === "string" && !!tabItem(id as NavModule));
+      return [...tabs, ...fallback.filter((id) => !tabs.includes(id))];
+    },
+  }),
   "history.columns": pref<ColumnLayout>({
     default: buildDefaultColumnLayout(HISTORY_COLUMN_DEFAULTS),
     normalize: normalizeColumnLayout,
