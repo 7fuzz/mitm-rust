@@ -5,6 +5,7 @@ import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
 import { StructuredBodyEditor } from '../../common/body/StructuredBodyEditor';
 import { ExtractRulesEditor } from '../../common/ExtractRulesEditor';
+import { PreRequestPicker } from '../../common/PreRequestPicker';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Select } from '../../common/ui';
 import { PaneHeader } from '../../common/PaneHeader';
@@ -31,8 +32,8 @@ const countActive = (items?: Array<{ key: string; enabled: boolean }>) =>
   (items || []).filter((i) => i.enabled && i.key.trim()).length;
 
 export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
-  const { updateTab, executeActiveRequest, isExecuting, toggleHistoryDrawer } = useRepeaterStore();
-  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auto-extract'>('body');
+  const { tabs, updateTab, executeActiveRequest, isExecuting, toggleHistoryDrawer } = useRepeaterStore();
+  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auto-extract' | 'pre-request'>('body');
 
   const executing = isExecuting[request.id] || false;
 
@@ -208,6 +209,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
           { value: 'headers', label: 'Headers', count: countActive(request.headers) },
           { value: 'body', label: 'Body' },
           { value: 'auto-extract', label: 'Auto-Extract', count: request.extractRules?.length },
+          { value: 'pre-request', label: request.preRequestId ? 'Pre-request •' : 'Pre-request' },
         ]}
         activeTab={activeTab}
         onTabChange={(val) => setActiveTab(val as typeof activeTab)}
@@ -288,6 +290,16 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
           <ExtractRulesEditor
             rules={request.extractRules || []}
             onChange={(extractRules) => updateTab({ ...request, extractRules })}
+          />
+        )}
+
+        {activeTab === 'pre-request' && (
+          <PreRequestPicker
+            value={request.preRequestId}
+            options={tabs
+              .filter((t) => t.id !== request.id)
+              .map((t) => ({ value: t.id, label: `${t.method} ${t.url}` }))}
+            onChange={(preRequestId) => updateTab({ ...request, preRequestId })}
           />
         )}
       </div>

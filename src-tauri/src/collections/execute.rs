@@ -1,11 +1,14 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::cookie::Jar;
 use reqwest::Method;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::encoding::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
+use crate::pre_request::{jar_cookie, pre_request_chain, pre_request_failure};
 use crate::repeater::HeaderItem;
 use crate::workspace::interpolate_variables;
 
@@ -48,8 +51,56 @@ pub async fn execute_collection_request_db(
     db_path: &PathBuf,
     request_id: &str,
 ) -> Result<ExecutionResult, String> {
+    let jar = Arc::new(Jar::default());
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .danger_accept_invalid_certs(true)
+        .cookie_provider(jar.clone())
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    for pre_id in pre_request_chain(db_path, request_id)? {
+        if let Err(error) = send_collection_request(db_path, &pre_id, &client, &jar).await {
+            return record_unsent_run(db_path, request_id, pre_request_failure(db_path, &pre_id, &error));
+        }
+    }
+    send_collection_request(db_path, request_id, &client, &jar).await
+}
+
+/// Logs a run that never reached the server, so the failure shows up like any other response.
+fn record_unsent_run(db_path: &PathBuf, request_id: &str, error: String) -> Result<ExecutionResult, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let (method, url): (String, String) = conn
+        .query_row("SELECT method, url FROM requests WHERE id = ?", [request_id], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO request_histories
+            (request_id, method, url, request_headers_json, request_body, status_code, response_headers_json, response_body, duration_ms, executed_at_ms)
+         VALUES (?, ?, ?, '[]', NULL, 0, '[]', ?, 0, ?)",
+        params![request_id, method, url, error, now_ms()],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(ExecutionResult {
+        history_id: conn.last_insert_rowid(),
+        request_id: request_id.to_string(),
+        status_code: 0,
+        status_text: "ERR_FAILED".to_string(),
+        response_headers: vec![],
+        response_size: error.len() as u64,
+        response_body: error,
+        duration_ms: 0,
+    })
+}
+
+async fn send_collection_request(
+    db_path: &PathBuf,
+    request_id: &str,
+    client: &reqwest::Client,
+    jar: &Jar,
+) -> Result<ExecutionResult, String> {
     // 1. Fetch request details & interpolate variables in scope block so Connection is dropped before .await
-    let (id, workspace_id, raw_method, target_url, logged_req_headers, final_body, req_headers_map, body_type, extract_rules_json) = {
+    let (id, workspace_id, raw_method, target_url, mut logged_req_headers, final_body, mut req_headers_map, body_type, extract_rules_json) = {
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
         let mut stmt = conn
@@ -158,12 +209,20 @@ pub async fn execute_collection_request_db(
         (id, workspace_id, raw_method, url, logged_req_headers, final_body, req_headers_map, body_type, extract_rules_json)
     };
 
-    // 2. Construct reqwest HTTP client & send request
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .danger_accept_invalid_certs(true)
-        .build()
-        .map_err(|e| e.to_string())?;
+    // 2. Send request
+    if !req_headers_map.contains_key(reqwest::header::COOKIE) {
+        if let Some(cookie) = jar_cookie(jar, &target_url) {
+            if let Ok(hv) = HeaderValue::from_str(&cookie) {
+                req_headers_map.insert(reqwest::header::COOKIE, hv);
+                logged_req_headers.push(HeaderItem {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    key: "Cookie".to_string(),
+                    value: cookie,
+                    enabled: true,
+                });
+            }
+        }
+    }
 
     let method = Method::from_bytes(raw_method.as_bytes()).map_err(|e| e.to_string())?;
     let mut req_builder = client.request(method, &target_url).headers(req_headers_map);
@@ -607,5 +666,36 @@ mod tests {
             Some("item_1".to_string())
         );
     }
-}
 
+    #[tokio::test]
+    async fn unreachable_pre_request_stops_the_main_request() {
+        let db_path = std::env::temp_dir().join(format!("collection-pre-request-{}.db", uuid::Uuid::new_v4()));
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            for m in crate::db::migrations::MIGRATIONS {
+                for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+                    let _ = conn.execute(statement, []);
+                }
+            }
+        }
+        let closed_port = {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.local_addr().unwrap().port()
+        };
+        let col = crate::collections::create_collection_db(&db_path, crate::repeater::REPEATER_WORKSPACE_ID.into(), None, "c".into()).unwrap();
+        let mut fetch = crate::collections::create_request_db(&db_path, col.id.clone(), "Get CSRF Token".into()).unwrap();
+        fetch.url = format!("http://127.0.0.1:{}/form", closed_port);
+        crate::collections::update_request_db(&db_path, fetch.clone()).unwrap();
+        let mut submit = crate::collections::create_request_db(&db_path, col.id, "Submit".into()).unwrap();
+        submit.pre_request_id = Some(fetch.id.clone());
+        crate::collections::update_request_db(&db_path, submit.clone()).unwrap();
+
+        let result = execute_collection_request_db(&db_path, &submit.id).await.unwrap();
+        let history = crate::collections::get_request_histories_db(&db_path, &submit.id).unwrap();
+        let _ = std::fs::remove_file(&db_path);
+
+        assert_eq!(result.status_code, 0);
+        assert!(result.response_body.starts_with("Pre-request \"Get CSRF Token\" failed:"), "{}", result.response_body);
+        assert_eq!(history.len(), 1);
+    }
+}

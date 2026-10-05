@@ -15,6 +15,7 @@ import {
   RepeaterHistoryItem,
 } from '../services/tauri/bridge';
 import { isTauriAvailable } from '../services/tauri/ipc';
+import { useRepeaterEnvStore } from './useRepeaterEnvStore';
 import { parseUrlQueryParams } from '../utils/urlParams';
 import { findHeader, toStructuredBody } from '../utils/bodyFormat';
 
@@ -380,6 +381,7 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
           isExecuting: { ...state.isExecuting, [targetId]: false },
         }));
         await get().fetchHistory(targetId);
+        await useRepeaterEnvStore.getState().loadEnvironments();
         // Refresh tabs to update last status code & latency stats
         const refreshedTabs = await getRepeaterTabs();
         set({ tabs: refreshedTabs, requests: refreshedTabs });

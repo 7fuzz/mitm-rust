@@ -67,6 +67,7 @@ export interface RequestItem {
   bodyFormData?: string;
   bodyUrlencoded?: string;
   extractRules: ExtractRuleItem[];
+  preRequestId?: string | null;
   description?: string;
   orderIndex: number;
   createdAtMs: number;

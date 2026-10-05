@@ -4,10 +4,12 @@ import { useSettingsStore } from '../../../stores/useSettingsStore';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
 import { ExtractRulesEditor } from '../../common/ExtractRulesEditor';
+import { PreRequestPicker } from '../../common/PreRequestPicker';
 import { MarkdownViewer } from '../../common/MarkdownViewer';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { PaneHeader } from '../../common/PaneHeader';
-import type { RequestItem, HeaderItem, ParamItem, ExtractRuleItem, RequestPreview } from '../../../services/tauri/bridge';
+import type { RequestItem, HeaderItem, ParamItem, ExtractRuleItem, RequestPreview, CollectionTreeItem } from '../../../services/tauri/bridge';
+import type { SelectOption } from '../../common/ui';
 import { previewCollectionRequest } from '../../../services/tauri/bridge';
 import { CollectionAddressBar } from './tab/CollectionAddressBar';
 import { CollectionBodyEditor } from './tab/CollectionBodyEditor';
@@ -20,14 +22,25 @@ const normalizeBodyType = (type?: string): string => {
   return type;
 };
 
+const requestOptions = (tree: CollectionTreeItem[], excludeId: string, prefix = ''): SelectOption[] =>
+  tree.flatMap((col) => {
+    const path = `${prefix}${col.name} / `;
+    return [
+      ...col.requests
+        .filter((r) => r.id !== excludeId)
+        .map((r) => ({ value: r.id, label: `${path}${r.name} (${r.method})` })),
+      ...requestOptions(col.children, excludeId, path),
+    ];
+  });
+
 interface CollectionRequestTabProps {
   request: RequestItem;
 }
 
 export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ request }) => {
-  const { updateRequestDetails, executeRequest, isExecuting, isHistoryDrawerOpen, toggleHistoryDrawer } = useCollectionStore();
+  const { updateRequestDetails, executeRequest, isExecuting, isHistoryDrawerOpen, toggleHistoryDrawer, collectionsTree } = useCollectionStore();
 
-  const [activeTab, setActiveTab] = useState<'docs' | 'params' | 'headers' | 'body' | 'extract_rules' | 'interpolation'>('params');
+  const [activeTab, setActiveTab] = useState<'docs' | 'params' | 'headers' | 'body' | 'extract_rules' | 'pre_request' | 'interpolation'>('params');
   const [docsMode, setDocsMode] = useState<'preview' | 'edit' | 'split'>('preview');
 
   // Local state for instant editing
@@ -77,6 +90,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       bodyFormData: overrides?.bodyFormData ?? bodyFormData,
       bodyUrlencoded: overrides?.bodyUrlencoded ?? bodyUrlencoded,
       description: overrides?.description ?? description,
+      preRequestId: overrides?.preRequestId !== undefined ? overrides.preRequestId : request.preRequestId,
       updatedAtMs: Date.now(),
     });
   };
@@ -159,6 +173,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
           { value: 'headers', label: 'Headers', count: headers.length },
           { value: 'body', label: 'Body' },
           { value: 'extract_rules', label: 'Extract Rules', count: extractRules.length },
+          { value: 'pre_request', label: request.preRequestId ? 'Pre-request •' : 'Pre-request' },
           { value: 'interpolation', label: 'Interpolation' },
         ]}
         activeTab={activeTab}
@@ -277,6 +292,14 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
               setExtractRules(newRules);
               handleUpdateStore({ extractRules: newRules });
             }}
+          />
+        )}
+
+        {activeTab === 'pre_request' && (
+          <PreRequestPicker
+            value={request.preRequestId}
+            options={requestOptions(collectionsTree, request.id)}
+            onChange={(preRequestId) => handleUpdateStore({ preRequestId })}
           />
         )}
 

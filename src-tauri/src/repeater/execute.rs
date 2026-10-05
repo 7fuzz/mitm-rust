@@ -1,6 +1,8 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use reqwest::header::{HeaderName, HeaderValue};
+use reqwest::cookie::Jar;
 use reqwest::Method;
 use uuid::Uuid;
 use base64::Engine;
@@ -8,7 +10,9 @@ use base64::Engine;
 use super::{HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab};
 use crate::repeater::{get_repeater_tab_by_id, insert_repeater_history_db, REPEATER_WORKSPACE_ID};
 use crate::workspace::{get_workspace_environments_db, interpolate_dynamic_variables, interpolate_variables_with_env};
+use crate::collections::execute::perform_auto_extraction_db;
 use crate::encoding::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
+use crate::pre_request::{jar_cookie, pre_request_chain, pre_request_failure};
 
 pub async fn execute_tab_request(
     db_path: &PathBuf,
@@ -59,18 +63,26 @@ pub struct SentRequest {
     pub duration_ms: u64,
 }
 
-/// Builds and sends a request from a tab and returns what was sent plus the response.
-/// Does not touch the database; callers decide whether to log it.
-pub async fn send_tab_request(tab: &RepeaterTab) -> Result<SentRequest, String> {
-    let client = reqwest::Client::builder()
+fn http_client(jar: Option<Arc<Jar>>) -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .gzip(true)
         .brotli(true)
         .deflate(true)
-        .zstd(true)
-        .build()
-        .map_err(|e| e.to_string())?;
+        .zstd(true);
+    if let Some(jar) = jar {
+        builder = builder.cookie_provider(jar);
+    }
+    builder.build().map_err(|e| e.to_string())
+}
 
+/// Builds and sends a request from a tab and returns what was sent plus the response.
+/// Does not touch the database; callers decide whether to log it.
+pub async fn send_tab_request(tab: &RepeaterTab) -> Result<SentRequest, String> {
+    send_tab_request_with(&http_client(None)?, tab).await
+}
+
+async fn send_tab_request_with(client: &reqwest::Client, tab: &RepeaterTab) -> Result<SentRequest, String> {
     // Parse method (fallback to GET if invalid)
     let method = Method::from_bytes(tab.method.as_bytes())
         .unwrap_or(Method::GET);
@@ -82,14 +94,7 @@ pub async fn send_tab_request(tab: &RepeaterTab) -> Result<SentRequest, String> 
         .filter(|p| p.enabled && !p.key.trim().is_empty())
         .collect();
 
-    // Auto-prefix http:// if URL missing scheme
-    let raw_url = tab.url.trim();
-    let url_with_scheme = if !raw_url.starts_with("http://") && !raw_url.starts_with("https://") {
-        format!("http://{}", raw_url)
-    } else {
-        raw_url.to_string()
-    };
-
+    let url_with_scheme = with_scheme(&tab.url);
     let mut parsed_url = reqwest::Url::parse(&url_with_scheme)
         .map_err(|e| format!("Invalid URL '{}': {}", tab.url, e))?;
 
@@ -268,6 +273,15 @@ pub async fn send_tab_request(tab: &RepeaterTab) -> Result<SentRequest, String> 
     }
 }
 
+fn with_scheme(url: &str) -> String {
+    let url = url.trim();
+    if url.starts_with("http://") || url.starts_with("https://") {
+        url.to_string()
+    } else {
+        format!("http://{}", url)
+    }
+}
+
 /// Fills `{{vars}}` from the Repeater workspace's active environment.
 fn interpolate_tab(db_path: &PathBuf, tab: &RepeaterTab) -> RepeaterTab {
     let env = get_workspace_environments_db(db_path, REPEATER_WORKSPACE_ID)
@@ -297,7 +311,62 @@ pub async fn execute_repeater_tab(
     db_path: &PathBuf,
     tab: &RepeaterTab,
 ) -> Result<RepeaterExecutionResult, String> {
-    let sent = send_tab_request(&interpolate_tab(db_path, tab)).await?;
+    let jar = Arc::new(Jar::default());
+    let client = http_client(Some(jar.clone()))?;
+
+    for pre_id in pre_request_chain(db_path, &tab.id)? {
+        let pre_tab = get_repeater_tab_by_id(db_path, &pre_id)?;
+        let error = match run_repeater_tab(db_path, &pre_tab, &client, &jar).await {
+            Ok(run) if run.status_code != 0 => continue,
+            Ok(run) => run.response_body,
+            Err(e) => e,
+        };
+        let message = pre_request_failure(db_path, &pre_id, &error);
+        return Ok(record_run(db_path, tab, unsent_request(&tab.url, message)));
+    }
+    run_repeater_tab(db_path, tab, &client, &jar).await
+}
+
+fn unsent_request(url: &str, error: String) -> SentRequest {
+    SentRequest {
+        final_url: url.to_string(),
+        request_headers: vec![],
+        request_body: None,
+        status_code: 0,
+        status_text: "ERR_FAILED".to_string(),
+        response_headers: vec![],
+        response_size: error.len() as u64,
+        response_body: error,
+        duration_ms: 0,
+    }
+}
+
+async fn run_repeater_tab(
+    db_path: &PathBuf,
+    tab: &RepeaterTab,
+    client: &reqwest::Client,
+    jar: &Jar,
+) -> Result<RepeaterExecutionResult, String> {
+    let mut filled = interpolate_tab(db_path, tab);
+    let has_cookie = filled.headers.iter().any(|h| h.enabled && h.key.trim().eq_ignore_ascii_case("cookie"));
+    if !has_cookie {
+        if let Some(cookie) = jar_cookie(jar, &with_scheme(&filled.url)) {
+            filled.headers.push(HeaderItem {
+                id: Uuid::new_v4().to_string(),
+                key: "Cookie".to_string(),
+                value: cookie,
+                enabled: true,
+            });
+        }
+    }
+
+    let sent = send_tab_request_with(client, &filled).await?;
+    let extract_rules_json = serde_json::to_string(&tab.extract_rules).unwrap_or_default();
+    perform_auto_extraction_db(db_path, REPEATER_WORKSPACE_ID, &extract_rules_json, &sent.response_body, &sent.response_headers);
+    Ok(record_run(db_path, tab, sent))
+}
+
+fn record_run(db_path: &PathBuf, tab: &RepeaterTab, sent: SentRequest) -> RepeaterExecutionResult {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
@@ -318,7 +387,7 @@ pub async fn execute_repeater_tab(
     };
     let history_id = insert_repeater_history_db(db_path, &history_entry).unwrap_or(0);
 
-    Ok(RepeaterExecutionResult {
+    RepeaterExecutionResult {
         history_id,
         repeater_id: tab.id.clone(),
         status_code: sent.status_code,
@@ -327,5 +396,137 @@ pub async fn execute_repeater_tab(
         response_body: sent.response_body,
         duration_ms: sent.duration_ms,
         response_size: sent.response_size,
-    })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::repeater::{create_repeater_tab_db, ExtractRuleItem};
+    use crate::workspace::{save_workspace_environment_db, Environment};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    /// `/form` hands out a session cookie and a CSRF token; any other path echoes the request head.
+    async fn serve_csrf_site() -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let (mut sock, _) = listener.accept().await.unwrap();
+                let mut buf = vec![0u8; 8192];
+                let n = sock.read(&mut buf).await.unwrap();
+                let head = String::from_utf8_lossy(&buf[..n]).to_string();
+                let response = if head.starts_with("GET /form") {
+                    let body = r#"<input name="csrf" value="tok123">"#;
+                    format!("HTTP/1.1 200 OK\r\nSet-Cookie: sid=abc; Path=/\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body)
+                } else {
+                    format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", head.len(), head)
+                };
+                sock.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        format!("http://{}", addr)
+    }
+
+    fn tab(id: &str, url: String) -> RepeaterTab {
+        RepeaterTab {
+            id: id.into(),
+            method: "GET".into(),
+            url,
+            headers: vec![],
+            params: vec![],
+            body_type: "none".into(),
+            body_content: None,
+            extract_rules: vec![],
+            pre_request_id: None,
+            order_index: 0,
+            created_at_ms: 0,
+            updated_at_ms: 0,
+            execution_count: 0,
+            last_status_code: None,
+            last_duration_ms: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn pre_request_supplies_token_and_session_cookie() {
+        let db_path = std::env::temp_dir().join(format!("pre-request-e2e-{}.db", Uuid::new_v4()));
+        {
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            for m in crate::db::migrations::MIGRATIONS {
+                for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+                    let _ = conn.execute(statement, []);
+                }
+            }
+        }
+        save_workspace_environment_db(&db_path, Environment {
+            id: "env".into(),
+            workspace_id: REPEATER_WORKSPACE_ID.into(),
+            name: "Default".into(),
+            is_active: true,
+            variables: vec![],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        })
+        .unwrap();
+
+        let base = serve_csrf_site().await;
+        let mut fetch = tab("fetch", format!("{}/form", base));
+        fetch.extract_rules = vec![ExtractRuleItem {
+            id: "r".into(),
+            r#type: "between_string".into(),
+            expression: r#"value="||""#.into(),
+            target_variable: "csrf_token".into(),
+            enabled: true,
+        }];
+        let mut submit = tab("submit", format!("{}/submit", base));
+        submit.headers = vec![HeaderItem {
+            id: "h".into(),
+            key: "X-CSRF-Token".into(),
+            value: "{{csrf_token}}".into(),
+            enabled: true,
+        }];
+        submit.pre_request_id = Some("fetch".into());
+        create_repeater_tab_db(&db_path, &fetch).unwrap();
+        create_repeater_tab_db(&db_path, &submit).unwrap();
+
+        let result = execute_repeater_tab(&db_path, &submit).await.unwrap();
+        let _ = std::fs::remove_file(&db_path);
+
+        let echoed = result.response_body.to_lowercase();
+        assert!(echoed.contains("x-csrf-token: tok123"), "{}", echoed);
+        assert!(echoed.contains("cookie: sid=abc"), "{}", echoed);
+    }
+
+    #[tokio::test]
+    async fn unreachable_pre_request_stops_the_main_request() {
+        let db_path = std::env::temp_dir().join(format!("pre-request-fail-{}.db", Uuid::new_v4()));
+        {
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            for m in crate::db::migrations::MIGRATIONS {
+                for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+                    let _ = conn.execute(statement, []);
+                }
+            }
+        }
+        let base = serve_csrf_site().await;
+        let closed_port = {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.local_addr().unwrap().port()
+        };
+        let fetch = tab("fetch", format!("http://127.0.0.1:{}/form", closed_port));
+        let mut submit = tab("submit", format!("{}/submit", base));
+        submit.pre_request_id = Some("fetch".into());
+        create_repeater_tab_db(&db_path, &fetch).unwrap();
+        create_repeater_tab_db(&db_path, &submit).unwrap();
+
+        let result = execute_repeater_tab(&db_path, &submit).await.unwrap();
+        let history = crate::repeater::get_repeater_history_db(&db_path, "submit", 1, 10).unwrap();
+        let _ = std::fs::remove_file(&db_path);
+
+        assert_eq!(result.status_code, 0);
+        assert!(result.response_body.starts_with("Pre-request \"GET http://127.0.0.1:"), "{}", result.response_body);
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].status_code, 0);
+    }
 }

@@ -6,6 +6,7 @@ pub mod encoding;
 pub mod instance;
 pub mod proxy;
 pub mod fuzzer;
+pub mod pre_request;
 pub mod repeater;
 pub mod state;
 pub mod webhook;

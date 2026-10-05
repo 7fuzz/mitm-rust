@@ -180,8 +180,15 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   },
 
   updateRequestDetails: async (request) => {
+    const patchTree = (nodes: CollectionTreeItem[]): CollectionTreeItem[] =>
+      nodes.map((col) => ({
+        ...col,
+        requests: col.requests.map((r) => (r.id === request.id ? request : r)),
+        children: patchTree(col.children),
+      }));
     set((state) => ({
       openRequests: state.openRequests.map((r) => (r.id === request.id ? request : r)),
+      collectionsTree: patchTree(state.collectionsTree),
     }));
     if (isTauriAvailable()) {
       try {

@@ -136,6 +136,34 @@ struct PostmanCollection {
     variable: Option<Vec<PostmanVariable>>,
 }
 
+/// Imported requests, kept so `pre_request` names can be resolved once every request has an id.
+#[derive(Default)]
+struct ImportedRequests {
+    /// (request id, collection id, name)
+    all: Vec<(String, String, String)>,
+    /// (request id, collection id, pre-request name)
+    pre_requests: Vec<(String, String, String)>,
+}
+
+impl ImportedRequests {
+    /// Links each `pre_request` name to an imported request, preferring one in the same folder.
+    fn link(&self, conn: &Connection) -> Result<(), String> {
+        for (req_id, col_id, pre_name) in &self.pre_requests {
+            let candidates = || self.all.iter().filter(|(id, _, name)| id != req_id && name == pre_name);
+            let target = candidates()
+                .find(|(_, c, _)| c == col_id)
+                .or_else(|| candidates().next());
+            if let Some((target_id, _, _)) = target {
+                conn.execute(
+                    "UPDATE requests SET pre_request_id = ? WHERE id = ?",
+                    params![target_id, req_id],
+                ).map_err(|e| e.to_string())?;
+            }
+        }
+        Ok(())
+    }
+}
+
 fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -330,6 +358,7 @@ pub fn import_workspace_json_db(
     // Check for native project test_cases
     if let Some(test_cases) = parsed.get("test_cases").and_then(|t| t.as_array()) {
         let root_base_url = parsed.get("url").and_then(|u| u.as_str());
+        let mut imported = ImportedRequests::default();
         for (idx, tc) in test_cases.iter().enumerate() {
             process_custom_folder(
                 &conn,
@@ -341,8 +370,10 @@ pub fn import_workspace_json_db(
                 &mut col_count,
                 &mut req_count,
                 root_base_url,
+                &mut imported,
             )?;
         }
+        imported.link(&conn)?;
     } else if let Ok(collection) = serde_json::from_str::<PostmanCollection>(json_content) {
         // Fallback Postman v2.1 collection format
         if let Some(items) = collection.item {
@@ -484,6 +515,7 @@ fn process_custom_folder(
     col_count: &mut usize,
     req_count: &mut usize,
     parent_base_url: Option<&str>,
+    imported: &mut ImportedRequests,
 ) -> Result<(), String> {
     let name = folder_val.get("name").and_then(|n| n.as_str()).unwrap_or("Untitled Group");
     let desc = folder_val.get("description").and_then(|d| d.as_str()).map(|s| s.to_string());
@@ -504,7 +536,7 @@ fn process_custom_folder(
     // Process target array (requests) inside folder
     if let Some(targets) = folder_val.get("target").and_then(|t| t.as_array()) {
         for (idx, target) in targets.iter().enumerate() {
-            process_custom_target(conn, &col_id, target, idx as i32, ts, req_count, folder_base_url)?;
+            process_custom_target(conn, &col_id, target, idx as i32, ts, req_count, folder_base_url, imported)?;
         }
     }
 
@@ -521,6 +553,7 @@ fn process_custom_folder(
                 col_count,
                 req_count,
                 folder_base_url,
+                imported,
             )?;
         }
     }
@@ -536,6 +569,7 @@ fn process_custom_target(
     ts: i64,
     req_count: &mut usize,
     base_url: Option<&str>,
+    imported: &mut ImportedRequests,
 ) -> Result<(), String> {
     let req_id = Uuid::new_v4().to_string();
     let name = target_val.get("name").and_then(|n| n.as_str()).unwrap_or("Untitled Request");
@@ -712,6 +746,11 @@ fn process_custom_target(
             ts
         ],
     ).map_err(|e| e.to_string())?;
+
+    imported.all.push((req_id.clone(), col_id.to_string(), name.to_string()));
+    if let Some(pre_name) = target_val.get("pre_request").and_then(|p| p.as_str()).filter(|p| !p.trim().is_empty()) {
+        imported.pre_requests.push((req_id, col_id.to_string(), pre_name.to_string()));
+    }
 
     *req_count += 1;
     Ok(())

@@ -37,6 +37,8 @@ pub struct RequestItem {
     pub body_form_data: Option<String>,
     pub body_urlencoded: Option<String>,
     pub extract_rules: Vec<ExtractRuleItem>,
+    #[serde(default)]
+    pub pre_request_id: Option<String>,
     pub description: Option<String>,
     pub order_index: i32,
     pub created_at_ms: i64,
@@ -121,7 +123,7 @@ pub fn get_collections_db(
     // Load all requests for these collections
     let mut req_stmt = conn
         .prepare(
-            "SELECT r.id, r.collection_id, r.name, r.method, r.url, r.headers_json, r.params_json, r.body_type, r.body_json, r.body_raw, r.body_form_data, r.body_urlencoded, r.extract_rules_json, r.description, r.order_index, r.created_at_ms, r.updated_at_ms 
+            "SELECT r.id, r.collection_id, r.name, r.method, r.url, r.headers_json, r.params_json, r.body_type, r.body_json, r.body_raw, r.body_form_data, r.body_urlencoded, r.extract_rules_json, r.description, r.order_index, r.created_at_ms, r.updated_at_ms, r.pre_request_id
              FROM requests r
              JOIN collections c ON r.collection_id = c.id
              WHERE c.workspace_id = ?
@@ -153,6 +155,7 @@ pub fn get_collections_db(
                 body_form_data: row.get(10)?,
                 body_urlencoded: row.get(11)?,
                 extract_rules,
+                pre_request_id: row.get(17)?,
                 description: row.get(13)?,
                 order_index: row.get(14)?,
                 created_at_ms: row.get(15)?,
@@ -275,6 +278,7 @@ pub fn create_request_db(
         body_form_data: None,
         body_urlencoded: None,
         extract_rules: vec![],
+        pre_request_id: None,
         description: None,
         order_index: 0,
         created_at_ms: ts,
@@ -291,7 +295,7 @@ pub fn update_request_db(db_path: &PathBuf, req: RequestItem) -> Result<(), Stri
     let extract_rules_json = serde_json::to_string(&req.extract_rules).unwrap_or_else(|_| "[]".to_string());
 
     conn.execute(
-        "UPDATE requests SET name = ?, method = ?, url = ?, headers_json = ?, params_json = ?, body_type = ?, body_json = ?, body_raw = ?, body_form_data = ?, body_urlencoded = ?, extract_rules_json = ?, description = ?, order_index = ?, updated_at_ms = ? WHERE id = ?",
+        "UPDATE requests SET name = ?, method = ?, url = ?, headers_json = ?, params_json = ?, body_type = ?, body_json = ?, body_raw = ?, body_form_data = ?, body_urlencoded = ?, extract_rules_json = ?, pre_request_id = ?, description = ?, order_index = ?, updated_at_ms = ? WHERE id = ?",
         params![
             req.name,
             req.method,
@@ -304,6 +308,7 @@ pub fn update_request_db(db_path: &PathBuf, req: RequestItem) -> Result<(), Stri
             req.body_form_data,
             req.body_urlencoded,
             extract_rules_json,
+            req.pre_request_id,
             req.description,
             req.order_index,
             ts,
@@ -318,6 +323,8 @@ pub fn update_request_db(db_path: &PathBuf, req: RequestItem) -> Result<(), Stri
 pub fn delete_request_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM requests WHERE id = ?", params![id]).map_err(|e| e.to_string())?;
+    conn.execute("UPDATE requests SET pre_request_id = NULL WHERE pre_request_id = ?", params![id])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -409,7 +416,7 @@ pub fn duplicate_request_db(db_path: &PathBuf, request_id: &str) -> Result<Reque
     let ts = now_ms();
 
     let req: RequestItem = conn.query_row(
-        "SELECT id, collection_id, name, method, url, headers_json, params_json, body_type, body_json, body_raw, body_form_data, body_urlencoded, extract_rules_json, description, order_index
+        "SELECT id, collection_id, name, method, url, headers_json, params_json, body_type, body_json, body_raw, body_form_data, body_urlencoded, extract_rules_json, description, order_index, pre_request_id
          FROM requests WHERE id = ?",
         params![request_id],
         |row| {
@@ -435,6 +442,7 @@ pub fn duplicate_request_db(db_path: &PathBuf, request_id: &str) -> Result<Reque
                 body_form_data: row.get(10)?,
                 body_urlencoded: row.get(11)?,
                 extract_rules,
+                pre_request_id: row.get(15)?,
                 description: row.get(13)?,
                 order_index: row.get::<_, i32>(14)? + 1,
                 created_at_ms: ts,
@@ -448,8 +456,8 @@ pub fn duplicate_request_db(db_path: &PathBuf, request_id: &str) -> Result<Reque
     let extract_rules_json = serde_json::to_string(&req.extract_rules).unwrap_or_else(|_| "[]".to_string());
 
     conn.execute(
-        "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, body_json, body_raw, body_form_data, body_urlencoded, extract_rules_json, description, order_index, created_at_ms, updated_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, body_json, body_raw, body_form_data, body_urlencoded, extract_rules_json, description, order_index, created_at_ms, updated_at_ms, pre_request_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
             req.id,
             req.collection_id,
@@ -467,7 +475,8 @@ pub fn duplicate_request_db(db_path: &PathBuf, request_id: &str) -> Result<Reque
             req.description,
             req.order_index,
             ts,
-            ts
+            ts,
+            req.pre_request_id
         ],
     ).map_err(|e| e.to_string())?;
 

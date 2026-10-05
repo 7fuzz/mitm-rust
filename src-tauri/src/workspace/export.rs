@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use rusqlite::{params, Connection};
 use serde_json::json;
@@ -22,7 +23,17 @@ pub fn format_endpoint(url: &str) -> String {
     }
 }
 
-fn serialize_request_item(req: &RequestItem) -> serde_json::Value {
+/// Request names by id, so a pre-request link can be exported as the name the importer resolves.
+fn request_names(nodes: &[CollectionTreeItem], names: &mut HashMap<String, String>) {
+    for node in nodes {
+        for req in &node.requests {
+            names.insert(req.id.clone(), req.name.clone());
+        }
+        request_names(&node.children, names);
+    }
+}
+
+fn serialize_request_item(req: &RequestItem, names: &HashMap<String, String>) -> serde_json::Value {
     let mut obj = serde_json::Map::new();
     obj.insert("name".to_string(), json!(req.name));
     obj.insert("method".to_string(), json!(req.method.to_uppercase()));
@@ -114,10 +125,14 @@ fn serialize_request_item(req: &RequestItem) -> serde_json::Value {
         obj.insert("extract".to_string(), serde_json::Value::Array(extract_list));
     }
 
+    if let Some(pre_name) = req.pre_request_id.as_ref().and_then(|id| names.get(id)) {
+        obj.insert("pre_request".to_string(), json!(pre_name));
+    }
+
     serde_json::Value::Object(obj)
 }
 
-fn serialize_collection_node(node: &CollectionTreeItem) -> serde_json::Value {
+fn serialize_collection_node(node: &CollectionTreeItem, names: &HashMap<String, String>) -> serde_json::Value {
     let mut obj = serde_json::Map::new();
     obj.insert("name".to_string(), json!(node.name));
 
@@ -127,10 +142,10 @@ fn serialize_collection_node(node: &CollectionTreeItem) -> serde_json::Value {
         }
     }
 
-    let targets: Vec<serde_json::Value> = node.requests.iter().map(serialize_request_item).collect();
+    let targets: Vec<serde_json::Value> = node.requests.iter().map(|r| serialize_request_item(r, names)).collect();
     obj.insert("target".to_string(), serde_json::Value::Array(targets));
 
-    let folders: Vec<serde_json::Value> = node.children.iter().map(serialize_collection_node).collect();
+    let folders: Vec<serde_json::Value> = node.children.iter().map(|c| serialize_collection_node(c, names)).collect();
     obj.insert("folders".to_string(), serde_json::Value::Array(folders));
 
     serde_json::Value::Object(obj)
@@ -196,9 +211,11 @@ pub fn export_workspace_json_db(db_path: &PathBuf, workspace_id: &str) -> Result
 
     // 3. Fetch Collections & Requests Tree
     let collections_tree = get_collections_db(db_path, workspace_id)?;
+    let mut names = HashMap::new();
+    request_names(&collections_tree, &mut names);
     let test_cases: Vec<serde_json::Value> = collections_tree
         .iter()
-        .map(serialize_collection_node)
+        .map(|c| serialize_collection_node(c, &names))
         .collect();
 
     // 4. Construct Root Project Document
@@ -268,7 +285,7 @@ mod tests {
             CREATE TABLE workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, active_environment_id TEXT, created_at_ms INTEGER, updated_at_ms INTEGER);
             CREATE TABLE environments (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, name TEXT NOT NULL, is_active INTEGER NOT NULL, variables_json TEXT NOT NULL DEFAULT '[]', created_at_ms INTEGER, updated_at_ms INTEGER);
             CREATE TABLE collections (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, parent_id TEXT, name TEXT NOT NULL, description TEXT, order_index INTEGER DEFAULT 0, created_at_ms INTEGER, updated_at_ms INTEGER);
-            CREATE TABLE requests (id TEXT PRIMARY KEY, collection_id TEXT NOT NULL, name TEXT NOT NULL, method TEXT NOT NULL, url TEXT NOT NULL, headers_json TEXT NOT NULL, params_json TEXT NOT NULL, body_type TEXT NOT NULL, body_json TEXT, body_raw TEXT, body_form_data TEXT, body_urlencoded TEXT, extract_rules_json TEXT NOT NULL, description TEXT, order_index INTEGER DEFAULT 0, created_at_ms INTEGER, updated_at_ms INTEGER);
+            CREATE TABLE requests (id TEXT PRIMARY KEY, collection_id TEXT NOT NULL, name TEXT NOT NULL, method TEXT NOT NULL, url TEXT NOT NULL, headers_json TEXT NOT NULL, params_json TEXT NOT NULL, body_type TEXT NOT NULL, body_json TEXT, body_raw TEXT, body_form_data TEXT, body_urlencoded TEXT, extract_rules_json TEXT NOT NULL, description TEXT, order_index INTEGER DEFAULT 0, created_at_ms INTEGER, updated_at_ms INTEGER, pre_request_id TEXT);
         ").unwrap();
 
         // 1. Insert Workspace
@@ -318,7 +335,7 @@ mod tests {
         ]).to_string();
 
         conn.execute(
-            "INSERT INTO requests VALUES ('req-1', 'col-1', 'Login', 'POST', '/auth/login', ?, ?, 'json', '{\"user\":\"admin\"}', '{\"user\":\"admin\"}', NULL, NULL, ?, 'Login request', 0, 1000, 1000)",
+            "INSERT INTO requests VALUES ('req-1', 'col-1', 'Login', 'POST', '/auth/login', ?, ?, 'json', '{\"user\":\"admin\"}', '{\"user\":\"admin\"}', NULL, NULL, ?, 'Login request', 0, 1000, 1000, NULL)",
             params![headers_json, params_json, extract_json],
         ).unwrap();
 
@@ -367,5 +384,38 @@ mod tests {
         assert_eq!(import_summary.requests_imported, 1);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn pre_request_links_survive_import_and_export() {
+        let db_path = std::env::temp_dir().join(format!("mitm_pre_request_{}.db", uuid::Uuid::new_v4()));
+        {
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            for m in crate::db::migrations::MIGRATIONS {
+                for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+                    let _ = conn.execute(statement, []);
+                }
+            }
+        }
+        let project = r#"{
+            "name": "CSRF",
+            "test_cases": [
+                { "name": "Other", "target": [ { "name": "Get CSRF Token", "endpoint": "https://a/other" } ] },
+                { "name": "Account", "target": [
+                    { "name": "Get CSRF Token", "endpoint": "https://a/form" },
+                    { "name": "Change Email", "method": "POST", "endpoint": "https://a/email", "pre_request": "Get CSRF Token" }
+                ] }
+            ]
+        }"#;
+
+        let summary = crate::workspace::import::import_workspace_json_db(&db_path, project, None, None).unwrap();
+        let tree = get_collections_db(&db_path, &summary.workspace_id).unwrap();
+        let account = tree.iter().find(|c| c.name == "Account").unwrap();
+        let exported: serde_json::Value =
+            serde_json::from_str(&export_workspace_json_db(&db_path, &summary.workspace_id).unwrap()).unwrap();
+        let _ = std::fs::remove_file(&db_path);
+
+        assert_eq!(account.requests[1].pre_request_id.as_deref(), Some(account.requests[0].id.as_str()));
+        assert_eq!(exported["test_cases"][1]["target"][1]["pre_request"], "Get CSRF Token");
     }
 }

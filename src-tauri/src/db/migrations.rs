@@ -99,6 +99,11 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         name: "20261004_0018_drop_legacy_proxy_address",
         sql: include_str!("../../migrations/20261004_0018_drop_legacy_proxy_address.sql"),
     },
+    MigrationSpec {
+        version: 19,
+        name: "20261005_0019_pre_request",
+        sql: include_str!("../../migrations/20261005_0019_pre_request.sql"),
+    },
 ];
 
 #[derive(Clone, Serialize, Debug)]

@@ -43,6 +43,8 @@ pub struct RepeaterTab {
     pub body_type: String,
     pub body_content: Option<String>,
     pub extract_rules: Vec<ExtractRuleItem>,
+    #[serde(default)]
+    pub pre_request_id: Option<String>,
     pub order_index: i32,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
@@ -102,7 +104,8 @@ const TAB_SELECT: &str = "
         r.extract_rules_json, r.order_index, r.created_at_ms, r.updated_at_ms,
         (SELECT COUNT(*) FROM request_histories WHERE request_id = r.id) as execution_count,
         (SELECT status_code FROM request_histories WHERE request_id = r.id ORDER BY executed_at_ms DESC, id DESC LIMIT 1) as last_status_code,
-        (SELECT duration_ms FROM request_histories WHERE request_id = r.id ORDER BY executed_at_ms DESC, id DESC LIMIT 1) as last_duration_ms
+        (SELECT duration_ms FROM request_histories WHERE request_id = r.id ORDER BY executed_at_ms DESC, id DESC LIMIT 1) as last_duration_ms,
+        r.pre_request_id
     FROM requests r
     JOIN collections c ON r.collection_id = c.id
 ";
@@ -130,6 +133,7 @@ fn row_to_tab(row: &rusqlite::Row) -> rusqlite::Result<RepeaterTab> {
         body_type,
         body_content,
         extract_rules: serde_json::from_str(&extract_rules_json).unwrap_or_default(),
+        pre_request_id: row.get(17)?,
         order_index: row.get(11)?,
         created_at_ms: row.get(12)?,
         updated_at_ms: row.get(13)?,
@@ -182,8 +186,8 @@ pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<()
     // (foreign keys are on by default in the bundled SQLite) and wipes the request's run history.
     // The tab's folder and position are left alone on update.
     let sql = format!(
-        "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, {col}, extract_rules_json, order_index, created_at_ms, updated_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, {col}, extract_rules_json, pre_request_id, order_index, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             method = excluded.method,
@@ -193,6 +197,7 @@ pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<()
             body_type = excluded.body_type,
             {col} = excluded.{col},
             extract_rules_json = excluded.extract_rules_json,
+            pre_request_id = excluded.pre_request_id,
             updated_at_ms = excluded.updated_at_ms",
         col = body_col
     );
@@ -209,6 +214,7 @@ pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<()
             tab.body_type,
             tab.body_content,
             extract_rules_json,
+            tab.pre_request_id,
             tab.order_index,
             tab.created_at_ms,
             tab.updated_at_ms,
@@ -228,6 +234,8 @@ pub fn delete_repeater_tab_db(db_path: &PathBuf, id: &str) -> Result<(), String>
     conn.execute("DELETE FROM request_histories WHERE request_id = ?", params![id])
         .map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM requests WHERE id = ?", params![id])
+        .map_err(|e| e.to_string())?;
+    conn.execute("UPDATE requests SET pre_request_id = NULL WHERE pre_request_id = ?", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -351,6 +359,7 @@ mod tests {
             body_type: "json".into(),
             body_content: Some("{}".into()),
             extract_rules: vec![],
+            pre_request_id: None,
             order_index,
             created_at_ms,
             updated_at_ms: created_at_ms,
@@ -419,6 +428,7 @@ mod tests {
             body_type: "none".into(),
             body_content: None,
             extract_rules: vec![],
+            pre_request_id: None,
             order_index: 0,
             created_at_ms: 1,
             updated_at_ms: 1,

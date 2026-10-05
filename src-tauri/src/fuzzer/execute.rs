@@ -61,6 +61,7 @@ fn template_to_tab(idx: u32, t: &super::FuzzTemplate) -> RepeaterTab {
         body_type: t.body_type.clone(),
         body_content: t.body.clone(),
         extract_rules: Vec::new(),
+        pre_request_id: None,
         order_index: 0,
         created_at_ms: 0,
         updated_at_ms: 0,

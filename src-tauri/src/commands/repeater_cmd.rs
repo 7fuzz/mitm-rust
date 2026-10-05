@@ -94,6 +94,7 @@ pub async fn create_repeater_tab(
         body_type: "none".to_string(),
         body_content: None,
         extract_rules: vec![],
+        pre_request_id: None,
         order_index: top_order_index_db(&state.db_path)?,
         created_at_ms: now_ms,
         updated_at_ms: now_ms,
