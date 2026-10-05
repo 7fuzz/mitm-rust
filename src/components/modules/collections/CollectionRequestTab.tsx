@@ -4,7 +4,7 @@ import { useSettingsStore } from '../../../stores/useSettingsStore';
 import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
 import { ExtractRulesEditor } from '../../common/ExtractRulesEditor';
-import { PreRequestPicker } from '../../common/PreRequestPicker';
+import { RequestStepsEditor } from '../../common/RequestStepsEditor';
 import { MarkdownViewer } from '../../common/MarkdownViewer';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { PaneHeader } from '../../common/PaneHeader';
@@ -40,7 +40,7 @@ interface CollectionRequestTabProps {
 export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ request }) => {
   const { updateRequestDetails, executeRequest, isExecuting, isHistoryDrawerOpen, toggleHistoryDrawer, collectionsTree } = useCollectionStore();
 
-  const [activeTab, setActiveTab] = useState<'docs' | 'params' | 'headers' | 'body' | 'extract_rules' | 'pre_request' | 'interpolation'>('params');
+  const [activeTab, setActiveTab] = useState<'docs' | 'params' | 'headers' | 'body' | 'extract_rules' | 'steps' | 'interpolation'>('params');
   const [docsMode, setDocsMode] = useState<'preview' | 'edit' | 'split'>('preview');
 
   // Local state for instant editing
@@ -90,7 +90,8 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
       bodyFormData: overrides?.bodyFormData ?? bodyFormData,
       bodyUrlencoded: overrides?.bodyUrlencoded ?? bodyUrlencoded,
       description: overrides?.description ?? description,
-      preRequestId: overrides?.preRequestId !== undefined ? overrides.preRequestId : request.preRequestId,
+      preRequests: overrides?.preRequests ?? request.preRequests,
+      postRequests: overrides?.postRequests ?? request.postRequests,
       updatedAtMs: Date.now(),
     });
   };
@@ -173,7 +174,7 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
           { value: 'headers', label: 'Headers', count: headers.length },
           { value: 'body', label: 'Body' },
           { value: 'extract_rules', label: 'Extract Rules', count: extractRules.length },
-          { value: 'pre_request', label: request.preRequestId ? 'Pre-request •' : 'Pre-request' },
+          { value: 'steps', label: 'Pre/Post', count: (request.preRequests?.length ?? 0) + (request.postRequests?.length ?? 0) },
           { value: 'interpolation', label: 'Interpolation' },
         ]}
         activeTab={activeTab}
@@ -295,11 +296,12 @@ export const CollectionRequestTab: React.FC<CollectionRequestTabProps> = ({ requ
           />
         )}
 
-        {activeTab === 'pre_request' && (
-          <PreRequestPicker
-            value={request.preRequestId}
+        {activeTab === 'steps' && (
+          <RequestStepsEditor
+            preRequests={request.preRequests ?? []}
+            postRequests={request.postRequests ?? []}
             options={requestOptions(collectionsTree, request.id)}
-            onChange={(preRequestId) => handleUpdateStore({ preRequestId })}
+            onChange={(steps) => handleUpdateStore(steps)}
           />
         )}
 

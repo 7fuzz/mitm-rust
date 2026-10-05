@@ -12,7 +12,7 @@ use crate::repeater::{get_repeater_tab_by_id, insert_repeater_history_db, REPEAT
 use crate::workspace::{get_workspace_environments_db, interpolate_dynamic_variables, interpolate_variables_with_env};
 use crate::collections::execute::perform_auto_extraction_db;
 use crate::encoding::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
-use crate::pre_request::{jar_cookie, pre_request_chain, pre_request_failure};
+use crate::request_steps::{jar_cookie, pre_request_failure, request_steps};
 
 pub async fn execute_tab_request(
     db_path: &PathBuf,
@@ -314,17 +314,30 @@ pub async fn execute_repeater_tab(
     let jar = Arc::new(Jar::default());
     let client = http_client(Some(jar.clone()))?;
 
-    for pre_id in pre_request_chain(db_path, &tab.id)? {
-        let pre_tab = get_repeater_tab_by_id(db_path, &pre_id)?;
+    let steps = request_steps(db_path, &tab.id)?;
+    for pre_id in &steps.pre {
+        let pre_tab = get_repeater_tab_by_id(db_path, pre_id)?;
         let error = match run_repeater_tab(db_path, &pre_tab, &client, &jar).await {
             Ok(run) if run.status_code != 0 => continue,
             Ok(run) => run.response_body,
             Err(e) => e,
         };
-        let message = pre_request_failure(db_path, &pre_id, &error);
+        let message = pre_request_failure(db_path, pre_id, &error);
         return Ok(record_run(db_path, tab, unsent_request(&tab.url, message)));
     }
-    run_repeater_tab(db_path, tab, &client, &jar).await
+
+    let result = run_repeater_tab(db_path, tab, &client, &jar).await?;
+    if result.status_code == 0 {
+        return Ok(result);
+    }
+
+    // The main response is what the user asked for; a failing post-request only shows in its own history
+    for post_id in &steps.post {
+        if let Ok(post_tab) = get_repeater_tab_by_id(db_path, post_id) {
+            let _ = run_repeater_tab(db_path, &post_tab, &client, &jar).await;
+        }
+    }
+    Ok(result)
 }
 
 fn unsent_request(url: &str, error: String) -> SentRequest {
@@ -438,7 +451,8 @@ mod tests {
             body_type: "none".into(),
             body_content: None,
             extract_rules: vec![],
-            pre_request_id: None,
+            pre_requests: vec![],
+            post_requests: vec![],
             order_index: 0,
             created_at_ms: 0,
             updated_at_ms: 0,
@@ -486,7 +500,7 @@ mod tests {
             value: "{{csrf_token}}".into(),
             enabled: true,
         }];
-        submit.pre_request_id = Some("fetch".into());
+        submit.pre_requests = vec!["fetch".into()];
         create_repeater_tab_db(&db_path, &fetch).unwrap();
         create_repeater_tab_db(&db_path, &submit).unwrap();
 
@@ -516,7 +530,7 @@ mod tests {
         };
         let fetch = tab("fetch", format!("http://127.0.0.1:{}/form", closed_port));
         let mut submit = tab("submit", format!("{}/submit", base));
-        submit.pre_request_id = Some("fetch".into());
+        submit.pre_requests = vec!["fetch".into()];
         create_repeater_tab_db(&db_path, &fetch).unwrap();
         create_repeater_tab_db(&db_path, &submit).unwrap();
 
@@ -528,5 +542,38 @@ mod tests {
         assert!(result.response_body.starts_with("Pre-request \"GET http://127.0.0.1:"), "{}", result.response_body);
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].status_code, 0);
+    }
+
+
+    #[tokio::test]
+    async fn post_requests_run_after_the_main_request_with_its_cookies() {
+        let db_path = std::env::temp_dir().join(format!("post-request-{}.db", Uuid::new_v4()));
+        {
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            for m in crate::db::migrations::MIGRATIONS {
+                for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+                    let _ = conn.execute(statement, []);
+                }
+            }
+        }
+        let base = serve_csrf_site().await;
+        let closed_port = {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.local_addr().unwrap().port()
+        };
+        let mut main = tab("main", format!("{}/form", base));
+        main.post_requests = vec!["unreachable".into(), "logout".into()];
+        create_repeater_tab_db(&db_path, &tab("unreachable", format!("http://127.0.0.1:{}/", closed_port))).unwrap();
+        create_repeater_tab_db(&db_path, &tab("logout", format!("{}/logout", base))).unwrap();
+        create_repeater_tab_db(&db_path, &main).unwrap();
+
+        let result = execute_repeater_tab(&db_path, &main).await.unwrap();
+        let logout_runs = crate::repeater::get_repeater_history_db(&db_path, "logout", 1, 10).unwrap();
+        let _ = std::fs::remove_file(&db_path);
+
+        assert_eq!(result.status_code, 200);
+        assert_eq!(logout_runs.len(), 1);
+        let echoed = logout_runs[0].response_body.clone().unwrap_or_default().to_lowercase();
+        assert!(echoed.starts_with("get /logout") && echoed.contains("cookie: sid=abc"), "{}", echoed);
     }
 }

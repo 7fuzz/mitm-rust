@@ -8,7 +8,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::encoding::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
-use crate::pre_request::{jar_cookie, pre_request_chain, pre_request_failure};
+use crate::request_steps::{jar_cookie, pre_request_failure, request_steps};
 use crate::repeater::HeaderItem;
 use crate::workspace::interpolate_variables;
 
@@ -59,12 +59,20 @@ pub async fn execute_collection_request_db(
         .build()
         .map_err(|e| e.to_string())?;
 
-    for pre_id in pre_request_chain(db_path, request_id)? {
-        if let Err(error) = send_collection_request(db_path, &pre_id, &client, &jar).await {
-            return record_unsent_run(db_path, request_id, pre_request_failure(db_path, &pre_id, &error));
+    let steps = request_steps(db_path, request_id)?;
+    for pre_id in &steps.pre {
+        if let Err(error) = send_collection_request(db_path, pre_id, &client, &jar).await {
+            return record_unsent_run(db_path, request_id, pre_request_failure(db_path, pre_id, &error));
         }
     }
-    send_collection_request(db_path, request_id, &client, &jar).await
+
+    let result = send_collection_request(db_path, request_id, &client, &jar).await?;
+
+    // The main response is what the user asked for; a failing post-request only shows in its own history
+    for post_id in &steps.post {
+        let _ = send_collection_request(db_path, post_id, &client, &jar).await;
+    }
+    Ok(result)
 }
 
 /// Logs a run that never reached the server, so the failure shows up like any other response.
@@ -687,7 +695,7 @@ mod tests {
         fetch.url = format!("http://127.0.0.1:{}/form", closed_port);
         crate::collections::update_request_db(&db_path, fetch.clone()).unwrap();
         let mut submit = crate::collections::create_request_db(&db_path, col.id, "Submit".into()).unwrap();
-        submit.pre_request_id = Some(fetch.id.clone());
+        submit.pre_requests = vec![fetch.id.clone()];
         crate::collections::update_request_db(&db_path, submit.clone()).unwrap();
 
         let result = execute_collection_request_db(&db_path, &submit.id).await.unwrap();

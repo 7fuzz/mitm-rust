@@ -1,6 +1,6 @@
 # Import Project from JSON Specification
 
-This document provides a technical specification and operational guide for the **Import Project from JSON** functionality in MITM Rust. The backend logic is implemented in `src-tauri/src/workspace/import.rs`, `src-tauri/src/workspace/mod.rs`, `src-tauri/src/collections/execute.rs`, and `src-tauri/src/pre_request.rs`.
+This document provides a technical specification and operational guide for the **Import Project from JSON** functionality in MITM Rust. The backend logic is implemented in `src-tauri/src/workspace/import.rs`, `src-tauri/src/workspace/mod.rs`, `src-tauri/src/collections/execute.rs`, and `src-tauri/src/request_steps.rs`.
 
 ---
 
@@ -16,7 +16,7 @@ flowchart TD
     D -->|Step 1: Insert Envs & Variables| E[(SQLite: environments)]
     D -->|Step 2: Insert Collection Folders| F[(SQLite: collections)]
     D -->|Step 3: Insert Requests & Extract Rules| G[(SQLite: requests)]
-    G -->|Step 4: Resolve pre_request names| G
+    G -->|Step 4: Resolve pre/post request names| I[(SQLite: request_steps)]
     D -->|Step 5: PRAGMA optimize| H[Return Import Summary JSON]
 ```
 
@@ -283,10 +283,10 @@ For multipart form requests, Base64 files use the `__form_data` array structure 
    - If request header key maps to `null`, the header is **deleted/removed**.
 6. **Request Insertion**:
    - Inserts into `repeater_requests(id, name, group_id, method, url, headers, body, extract, order_index)`.
-7. **Pre-Request Linking**:
-   - Runs after every request in the file has been inserted, so a `pre_request` may name a request that appears later in the file.
-   - Each `pre_request` name is matched against the names of requests from **this import only**. A request in the same folder wins, otherwise the first match in file order is used.
-   - The match is stored as `requests.pre_request_id`. Unknown names are ignored, and a request can't be its own pre-request.
+7. **Pre/Post-Request Linking**:
+   - Runs after every request in the file has been inserted, so `pre_requests` / `post_requests` may name requests that appear later in the file.
+   - Each name is matched against the names of requests from **this import only**. A request in the same folder wins, otherwise the first match in file order is used.
+   - Matches are stored in order in the `request_steps` table. Unknown names are ignored, and a request can't be its own step.
 
 ---
 
@@ -523,22 +523,31 @@ Supports 6 distinct extraction modes with JSONPath array index support and case-
 
 ---
 
-### Pre-Request: Fetch a CSRF / XSRF Token Before Sending (`pre_request`)
+### Pre- and Post-Requests: Fetch a CSRF / XSRF Token Before Sending (`pre_requests` / `post_requests`)
 
-Similar to session-handling macros in Burp Suite, a request can name another request to **run first** every time it is sent. This keeps one-time tokens such as CSRF/XSRF tokens fresh:
+Similar to session-handling macros in Burp Suite, a request can list other requests to run **before** and **after** it every time it is sent. This keeps one-time tokens such as CSRF/XSRF tokens fresh:
 
-1. The pre-request runs and its `extract` rules save the token into the active environment (e.g. `csrf_token`).
+1. The pre-requests run in order, and their `extract` rules save values into the active environment (e.g. `csrf_token`).
 2. The main request is then interpolated, so `{{csrf_token}}` resolves to the token that was just fetched.
+3. The post-requests run in order (e.g. a logout or cleanup call). Values extracted from the main response are already available to them.
 
 | Field | Type | Description | Example |
 | :--- | :--- | :--- | :--- |
-| `pre_request` | String | Name of another request in the same import to run first | `"Get CSRF Token"` |
+| `pre_requests` | Array of strings | Names of requests in the same import to run first, in order | `["Login", "Get CSRF Token"]` |
+| `post_requests` | Array of strings | Names of requests in the same import to run afterwards, in order | `["Logout"]` |
 
 ```json
 {
   "name": "Account",
   "url": "https://{{host}}",
   "target": [
+    {
+      "name": "Login",
+      "method": "POST",
+      "endpoint": "/login",
+      "body_mode": "urlencoded",
+      "body_urlencoded": "username={{username}}&password={{password}}"
+    },
     {
       "name": "Get CSRF Token",
       "method": "GET",
@@ -552,10 +561,16 @@ Similar to session-handling macros in Burp Suite, a request can name another req
       ]
     },
     {
+      "name": "Logout",
+      "method": "POST",
+      "endpoint": "/logout"
+    },
+    {
       "name": "Change Email",
       "method": "POST",
       "endpoint": "/account/email",
-      "pre_request": "Get CSRF Token",
+      "pre_requests": ["Login", "Get CSRF Token"],
+      "post_requests": ["Logout"],
       "header": {
         "X-CSRF-Token": "{{csrf_token}}",
         "Content-Type": "application/x-www-form-urlencoded"
@@ -568,14 +583,17 @@ Similar to session-handling macros in Burp Suite, a request can name another req
 ```
 
 #### Execution Behavior
-- **Shared cookies**: the pre-request and the main request share one cookie jar for that send, so a session cookie set alongside the token (e.g. `Set-Cookie: sid=...`) is sent back with the main request. If the main request has its own enabled `Cookie` header, that header is used instead.
-- **Chains**: a pre-request can have its own `pre_request` (e.g. *Login* → *Get CSRF Token* → *Change Email*). The chain runs from the far end first, and cycles or missing links are skipped.
-- **History**: each pre-request run is recorded in that request's own run history. Cookies taken from the jar appear in the logged request headers.
-- **Failures**: if a pre-request can't reach the server (network error, invalid URL), the main request is not sent. Instead its response, and a status `0` entry in its run history, read `Pre-request "<name>" failed: <error>`. A pre-request that gets any HTTP response, including 4xx/5xx, or whose extract rule finds nothing, does not stop the main request.
-- **Export**: exported projects write the link back as `"pre_request": "<request name>"`. Give requests unique names if you plan to round-trip them.
+- **Flat lists**: only the main request's own lists run. Pre/post-requests configured on a step are ignored while it runs as a step, so add every request the flow needs to the main request's lists.
+- **Shared cookies**: every step and the main request share one cookie jar for that send, so a session cookie set by *Login* or alongside the token (e.g. `Set-Cookie: sid=...`) is sent back on the following requests. A request with its own enabled `Cookie` header uses that header instead.
+- **History**: each step's run is recorded in that step's own run history. Cookies taken from the jar appear in the logged request headers.
+- **Pre-request failures**: if a pre-request can't reach the server (network error, invalid URL), the main request and the post-requests are not sent. Instead, the main request's response and a status `0` entry in its run history read `Pre-request "<name>" failed: <error>`. A pre-request that gets any HTTP response, including 4xx/5xx, or whose extract rule finds nothing, does not stop the send.
+- **Post-request failures**: the main response is always what is shown. A failing post-request only appears in its own run history, and the remaining post-requests still run. Post-requests are skipped if the main request itself didn't reach the server.
+- **Deleting requests**: steps are stored in the `request_steps` table with cascading foreign keys, so deleting a request (or the folder holding it) removes it from every list it was in.
+- **Duplicating**: a duplicated request keeps its steps. When a whole folder is duplicated, steps that point at requests inside that folder point at the copies.
+- **Export**: exported projects write the lists back as request names. Give requests unique names if you plan to round-trip them.
 
 > [!NOTE]
-> Requests imported via the Postman v2.1 fallback format do not support `pre_request`; set it in the request's **Pre-request** tab after importing.
+> Requests imported via the Postman v2.1 fallback format do not support `pre_requests` / `post_requests`; set them in the request's **Pre/Post** tab after importing.
 
 ---
 
@@ -605,7 +623,8 @@ Starting with Database Migration Version 8, request bodies are stored in a dedic
 | `body_urlencoded` | String | Dedicated URL-encoded body string | `"grant_type=client_credentials&client_id={{client_id}}"` |
 | `body_multipart` | String | Dedicated Multipart form data JSON structure with parameter toggles | `"{\"__form_data\": [{\"enabled\": true, \"k\": \"file\", \"v\": \"data:...\", \"type\": \"base64\"}]}"` |
 | `url_params` | String | JSON string of URL query parameter entries with enable/disable toggles | `"[{\"id\":\"123\",\"k\":\"page\",\"v\":\"1\",\"enabled\":true},{\"id\":\"456\",\"k\":\"filter\",\"v\":\"abc\",\"enabled\":false}]"` |
-| `pre_request` | String | Name of a request to run first (see [Pre-Request](#pre-request-fetch-a-csrf--xsrf-token-before-sending-pre_request)) | `"Get CSRF Token"` |
+| `pre_requests` | Array | Names of requests to run first (see [Pre- and Post-Requests](#pre--and-post-requests-fetch-a-csrf--xsrf-token-before-sending-pre_requests--post_requests)) | `["Login", "Get CSRF Token"]` |
+| `post_requests` | Array | Names of requests to run afterwards | `["Logout"]` |
 
 #### Parameter & JSON Key ON / OFF Toggles
 

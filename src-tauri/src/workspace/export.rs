@@ -125,8 +125,11 @@ fn serialize_request_item(req: &RequestItem, names: &HashMap<String, String>) ->
         obj.insert("extract".to_string(), serde_json::Value::Array(extract_list));
     }
 
-    if let Some(pre_name) = req.pre_request_id.as_ref().and_then(|id| names.get(id)) {
-        obj.insert("pre_request".to_string(), json!(pre_name));
+    for (key, ids) in [("pre_requests", &req.pre_requests), ("post_requests", &req.post_requests)] {
+        let step_names: Vec<&String> = ids.iter().filter_map(|id| names.get(id)).collect();
+        if !step_names.is_empty() {
+            obj.insert(key.to_string(), json!(step_names));
+        }
     }
 
     serde_json::Value::Object(obj)
@@ -285,8 +288,9 @@ mod tests {
             CREATE TABLE workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, active_environment_id TEXT, created_at_ms INTEGER, updated_at_ms INTEGER);
             CREATE TABLE environments (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, name TEXT NOT NULL, is_active INTEGER NOT NULL, variables_json TEXT NOT NULL DEFAULT '[]', created_at_ms INTEGER, updated_at_ms INTEGER);
             CREATE TABLE collections (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, parent_id TEXT, name TEXT NOT NULL, description TEXT, order_index INTEGER DEFAULT 0, created_at_ms INTEGER, updated_at_ms INTEGER);
-            CREATE TABLE requests (id TEXT PRIMARY KEY, collection_id TEXT NOT NULL, name TEXT NOT NULL, method TEXT NOT NULL, url TEXT NOT NULL, headers_json TEXT NOT NULL, params_json TEXT NOT NULL, body_type TEXT NOT NULL, body_json TEXT, body_raw TEXT, body_form_data TEXT, body_urlencoded TEXT, extract_rules_json TEXT NOT NULL, description TEXT, order_index INTEGER DEFAULT 0, created_at_ms INTEGER, updated_at_ms INTEGER, pre_request_id TEXT);
+            CREATE TABLE requests (id TEXT PRIMARY KEY, collection_id TEXT NOT NULL, name TEXT NOT NULL, method TEXT NOT NULL, url TEXT NOT NULL, headers_json TEXT NOT NULL, params_json TEXT NOT NULL, body_type TEXT NOT NULL, body_json TEXT, body_raw TEXT, body_form_data TEXT, body_urlencoded TEXT, extract_rules_json TEXT NOT NULL, description TEXT, order_index INTEGER DEFAULT 0, created_at_ms INTEGER, updated_at_ms INTEGER);
         ").unwrap();
+        conn.execute_batch(include_str!("../../migrations/20261005_0019_request_steps.sql")).unwrap();
 
         // 1. Insert Workspace
         conn.execute(
@@ -335,7 +339,7 @@ mod tests {
         ]).to_string();
 
         conn.execute(
-            "INSERT INTO requests VALUES ('req-1', 'col-1', 'Login', 'POST', '/auth/login', ?, ?, 'json', '{\"user\":\"admin\"}', '{\"user\":\"admin\"}', NULL, NULL, ?, 'Login request', 0, 1000, 1000, NULL)",
+            "INSERT INTO requests VALUES ('req-1', 'col-1', 'Login', 'POST', '/auth/login', ?, ?, 'json', '{\"user\":\"admin\"}', '{\"user\":\"admin\"}', NULL, NULL, ?, 'Login request', 0, 1000, 1000)",
             params![headers_json, params_json, extract_json],
         ).unwrap();
 
@@ -387,8 +391,8 @@ mod tests {
     }
 
     #[test]
-    fn pre_request_links_survive_import_and_export() {
-        let db_path = std::env::temp_dir().join(format!("mitm_pre_request_{}.db", uuid::Uuid::new_v4()));
+    fn request_steps_survive_import_and_export() {
+        let db_path = std::env::temp_dir().join(format!("mitm_request_steps_{}.db", uuid::Uuid::new_v4()));
         {
             let conn = rusqlite::Connection::open(&db_path).unwrap();
             for m in crate::db::migrations::MIGRATIONS {
@@ -402,8 +406,11 @@ mod tests {
             "test_cases": [
                 { "name": "Other", "target": [ { "name": "Get CSRF Token", "endpoint": "https://a/other" } ] },
                 { "name": "Account", "target": [
+                    { "name": "Login", "endpoint": "https://a/login" },
                     { "name": "Get CSRF Token", "endpoint": "https://a/form" },
-                    { "name": "Change Email", "method": "POST", "endpoint": "https://a/email", "pre_request": "Get CSRF Token" }
+                    { "name": "Logout", "endpoint": "https://a/logout" },
+                    { "name": "Change Email", "method": "POST", "endpoint": "https://a/email",
+                      "pre_requests": ["Login", "Get CSRF Token", "Missing"], "post_requests": ["Logout"] }
                 ] }
             ]
         }"#;
@@ -411,11 +418,16 @@ mod tests {
         let summary = crate::workspace::import::import_workspace_json_db(&db_path, project, None, None).unwrap();
         let tree = get_collections_db(&db_path, &summary.workspace_id).unwrap();
         let account = tree.iter().find(|c| c.name == "Account").unwrap();
+        let id = |name: &str| account.requests.iter().find(|r| r.name == name).unwrap().id.clone();
+        let change_email = account.requests.iter().find(|r| r.name == "Change Email").unwrap();
         let exported: serde_json::Value =
             serde_json::from_str(&export_workspace_json_db(&db_path, &summary.workspace_id).unwrap()).unwrap();
         let _ = std::fs::remove_file(&db_path);
 
-        assert_eq!(account.requests[1].pre_request_id.as_deref(), Some(account.requests[0].id.as_str()));
-        assert_eq!(exported["test_cases"][1]["target"][1]["pre_request"], "Get CSRF Token");
+        assert_eq!(change_email.pre_requests, [id("Login"), id("Get CSRF Token")]);
+        assert_eq!(change_email.post_requests, [id("Logout")]);
+        let exported_target = &exported["test_cases"][1]["target"][3];
+        assert_eq!(exported_target["pre_requests"], serde_json::json!(["Login", "Get CSRF Token"]));
+        assert_eq!(exported_target["post_requests"], serde_json::json!(["Logout"]));
     }
 }

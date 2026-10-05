@@ -31,7 +31,8 @@ export interface RepeaterTab {
   bodyType: string;
   bodyContent?: string;
   extractRules: ExtractRuleItem[];
-  preRequestId?: string | null;
+  preRequests?: string[];
+  postRequests?: string[];
   orderIndex: number;
   createdAtMs: number;
   updatedAtMs: number;

@@ -5,7 +5,7 @@ import { KeyValueEditor } from '../../common/KeyValueEditor';
 import { CodeEditor } from '../../common/CodeEditor';
 import { StructuredBodyEditor } from '../../common/body/StructuredBodyEditor';
 import { ExtractRulesEditor } from '../../common/ExtractRulesEditor';
-import { PreRequestPicker } from '../../common/PreRequestPicker';
+import { RequestStepsEditor } from '../../common/RequestStepsEditor';
 import { MingCuteIcon } from '../../common/MingCuteIcon';
 import { Select } from '../../common/ui';
 import { PaneHeader } from '../../common/PaneHeader';
@@ -33,7 +33,7 @@ const countActive = (items?: Array<{ key: string; enabled: boolean }>) =>
 
 export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
   const { tabs, updateTab, executeActiveRequest, isExecuting, toggleHistoryDrawer } = useRepeaterStore();
-  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auto-extract' | 'pre-request'>('body');
+  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auto-extract' | 'steps'>('body');
 
   const executing = isExecuting[request.id] || false;
 
@@ -209,7 +209,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
           { value: 'headers', label: 'Headers', count: countActive(request.headers) },
           { value: 'body', label: 'Body' },
           { value: 'auto-extract', label: 'Auto-Extract', count: request.extractRules?.length },
-          { value: 'pre-request', label: request.preRequestId ? 'Pre-request •' : 'Pre-request' },
+          { value: 'steps', label: 'Pre/Post', count: (request.preRequests?.length ?? 0) + (request.postRequests?.length ?? 0) },
         ]}
         activeTab={activeTab}
         onTabChange={(val) => setActiveTab(val as typeof activeTab)}
@@ -293,13 +293,14 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({ request }) => {
           />
         )}
 
-        {activeTab === 'pre-request' && (
-          <PreRequestPicker
-            value={request.preRequestId}
+        {activeTab === 'steps' && (
+          <RequestStepsEditor
+            preRequests={request.preRequests ?? []}
+            postRequests={request.postRequests ?? []}
             options={tabs
               .filter((t) => t.id !== request.id)
               .map((t) => ({ value: t.id, label: `${t.method} ${t.url}` }))}
-            onChange={(preRequestId) => updateTab({ ...request, preRequestId })}
+            onChange={(steps) => updateTab({ ...request, ...steps })}
           />
         )}
       </div>

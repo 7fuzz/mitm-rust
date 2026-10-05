@@ -136,32 +136,56 @@ struct PostmanCollection {
     variable: Option<Vec<PostmanVariable>>,
 }
 
-/// Imported requests, kept so `pre_request` names can be resolved once every request has an id.
+/// A request's `pre_requests` / `post_requests`, still as names.
+struct StepNames {
+    request_id: String,
+    collection_id: String,
+    pre: Vec<String>,
+    post: Vec<String>,
+}
+
+/// Imported requests, kept so step names can be resolved once every request has an id.
 #[derive(Default)]
 struct ImportedRequests {
     /// (request id, collection id, name)
     all: Vec<(String, String, String)>,
-    /// (request id, collection id, pre-request name)
-    pre_requests: Vec<(String, String, String)>,
+    steps: Vec<StepNames>,
 }
 
 impl ImportedRequests {
-    /// Links each `pre_request` name to an imported request, preferring one in the same folder.
+    /// Resolves a step name to an imported request, preferring one in the same folder.
+    fn resolve(&self, step: &StepNames, step_name: &str) -> Option<String> {
+        let candidates = || {
+            self.all
+                .iter()
+                .filter(|(id, _, name)| *id != step.request_id && name == step_name)
+        };
+        candidates()
+            .find(|(_, col, _)| *col == step.collection_id)
+            .or_else(|| candidates().next())
+            .map(|(id, _, _)| id.clone())
+    }
+
     fn link(&self, conn: &Connection) -> Result<(), String> {
-        for (req_id, col_id, pre_name) in &self.pre_requests {
-            let candidates = || self.all.iter().filter(|(id, _, name)| id != req_id && name == pre_name);
-            let target = candidates()
-                .find(|(_, c, _)| c == col_id)
-                .or_else(|| candidates().next());
-            if let Some((target_id, _, _)) = target {
-                conn.execute(
-                    "UPDATE requests SET pre_request_id = ? WHERE id = ?",
-                    params![target_id, req_id],
-                ).map_err(|e| e.to_string())?;
-            }
+        for step in &self.steps {
+            let ids = |names: &[String]| -> Vec<String> {
+                names.iter().filter_map(|n| self.resolve(step, n)).collect()
+            };
+            crate::request_steps::save_steps(conn, &step.request_id, &ids(&step.pre), &ids(&step.post))
+                .map_err(|e| e.to_string())?;
         }
         Ok(())
     }
+}
+
+/// Accepts a list of names or a single name.
+fn step_names(value: Option<&serde_json::Value>) -> Vec<String> {
+    let names = match value {
+        Some(serde_json::Value::Array(items)) => items.iter().filter_map(|v| v.as_str()).map(str::to_string).collect(),
+        Some(serde_json::Value::String(name)) => vec![name.clone()],
+        _ => vec![],
+    };
+    names.into_iter().filter(|n| !n.trim().is_empty()).collect()
 }
 
 fn now_ms() -> i64 {
@@ -748,8 +772,10 @@ fn process_custom_target(
     ).map_err(|e| e.to_string())?;
 
     imported.all.push((req_id.clone(), col_id.to_string(), name.to_string()));
-    if let Some(pre_name) = target_val.get("pre_request").and_then(|p| p.as_str()).filter(|p| !p.trim().is_empty()) {
-        imported.pre_requests.push((req_id, col_id.to_string(), pre_name.to_string()));
+    let pre = step_names(target_val.get("pre_requests"));
+    let post = step_names(target_val.get("post_requests"));
+    if !pre.is_empty() || !post.is_empty() {
+        imported.steps.push(StepNames { request_id: req_id, collection_id: col_id.to_string(), pre, post });
     }
 
     *req_count += 1;

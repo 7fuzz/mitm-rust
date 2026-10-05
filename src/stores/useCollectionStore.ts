@@ -74,7 +74,21 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     if (isTauriAvailable()) {
       try {
         const tree = await getCollections(workspaceId);
-        set({ collectionsTree: tree });
+        // Deleting a request drops it from other requests' steps on the backend; open tabs need that too
+        const saved = new Map<string, RequestItem>();
+        const collect = (nodes: CollectionTreeItem[]) =>
+          nodes.forEach((col) => {
+            col.requests.forEach((r) => saved.set(r.id, r));
+            collect(col.children);
+          });
+        collect(tree);
+        set((state) => ({
+          collectionsTree: tree,
+          openRequests: state.openRequests.map((r) => {
+            const fresh = saved.get(r.id);
+            return fresh ? { ...r, preRequests: fresh.preRequests, postRequests: fresh.postRequests } : r;
+          }),
+        }));
       } catch (err) {
         console.error('Failed to fetch collections tree:', err);
       }

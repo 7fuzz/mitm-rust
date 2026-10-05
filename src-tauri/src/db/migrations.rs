@@ -101,8 +101,8 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
     },
     MigrationSpec {
         version: 19,
-        name: "20261005_0019_pre_request",
-        sql: include_str!("../../migrations/20261005_0019_pre_request.sql"),
+        name: "20261005_0019_request_steps",
+        sql: include_str!("../../migrations/20261005_0019_request_steps.sql"),
     },
 ];
 

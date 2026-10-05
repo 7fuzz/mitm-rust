@@ -331,7 +331,13 @@ export const useRepeaterStore = create<RepeaterState>((set, get) => ({
   },
 
   deleteTab: async (id) => {
-    const remaining = get().tabs.filter((t) => t.id !== id);
+    const remaining = get()
+      .tabs.filter((t) => t.id !== id)
+      .map((t) => ({
+        ...t,
+        preRequests: t.preRequests?.filter((stepId) => stepId !== id),
+        postRequests: t.postRequests?.filter((stepId) => stepId !== id),
+      }));
     let nextActiveId = get().activeTabId;
 
     if (get().activeTabId === id) {

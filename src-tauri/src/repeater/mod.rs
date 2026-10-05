@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
+use crate::request_steps::{load_steps, load_workspace_steps, save_steps};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HeaderItem {
@@ -44,7 +46,9 @@ pub struct RepeaterTab {
     pub body_content: Option<String>,
     pub extract_rules: Vec<ExtractRuleItem>,
     #[serde(default)]
-    pub pre_request_id: Option<String>,
+    pub pre_requests: Vec<String>,
+    #[serde(default)]
+    pub post_requests: Vec<String>,
     pub order_index: i32,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
@@ -104,8 +108,7 @@ const TAB_SELECT: &str = "
         r.extract_rules_json, r.order_index, r.created_at_ms, r.updated_at_ms,
         (SELECT COUNT(*) FROM request_histories WHERE request_id = r.id) as execution_count,
         (SELECT status_code FROM request_histories WHERE request_id = r.id ORDER BY executed_at_ms DESC, id DESC LIMIT 1) as last_status_code,
-        (SELECT duration_ms FROM request_histories WHERE request_id = r.id ORDER BY executed_at_ms DESC, id DESC LIMIT 1) as last_duration_ms,
-        r.pre_request_id
+        (SELECT duration_ms FROM request_histories WHERE request_id = r.id ORDER BY executed_at_ms DESC, id DESC LIMIT 1) as last_duration_ms
     FROM requests r
     JOIN collections c ON r.collection_id = c.id
 ";
@@ -133,7 +136,8 @@ fn row_to_tab(row: &rusqlite::Row) -> rusqlite::Result<RepeaterTab> {
         body_type,
         body_content,
         extract_rules: serde_json::from_str(&extract_rules_json).unwrap_or_default(),
-        pre_request_id: row.get(17)?,
+        pre_requests: vec![],
+        post_requests: vec![],
         order_index: row.get(11)?,
         created_at_ms: row.get(12)?,
         updated_at_ms: row.get(13)?,
@@ -150,11 +154,19 @@ pub fn get_repeater_tabs_db(db_path: &PathBuf) -> Result<Vec<RepeaterTab>, Strin
         TAB_SELECT
     );
     let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
-    let tabs = stmt
+    let mut tabs: Vec<RepeaterTab> = stmt
         .query_map(params![REPEATER_WORKSPACE_ID], row_to_tab)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();
+
+    let mut steps = load_workspace_steps(&conn, REPEATER_WORKSPACE_ID).map_err(|e| e.to_string())?;
+    for tab in &mut tabs {
+        if let Some(s) = steps.remove(&tab.id) {
+            tab.pre_requests = s.pre;
+            tab.post_requests = s.post;
+        }
+    }
     Ok(tabs)
 }
 
@@ -186,8 +198,8 @@ pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<()
     // (foreign keys are on by default in the bundled SQLite) and wipes the request's run history.
     // The tab's folder and position are left alone on update.
     let sql = format!(
-        "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, {col}, extract_rules_json, pre_request_id, order_index, created_at_ms, updated_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, {col}, extract_rules_json, order_index, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             method = excluded.method,
@@ -197,7 +209,6 @@ pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<()
             body_type = excluded.body_type,
             {col} = excluded.{col},
             extract_rules_json = excluded.extract_rules_json,
-            pre_request_id = excluded.pre_request_id,
             updated_at_ms = excluded.updated_at_ms",
         col = body_col
     );
@@ -214,13 +225,13 @@ pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<()
             tab.body_type,
             tab.body_content,
             extract_rules_json,
-            tab.pre_request_id,
             tab.order_index,
             tab.created_at_ms,
             tab.updated_at_ms,
         ],
     )
     .map_err(|e| e.to_string())?;
+    save_steps(&conn, &tab.id, &tab.pre_requests, &tab.post_requests).map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -235,16 +246,18 @@ pub fn delete_repeater_tab_db(db_path: &PathBuf, id: &str) -> Result<(), String>
         .map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM requests WHERE id = ?", params![id])
         .map_err(|e| e.to_string())?;
-    conn.execute("UPDATE requests SET pre_request_id = NULL WHERE pre_request_id = ?", params![id])
-        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 pub fn get_repeater_tab_by_id(db_path: &PathBuf, id: &str) -> Result<RepeaterTab, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let query = format!("{} WHERE r.id = ?", TAB_SELECT);
-    conn.query_row(&query, params![id], row_to_tab)
-        .map_err(|e| e.to_string())
+    let mut tab = conn.query_row(&query, params![id], row_to_tab)
+        .map_err(|e| e.to_string())?;
+    let steps = load_steps(&conn, id).map_err(|e| e.to_string())?;
+    tab.pre_requests = steps.pre;
+    tab.post_requests = steps.post;
+    Ok(tab)
 }
 
 pub fn insert_repeater_history_db(
@@ -359,7 +372,8 @@ mod tests {
             body_type: "json".into(),
             body_content: Some("{}".into()),
             extract_rules: vec![],
-            pre_request_id: None,
+            pre_requests: vec![],
+            post_requests: vec![],
             order_index,
             created_at_ms,
             updated_at_ms: created_at_ms,
@@ -428,7 +442,8 @@ mod tests {
             body_type: "none".into(),
             body_content: None,
             extract_rules: vec![],
-            pre_request_id: None,
+            pre_requests: vec![],
+            post_requests: vec![],
             order_index: 0,
             created_at_ms: 1,
             updated_at_ms: 1,
