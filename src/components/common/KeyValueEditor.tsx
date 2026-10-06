@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { KeyValuePair } from '../../types';
 import { MingCuteIcon } from './MingCuteIcon';
 import { StandardHeaderPicker, type StandardHeader } from './StandardHeaderPicker';
+import { CookieEditor, CookieToggle, isCookieHeader } from './CookieEditor';
 
 interface KeyValueEditorProps {
   items: KeyValuePair[];
@@ -81,6 +82,15 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
   const isHeaderEditor = keyPlaceholder.toLowerCase().includes('header');
   const datalistKeyId = isHeaderEditor ? 'http-header-keys-list' : undefined;
   const datalistValId = isHeaderEditor ? 'http-header-vals-list' : undefined;
+  const [expandedCookies, setExpandedCookies] = useState<Set<string>>(new Set());
+
+  const toggleCookies = (rowKey: string) =>
+    setExpandedCookies((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
 
   const handleItemChange = (index: number, field: keyof KeyValuePair, value: any) => {
     const updated = [...items];
@@ -144,67 +154,91 @@ export const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
                 </td>
               </tr>
             ) : (
-              items.map((item, index) => (
-                <tr key={item.id || index} className="hover:bg-neutral-subtle/50 transition-colors">
-                  {!readOnly && (
-                    <td className="px-2 py-1 text-center">
-                      <input
-                        type="checkbox"
-                        checked={item.enabled}
-                        onChange={() => handleToggleEnable(index)}
-                        className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
-                      />
-                    </td>
-                  )}
-                  <td className="px-2 py-1">
-                    {readOnly ? (
-                      <span className={`font-mono ${!item.enabled ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                        {item.key}
-                      </span>
-                    ) : (
-                      <input
-                        type="text"
-                        list={datalistKeyId}
-                        value={item.key}
-                        onChange={(e) => handleItemChange(index, 'key', e.target.value)}
-                        placeholder={keyPlaceholder}
-                        className={`w-full bg-transparent px-1.5 py-1 font-mono text-xs focus:outline-none border border-transparent focus:border-border rounded ${
-                          !item.enabled ? 'line-through text-muted-foreground' : 'text-foreground'
-                        }`}
-                      />
+              items.map((item, index) => {
+                const rowKey = item.id || String(index);
+                const isCookie = isCookieHeader(item.key);
+                const cookiesOpen = isCookie && expandedCookies.has(rowKey);
+                return (
+                  <React.Fragment key={rowKey}>
+                    <tr className="hover:bg-neutral-subtle/50 transition-colors">
+                      {!readOnly && (
+                        <td className="px-2 py-1 text-center">
+                          <input
+                            type="checkbox"
+                            checked={item.enabled}
+                            onChange={() => handleToggleEnable(index)}
+                            className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
+                          />
+                        </td>
+                      )}
+                      <td className="px-2 py-1">
+                        <div className="flex items-center gap-1">
+                          {readOnly ? (
+                            <span className={`flex-1 font-mono ${!item.enabled ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                              {item.key}
+                            </span>
+                          ) : (
+                            <input
+                              type="text"
+                              list={datalistKeyId}
+                              value={item.key}
+                              onChange={(e) => handleItemChange(index, 'key', e.target.value)}
+                              placeholder={keyPlaceholder}
+                              className={`flex-1 min-w-0 bg-transparent px-1.5 py-1 font-mono text-xs focus:outline-none border border-transparent focus:border-border rounded ${
+                                !item.enabled ? 'line-through text-muted-foreground' : 'text-foreground'
+                              }`}
+                            />
+                          )}
+                          {isCookie && (
+                            <CookieToggle value={item.value} expanded={cookiesOpen} onToggle={() => toggleCookies(rowKey)} />
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-2 py-1">
+                        {readOnly ? (
+                          <span className={`font-mono break-all ${!item.enabled ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                            {item.value}
+                          </span>
+                        ) : (
+                          <input
+                            type="text"
+                            list={datalistValId}
+                            value={item.value}
+                            onChange={(e) => handleItemChange(index, 'value', e.target.value)}
+                            placeholder={valuePlaceholder}
+                            className={`w-full bg-transparent px-1.5 py-1 font-mono text-xs focus:outline-none border border-transparent focus:border-border rounded ${
+                              !item.enabled ? 'line-through text-muted-foreground' : 'text-foreground'
+                            }`}
+                          />
+                        )}
+                      </td>
+                      {!readOnly && (
+                        <td className="px-2 py-1 text-center">
+                          <button
+                            onClick={() => handleDelete(index)}
+                            className="p-1 text-muted-foreground hover:text-rose-500 rounded transition-colors"
+                            title="Delete row"
+                          >
+                            <MingCuteIcon name="delete_2_line" size={14} />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                    {cookiesOpen && (
+                      <tr className="bg-surface">
+                        {!readOnly && <td />}
+                        <td colSpan={readOnly ? 2 : 3} className="px-2 pb-2">
+                          <CookieEditor
+                            value={item.value}
+                            onChange={(value) => handleItemChange(index, 'value', value)}
+                            readOnly={readOnly}
+                          />
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td className="px-2 py-1">
-                    {readOnly ? (
-                      <span className={`font-mono break-all ${!item.enabled ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                        {item.value}
-                      </span>
-                    ) : (
-                      <input
-                        type="text"
-                        list={datalistValId}
-                        value={item.value}
-                        onChange={(e) => handleItemChange(index, 'value', e.target.value)}
-                        placeholder={valuePlaceholder}
-                        className={`w-full bg-transparent px-1.5 py-1 font-mono text-xs focus:outline-none border border-transparent focus:border-border rounded ${
-                          !item.enabled ? 'line-through text-muted-foreground' : 'text-foreground'
-                        }`}
-                      />
-                    )}
-                  </td>
-                  {!readOnly && (
-                    <td className="px-2 py-1 text-center">
-                      <button
-                        onClick={() => handleDelete(index)}
-                        className="p-1 text-muted-foreground hover:text-rose-500 rounded transition-colors"
-                        title="Delete row"
-                      >
-                        <MingCuteIcon name="delete_2_line" size={14} />
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))
+                  </React.Fragment>
+                );
+              })
             )}
           </tbody>
         </table>

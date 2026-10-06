@@ -4,6 +4,7 @@ import { useUiPref } from "../../stores/useUiPrefsStore";
 import { MingCuteIcon } from "../common/MingCuteIcon";
 import { Select, SourceScopeSection, Switch } from "../common/ui";
 import { KeyValueEditor } from "../common/KeyValueEditor";
+import { CookieEditor, CookieToggle, isCookieHeader } from "../common/CookieEditor";
 import { RawBodyEditor } from "../common/body/RawBodyEditor";
 import { findHeader } from "../../utils/bodyFormat";
 
@@ -55,6 +56,7 @@ export const InterceptViewer: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<"params" | "headers" | "body">("params");
   const [sidebarOpen, setSidebarOpen] = useUiPref("intercept.sidebarOpen");
+  const [cookiesExpanded, setCookiesExpanded] = useUiPref("intercept.cookiesExpanded");
   const [sidebarTab, setSidebarTab] = useState<"rules" | "settings">("rules");
   const [queueWidthPx, setQueueWidthPx] = useState(320);
   const [sidebarWidthPx, setSidebarWidthPx] = useState(384);
@@ -439,28 +441,42 @@ export const InterceptViewer: React.FC = () => {
                     </div>
 
                     {editedHeaders.map(([key, val], idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          placeholder="Header Key"
-                          value={key}
-                          onChange={(e) => handleHeaderChange(idx, e.target.value, val)}
-                          className="flex-1 bg-surface border border-border focus:border-primary rounded px-2.5 py-1.5 text-foreground outline-none font-mono text-xs"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Header Value"
-                          value={val}
-                          onChange={(e) => handleHeaderChange(idx, key, e.target.value)}
-                          className="flex-2 bg-surface border border-border focus:border-primary rounded px-2.5 py-1.5 text-foreground outline-none font-mono text-xs"
-                        />
-                        <button
-                          onClick={() => handleRemoveHeader(idx)}
-                          className="p-1.5 text-muted-foreground hover:text-rose-500 rounded transition-colors cursor-pointer"
-                        >
-                          <MingCuteIcon name="close_line" size={14} />
-                        </button>
-                      </div>
+                      <React.Fragment key={idx}>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 flex items-center gap-1 bg-surface border border-border focus-within:border-primary rounded pr-1">
+                            <input
+                              type="text"
+                              placeholder="Header Key"
+                              value={key}
+                              onChange={(e) => handleHeaderChange(idx, e.target.value, val)}
+                              className="flex-1 min-w-0 bg-transparent px-2.5 py-1.5 text-foreground outline-none font-mono text-xs"
+                            />
+                            {isCookieHeader(key) && (
+                              <CookieToggle
+                                value={val}
+                                expanded={cookiesExpanded}
+                                onToggle={() => setCookiesExpanded(!cookiesExpanded)}
+                              />
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Header Value"
+                            value={val}
+                            onChange={(e) => handleHeaderChange(idx, key, e.target.value)}
+                            className="flex-2 bg-surface border border-border focus:border-primary rounded px-2.5 py-1.5 text-foreground outline-none font-mono text-xs"
+                          />
+                          <button
+                            onClick={() => handleRemoveHeader(idx)}
+                            className="p-1.5 text-muted-foreground hover:text-rose-500 rounded transition-colors cursor-pointer"
+                          >
+                            <MingCuteIcon name="close_line" size={14} />
+                          </button>
+                        </div>
+                        {cookiesExpanded && isCookieHeader(key) && (
+                          <CookieEditor value={val} onChange={(v) => handleHeaderChange(idx, key, v)} />
+                        )}
+                      </React.Fragment>
                     ))}
                   </div>
                 ) : (

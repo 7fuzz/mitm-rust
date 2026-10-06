@@ -121,6 +121,10 @@ export const UI_PREFS = {
     default: true,
     normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),
   }),
+  "intercept.cookiesExpanded": pref<boolean>({
+    default: false,
+    normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),
+  }),
   "workspace.sidebarOpen": pref<boolean>({
     default: true,
     normalize: (stored, fallback) => (typeof stored === "boolean" ? stored : fallback),
