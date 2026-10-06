@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { MingCuteIcon } from './MingCuteIcon';
 import type { UrlEncodedParam } from '../../types';
+import { UrlEncodedTree, hasNestedKeys } from './UrlEncodedTree';
 
 interface UrlEncodedEditorProps {
   params: UrlEncodedParam[];
@@ -15,6 +16,8 @@ export const UrlEncodedEditor: React.FC<UrlEncodedEditorProps> = ({
 }) => {
   const [showBulkPaste, setShowBulkPaste] = useState(false);
   const [bulkRawText, setBulkRawText] = useState('');
+  const [draftIds, setDraftIds] = useState<Set<string>>(new Set());
+  const nested = useMemo(() => hasNestedKeys(params), [params]);
 
   const handleAddParam = () => {
     const newParam: UrlEncodedParam = {
@@ -23,6 +26,7 @@ export const UrlEncodedEditor: React.FC<UrlEncodedEditorProps> = ({
       key: '',
       value: '',
     };
+    setDraftIds((prev) => new Set(prev).add(newParam.id));
     onChange([...params, newParam]);
   };
 
@@ -105,81 +109,84 @@ export const UrlEncodedEditor: React.FC<UrlEncodedEditorProps> = ({
         </div>
       )}
 
-      {/* URL-Encoded Table */}
-      <div className="border border-border rounded-lg overflow-hidden">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="bg-header border-b border-border text-muted-foreground text-2xs">
-              <th className="w-8 px-2 py-1.5 text-center">En</th>
-              <th className="w-1/3 px-3 py-1.5 font-medium">Parameter Key</th>
-              <th className="px-3 py-1.5 font-medium">Value</th>
-              {!readOnly && <th className="w-8 px-2 py-1.5 text-center"></th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border bg-surface">
-            {params.length === 0 ? (
-              <tr>
-                <td colSpan={readOnly ? 3 : 4} className="px-3 py-6 text-center text-muted-foreground italic font-sans text-xs">
-                  No URL-encoded parameters added.
-                </td>
+      {nested ? (
+        <UrlEncodedTree params={params} onChange={onChange} readOnly={readOnly} draftIds={draftIds} />
+      ) : (
+        <div className="border border-border rounded-lg overflow-hidden">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-header border-b border-border text-muted-foreground text-2xs">
+                <th className="w-8 px-2 py-1.5 text-center">En</th>
+                <th className="w-1/3 px-3 py-1.5 font-medium">Parameter Key</th>
+                <th className="px-3 py-1.5 font-medium">Value</th>
+                {!readOnly && <th className="w-8 px-2 py-1.5 text-center"></th>}
               </tr>
-            ) : (
-              params.map((param, idx) => (
-                <tr key={param.id || idx} className="hover:bg-neutral-subtle/50">
-                  {/* Enable Checkbox */}
-                  <td className="px-2 py-1 text-center">
-                    <input
-                      type="checkbox"
-                      checked={param.enabled}
-                      disabled={readOnly}
-                      onChange={(e) => handleParamChange(idx, { enabled: e.target.checked })}
-                      className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer accent-primary"
-                    />
+            </thead>
+            <tbody className="divide-y divide-border bg-surface">
+              {params.length === 0 ? (
+                <tr>
+                  <td colSpan={readOnly ? 3 : 4} className="px-3 py-6 text-center text-muted-foreground italic font-sans text-xs">
+                    No URL-encoded parameters added.
                   </td>
-
-                  {/* Key Input */}
-                  <td className="px-2 py-1">
-                    <input
-                      type="text"
-                      placeholder="key_name"
-                      value={param.key}
-                      disabled={readOnly}
-                      onChange={(e) => handleParamChange(idx, { key: e.target.value })}
-                      className="w-full bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
-                    />
-                  </td>
-
-                  {/* Value Input */}
-                  <td className="px-2 py-1">
-                    <input
-                      type="text"
-                      placeholder="param_value"
-                      value={param.value}
-                      disabled={readOnly}
-                      onChange={(e) => handleParamChange(idx, { value: e.target.value })}
-                      className="w-full bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
-                    />
-                  </td>
-
-                  {/* Delete Row Button */}
-                  {!readOnly && (
-                    <td className="px-2 py-1 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteParam(idx)}
-                        className="text-muted-foreground hover:text-rose-500 p-1 rounded transition-colors cursor-pointer"
-                        title="Remove Parameter"
-                      >
-                        <MingCuteIcon name="close_line" size={13} />
-                      </button>
-                    </td>
-                  )}
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                params.map((param, idx) => (
+                  <tr key={param.id || idx} className="hover:bg-neutral-subtle/50">
+                    {/* Enable Checkbox */}
+                    <td className="px-2 py-1 text-center">
+                      <input
+                        type="checkbox"
+                        checked={param.enabled}
+                        disabled={readOnly}
+                        onChange={(e) => handleParamChange(idx, { enabled: e.target.checked })}
+                        className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer accent-primary"
+                      />
+                    </td>
+
+                    {/* Key Input */}
+                    <td className="px-2 py-1">
+                      <input
+                        type="text"
+                        placeholder="key_name"
+                        value={param.key}
+                        disabled={readOnly}
+                        onChange={(e) => handleParamChange(idx, { key: e.target.value })}
+                        className="w-full bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
+                      />
+                    </td>
+
+                    {/* Value Input */}
+                    <td className="px-2 py-1">
+                      <input
+                        type="text"
+                        placeholder="param_value"
+                        value={param.value}
+                        disabled={readOnly}
+                        onChange={(e) => handleParamChange(idx, { value: e.target.value })}
+                        className="w-full bg-background border border-border rounded px-2 py-0.5 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
+                      />
+                    </td>
+
+                    {/* Delete Row Button */}
+                    {!readOnly && (
+                      <td className="px-2 py-1 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteParam(idx)}
+                          className="text-muted-foreground hover:text-rose-500 p-1 rounded transition-colors cursor-pointer"
+                          title="Remove Parameter"
+                        >
+                          <MingCuteIcon name="close_line" size={13} />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {!readOnly && (
         <div className="flex items-center justify-between pt-0.5 font-sans">
