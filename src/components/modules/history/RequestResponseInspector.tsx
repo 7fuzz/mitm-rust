@@ -10,6 +10,7 @@ import { SegmentedControl } from '../../common/ui';
 import { PaneHeader } from '../../common/PaneHeader';
 import { MediaResponsePreview } from '../../common/MediaResponsePreview';
 import { JsonTreeViewerRoot } from '../../common/JsonTreeViewer';
+import { FormBodyView, isFormBody } from '../../common/body/FormBodyView';
 import { detectMediaResponse } from '../../../utils/mediaDetector';
 import { isJsonString } from '../../../utils/bodyConverters';
 import { useUiPref } from '../../../stores/useUiPrefsStore';
@@ -65,6 +66,16 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
     return isJsonString(item.requestBody);
   }, [item?.requestBody, item?.requestHeaders]);
 
+  const reqContentType = useMemo(
+    () => (item?.requestHeaders || []).find((h) => h.key?.toLowerCase() === 'content-type')?.value || '',
+    [item?.requestHeaders]
+  );
+
+  const isReqForm = useMemo(
+    () => !!item?.requestBody && isFormBody(reqContentType, item.requestBody),
+    [item?.requestBody, reqContentType]
+  );
+
   const isResJson = useMemo(() => {
     if (!item?.responseBody) return false;
     const hasJsonHeader = (item.responseHeaders || []).some(
@@ -90,15 +101,20 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
   useEffect(() => {
     if (reqMediaInfo) {
       setReqBodyFormat('preview');
-    } else if (reqBodyFormat === 'tree' && !isReqJson) {
+    } else if (isReqForm) {
+      setReqBodyFormat('form');
+    } else if ((reqBodyFormat === 'tree' && !isReqJson) || reqBodyFormat === 'form') {
       setReqBodyFormat('pretty');
     }
-  }, [reqMediaInfo, isReqJson, item?.id]);
+  }, [reqMediaInfo, isReqJson, isReqForm, item?.id]);
 
   const reqBodyFormats = useMemo(() => {
     const list: Array<{ value: string; label: string }> = [];
     if (reqMediaInfo) {
       list.push({ value: 'preview', label: `Preview (${reqMediaInfo.previewType.toUpperCase()})` });
+    }
+    if (isReqForm) {
+      list.push({ value: 'form', label: 'Form' });
     }
     list.push({ value: 'pretty', label: 'Pretty' });
     if (isReqJson) {
@@ -109,7 +125,7 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
       { value: 'hex', label: 'Hex' }
     );
     return list;
-  }, [reqMediaInfo, isReqJson]);
+  }, [reqMediaInfo, isReqJson, isReqForm]);
 
   const resBodyFormats = useMemo(() => {
     const list: Array<{ value: string; label: string }> = [];
@@ -214,6 +230,10 @@ export const RequestResponseInspector: React.FC<RequestResponseInspectorProps> =
 
     if (!bodyText) {
       return <div className="p-4 text-muted-foreground italic text-xs">No body content</div>;
+    }
+
+    if (format === 'form') {
+      return <FormBodyView body={bodyText} contentType={reqContentType} />;
     }
 
     if (format === 'tree') {
