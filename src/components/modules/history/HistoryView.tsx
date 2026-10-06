@@ -314,9 +314,7 @@ export const HistoryView: React.FC = () => {
           item.url.toLowerCase().includes(q) ||
           item.statusCode.toString().includes(q) ||
           item.method.toLowerCase().includes(q) ||
-          (item.listenerLabel && item.listenerLabel.toLowerCase().includes(q)) ||
-          item.requestBody.toLowerCase().includes(q) ||
-          item.responseBody.toLowerCase().includes(q);
+          (item.listenerLabel && item.listenerLabel.toLowerCase().includes(q));
         if (!matchesQuery) return false;
       }
 

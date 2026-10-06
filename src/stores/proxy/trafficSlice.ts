@@ -136,7 +136,19 @@ if (typeof window !== 'undefined' && window.__MITM_TRAFFIC_UNLISTEN__) {
   window.__MITM_TRAFFIC_UNLISTEN__ = null;
 }
 
+const MAX_CACHED_DETAILS = 50;
+
+// Rows hold only summary fields; headers and bodies live in the bounded trafficDetails cache
+const withoutPayload = (item: TrafficItem): TrafficItem => ({
+  ...item,
+  requestHeaders: [],
+  responseHeaders: [],
+  requestBody: '',
+  responseBody: '',
+});
+
 let incomingBatchMap = new Map<number, TrafficItem>();
+const persistedIds = new Set<number>();
 let batchTimer: ReturnType<typeof setTimeout> | null = null;
 let isTrafficSubscribing = false;
 
@@ -152,10 +164,31 @@ export const createTrafficSlice: StateCreator<
       return;
     }
     const batch = Array.from(incomingBatchMap.values());
+    const persisted = Array.from(persistedIds);
     incomingBatchMap.clear();
+    persistedIds.clear();
     batchTimer = null;
 
     get().addTrafficBatch(batch);
+    persisted.forEach(refreshPersistedDetail);
+  };
+
+  // Runs after the batch delay so the history actor has had time to write the row
+  const refreshPersistedDetail = async (id: number) => {
+    if (get().selectedTrafficId !== id) {
+      set((state) => {
+        if (!state.trafficDetails[id]) return {};
+        const { [id]: _, ...rest } = state.trafficDetails;
+        return { trafficDetails: rest };
+      });
+      return;
+    }
+    try {
+      const detail = await getHistoryDetail(id);
+      if (detail) get().cacheTrafficDetail(detail);
+    } catch (err) {
+      console.warn(`Failed to refresh history detail for ${id}:`, err);
+    }
   };
 
   const queueIncomingItem = (item: TrafficItem) => {
@@ -251,16 +284,19 @@ export const createTrafficSlice: StateCreator<
             const raw = event?.entry || event;
             if (raw && raw.id) {
               const mappedItem = mapHistoryEntryToTrafficItem(raw);
-              if (raw.requestBody || raw.responseBody || raw.request_body || raw.response_body) {
+              // Only the final 'response' event is persisted; earlier phases exist solely in this payload
+              if (mappedItem.phase === 'response') {
+                persistedIds.add(mappedItem.id);
+              } else {
                 get().cacheTrafficDetail({
-                  id: Number(raw.id),
+                  id: mappedItem.id,
                   requestHeaders: mappedItem.requestHeaders.map((h) => [h.key, h.value]),
                   responseHeaders: mappedItem.responseHeaders.map((h) => [h.key, h.value]),
                   requestBody: mappedItem.requestBody,
                   responseBody: mappedItem.responseBody,
                 });
               }
-              queueIncomingItem(mappedItem);
+              queueIncomingItem(withoutPayload(mappedItem));
             }
           });
           if (typeof window !== 'undefined') {
@@ -392,23 +428,6 @@ export const createTrafficSlice: StateCreator<
         const detail = await getHistoryDetail(id);
         if (detail) {
           get().cacheTrafficDetail(detail);
-
-          set((state) => {
-            const idx = state.traffic.findIndex((t) => t.id === id);
-            if (idx >= 0) {
-              const updated = [...state.traffic];
-              updated[idx] = {
-                ...updated[idx],
-                requestHeaders: mapHeaders(detail.requestHeaders),
-                responseHeaders: mapHeaders(detail.responseHeaders),
-                requestBody: detail.requestBody,
-                responseBody: detail.responseBody,
-              };
-              return { traffic: updated };
-            }
-            return {};
-          });
-
           return detail;
         }
       } catch (err) {
@@ -420,9 +439,9 @@ export const createTrafficSlice: StateCreator<
     cacheTrafficDetail: (detail: HistoryDetail) => {
       set((state) => {
         const next = { ...state.trafficDetails, [detail.id]: detail };
-        const keys = Object.keys(next);
-        if (keys.length > 50) {
-          delete next[Number(keys[0])];
+        const evictable = Object.keys(next).map(Number).filter((id) => id !== state.selectedTrafficId);
+        if (evictable.length > MAX_CACHED_DETAILS) {
+          delete next[evictable[0]];
         }
         return { trafficDetails: next };
       });
@@ -553,6 +572,7 @@ export const createTrafficSlice: StateCreator<
 
     clearTraffic: async () => {
       incomingBatchMap.clear();
+      persistedIds.clear();
       if (batchTimer) {
         clearTimeout(batchTimer);
         batchTimer = null;

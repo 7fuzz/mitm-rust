@@ -807,8 +807,16 @@ async fn log_and_emit_history(
         response_at: Some(now_rfc3339_ms()),
     };
 
-    let _ = state.history_tx.send(history_entry.clone()).await;
-    let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: history_entry });
+    // The UI fetches headers and bodies of persisted entries on demand via get_history_detail
+    let summary = HistoryEntry {
+        request_headers: Vec::new(),
+        response_headers: Vec::new(),
+        request_body: String::new(),
+        response_body: String::new(),
+        ..history_entry.clone()
+    };
+    let _ = state.history_tx.send(history_entry).await;
+    let _ = app_handle.emit("traffic_captured", &TrafficCapturedEvent { entry: summary });
 }
 
 /// Current UTC time as RFC3339 truncated to milliseconds, which every JS engine parses
