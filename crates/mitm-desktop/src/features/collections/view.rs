@@ -11,8 +11,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
 
     egui::Panel::left("collections_sidebar")
         .resizable(true)
-        .default_size(290.0)
-        .size_range(200.0..=520.0)
+        .default_size(240.0)
+        .size_range(160.0..=480.0)
         .show(ui, |ui| tree::show(ui, state, cmds));
 
     egui::CentralPanel::no_frame().show(ui, |ui| {

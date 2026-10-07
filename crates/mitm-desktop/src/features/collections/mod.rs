@@ -84,7 +84,7 @@ pub struct CollectionsState {
     pub active_workspace_id: String,
     pub trees: Vec<CollectionTreeItem>,
     pub search: String,
-    pub collapsed: HashSet<String>,
+    pub reveal: HashSet<String>,
     pub tree_edit: Option<TreeEdit>,
     pub edit_text: String,
     pub edit_focus: bool,
@@ -113,7 +113,7 @@ impl Default for CollectionsState {
             active_workspace_id: String::new(),
             trees: Vec::new(),
             search: String::new(),
-            collapsed: HashSet::new(),
+            reveal: HashSet::new(),
             tree_edit: None,
             edit_text: String::new(),
             edit_focus: false,
@@ -204,13 +204,13 @@ impl CollectionsState {
             CollectionsCmd::CreateFolder { parent, name } => {
                 let _ = core_collections::create_collection_db(db_path, ws, parent.clone(), name);
                 if let Some(parent) = parent {
-                    self.collapsed.remove(&parent);
+                    self.reveal.insert(parent);
                 }
                 self.reload_tree(db_path);
             }
             CollectionsCmd::CreateRequest { collection_id, name } => {
                 let created = core_collections::create_request_db(db_path, collection_id.clone(), name);
-                self.collapsed.remove(&collection_id);
+                self.reveal.insert(collection_id.clone());
                 self.reload_tree(db_path);
                 if let Ok(request) = created {
                     self.open_request(request.id, db_path);
@@ -263,7 +263,7 @@ impl CollectionsState {
                 if !into_itself {
                     let _ = core_collections::move_collection_db(db_path, &id, parent.clone());
                     if let Some(parent) = parent {
-                        self.collapsed.remove(&parent);
+                        self.reveal.insert(parent);
                     }
                     self.reload_tree(db_path);
                 }
@@ -276,7 +276,7 @@ impl CollectionsState {
                 if let Some(target) = target {
                     self.flush(db_path);
                     let _ = core_collections::move_request_db(db_path, &id, &target);
-                    self.collapsed.remove(&target);
+                    self.reveal.insert(target.clone());
                     self.reload_tree(db_path);
                 }
             }
@@ -365,7 +365,7 @@ impl CollectionsState {
 
     pub fn start_edit(&mut self, edit: TreeEdit, text: String) {
         if let TreeEdit::NewFolder { parent: Some(id) } | TreeEdit::NewRequest { collection_id: id } = &edit {
-            self.collapsed.remove(id);
+            self.reveal.insert(id.clone());
         }
         self.tree_edit = Some(edit);
         self.edit_text = text;

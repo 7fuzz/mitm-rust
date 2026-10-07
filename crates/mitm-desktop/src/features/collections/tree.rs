@@ -1,13 +1,11 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
-use eframe::egui::{self, RichText, Sense};
+use eframe::egui::{self, collapsing_header::CollapsingState, RichText, Sense};
 use mitm_core::collections::{CollectionTreeItem, RequestItem};
 use crate::command::{AppCommand, Commands};
-use crate::widgets::pills::{render_method_pill, AMBER, ROSE};
+use crate::widgets::pills::{method_text, ROSE};
+use crate::widgets::search::search_field;
 use super::{all_requests, CollectionsCmd, CollectionsState, TreeEdit};
-
-const ROW_HEIGHT: f32 = 24.0;
-const INDENT: f32 = 14.0;
 
 #[derive(Clone)]
 enum DragItem {
@@ -22,7 +20,6 @@ struct DragPayload {
 }
 
 enum TreeAction {
-    Toggle(String),
     StartEdit(TreeEdit, String),
     CancelEdit,
     CommitEdit,
@@ -31,10 +28,11 @@ enum TreeAction {
 }
 
 struct TreeUi<'a> {
-    collapsed: &'a HashSet<String>,
+    reveal: &'a HashSet<String>,
     edit: &'a Option<TreeEdit>,
     edit_text: &'a mut String,
     edit_focus: &'a mut bool,
+    active_id: Option<&'a str>,
     searching: bool,
     actions: Vec<TreeAction>,
 }
@@ -50,54 +48,48 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
         Cow::Borrowed(&state.trees)
     };
     let mut tree = TreeUi {
-        collapsed: &state.collapsed,
+        reveal: &state.reveal,
         edit: &state.tree_edit,
         edit_text: &mut state.edit_text,
         edit_focus: &mut state.edit_focus,
+        active_id: state.active_id.as_deref(),
         searching,
         actions: Vec::new(),
     };
 
     egui::ScrollArea::vertical().id_salt("collections_tree").auto_shrink([false, false]).show(ui, |ui| {
         if matches!(tree.edit, Some(TreeEdit::NewFolder { parent: None })) {
-            tree.name_input(ui, 0, "Root folder name...");
+            tree.name_input(ui, "Folder name");
         }
-
-        if visible.is_empty() && searching {
-            empty_state(ui, &format!("No collections or requests match “{}”", state.search.trim()));
-            if ui.vertical_centered(|ui| ui.link("Clear search").clicked()).inner {
-                state.search.clear();
-            }
-        } else if visible.is_empty() && tree.edit.is_none() {
-            empty_state(ui, "No collections created yet");
-            if ui.vertical_centered(|ui| ui.button("➕ Create Root Folder").clicked()).inner {
-                tree.actions.push(TreeAction::StartEdit(TreeEdit::NewFolder { parent: None }, String::new()));
-            }
+        if visible.is_empty() && tree.edit.is_none() {
+            ui.weak(if searching { "No matches" } else { "No collections yet" });
         }
-
         for folder in visible.iter() {
-            tree.folder(ui, folder, 0);
+            tree.folder(ui, folder);
         }
         tree.root_drop_zone(ui);
     });
 
     floating_drag_label(ui);
     let actions = std::mem::take(&mut tree.actions);
+    state.reveal.clear();
     for action in actions {
         apply(action, state, cmds);
     }
 }
 
 fn header(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands) {
-    ui.horizontal(|ui| {
-        ui.label(RichText::new("📁").color(AMBER));
-        ui.label(RichText::new("Collections").strong());
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("➕ Folder").on_hover_text("Create root folder").clicked() {
+    egui::Sides::new().show(
+        ui,
+        |ui| {
+            ui.strong("Collections");
+        },
+        |ui| {
+            if ui.button("➕").on_hover_text("New folder").clicked() {
                 state.start_edit(TreeEdit::NewFolder { parent: None }, String::new());
             }
-        });
-    });
+        },
+    );
 
     if state.workspaces.len() > 1 {
         let current = state
@@ -107,7 +99,8 @@ fn header(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands) 
             .map_or("Workspace".to_string(), |w| w.name.clone());
         egui::ComboBox::from_id_salt("collections_workspace")
             .selected_text(current)
-            .width(ui.available_width() - 8.0)
+            .width(ui.available_width())
+            .truncate()
             .show_ui(ui, |ui| {
                 for ws in &state.workspaces {
                     if ui.selectable_label(ws.id == state.active_workspace_id, &ws.name).clicked() {
@@ -116,28 +109,11 @@ fn header(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands) 
                 }
             });
     }
-
-    ui.horizontal(|ui| {
-        let width = ui.available_width() - if state.search.is_empty() { 0.0 } else { 24.0 };
-        ui.add(egui::TextEdit::singleline(&mut state.search).hint_text("🔍 Search collections & requests...").desired_width(width));
-        if !state.search.is_empty() && ui.small_button("✖").clicked() {
-            state.search.clear();
-        }
-    });
-}
-
-fn empty_state(ui: &mut egui::Ui, text: &str) {
-    ui.add_space(24.0);
-    ui.vertical_centered(|ui| ui.label(RichText::new(text).weak().italics()));
+    search_field(ui, &mut state.search, "Search");
 }
 
 fn apply(action: TreeAction, state: &mut CollectionsState, cmds: &mut Commands) {
     match action {
-        TreeAction::Toggle(id) => {
-            if !state.collapsed.remove(&id) {
-                state.collapsed.insert(id);
-            }
-        }
         TreeAction::StartEdit(edit, text) => state.start_edit(edit, text),
         TreeAction::CancelEdit => state.tree_edit = None,
         TreeAction::CommitEdit => {
@@ -158,40 +134,52 @@ fn apply(action: TreeAction, state: &mut CollectionsState, cmds: &mut Commands) 
 }
 
 impl TreeUi<'_> {
-    fn folder(&mut self, ui: &mut egui::Ui, folder: &CollectionTreeItem, depth: usize) {
-        let expanded = self.searching || !self.collapsed.contains(&folder.id);
-        let renaming = matches!(self.edit, Some(TreeEdit::RenameFolder { id }) if *id == folder.id);
-
-        let (rect, response) = row(ui);
-        let dropping = response.dnd_hover_payload::<DragPayload>().is_some();
-        if dropping {
-            ui.painter().rect_stroke(rect, 3.0, ui.visuals().selection.stroke, egui::StrokeKind::Inside);
+    fn folder(&mut self, ui: &mut egui::Ui, folder: &CollectionTreeItem) {
+        let id = ui.make_persistent_id(("collection_folder", &folder.id, self.searching));
+        let mut collapsing = CollapsingState::load_with_default_open(ui.ctx(), id, true);
+        let adding_here = matches!(self.edit,
+            Some(TreeEdit::NewFolder { parent: Some(p) }) | Some(TreeEdit::NewRequest { collection_id: p }) if *p == folder.id);
+        if self.searching || adding_here || self.reveal.contains(&folder.id) {
+            collapsing.set_open(true);
         }
 
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect.shrink2(egui::vec2(4.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        child.add_space(depth as f32 * INDENT);
-        child.label(RichText::new(if expanded { "📂" } else { "📁" }).color(AMBER));
-        if renaming {
-            self.inline_edit(&mut child);
-        } else {
-            child.add(egui::Label::new(RichText::new(&folder.name).strong()).truncate().selectable(false));
-            if response.hovered() || child.ui_contains_pointer() {
-                child.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button(RichText::new("✖").color(ROSE)).on_hover_text("Delete folder").clicked() {
-                        self.actions.push(TreeAction::Cmd(CollectionsCmd::DeleteFolder(folder.id.clone())));
-                    }
-                    if ui.small_button("➕").on_hover_text("Add request").clicked() {
-                        self.actions.push(TreeAction::StartEdit(TreeEdit::NewRequest { collection_id: folder.id.clone() }, String::new()));
-                    }
-                    if ui.small_button("📁").on_hover_text("Add subfolder").clicked() {
-                        self.actions.push(TreeAction::StartEdit(TreeEdit::NewFolder { parent: Some(folder.id.clone()) }, String::new()));
-                    }
-                });
+        let mut label = None;
+        let mut header = collapsing.show_header(ui, |ui| {
+            if matches!(self.edit, Some(TreeEdit::RenameFolder { id }) if *id == folder.id) {
+                self.inline_rename(ui);
+            } else {
+                let text = RichText::new(format!("📁 {}", folder.name));
+                label = Some(ui.add(egui::Label::new(text).truncate().selectable(false).sense(Sense::click_and_drag())));
             }
+        });
+        if let Some(response) = &label {
+            if response.clicked() {
+                header.toggle();
+            }
+            self.folder_interactions(response, folder);
         }
 
-        if response.clicked() {
-            self.actions.push(TreeAction::Toggle(folder.id.clone()));
+        header.body(|ui| {
+            if matches!(self.edit, Some(TreeEdit::NewFolder { parent: Some(p) }) if *p == folder.id) {
+                self.name_input(ui, "Folder name");
+            }
+            if matches!(self.edit, Some(TreeEdit::NewRequest { collection_id }) if *collection_id == folder.id) {
+                self.name_input(ui, "Request name");
+            }
+            for child in &folder.children {
+                self.folder(ui, child);
+            }
+            for request in &folder.requests {
+                self.request(ui, request);
+            }
+        });
+    }
+
+    fn folder_interactions(&mut self, response: &egui::Response, folder: &CollectionTreeItem) {
+        if response.dnd_hover_payload::<DragPayload>().is_some() {
+            let stroke = response.ctx.global_style().visuals.selection.stroke;
+            let painter = response.ctx.layer_painter(response.layer_id);
+            painter.rect_stroke(response.rect.expand(2.0), 3.0, stroke, egui::StrokeKind::Outside);
         }
         if response.drag_started() {
             response.dnd_set_drag_payload(DragPayload {
@@ -212,48 +200,29 @@ impl TreeUi<'_> {
             self.actions.extend(cmd.map(TreeAction::Cmd));
         }
         response.context_menu(|ui| self.folder_menu(ui, folder));
-
-        if !expanded {
-            return;
-        }
-        if matches!(self.edit, Some(TreeEdit::NewFolder { parent: Some(id) }) if *id == folder.id) {
-            self.name_input(ui, depth + 1, "Subfolder name...");
-        }
-        if matches!(self.edit, Some(TreeEdit::NewRequest { collection_id }) if *collection_id == folder.id) {
-            self.name_input(ui, depth + 1, "Request name...");
-        }
-        for child_folder in &folder.children {
-            self.folder(ui, child_folder, depth + 1);
-        }
-        for request in &folder.requests {
-            self.request(ui, request, depth + 1);
-        }
     }
 
-    fn request(&mut self, ui: &mut egui::Ui, request: &RequestItem, depth: usize) {
-        let renaming = matches!(self.edit, Some(TreeEdit::RenameRequest { id }) if *id == request.id);
-        let (rect, response) = row(ui);
-
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect.shrink2(egui::vec2(4.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        child.add_space(depth as f32 * INDENT);
-        render_method_pill(&mut child, &request.method);
-        if renaming {
-            self.inline_edit(&mut child);
-        } else {
-            let text = if self.searching && !request.url.is_empty() {
-                RichText::new(format!("{}  {}", request.name, request.url))
-            } else {
-                RichText::new(&request.name)
-            };
-            child.add(egui::Label::new(text).truncate().selectable(false));
-            if response.hovered() || child.ui_contains_pointer() {
-                child.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button(RichText::new("✖").color(ROSE)).on_hover_text("Delete request").clicked() {
-                        self.actions.push(TreeAction::Cmd(CollectionsCmd::DeleteRequest(request.id.clone())));
-                    }
-                });
-            }
+    fn request(&mut self, ui: &mut egui::Ui, request: &RequestItem) {
+        if matches!(self.edit, Some(TreeEdit::RenameRequest { id }) if *id == request.id) {
+            self.inline_rename(ui);
+            return;
         }
+
+        let mut text = egui::text::LayoutJob::default();
+        let style = ui.style().clone();
+        method_text(&request.method).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
+        RichText::new(format!("  {}", request.name)).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
+        if self.searching && !request.url.is_empty() {
+            RichText::new(format!("  {}", request.url)).weak().append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
+        }
+
+        let active = self.active_id == Some(request.id.as_str());
+        let response = ui.add(
+            egui::Button::selectable(active, text)
+                .truncate()
+                .sense(Sense::click_and_drag())
+                .min_size(egui::vec2(ui.available_width(), 0.0)),
+        );
 
         if response.clicked() {
             self.actions.push(TreeAction::Cmd(CollectionsCmd::Open(request.id.clone())));
@@ -269,16 +238,16 @@ impl TreeUi<'_> {
 
     fn folder_menu(&mut self, ui: &mut egui::Ui, folder: &CollectionTreeItem) {
         let id = folder.id.clone();
-        let items: [(&str, TreeAction); 5] = [
-            ("➕ Add Request", TreeAction::StartEdit(TreeEdit::NewRequest { collection_id: id.clone() }, String::new())),
-            ("📁 Add Subfolder", TreeAction::StartEdit(TreeEdit::NewFolder { parent: Some(id.clone()) }, String::new())),
-            ("⚡ Auto-Extract Rules", TreeAction::ExtractRules(all_requests(std::slice::from_ref(folder)).iter().map(|r| r.id.clone()).collect())),
-            ("📋 Duplicate Folder", TreeAction::Cmd(CollectionsCmd::DuplicateFolder(id.clone()))),
-            ("✏ Rename Folder", TreeAction::StartEdit(TreeEdit::RenameFolder { id: id.clone() }, folder.name.clone())),
-        ];
-        self.menu_items(ui, items);
+        let request_ids = all_requests(std::slice::from_ref(folder)).iter().map(|r| r.id.clone()).collect();
+        self.menu_items(ui, [
+            ("New Request", TreeAction::StartEdit(TreeEdit::NewRequest { collection_id: id.clone() }, String::new())),
+            ("New Subfolder", TreeAction::StartEdit(TreeEdit::NewFolder { parent: Some(id.clone()) }, String::new())),
+            ("Auto-Extract Rules…", TreeAction::ExtractRules(request_ids)),
+            ("Duplicate", TreeAction::Cmd(CollectionsCmd::DuplicateFolder(id.clone()))),
+            ("Rename", TreeAction::StartEdit(TreeEdit::RenameFolder { id: id.clone() }, folder.name.clone())),
+        ]);
         ui.separator();
-        if ui.button(RichText::new("✖ Delete Folder").color(ROSE)).clicked() {
+        if ui.button(RichText::new("Delete Folder").color(ROSE)).clicked() {
             self.actions.push(TreeAction::Cmd(CollectionsCmd::DeleteFolder(id)));
             ui.close();
         }
@@ -286,15 +255,14 @@ impl TreeUi<'_> {
 
     fn request_menu(&mut self, ui: &mut egui::Ui, request: &RequestItem) {
         let id = request.id.clone();
-        let items: [(&str, TreeAction); 4] = [
-            ("👁 Open in Tab", TreeAction::Cmd(CollectionsCmd::Open(id.clone()))),
-            ("⚡ Auto-Extract Rules", TreeAction::ExtractRules(vec![id.clone()])),
-            ("📋 Duplicate Request", TreeAction::Cmd(CollectionsCmd::DuplicateRequest(id.clone()))),
-            ("✏ Rename Request", TreeAction::StartEdit(TreeEdit::RenameRequest { id: id.clone() }, request.name.clone())),
-        ];
-        self.menu_items(ui, items);
+        self.menu_items(ui, [
+            ("Open", TreeAction::Cmd(CollectionsCmd::Open(id.clone()))),
+            ("Auto-Extract Rules…", TreeAction::ExtractRules(vec![id.clone()])),
+            ("Duplicate", TreeAction::Cmd(CollectionsCmd::DuplicateRequest(id.clone()))),
+            ("Rename", TreeAction::StartEdit(TreeEdit::RenameRequest { id: id.clone() }, request.name.clone())),
+        ]);
         ui.separator();
-        if ui.button(RichText::new("✖ Delete Request").color(ROSE)).clicked() {
+        if ui.button(RichText::new("Delete Request").color(ROSE)).clicked() {
             self.actions.push(TreeAction::Cmd(CollectionsCmd::DeleteRequest(id)));
             ui.close();
         }
@@ -309,23 +277,19 @@ impl TreeUi<'_> {
         }
     }
 
-    fn name_input(&mut self, ui: &mut egui::Ui, depth: usize, hint: &str) {
-        ui.horizontal(|ui| {
-            ui.add_space(depth as f32 * INDENT + 4.0);
-            let response = ui.add(egui::TextEdit::singleline(self.edit_text).hint_text(hint).desired_width(ui.available_width() - 56.0));
-            self.take_focus(&response);
-            let enter = response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            if enter || ui.small_button("✔").on_hover_text("Save").clicked() {
-                self.actions.push(TreeAction::CommitEdit);
-            }
-            if ui.small_button("✖").on_hover_text("Cancel").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                self.actions.push(TreeAction::CancelEdit);
-            }
-        });
+    fn name_input(&mut self, ui: &mut egui::Ui, hint: &str) {
+        let response = ui.add(egui::TextEdit::singleline(self.edit_text).hint_text(hint).desired_width(f32::INFINITY));
+        self.take_focus(&response);
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.actions.push(TreeAction::CancelEdit);
+        } else if response.lost_focus() {
+            let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+            self.actions.push(if enter { TreeAction::CommitEdit } else { TreeAction::CancelEdit });
+        }
     }
 
-    fn inline_edit(&mut self, ui: &mut egui::Ui) {
-        let response = ui.add(egui::TextEdit::singleline(self.edit_text).desired_width(ui.available_width()));
+    fn inline_rename(&mut self, ui: &mut egui::Ui) {
+        let response = ui.add(egui::TextEdit::singleline(self.edit_text).desired_width(f32::INFINITY));
         self.take_focus(&response);
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.actions.push(TreeAction::CancelEdit);
@@ -342,17 +306,10 @@ impl TreeUi<'_> {
     }
 
     fn root_drop_zone(&mut self, ui: &mut egui::Ui) {
-        let height = ui.available_height().max(ROW_HEIGHT * 2.0);
+        let height = ui.available_height().max(48.0);
         let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::click());
         if response.dnd_hover_payload::<DragPayload>().is_some() {
             ui.painter().rect_filled(rect, 4.0, ui.visuals().selection.bg_fill.gamma_multiply(0.15));
-            ui.painter().text(
-                rect.center_top() + egui::vec2(0.0, 14.0),
-                egui::Align2::CENTER_CENTER,
-                "Drop here to move to the root level",
-                egui::FontId::proportional(12.0),
-                ui.visuals().selection.stroke.color,
-            );
         }
         if let Some(payload) = response.dnd_release_payload::<DragPayload>() {
             let cmd = match &payload.item {
@@ -362,20 +319,12 @@ impl TreeUi<'_> {
             self.actions.push(TreeAction::Cmd(cmd));
         }
         response.context_menu(|ui| {
-            if ui.button("📁 New Root Folder").clicked() {
+            if ui.button("New Folder").clicked() {
                 self.actions.push(TreeAction::StartEdit(TreeEdit::NewFolder { parent: None }, String::new()));
                 ui.close();
             }
         });
     }
-}
-
-fn row(ui: &mut egui::Ui) -> (egui::Rect, egui::Response) {
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_HEIGHT), Sense::click_and_drag());
-    if response.hovered() {
-        ui.painter().rect_filled(rect, 3.0, ui.visuals().widgets.hovered.weak_bg_fill);
-    }
-    (rect, response)
 }
 
 fn floating_drag_label(ui: &egui::Ui) {
@@ -393,9 +342,6 @@ fn floating_drag_label(ui: &egui::Ui) {
 
 fn filter_tree(items: &[CollectionTreeItem], query: &str) -> Vec<CollectionTreeItem> {
     let terms: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
-    if terms.is_empty() {
-        return items.to_vec();
-    }
     let matches = |text: String| {
         let text = text.to_lowercase();
         terms.iter().all(|t| text.contains(t))
