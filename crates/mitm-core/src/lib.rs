@@ -71,41 +71,92 @@ impl MitmCore {
         self.state.listener_errors.clear();
 
         let mut started = Vec::new();
-
         for config in configs.into_iter().filter(|c| c.enabled) {
-            let addr: std::net::SocketAddr = match config.address.parse() {
-                Ok(a) => a,
-                Err(e) => {
-                    self.state.listener_errors.insert(config.id, format!("Invalid address: {}", e));
-                    continue;
-                }
-            };
-            let tcp_listener = match proxy::bind_proxy_listener(addr).await {
-                Ok(l) => l,
-                Err(e) => {
-                    self.state.listener_errors.insert(config.id, e);
-                    continue;
-                }
-            };
-
-            let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
-            self.state.listeners.write().await.push(state::ListenerInstance {
-                id: config.id,
-                stop_tx: Some(stop_tx),
-            });
-
-            let event_bus = Some(self.event_bus.clone());
-            let state = Arc::clone(&self.state);
-            let ca_clone = Arc::clone(&ca);
-            let label = config.label.clone();
-            started.push(format!("{} ({})", config.label, config.address));
-
-            tokio::spawn(async move {
-                let _ = proxy::start_proxy_server(event_bus, state, ca_clone, tcp_listener, label, stop_rx).await;
-            });
+            started.extend(self.start_listener(config, Arc::clone(&ca)).await);
         }
         self.state.proxy_active.store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(started)
+    }
+
+    /// Binds one listener; a failure is recorded in `listener_errors`. Returns its summary when bound.
+    async fn start_listener(&self, config: state::ListenerConfig, ca: Arc<ca::CA>) -> Option<String> {
+        let addr: std::net::SocketAddr = match config.address.parse() {
+            Ok(a) => a,
+            Err(e) => {
+                self.state.listener_errors.insert(config.id, format!("Invalid address: {}", e));
+                return None;
+            }
+        };
+        let tcp_listener = match proxy::bind_proxy_listener(addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                self.state.listener_errors.insert(config.id, e);
+                return None;
+            }
+        };
+
+        let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
+        self.state.listeners.write().await.push(state::ListenerInstance {
+            id: config.id,
+            stop_tx: Some(stop_tx),
+        });
+
+        let event_bus = Some(self.event_bus.clone());
+        let state = Arc::clone(&self.state);
+        let label = config.label.clone();
+        tokio::spawn(async move {
+            let _ = proxy::start_proxy_server(event_bus, state, ca, tcp_listener, label, stop_rx).await;
+        });
+        Some(format!("{} ({})", config.label, config.address))
+    }
+
+    async fn stop_listener(&self, id: u32) {
+        let mut listeners = self.state.listeners.write().await;
+        listeners.retain_mut(|instance| {
+            if instance.id != id {
+                return true;
+            }
+            if let Some(tx) = instance.stop_tx.take() {
+                let _ = tx.send(());
+            }
+            false
+        });
+    }
+
+    /// Turns one listener on or off without restarting the others.
+    pub async fn set_listener_enabled(&self, id: u32, enabled: bool) -> Result<(), String> {
+        let config = {
+            let mut configs = self.state.listener_configs.write().await;
+            let config = configs.iter_mut().find(|c| c.id == id).ok_or_else(|| format!("No listener #{}", id))?;
+            config.enabled = enabled;
+            let config = config.clone();
+            let json = serde_json::to_string(&*configs).map_err(|e| e.to_string())?;
+            db::set_preference(&self.db_path, "proxy_listeners", &json)?;
+            config
+        };
+        self.stop_listener(id).await;
+        self.state.listener_errors.remove(&id);
+        if enabled && self.state.proxy_active.load(std::sync::atomic::Ordering::SeqCst) {
+            self.start_listener(config, self.get_ca()).await;
+        }
+        Ok(())
+    }
+
+    pub async fn listener_status(&self) -> Vec<state::ListenerStatus> {
+        let configs = self.state.listener_configs.read().await.clone();
+        let running = self.state.listeners.read().await;
+        configs
+            .into_iter()
+            .map(|config| state::ListenerStatus {
+                running: running.iter().any(|l| l.id == config.id),
+                error: self.state.listener_errors.get(&config.id).map(|e| e.clone()),
+                config,
+            })
+            .collect()
+    }
+
+    pub fn list_host_ips(&self) -> Result<Vec<proxy::host_ips::HostIp>, String> {
+        proxy::host_ips::list()
     }
 
     pub async fn stop_all_listeners(&self) {
