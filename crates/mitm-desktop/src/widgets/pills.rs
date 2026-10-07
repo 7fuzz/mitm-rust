@@ -86,3 +86,27 @@ pub fn badge(ui: &mut egui::Ui, text: &str, color: Color32) -> egui::Response {
         })
         .response
 }
+
+pub fn method_text(method: &str) -> RichText {
+    let color = match method.to_uppercase().as_str() {
+        "GET" => Color32::from_rgb(74, 222, 128),
+        "POST" => Color32::from_rgb(96, 165, 250),
+        "PUT" => Color32::from_rgb(250, 204, 21),
+        "PATCH" => Color32::from_rgb(192, 132, 252),
+        "DELETE" => Color32::from_rgb(248, 113, 113),
+        _ => Color32::from_rgb(156, 163, 175),
+    };
+    RichText::new(method.to_uppercase()).monospace().strong().size(11.0).color(color)
+}
+
+pub fn status_text(code: u16) -> RichText {
+    let color = match code {
+        200..=299 => Color32::from_rgb(74, 222, 128),
+        300..=399 => Color32::from_rgb(96, 165, 250),
+        400..=499 => Color32::from_rgb(251, 146, 60),
+        500..=599 => Color32::from_rgb(248, 113, 113),
+        _ => Color32::from_rgb(156, 163, 175),
+    };
+    let label = if code == 0 { "ERR".to_string() } else { code.to_string() };
+    RichText::new(label).monospace().strong().size(11.0).color(color)
+}
