@@ -205,4 +205,18 @@ impl MitmCore {
         *r = rules;
         Ok(())
     }
+
+    pub async fn get_history_settings(&self) -> state::HistorySettings {
+        self.state.history_settings.read().await.clone()
+    }
+
+    pub async fn set_history_settings(&self, settings: state::HistorySettings) -> Result<(), String> {
+        db::set_preference(&self.db_path, "history_limiter_enabled", if settings.limiter_enabled { "true" } else { "false" })?;
+        db::set_preference(&self.db_path, "history_limiter_max_rows", &settings.max_rows.to_string())?;
+        if settings.limiter_enabled {
+            db::prune_history_logs(&self.db_path, settings.max_rows)?;
+        }
+        *self.state.history_settings.write().await = settings;
+        Ok(())
+    }
 }

@@ -182,3 +182,10 @@ pub fn clear_history(db_path: &PathBuf) -> Result<(), String> {
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+pub fn delete_history_entry(db_path: &PathBuf, id: i64) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM history WHERE id = ?1", [id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
