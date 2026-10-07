@@ -198,10 +198,19 @@ impl eframe::App for NativeMitmApp {
         while let Ok(event) = self.event_rx.try_recv() {
             match event {
                 CoreEvent::TrafficCaptured(ev) => {
-                    self.ui_state.add_flow(ev.entry);
+                    let flow_id = ev.entry.id;
+                    let was_selected = self.ui_state.selected_flow_id == Some(flow_id);
+                    self.ui_state.add_or_update_flow(ev.entry);
+                    if was_selected {
+                        self.ui_state.refresh_selected_flow_detail(&self.core.state.db_path);
+                    }
                 }
                 CoreEvent::TrafficUpdated { id, status, size, duration_ms } => {
+                    let was_selected = self.ui_state.selected_flow_id == Some(id);
                     self.ui_state.update_flow(id, status, size, duration_ms);
+                    if was_selected {
+                        self.ui_state.refresh_selected_flow_detail(&self.core.state.db_path);
+                    }
                 }
                 CoreEvent::TrafficCleared => {
                     self.ui_state.clear_flows();

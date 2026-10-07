@@ -376,18 +376,47 @@ impl UiState {
 
     pub fn load_history_from_db(&mut self, db_path: &PathBuf) {
         if let Ok(entries) = mitm_core::db::get_history_logs(db_path, 500, 0, None, None, None, false) {
-            // DB returns descending (newest first). Reverse so newest is appended at end.
-            for entry in entries.into_iter().rev() {
-                self.add_flow(entry);
+            self.flows.clear();
+            // DB returns descending (newest first). Pushing in order keeps newest at top (index 0).
+            for entry in entries {
+                self.flows.push_back(entry);
             }
         }
     }
 
-    pub fn add_flow(&mut self, entry: HistoryEntry) {
-        if self.flows.len() >= self.max_flows {
-            self.flows.pop_front();
+    pub fn add_or_update_flow(&mut self, entry: HistoryEntry) {
+        // 1. If this flow already exists in memory, update in-place without duplicating or reordering
+        if let Some(existing) = self.flows.iter_mut().find(|f| f.id == entry.id) {
+            existing.status_code = entry.status_code;
+            existing.response_size = entry.response_size;
+            existing.duration_ms = entry.duration_ms;
+            existing.content_type = entry.content_type;
+            existing.phase = entry.phase;
+            existing.is_intercepted = entry.is_intercepted;
+            existing.is_rewritten = entry.is_rewritten;
+            existing.is_failed = entry.is_failed;
+            if !entry.response_headers.is_empty() {
+                existing.response_headers = entry.response_headers;
+            }
+            if !entry.response_body.is_empty() {
+                existing.response_body = entry.response_body;
+            }
+            if let Some(resp_at) = entry.response_at {
+                existing.response_at = Some(resp_at);
+            }
+            return;
         }
-        self.flows.push_back(entry);
+
+        // 2. New flow: push to front so newer traffic is always on top
+        if self.flows.len() >= self.max_flows {
+            self.flows.pop_back();
+        }
+        self.flows.push_front(entry);
+    }
+
+    #[allow(dead_code)]
+    pub fn add_flow(&mut self, entry: HistoryEntry) {
+        self.add_or_update_flow(entry);
     }
 
     pub fn update_flow(&mut self, id: i64, status: u16, size: u64, duration_ms: u64) {
@@ -395,6 +424,15 @@ impl UiState {
             flow.status_code = status;
             flow.response_size = size;
             flow.duration_ms = Some(duration_ms);
+            flow.phase = "response".to_string();
+        }
+    }
+
+    pub fn refresh_selected_flow_detail(&mut self, db_path: &PathBuf) {
+        if let Some(id) = self.selected_flow_id {
+            if let Ok(detail) = mitm_core::db::get_history_detail(db_path, id) {
+                self.selected_flow_detail = detail;
+            }
         }
     }
 

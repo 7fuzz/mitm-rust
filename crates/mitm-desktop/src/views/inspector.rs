@@ -37,13 +37,16 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
 
         ui.separator();
 
-        ui.label(RichText::new(&flow.url).strong().text_style(egui::TextStyle::Monospace));
-
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.button("📋 Copy cURL").on_hover_text("Copy as bash cURL command").clicked() {
                 let curl_cmd = build_curl_command(&flow, detail);
                 ui.ctx().copy_text(curl_cmd);
             }
+            if ui.button("📋 Copy URL").on_hover_text("Copy URL to clipboard").clicked() {
+                ui.ctx().copy_text(flow.url.clone());
+            }
+
+            ui.add(egui::Label::new(RichText::new(&flow.url).strong().text_style(egui::TextStyle::Monospace)).selectable(true));
         });
     });
 

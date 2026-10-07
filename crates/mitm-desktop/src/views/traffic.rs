@@ -57,6 +57,7 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std
     let filtered_indices = state.filtered_flow_indices();
     let num_rows = filtered_indices.len();
 
+    let egui_ctx = ui.ctx().clone();
     let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
     let row_height = text_height + 8.0;
 
@@ -65,7 +66,7 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std
     let mut send_to_repeater: Option<mitm_core::state::HistoryEntry> = None;
     let mut send_to_fuzzer: Option<mitm_core::state::HistoryEntry> = None;
 
-    TableBuilder::new(ui)
+    let mut builder = TableBuilder::new(ui)
         .striped(true)
         .resizable(true)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
@@ -76,7 +77,13 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std
         .column(Column::remainder())    // Path
         .column(Column::initial(90.0))  // Type
         .column(Column::exact(65.0))    // Size
-        .column(Column::exact(60.0))    // Time
+        .column(Column::exact(60.0));   // Time
+
+    if state.auto_scroll {
+        builder = builder.scroll_to_row(0, Some(egui::Align::TOP));
+    }
+
+    builder
         .header(24.0, |mut header| {
             header.col(|ui| { ui.strong("#"); });
             header.col(|ui| { ui.strong("Method"); });
@@ -101,9 +108,7 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std
 
                 // ID
                 row.col(|ui| {
-                    if ui.selectable_label(is_selected, flow_id.to_string()).clicked() {
-                        new_selection = Some(flow_id);
-                    }
+                    ui.label(flow_id.to_string());
                 });
 
                 // Method
@@ -146,28 +151,54 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std
                     ui.label(format_duration(flow.duration_ms));
                 });
 
-                let response = row.response();
+                // Clickable area is the entire row union
+                let response = row.response().interact(egui::Sense::click());
                 if response.clicked() {
                     new_selection = Some(flow_id);
                 }
+                if response.double_clicked() {
+                    egui_ctx.copy_text(flow_url.clone());
+                }
 
                 response.context_menu(|ui| {
+                    if ui.button("📋 Copy URL").clicked() {
+                        ui.ctx().copy_text(flow_url.clone());
+                        ui.close();
+                    }
+                    if ui.button("📋 Copy Host").clicked() {
+                        ui.ctx().copy_text(flow_clone.host.clone());
+                        ui.close();
+                    }
+                    if ui.button("📋 Copy Path").clicked() {
+                        ui.ctx().copy_text(flow_clone.path.clone());
+                        ui.close();
+                    }
+                    if ui.button("📋 Copy as cURL").clicked() {
+                        let curl_cmd = crate::views::inspector::build_curl_command(&flow_clone, state.selected_flow_detail.as_ref());
+                        ui.ctx().copy_text(curl_cmd);
+                        ui.close();
+                    }
+                    if ui.button("📋 Copy Entire Row").clicked() {
+                        let row_summary = format!(
+                            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                            flow_clone.id,
+                            flow_clone.method,
+                            flow_clone.status_code,
+                            flow_clone.host,
+                            flow_clone.path,
+                            format_bytes(flow_clone.response_size),
+                            format_duration(flow_clone.duration_ms)
+                        );
+                        ui.ctx().copy_text(row_summary);
+                        ui.close();
+                    }
+                    ui.separator();
                     if ui.button("🔁 Send to Repeater").clicked() {
                         send_to_repeater = Some(flow_clone.clone());
                         ui.close();
                     }
                     if ui.button("⚡ Send to Fuzzer").clicked() {
                         send_to_fuzzer = Some(flow_clone.clone());
-                        ui.close();
-                    }
-                    ui.separator();
-                    if ui.button("📋 Copy URL").clicked() {
-                        ui.ctx().copy_text(flow_url.clone());
-                        ui.close();
-                    }
-                    if ui.button("📋 Copy as cURL").clicked() {
-                        let curl_cmd = crate::views::inspector::build_curl_command(&flow_clone, state.selected_flow_detail.as_ref());
-                        ui.ctx().copy_text(curl_cmd);
                         ui.close();
                     }
                     ui.separator();
@@ -178,6 +209,13 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std
                 });
             });
         });
+
+    // Keyboard shortcut: Ctrl+C copies URL of selected flow
+    if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::C)) {
+        if let Some(selected) = state.selected_flow() {
+            ui.ctx().copy_text(selected.url.clone());
+        }
+    }
 
     if let Some(id) = new_selection {
         state.select_flow(id, db_path);
