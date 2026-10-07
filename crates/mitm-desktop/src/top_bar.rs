@@ -21,6 +21,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState, dock: &DockState<Tab>, cmds: &m
         add_panel_menu(ui, dock, cmds);
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            egui::widgets::global_theme_preference_switch(ui);
             ui.label(RichText::new(format!("{} flows in memory", state.traffic.flows.len())).weak());
         });
     });
