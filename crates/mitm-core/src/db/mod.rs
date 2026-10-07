@@ -264,3 +264,125 @@ pub fn clear_rewrite_history_logs(db_path: &PathBuf) -> Result<(), String> {
     conn.execute("DELETE FROM rewrite_history", []).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DataCategory {
+    Traffic,
+    WebhookDeliveries,
+    WsMessages,
+    FuzzRuns,
+    RewriteHistory,
+}
+
+impl DataCategory {
+    pub const ALL: [DataCategory; 5] = [
+        DataCategory::Traffic,
+        DataCategory::WebhookDeliveries,
+        DataCategory::WsMessages,
+        DataCategory::FuzzRuns,
+        DataCategory::RewriteHistory,
+    ];
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Traffic => "Traffic",
+            Self::WebhookDeliveries => "Webhook deliveries",
+            Self::WsMessages => "WebSocket messages",
+            Self::FuzzRuns => "Fuzz runs",
+            Self::RewriteHistory => "Rewrite history",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataCategoryCounts {
+    pub traffic: u64,
+    pub webhook_deliveries: u64,
+    pub ws_messages: u64,
+    pub fuzz_runs: u64,
+    pub rewrite_history: u64,
+}
+
+impl DataCategoryCounts {
+    pub fn get(&self, category: DataCategory) -> u64 {
+        match category {
+            DataCategory::Traffic => self.traffic,
+            DataCategory::WebhookDeliveries => self.webhook_deliveries,
+            DataCategory::WsMessages => self.ws_messages,
+            DataCategory::FuzzRuns => self.fuzz_runs,
+            DataCategory::RewriteHistory => self.rewrite_history,
+        }
+    }
+}
+
+pub fn count_table_rows(db_path: &PathBuf, table: &str) -> Result<u64, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let count: u64 = conn
+        .query_row(&format!("SELECT COUNT(*) FROM {}", table), [], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    Ok(count)
+}
+
+pub fn get_data_category_counts(db_path: &PathBuf) -> Result<DataCategoryCounts, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let traffic = conn.query_row("SELECT COUNT(*) FROM history", [], |r| r.get(0)).unwrap_or(0);
+    let webhook_deliveries = conn.query_row("SELECT COUNT(*) FROM webhook_deliveries", [], |r| r.get(0)).unwrap_or(0);
+    let ws_messages = conn.query_row("SELECT COUNT(*) FROM ws_messages", [], |r| r.get(0)).unwrap_or(0);
+    let fuzz_runs = conn.query_row("SELECT COUNT(*) FROM fuzz_runs", [], |r| r.get(0)).unwrap_or(0);
+    let rewrite_history = conn.query_row("SELECT COUNT(*) FROM rewrite_history", [], |r| r.get(0)).unwrap_or(0);
+
+    Ok(DataCategoryCounts {
+        traffic,
+        webhook_deliveries,
+        ws_messages,
+        fuzz_runs,
+        rewrite_history,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_db() -> (PathBuf, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("mitm-counts-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("test.db");
+        init_database(&db, None).unwrap();
+        (db, dir)
+    }
+
+    #[test]
+    fn counts_and_clears_per_data_category() {
+        let (db, dir) = temp_db();
+        let counts = get_data_category_counts(&db).unwrap();
+        assert_eq!(counts, DataCategoryCounts::default());
+
+        let conn = Connection::open(&db).unwrap();
+        conn.execute("INSERT INTO history (id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase) VALUES (1, 'GET', 'http://a', 'a', 200, '[]', '[]', '', '', 'done')", []).unwrap();
+        conn.execute("INSERT INTO webhook_deliveries (endpoint_id, endpoint_path, headers, payload, signature_status, computed_hmac, provided_hmac, timestamp) VALUES ('e1', '/w', '[]', '', 'none', '', '', 1000)", []).unwrap();
+        conn.execute("INSERT INTO ws_connections (id, url, status, handshake_time) VALUES (1, 'ws://localhost', 'open', 1000)", []).unwrap();
+        conn.execute("INSERT INTO ws_messages (connection_id, direction, msg_type, payload, timestamp, length, is_injected) VALUES (1, 'c2s', 'text', 'hi', 1000, 2, 0)", []).unwrap();
+        conn.execute("INSERT INTO fuzz_runs (id, name, attack_type, config_json, total, created_at_ms) VALUES (1, 'run', 'sniper', '{}', 1, 1000)", []).unwrap();
+        conn.execute("INSERT INTO rewrite_history (id, rule_id, rule_name, action_type, method, original_url, rewritten_url, original_headers, rewritten_headers, original_body, rewritten_body, status_code, duration_ms) VALUES (1, 'r1', 'rule', 'modify', 'GET', 'http://a', 'http://a', '[]', '[]', '', '', 200, 10)", []).unwrap();
+
+        let counts = get_data_category_counts(&db).unwrap();
+        assert_eq!(counts.traffic, 1);
+        assert_eq!(counts.webhook_deliveries, 1);
+        assert_eq!(counts.ws_messages, 1);
+        assert_eq!(counts.fuzz_runs, 1);
+        assert_eq!(counts.rewrite_history, 1);
+
+        clear_history(&db).unwrap();
+        webhook_db::clear_webhook_deliveries(&db).unwrap();
+        ws_db::clear_ws_messages(&db, None).unwrap();
+        crate::fuzzer::clear_fuzz_runs(&db).unwrap();
+        clear_rewrite_history_logs(&db).unwrap();
+
+        let cleared = get_data_category_counts(&db).unwrap();
+        assert_eq!(cleared, DataCategoryCounts::default());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

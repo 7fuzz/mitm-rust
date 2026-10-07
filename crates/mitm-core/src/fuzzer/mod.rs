@@ -518,6 +518,15 @@ pub fn delete_run_db(db_path: &PathBuf, id: i64) -> Result<(), String> {
     Ok(())
 }
 
+pub fn clear_fuzz_runs(db_path: &PathBuf) -> Result<(), String> {
+    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM fuzz_results", []).map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM fuzz_runs", []).map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

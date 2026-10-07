@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 pub use ca::{CaFormat, CaInfo};
+pub use db::{DataCategory, DataCategoryCounts};
 pub use events::{CoreEvent, EventBus};
 pub use state::{AppState, HistoryEntry, RewriteHistoryEntry};
 
@@ -83,6 +84,64 @@ impl MitmCore {
 
     pub fn clear_all_traffic(&self) -> Result<(), String> {
         db::clear_history(&self.db_path)?;
+        self.state.reset_history_id();
+        self.event_bus.emit(CoreEvent::TrafficCleared);
+        Ok(())
+    }
+
+    pub fn data_counts(&self) -> Result<db::DataCategoryCounts, String> {
+        db::get_data_category_counts(&self.db_path)
+    }
+
+    pub fn count_traffic(&self) -> Result<u64, String> {
+        db::count_table_rows(&self.db_path, "history")
+    }
+
+    pub fn count_webhook_deliveries(&self) -> Result<u64, String> {
+        db::count_table_rows(&self.db_path, "webhook_deliveries")
+    }
+
+    pub fn count_ws_messages(&self) -> Result<u64, String> {
+        db::count_table_rows(&self.db_path, "ws_messages")
+    }
+
+    pub fn count_fuzz_runs(&self) -> Result<u64, String> {
+        db::count_table_rows(&self.db_path, "fuzz_runs")
+    }
+
+    pub fn count_rewrite_history(&self) -> Result<u64, String> {
+        db::count_table_rows(&self.db_path, "rewrite_history")
+    }
+
+    pub fn clear_data_category(&self, category: db::DataCategory) -> Result<(), String> {
+        match category {
+            db::DataCategory::Traffic => self.clear_all_traffic(),
+            db::DataCategory::WebhookDeliveries => self.clear_webhook_deliveries(),
+            db::DataCategory::WsMessages => self.clear_ws_messages(),
+            db::DataCategory::FuzzRuns => self.clear_fuzz_runs(),
+            db::DataCategory::RewriteHistory => self.clear_rewrite_history(),
+        }
+    }
+
+    pub fn clear_webhook_deliveries(&self) -> Result<(), String> {
+        db::webhook_db::clear_webhook_deliveries(&self.db_path)
+    }
+
+    pub fn clear_ws_messages(&self) -> Result<(), String> {
+        db::ws_db::clear_ws_messages(&self.db_path, None)
+    }
+
+    pub fn clear_fuzz_runs(&self) -> Result<(), String> {
+        fuzzer::clear_fuzz_runs(&self.db_path)
+    }
+
+    pub fn clear_rewrite_history(&self) -> Result<(), String> {
+        db::clear_rewrite_history_logs(&self.db_path)
+    }
+
+    pub async fn factory_reset(&self) -> Result<(), String> {
+        self.stop_all_listeners().await;
+        db::recovery::factory_reset(&self.db_path, Some(&self.event_bus)).map_err(|e| e.to_string())?;
         self.state.reset_history_id();
         self.event_bus.emit(CoreEvent::TrafficCleared);
         Ok(())

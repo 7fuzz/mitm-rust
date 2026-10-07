@@ -23,6 +23,25 @@ pub fn backup_and_reset(db_path: &PathBuf, event_bus: Option<&EventBus>) -> Resu
     Ok(backup)
 }
 
+pub fn factory_reset(db_path: &PathBuf, event_bus: Option<&EventBus>) -> Result<(), InitError> {
+    factory_reset_with_ca(db_path, None, event_bus)
+}
+
+pub fn factory_reset_with_ca(
+    db_path: &PathBuf,
+    ca_dir: Option<PathBuf>,
+    event_bus: Option<&EventBus>,
+) -> Result<(), InitError> {
+    for suffix in ["", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(sibling(db_path, suffix));
+    }
+    let ca_path = ca_dir.unwrap_or_else(crate::ca::get_default_ca_dir);
+    crate::ca::delete_ca(ca_path.clone());
+    let _ = crate::ca::get_ca(ca_path);
+    super::init_database(db_path, event_bus)?;
+    Ok(())
+}
+
 pub fn export_database(db_path: &Path, destination: &Path) -> Result<(), String> {
     if !db_path.exists() {
         return Err("Database file does not exist yet".to_string());
@@ -69,6 +88,31 @@ mod tests {
         std::fs::write(&db, b"data").unwrap();
         export_database(&db, &dir.join("out.db")).unwrap();
         assert_eq!(std::fs::read(dir.join("out.db")).unwrap(), b"data");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn factory_reset_clears_db_and_ca_and_remigrates() {
+        let dir = temp_dir();
+        let db = dir.join("mitm.db");
+        let ca_dir = dir.join("ca");
+        std::fs::create_dir_all(&ca_dir).unwrap();
+        let _ = crate::ca::get_ca(ca_dir.clone());
+        assert!(ca_dir.join("ca.crt").exists());
+
+        crate::db::init_database(&db, None).unwrap();
+        rusqlite::Connection::open(&db)
+            .unwrap()
+            .execute("INSERT INTO history (id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase) VALUES (1, 'GET', 'http://a', 'a', 200, '[]', '[]', '', '', 'done')", [])
+            .unwrap();
+
+        factory_reset_with_ca(&db, Some(ca_dir.clone()), None).unwrap();
+        assert!(ca_dir.join("ca.crt").exists());
+        let count: u64 = rusqlite::Connection::open(&db)
+            .unwrap()
+            .query_row("SELECT count(*) FROM history", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
