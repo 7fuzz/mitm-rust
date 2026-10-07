@@ -47,16 +47,27 @@ pub fn show<R: KeyValueRow>(
     for (index, row) in rows.iter_mut().enumerate() {
         let (enabled, key, value) = row.fields();
         ui.push_id((id_salt, index), |ui| {
+            let dim = !*enabled;
+            let is_cookie = key.trim().eq_ignore_ascii_case("cookie");
+            let expanded_id = ui.id().with("cookies_expanded");
+            let mut expanded = is_cookie && ui.data(|d| d.get_temp(expanded_id).unwrap_or(false));
             ui.horizontal(|ui| {
                 changed |= ui.checkbox(enabled, "").changed();
-                let dim = !*enabled;
                 changed |= text_field(ui, key, labels.key, dim, key_width).changed();
-                let value_width = (ui.available_width() - 28.0).max(80.0);
+                let reserved = if is_cookie { 56.0 } else { 28.0 };
+                let value_width = (ui.available_width() - reserved).max(80.0);
                 changed |= text_field(ui, value, labels.value, dim, value_width).changed();
+                if is_cookie && ui.small_button(if expanded { "⏷" } else { "⏵" }).on_hover_text("Edit cookies").clicked() {
+                    expanded = !expanded;
+                    ui.data_mut(|d| d.insert_temp(expanded_id, expanded));
+                }
                 if ui.small_button(RichText::new("🗑").color(theme::color(ui, Tone::Danger))).on_hover_text("Delete row").clicked() {
                     remove = Some(index);
                 }
             });
+            if expanded {
+                changed |= cookie_rows(ui, value, dim, key_width);
+            }
         });
     }
 
@@ -88,6 +99,57 @@ pub fn show<R: KeyValueRow>(
     });
 
     changed
+}
+
+fn cookie_rows(ui: &mut egui::Ui, header: &mut String, dim: bool, key_width: f32) -> bool {
+    let mut cookies = parse_cookies(header);
+    let mut changed = false;
+    let mut remove = None;
+    let indent = ui.spacing().interact_size.y + ui.spacing().item_spacing.x;
+    for (index, (name, value)) in cookies.iter_mut().enumerate() {
+        ui.push_id(("cookie", index), |ui| {
+            ui.horizontal(|ui| {
+                ui.add_space(indent);
+                changed |= text_field(ui, name, "Name", dim, key_width - indent).changed();
+                let value_width = (ui.available_width() - 56.0).max(80.0);
+                changed |= text_field(ui, value, "Value", dim, value_width).changed();
+                if ui.small_button(RichText::new("🗑").color(theme::color(ui, Tone::Danger))).on_hover_text("Delete cookie").clicked() {
+                    remove = Some(index);
+                }
+            });
+        });
+    }
+    ui.horizontal(|ui| {
+        ui.add_space(indent);
+        if ui.small_button("➕ Cookie").clicked() {
+            cookies.push((String::new(), String::new()));
+            changed = true;
+        }
+    });
+    if let Some(index) = remove {
+        cookies.remove(index);
+        changed = true;
+    }
+    if changed {
+        *header = join_cookies(&cookies);
+    }
+    changed
+}
+
+fn parse_cookies(header: &str) -> Vec<(String, String)> {
+    header
+        .split(';')
+        .map(str::trim)
+        .filter(|pair| !pair.is_empty())
+        .map(|pair| {
+            let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+            (name.trim().to_string(), value.trim().to_string())
+        })
+        .collect()
+}
+
+fn join_cookies(cookies: &[(String, String)]) -> String {
+    cookies.iter().map(|(name, value)| format!("{}={}", name, value)).collect::<Vec<_>>().join("; ")
 }
 
 fn text_field(ui: &mut egui::Ui, text: &mut String, hint: &str, dim: bool, width: f32) -> egui::Response {
@@ -123,4 +185,31 @@ pub fn standard_headers(content_type: &'static str) -> Vec<(&'static str, &'stat
         ("X-Forwarded-For", "127.0.0.1"),
         ("X-Requested-With", "XMLHttpRequest"),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cookies_round_trip_through_pairs() {
+        let cookies = parse_cookies(" sid=abc; theme = dark ;flag; ");
+        assert_eq!(cookies, [
+            ("sid".to_string(), "abc".to_string()),
+            ("theme".to_string(), "dark".to_string()),
+            ("flag".to_string(), String::new()),
+        ]);
+        assert_eq!(join_cookies(&cookies), "sid=abc; theme=dark; flag=");
+    }
+
+    #[test]
+    fn values_keep_embedded_equals_signs() {
+        assert_eq!(parse_cookies("t=a=b=="), [("t".to_string(), "a=b==".to_string())]);
+    }
+
+    #[test]
+    fn a_new_empty_cookie_survives_the_next_parse() {
+        let header = join_cookies(&[("a".to_string(), "1".to_string()), (String::new(), String::new())]);
+        assert_eq!(parse_cookies(&header).len(), 2);
+    }
 }
