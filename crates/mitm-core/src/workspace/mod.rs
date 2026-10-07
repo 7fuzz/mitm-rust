@@ -31,6 +31,22 @@ pub struct EnvironmentVariable {
     pub variants: Vec<VariableVariant>,
 }
 
+impl EnvironmentVariable {
+    pub fn current_value(&self) -> &str {
+        if !self.variants.is_empty() && self.active_index < self.variants.len() {
+            &self.variants[self.active_index].value
+        } else {
+            &self.value
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Unresolved {
+    pub name: String,
+}
+
 fn default_true() -> bool {
     true
 }
@@ -615,8 +631,9 @@ pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
     for var in &env.variables {
         if var.enabled && !var.key.trim().is_empty() {
             let k = var.key.trim().to_string();
-            lower_var_map.insert(k.to_lowercase(), var.value.clone());
-            var_map.insert(k, var.value.clone());
+            let v = var.current_value().to_string();
+            lower_var_map.insert(k.to_lowercase(), v.clone());
+            var_map.insert(k, v);
         }
     }
 
@@ -698,6 +715,54 @@ pub fn interpolate_variables(db_path: &PathBuf, workspace_id: &str, text: &str) 
     } else {
         interpolate_dynamic_variables(text)
     }
+}
+
+pub fn find_unresolved_variables(text: &str) -> Vec<Unresolved> {
+    if !text.contains("{{") || !text.contains("}}") {
+        return Vec::new();
+    }
+    let re = match regex::Regex::new(r"\{\{\s*([^\r\n{}]+?)\s*\}\}") {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+    let mut seen = std::collections::HashSet::new();
+    let mut unresolved = Vec::new();
+    for caps in re.captures_iter(text) {
+        let key = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+        if !key.is_empty() && seen.insert(key.to_string()) {
+            unresolved.push(Unresolved { name: key.to_string() });
+        }
+    }
+    unresolved
+}
+
+pub fn resolve_variables_with_env(
+    env: Option<&Environment>,
+    text: &str,
+) -> (String, Vec<Unresolved>) {
+    let resolved = match env {
+        Some(e) => interpolate_variables_with_env(e, text),
+        None => interpolate_dynamic_variables(text),
+    };
+    let unresolved = find_unresolved_variables(&resolved);
+    (resolved, unresolved)
+}
+
+pub fn variable_value_in_env(env: Option<&Environment>, name: &str) -> Option<String> {
+    let trimmed = name.trim();
+    if let Some(env) = env {
+        if let Some(var) = env.variables.iter().find(|v| v.enabled && v.key.trim() == trimmed) {
+            return Some(var.current_value().to_string());
+        }
+        if let Some(var) = env
+            .variables
+            .iter()
+            .find(|v| v.enabled && v.key.trim().eq_ignore_ascii_case(trimmed))
+        {
+            return Some(var.current_value().to_string());
+        }
+    }
+    resolve_dynamic_variable(trimmed)
 }
 
 #[cfg(test)]
@@ -914,6 +979,63 @@ mod tests {
         assert!(get_workspace_db(&db, &ws.id).unwrap().is_none());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_resolve_vars_and_variable_value() {
+        let env = Environment {
+            id: "env-test".to_string(),
+            workspace_id: "ws-test".to_string(),
+            name: "Test Env".to_string(),
+            is_active: true,
+            variables: vec![
+                EnvironmentVariable {
+                    key: "HOST".to_string(),
+                    value: "api.example.com".to_string(),
+                    enabled: true,
+                    r#type: "default".to_string(),
+                    active_index: 0,
+                    variants: vec![],
+                },
+                EnvironmentVariable {
+                    key: "REGION".to_string(),
+                    value: "us-east-1".to_string(),
+                    enabled: true,
+                    r#type: "default".to_string(),
+                    active_index: 1,
+                    variants: vec![
+                        VariableVariant { name: "us".to_string(), value: "us-east-1".to_string() },
+                        VariableVariant { name: "eu".to_string(), value: "eu-west-1".to_string() },
+                    ],
+                },
+                EnvironmentVariable {
+                    key: "DISABLED_KEY".to_string(),
+                    value: "secret".to_string(),
+                    enabled: false,
+                    r#type: "default".to_string(),
+                    active_index: 0,
+                    variants: vec![],
+                },
+            ],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        };
+
+        let template = "https://{{HOST}}/{{REGION}}/users/{{user_id}}?disabled={{DISABLED_KEY}}&uuid={{$guid}}";
+        let (resolved, unresolved) = resolve_variables_with_env(Some(&env), template);
+
+        assert!(resolved.starts_with("https://api.example.com/eu-west-1/users/{{user_id}}?disabled={{DISABLED_KEY}}&uuid="));
+        assert_eq!(unresolved, vec![
+            Unresolved { name: "user_id".to_string() },
+            Unresolved { name: "DISABLED_KEY".to_string() },
+        ]);
+
+        assert_eq!(variable_value_in_env(Some(&env), "HOST"), Some("api.example.com".to_string()));
+        assert_eq!(variable_value_in_env(Some(&env), "host"), Some("api.example.com".to_string()));
+        assert_eq!(variable_value_in_env(Some(&env), "REGION"), Some("eu-west-1".to_string()));
+        assert_eq!(variable_value_in_env(Some(&env), "DISABLED_KEY"), None);
+        assert_eq!(variable_value_in_env(Some(&env), "user_id"), None);
+        assert!(variable_value_in_env(Some(&env), "$guid").is_some());
     }
 }
 

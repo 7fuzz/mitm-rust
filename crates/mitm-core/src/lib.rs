@@ -20,7 +20,7 @@ pub use ca::{CaFormat, CaInfo};
 pub use db::{DataCategory, DataCategoryCounts};
 pub use events::{CoreEvent, EventBus};
 pub use state::{AppState, HistoryEntry, RewriteHistoryEntry};
-pub use workspace::{Environment, EnvironmentVariable, VariableVariant, Workspace};
+pub use workspace::{Environment, EnvironmentVariable, Unresolved, VariableVariant, Workspace};
 
 pub struct MitmCore {
     pub state: Arc<AppState>,
@@ -463,5 +463,30 @@ impl MitmCore {
 
     pub fn set_active_environment(&self, workspace_id: &str, env_id: Option<&str>) -> Result<(), String> {
         workspace::set_active_environment_db(&self.db_path, workspace_id, env_id)
+    }
+
+    pub fn get_active_environment(&self) -> Result<Option<workspace::Environment>, String> {
+        if let Some(ws) = self.get_active_workspace()? {
+            let envs = self.get_workspace_environments(&ws.id)?;
+            if let Some(active_id) = &ws.active_environment_id {
+                if let Some(env) = envs.iter().find(|e| &e.id == active_id) {
+                    return Ok(Some(env.clone()));
+                }
+            }
+            if let Some(env) = envs.into_iter().find(|e| e.is_active) {
+                return Ok(Some(env));
+            }
+        }
+        Ok(None)
+    }
+
+    pub fn resolve_vars(&self, text: &str) -> (String, Vec<workspace::Unresolved>) {
+        let active_env = self.get_active_environment().ok().flatten();
+        workspace::resolve_variables_with_env(active_env.as_ref(), text)
+    }
+
+    pub fn variable_value(&self, name: &str) -> Option<String> {
+        let active_env = self.get_active_environment().ok().flatten();
+        workspace::variable_value_in_env(active_env.as_ref(), name)
     }
 }
