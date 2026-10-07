@@ -98,14 +98,16 @@ impl ProxyState {
 
 pub struct ListenerForm {
     pub label: String,
-    pub address: String,
+    pub host: String,
+    pub port: String,
 }
 
 impl Default for ListenerForm {
     fn default() -> Self {
         Self {
             label: String::new(),
-            address: "127.0.0.1:8082".to_string(),
+            host: String::new(),
+            port: "8082".to_string(),
         }
     }
 }

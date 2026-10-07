@@ -124,18 +124,48 @@ fn proxy_section(
     ui.strong("Add New Listener");
     ui.horizontal(|ui| {
         ui.label("Label:");
-        ui.add(egui::TextEdit::singleline(&mut form.label).hint_text("e.g. Mobile, Docker").desired_width(120.0));
+        ui.add(egui::TextEdit::singleline(&mut form.label).hint_text("e.g. Mobile, Docker").desired_width(110.0));
 
-        ui.label("Address:");
-        ui.add(egui::TextEdit::singleline(&mut form.address).hint_text("127.0.0.1:8081").desired_width(160.0));
+        ui.label("Host:");
+        ui.add(egui::TextEdit::singleline(&mut form.host).hint_text("0.0.0.0").desired_width(90.0));
 
-        let can_add = !form.label.trim().is_empty() && !form.address.trim().is_empty();
+        let host_hint = match form.host.trim() {
+            "" | "0.0.0.0" => "all interfaces",
+            "127.0.0.1" | "localhost" => "this machine",
+            _ => "",
+        };
+        if !host_hint.is_empty() {
+            ui.label(RichText::new(host_hint).weak());
+        }
+
+        ui.label("Port:");
+        ui.add(egui::TextEdit::singleline(&mut form.port).hint_text("8082").desired_width(50.0));
+
+        let port_num = form.port.trim().parse::<u16>().ok().filter(|&p| p > 0);
+        let overlap = port_num.and_then(|p| find_listener_overlap(&proxy.listeners, &form.host, p));
+
+        if let Some(id) = overlap {
+            ui.label(RichText::new(format!("covered by #{}", id)).color(theme::color(ui, Tone::Warn)));
+        }
+
+        let can_add = !form.label.trim().is_empty() && port_num.is_some() && overlap.is_none();
         if ui.add_enabled(can_add, egui::Button::new("➕ Add Listener")).clicked() {
+            let port = port_num.unwrap();
+            let effective_host = match form.host.trim() {
+                "" => "0.0.0.0",
+                "localhost" => "127.0.0.1",
+                h => h,
+            };
+            let address = if effective_host.contains(':') && !effective_host.starts_with('[') {
+                format!("[{}]:{}", effective_host, port)
+            } else {
+                format!("{}:{}", effective_host, port)
+            };
             let next_id = proxy.listeners.iter().map(|l| l.id).max().unwrap_or(0) + 1;
             proxy.listeners.push(mitm_core::state::ListenerConfig {
                 id: next_id,
                 label: form.label.trim().to_string(),
-                address: form.address.trim().to_string(),
+                address,
                 enabled: true,
             });
             form.label.clear();
@@ -176,4 +206,49 @@ fn proxy_section(
             ui.label(db_path.to_string_lossy());
             ui.end_row();
         });
+}
+
+fn find_listener_overlap(listeners: &[mitm_core::state::ListenerConfig], host: &str, port: u16) -> Option<u32> {
+    let candidate_host = match host.trim() {
+        "" => "0.0.0.0",
+        h if h.eq_ignore_ascii_case("localhost") => "127.0.0.1",
+        h => h,
+    };
+    let candidate_ip: std::net::IpAddr = candidate_host.parse().ok()?;
+    for listener in listeners {
+        if let Ok(addr) = listener.address.parse::<std::net::SocketAddr>() {
+            if addr.port() == port {
+                let ip = addr.ip();
+                let overlap = ip == candidate_ip
+                    || (ip.is_unspecified() && candidate_ip.is_unspecified())
+                    || (ip.is_unspecified() && ip.is_ipv4() == candidate_ip.is_ipv4())
+                    || (candidate_ip.is_unspecified() && ip.is_ipv4() == candidate_ip.is_ipv4());
+                if overlap {
+                    return Some(listener.id);
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mitm_core::state::ListenerConfig;
+
+    #[test]
+    fn detects_overlapping_listeners() {
+        let listeners = vec![
+            ListenerConfig { id: 0, label: "default".into(), address: "127.0.0.1:8080".into(), enabled: true },
+            ListenerConfig { id: 1, label: "all".into(), address: "0.0.0.0:8085".into(), enabled: true },
+        ];
+        assert_eq!(find_listener_overlap(&listeners, "127.0.0.1", 8080), Some(0));
+        assert_eq!(find_listener_overlap(&listeners, "", 8080), Some(0));
+        assert_eq!(find_listener_overlap(&listeners, "localhost", 8080), Some(0));
+        assert_eq!(find_listener_overlap(&listeners, "127.0.0.1", 8085), Some(1));
+        assert_eq!(find_listener_overlap(&listeners, "192.168.1.1", 8085), Some(1));
+        assert_eq!(find_listener_overlap(&listeners, "127.0.0.1", 8081), None);
+        assert_eq!(find_listener_overlap(&listeners, "192.168.1.1", 8080), None);
+    }
 }
