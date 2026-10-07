@@ -26,7 +26,7 @@ pub struct MitmCore {
 }
 
 impl MitmCore {
-    pub fn init() -> Result<Self, String> {
+    pub fn init() -> Result<Self, db::InitError> {
         let _ = rustls::crypto::ring::default_provider().install_default();
 
         let db_path = db::get_default_db_path();

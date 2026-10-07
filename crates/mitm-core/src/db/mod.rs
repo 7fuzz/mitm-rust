@@ -1,9 +1,11 @@
 pub mod actor;
+mod error;
 pub mod history_db;
 pub mod migrations;
 pub mod webhook_db;
 pub mod ws_db;
 
+pub use error::InitError;
 pub use history_db::*;
 
 use std::path::PathBuf;
@@ -39,23 +41,21 @@ pub fn get_default_db_path() -> PathBuf {
     app_dir.join("mitm.db")
 }
 
-pub fn init_database(db_path: &PathBuf, event_bus: Option<&crate::events::EventBus>) -> Result<(), String> {
+pub fn init_database(db_path: &PathBuf, event_bus: Option<&crate::events::EventBus>) -> Result<(), InitError> {
     if let Some(parent) = db_path.parent() {
         if !parent.exists() {
-            let _ = std::fs::create_dir_all(parent);
+            std::fs::create_dir_all(parent).map_err(|e| InitError::Io(e.to_string()))?;
         }
     }
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = Connection::open(db_path).map_err(InitError::from)?;
 
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
          PRAGMA synchronous = NORMAL;
          PRAGMA foreign_keys = ON;"
-    ).map_err(|e| e.to_string())?;
+    ).map_err(InitError::from)?;
 
-    migrations::run_all(event_bus, &conn)?;
-
-    Ok(())
+    migrations::run_all(event_bus, &conn).map_err(InitError::migration)
 }
 
 pub fn get_preference(db_path: &PathBuf, key: &str) -> Option<String> {
