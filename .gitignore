@@ -26,3 +26,4 @@ mitm-next-python/
 mitm-rust/
 do_not_commit/
 .agents/
+/target/
