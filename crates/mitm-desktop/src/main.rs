@@ -9,8 +9,10 @@ mod state;
 mod views;
 
 use state::UiState;
+use views::fuzzer::render_fuzzer_view;
 use views::inspector::render_inspector_view;
 use views::intercept::render_intercept_view;
+use views::repeater::render_repeater_view;
 use views::settings::render_settings_view;
 use views::traffic::render_traffic_view;
 
@@ -19,8 +21,15 @@ pub enum TabKind {
     Traffic,
     Inspector,
     Repeater,
+    Fuzzer,
     Intercept,
     Settings,
+}
+
+#[derive(Debug, Clone)]
+pub enum FuzzMsg {
+    Result(crate::state::FuzzResultRow),
+    Done,
 }
 
 struct TabViewerApp<'a> {
@@ -39,7 +48,8 @@ impl<'a> egui_dock::TabViewer for TabViewerApp<'a> {
         match tab {
             TabKind::Traffic => format!("Traffic ({})", self.state.flows.len()).into(),
             TabKind::Inspector => "Inspector".into(),
-            TabKind::Repeater => "Repeater".into(),
+            TabKind::Repeater => format!("Repeater ({})", self.state.repeater_tabs.len()).into(),
+            TabKind::Fuzzer => "Fuzzer".into(),
             TabKind::Intercept => {
                 let count = self.state.pending_intercepts.len();
                 if count > 0 {
@@ -61,9 +71,10 @@ impl<'a> egui_dock::TabViewer for TabViewerApp<'a> {
                 render_inspector_view(ui, self.state);
             }
             TabKind::Repeater => {
-                ui.heading("Repeater");
-                ui.separator();
-                ui.label("Send custom HTTP requests and view raw responses.");
+                render_repeater_view(ui, self.state);
+            }
+            TabKind::Fuzzer => {
+                render_fuzzer_view(ui, self.state);
             }
             TabKind::Intercept => {
                 render_intercept_view(ui, self.state);
@@ -82,6 +93,10 @@ pub struct NativeMitmApp {
     rt: Arc<tokio::runtime::Runtime>,
     event_rx: Receiver<CoreEvent>,
     proxy_stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    repeater_result_tx: crossbeam_channel::Sender<(usize, Result<mitm_core::repeater::execute::SentRequest, String>)>,
+    repeater_result_rx: crossbeam_channel::Receiver<(usize, Result<mitm_core::repeater::execute::SentRequest, String>)>,
+    fuzzer_result_tx: crossbeam_channel::Sender<FuzzMsg>,
+    fuzzer_result_rx: crossbeam_channel::Receiver<FuzzMsg>,
 }
 
 impl NativeMitmApp {
@@ -109,12 +124,20 @@ impl NativeMitmApp {
             }
         });
 
-        // Default layout: Traffic on top/left, Inspector on right, bottom tabs for Repeater/Settings
+        let (repeater_result_tx, repeater_result_rx) = crossbeam_channel::unbounded();
+        let (fuzzer_result_tx, fuzzer_result_rx) = crossbeam_channel::unbounded();
+
+        // Default layout: Traffic on top/left, Inspector on right, bottom tabs for Repeater/Fuzzer/Settings
         let mut dock_state = DockState::new(vec![TabKind::Traffic]);
         let [_traffic_node, inspector_node] =
             dock_state.main_surface_mut().split_right(NodeIndex::root(), 0.55, vec![TabKind::Inspector]);
         let [_inspector_node, _tools_node] =
-            dock_state.main_surface_mut().split_below(inspector_node, 0.5, vec![TabKind::Repeater, TabKind::Intercept, TabKind::Settings]);
+            dock_state.main_surface_mut().split_below(inspector_node, 0.5, vec![
+                TabKind::Repeater,
+                TabKind::Fuzzer,
+                TabKind::Intercept,
+                TabKind::Settings,
+            ]);
 
         Self {
             dock_state,
@@ -123,6 +146,10 @@ impl NativeMitmApp {
             rt,
             event_rx,
             proxy_stop_tx: None,
+            repeater_result_tx,
+            repeater_result_rx,
+            fuzzer_result_tx,
+            fuzzer_result_rx,
         }
     }
 
@@ -171,6 +198,36 @@ impl eframe::App for NativeMitmApp {
                     self.ui_state.remove_pending_intercept(&flow_id);
                 }
                 _ => {}
+            }
+        }
+
+        // Drain repeater results
+        while let Ok((tab_idx, res)) = self.repeater_result_rx.try_recv() {
+            if let Some(tab) = self.ui_state.repeater_tabs.get_mut(tab_idx) {
+                tab.is_loading = false;
+                match res {
+                    Ok(r) => {
+                        tab.last_result = Some(r);
+                        tab.error = None;
+                    }
+                    Err(e) => {
+                        tab.error = Some(e);
+                        tab.last_result = None;
+                    }
+                }
+            }
+        }
+
+        // Drain fuzzer results
+        while let Ok(msg) = self.fuzzer_result_rx.try_recv() {
+            match msg {
+                FuzzMsg::Result(row) => {
+                    self.ui_state.fuzzer_state.progress_completed += 1;
+                    self.ui_state.fuzzer_state.results.push(row);
+                }
+                FuzzMsg::Done => {
+                    self.ui_state.fuzzer_state.is_running = false;
+                }
             }
         }
 
@@ -244,6 +301,105 @@ impl eframe::App for NativeMitmApp {
                         let _ = core.update_intercept_rules(rules).await;
                     });
                 }
+            }
+        }
+
+        // 5. Drain queued repeater actions
+        while let Some(cmd) = self.ui_state.repeater_action_queue.pop() {
+            match cmd {
+                crate::state::RepeaterActionCmd::Send { tab_index, tab } => {
+                    let tx = self.repeater_result_tx.clone();
+                    self.rt.spawn(async move {
+                        let res = mitm_core::repeater::execute::send_tab_request(&tab).await;
+                        let _ = tx.send((tab_index, res));
+                    });
+                }
+            }
+        }
+
+        // 6. Drain queued fuzzer actions
+        while let Some(cmd) = self.ui_state.fuzzer_action_queue.pop() {
+            match cmd {
+                crate::state::FuzzerActionCmd::Start { template, payloads, concurrency } => {
+                    let tx = self.fuzzer_result_tx.clone();
+                    let egui_ctx = ui.ctx().clone();
+                    self.rt.spawn(async move {
+                        let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency));
+                        let mut handles = Vec::new();
+
+                        for (idx, payload) in payloads.into_iter().enumerate() {
+                            let sem = Arc::clone(&semaphore);
+                            let t = template.clone();
+                            let tx_clone = tx.clone();
+                            let egui_clone = egui_ctx.clone();
+
+                            let handle = tokio::spawn(async move {
+                                let _permit = sem.acquire().await.ok();
+                                let re = mitm_core::fuzzer::marker_re();
+                                let substituted_url = re.replace_all(&t.url, payload.as_str()).to_string();
+                                let substituted_body = t.body.as_ref().map(|b| re.replace_all(b, payload.as_str()).to_string());
+                                let substituted_headers = t.headers.iter().map(|h| {
+                                    let sub_val = re.replace_all(&h.value, payload.as_str()).to_string();
+                                    mitm_core::repeater::HeaderItem {
+                                        id: h.id.clone(),
+                                        key: h.key.clone(),
+                                        value: sub_val,
+                                        enabled: h.enabled,
+                                    }
+                                }).collect();
+
+                                let tab = mitm_core::repeater::RepeaterTab {
+                                    id: format!("fuzz-{}", idx),
+                                    method: t.method.clone(),
+                                    url: substituted_url,
+                                    headers: substituted_headers,
+                                    params: Vec::new(),
+                                    body_type: t.body_type.clone(),
+                                    body_content: substituted_body,
+                                    extract_rules: Vec::new(),
+                                    pre_requests: Vec::new(),
+                                    post_requests: Vec::new(),
+                                    order_index: idx as i32,
+                                    created_at_ms: chrono::Utc::now().timestamp_millis(),
+                                    updated_at_ms: chrono::Utc::now().timestamp_millis(),
+                                    execution_count: 0,
+                                    last_status_code: None,
+                                    last_duration_ms: None,
+                                };
+
+                                let result = match mitm_core::repeater::execute::send_tab_request(&tab).await {
+                                    Ok(res) => crate::state::FuzzResultRow {
+                                        index: idx + 1,
+                                        payload,
+                                        status_code: res.status_code,
+                                        size: res.response_size,
+                                        duration_ms: res.duration_ms,
+                                        error: None,
+                                    },
+                                    Err(e) => crate::state::FuzzResultRow {
+                                        index: idx + 1,
+                                        payload,
+                                        status_code: 0,
+                                        size: 0,
+                                        duration_ms: 0,
+                                        error: Some(e),
+                                    },
+                                };
+
+                                let _ = tx_clone.send(FuzzMsg::Result(result));
+                                egui_clone.request_repaint();
+                            });
+                            handles.push(handle);
+                        }
+
+                        for h in handles {
+                            let _ = h.await;
+                        }
+                        let _ = tx.send(FuzzMsg::Done);
+                        egui_ctx.request_repaint();
+                    });
+                }
+                crate::state::FuzzerActionCmd::Stop => {}
             }
         }
     }

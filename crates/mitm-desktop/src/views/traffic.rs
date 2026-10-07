@@ -62,6 +62,8 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std
 
     let mut new_selection: Option<i64> = None;
     let mut should_clear = false;
+    let mut send_to_repeater: Option<mitm_core::state::HistoryEntry> = None;
+    let mut send_to_fuzzer: Option<mitm_core::state::HistoryEntry> = None;
 
     TableBuilder::new(ui)
         .striped(true)
@@ -150,6 +152,15 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std
                 }
 
                 response.context_menu(|ui| {
+                    if ui.button("🔁 Send to Repeater").clicked() {
+                        send_to_repeater = Some(flow_clone.clone());
+                        ui.close();
+                    }
+                    if ui.button("⚡ Send to Fuzzer").clicked() {
+                        send_to_fuzzer = Some(flow_clone.clone());
+                        ui.close();
+                    }
+                    ui.separator();
                     if ui.button("📋 Copy URL").clicked() {
                         ui.ctx().copy_text(flow_url.clone());
                         ui.close();
@@ -170,6 +181,13 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std
 
     if let Some(id) = new_selection {
         state.select_flow(id, db_path);
+    }
+    let detail = state.selected_flow_detail.clone();
+    if let Some(f) = send_to_repeater {
+        state.send_flow_to_repeater(&f, detail.as_ref());
+    }
+    if let Some(f) = send_to_fuzzer {
+        state.send_flow_to_fuzzer(&f, detail.as_ref());
     }
     if should_clear {
         state.clear_flows();

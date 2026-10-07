@@ -51,6 +51,7 @@ fn detect_body_content_type(body_type: &str, body: &str) -> Option<String> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct SentRequest {
     pub final_url: String,
     pub request_headers: Vec<HeaderItem>,

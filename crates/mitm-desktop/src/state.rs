@@ -30,6 +30,89 @@ pub enum InterceptActionCmd {
     SaveRules { rules: Vec<mitm_core::db::InterceptRule> },
 }
 
+#[derive(Debug, Clone)]
+pub struct RepeaterTabState {
+    pub id: String,
+    pub name: String,
+    pub method: String,
+    pub url: String,
+    pub headers: String,
+    pub body: String,
+    pub is_loading: bool,
+    pub last_result: Option<mitm_core::repeater::execute::SentRequest>,
+    pub error: Option<String>,
+}
+
+impl Default for RepeaterTabState {
+    fn default() -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: "New Request".to_string(),
+            method: "GET".to_string(),
+            url: "https://httpbin.org/get".to_string(),
+            headers: "User-Agent: MITM-Native/0.2\nAccept: */*".to_string(),
+            body: String::new(),
+            is_loading: false,
+            last_result: None,
+            error: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FuzzResultRow {
+    pub index: usize,
+    pub payload: String,
+    pub status_code: u16,
+    pub size: u64,
+    pub duration_ms: u64,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FuzzerState {
+    pub method: String,
+    pub url: String,
+    pub headers: String,
+    pub body: String,
+    pub wordlist_input: String,
+    pub concurrency: usize,
+    pub is_running: bool,
+    pub progress_completed: usize,
+    pub progress_total: usize,
+    pub results: Vec<FuzzResultRow>,
+}
+
+impl Default for FuzzerState {
+    fn default() -> Self {
+        Self {
+            method: "GET".to_string(),
+            url: "https://httpbin.org/status/{{status}}".to_string(),
+            headers: "User-Agent: MITM-Native/0.2".to_string(),
+            body: String::new(),
+            wordlist_input: "200\n301\n400\n404\n500".to_string(),
+            concurrency: 5,
+            is_running: false,
+            progress_completed: 0,
+            progress_total: 0,
+            results: Vec::new(),
+        }
+    }
+}
+
+pub enum RepeaterActionCmd {
+    Send { tab_index: usize, tab: mitm_core::repeater::RepeaterTab },
+}
+
+pub enum FuzzerActionCmd {
+    Start {
+        template: mitm_core::fuzzer::FuzzTemplate,
+        payloads: Vec<String>,
+        concurrency: usize,
+    },
+    Stop,
+}
+
 pub struct UiState {
     pub flows: VecDeque<HistoryEntry>,
     pub max_flows: usize,
@@ -48,6 +131,15 @@ pub struct UiState {
     pub active_intercept_id: Option<String>,
     pub intercept_rules: Vec<mitm_core::db::InterceptRule>,
     pub intercept_action_queue: Vec<InterceptActionCmd>,
+
+    // Repeater state
+    pub repeater_tabs: Vec<RepeaterTabState>,
+    pub active_repeater_index: usize,
+    pub repeater_action_queue: Vec<RepeaterActionCmd>,
+
+    // Fuzzer state
+    pub fuzzer_state: FuzzerState,
+    pub fuzzer_action_queue: Vec<FuzzerActionCmd>,
 
     // Active intercept editing buffers
     pub edit_intercept_url: String,
@@ -91,6 +183,11 @@ impl Default for UiState {
             active_intercept_id: None,
             intercept_rules: Vec::new(),
             intercept_action_queue: Vec::new(),
+            repeater_tabs: vec![RepeaterTabState::default()],
+            active_repeater_index: 0,
+            repeater_action_queue: Vec::new(),
+            fuzzer_state: FuzzerState::default(),
+            fuzzer_action_queue: Vec::new(),
             edit_intercept_url: String::new(),
             edit_intercept_method: "GET".to_string(),
             edit_intercept_headers: String::new(),
@@ -115,6 +212,52 @@ impl Default for UiState {
 impl UiState {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn send_flow_to_repeater(&mut self, flow: &HistoryEntry, detail: Option<&HistoryDetail>) {
+        let headers_str = if let Some(d) = detail {
+            d.request_headers.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<_>>().join("\n")
+        } else {
+            flow.request_headers.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<_>>().join("\n")
+        };
+        let body_str = if let Some(d) = detail {
+            d.request_body.clone()
+        } else {
+            flow.request_body.clone()
+        };
+
+        let name = format!("{} {}", flow.method, flow.path.chars().take(20).collect::<String>());
+        let tab = RepeaterTabState {
+            id: uuid::Uuid::new_v4().to_string(),
+            name,
+            method: flow.method.clone(),
+            url: flow.url.clone(),
+            headers: headers_str,
+            body: body_str,
+            is_loading: false,
+            last_result: None,
+            error: None,
+        };
+        self.repeater_tabs.push(tab);
+        self.active_repeater_index = self.repeater_tabs.len() - 1;
+    }
+
+    pub fn send_flow_to_fuzzer(&mut self, flow: &HistoryEntry, detail: Option<&HistoryDetail>) {
+        let headers_str = if let Some(d) = detail {
+            d.request_headers.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<_>>().join("\n")
+        } else {
+            flow.request_headers.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<_>>().join("\n")
+        };
+        let body_str = if let Some(d) = detail {
+            d.request_body.clone()
+        } else {
+            flow.request_body.clone()
+        };
+
+        self.fuzzer_state.method = flow.method.clone();
+        self.fuzzer_state.url = flow.url.clone();
+        self.fuzzer_state.headers = headers_str;
+        self.fuzzer_state.body = body_str;
     }
 
     pub fn select_flow(&mut self, flow_id: i64, db_path: &PathBuf) {
