@@ -71,6 +71,19 @@ fn certificate_section(
         if ui.button("Open folder").clicked() {
             cmds.push(AppCommand::OpenCaFolder);
         }
+
+        ui.separator();
+
+        let regen_id = ui.id().with("regenerate_ca");
+        if crate::widgets::confirm::confirm_button(
+            ui,
+            regen_id,
+            RichText::new("Regenerate CA"),
+            "Confirm regenerate?",
+            "Recreates root CA. Devices will need to trust the new certificate.",
+        ) {
+            cmds.push(AppCommand::RegenerateCa);
+        }
     });
 
     if let Some((msg, tone)) = &cert.status {

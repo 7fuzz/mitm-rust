@@ -25,6 +25,7 @@ pub enum AppCommand {
     ExportCa(mitm_core::CaFormat),
     CopyCaPem,
     OpenCaFolder,
+    RegenerateCa,
 
     SelectFlow(i64),
     ClearTraffic,

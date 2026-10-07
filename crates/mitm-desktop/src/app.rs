@@ -122,6 +122,17 @@ impl MitmApp {
                     let _ = crate::files::open_external(&info.ca_dir);
                 }
             }
+            AppCommand::RegenerateCa => {
+                match self.rt.block_on(self.core.regenerate_ca()) {
+                    Ok(()) => {
+                        self.state.certificate.info = self.core.ca_info().ok();
+                        self.state.certificate.status = Some(("CA certificate regenerated".to_string(), Tone::Success));
+                    }
+                    Err(e) => {
+                        self.state.certificate.status = Some((e, Tone::Danger));
+                    }
+                }
+            }
 
             AppCommand::SelectFlow(id) => {
                 self.state.traffic.select(id, db_path);
