@@ -123,6 +123,37 @@ pub struct ProxyConfig {
     pub intercept_source_scope: SourceScope,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProxyMode {
+    On,
+    Off,
+    /// Requests reach the server but responses never reach the client
+    BlockClient,
+    /// Requests are answered by the proxy and never leave
+    BlockAll,
+}
+
+impl ProxyMode {
+    pub const ALL: [ProxyMode; 4] = [ProxyMode::On, ProxyMode::Off, ProxyMode::BlockClient, ProxyMode::BlockAll];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ProxyMode::On => "on",
+            ProxyMode::Off => "off",
+            ProxyMode::BlockClient => "block_client",
+            ProxyMode::BlockAll => "block",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|mode| mode.as_str() == value)
+    }
+
+    pub fn is_enabled(self) -> bool {
+        self != ProxyMode::Off
+    }
+}
+
 /// Restricts a feature to traffic from selected proxy listeners (sources).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -613,5 +644,20 @@ impl AppState {
 
     pub fn set_webhook_running(&self, running: bool) {
         self.webhook_running.store(running, Ordering::SeqCst);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProxyMode;
+
+    #[test]
+    fn proxy_modes_round_trip_through_their_stored_names() {
+        for mode in ProxyMode::ALL {
+            assert_eq!(ProxyMode::parse(mode.as_str()), Some(mode));
+        }
+        assert_eq!(ProxyMode::BlockAll.as_str(), "block");
+        assert_eq!(ProxyMode::parse("nope"), None);
+        assert!(!ProxyMode::Off.is_enabled());
     }
 }

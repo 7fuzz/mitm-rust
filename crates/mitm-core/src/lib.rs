@@ -117,6 +117,31 @@ impl MitmCore {
         self.state.proxy_active.store(false, std::sync::atomic::Ordering::SeqCst);
     }
 
+    pub async fn proxy_mode(&self) -> state::ProxyMode {
+        let mode = self.state.proxy_config.read().await.proxy_mode.clone();
+        state::ProxyMode::parse(&mode).unwrap_or(state::ProxyMode::On)
+    }
+
+    /// Saves the mode and starts or stops the listeners to match. Returns the listeners it started, if any.
+    pub async fn set_proxy_mode(&self, mode: state::ProxyMode) -> Result<Option<Vec<String>>, String> {
+        {
+            let mut cfg = self.state.proxy_config.write().await;
+            cfg.proxy_mode = mode.as_str().to_string();
+            cfg.proxy_enabled = mode.is_enabled();
+        }
+        db::set_preference(&self.db_path, "proxy_mode", mode.as_str())?;
+        db::set_preference(&self.db_path, "proxy_enabled", if mode.is_enabled() { "true" } else { "false" })?;
+
+        let active = self.state.proxy_active.load(std::sync::atomic::Ordering::SeqCst);
+        if mode.is_enabled() && !active {
+            return self.start_all_listeners().await.map(Some);
+        }
+        if !mode.is_enabled() && active {
+            self.stop_all_listeners().await;
+        }
+        Ok(None)
+    }
+
     pub async fn get_listener_configs(&self) -> Vec<state::ListenerConfig> {
         self.state.listener_configs.read().await.clone()
     }
