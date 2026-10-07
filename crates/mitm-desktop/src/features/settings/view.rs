@@ -128,6 +128,79 @@ fn certificate_section(
     } else {
         ui.label(RichText::new("Loading certificate info…").weak());
     }
+
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
+
+    ui.strong("Install & Trust Certificate");
+    ui.label(RichText::new("Instructions and commands to trust this root certificate on your operating system or tools.").weak());
+    ui.add_space(6.0);
+
+    let os = std::env::consts::OS;
+    let cert_path = cert.info.as_ref().map_or("~/.local/share/mitm/ca/ca.crt", |i| i.cert_path.as_str());
+
+    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id("trust_linux"), os == "linux")
+        .show_header(ui, |ui| { ui.strong("Linux"); })
+        .body(|ui| {
+            let p11_cmd = format!("sudo trust anchor --store \"{}\"", cert_path);
+            copyable_command(ui, "linux_p11", "Fedora / Arch / RHEL / p11-kit:", &p11_cmd);
+            ui.add_space(4.0);
+            let deb_cmd = format!("sudo cp \"{}\" /usr/local/share/ca-certificates/mitm-ca.crt && sudo update-ca-certificates", cert_path);
+            copyable_command(ui, "linux_deb", "Debian / Ubuntu:", &deb_cmd);
+        });
+
+    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id("trust_macos"), os == "macos")
+        .show_header(ui, |ui| { ui.strong("macOS"); })
+        .body(|ui| {
+            let mac_cmd = format!("sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain \"{}\"", cert_path);
+            copyable_command(ui, "macos_trust", "System keychain:", &mac_cmd);
+        });
+
+    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id("trust_windows"), os == "windows")
+        .show_header(ui, |ui| { ui.strong("Windows"); })
+        .body(|ui| {
+            let win_cmd = format!("certutil -addstore -f \"Root\" \"{}\"", cert_path);
+            copyable_command(ui, "win_certutil", "Certificate store (Run as Administrator):", &win_cmd);
+        });
+
+    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id("trust_firefox"), false)
+        .show_header(ui, |ui| { ui.strong("Firefox"); })
+        .body(|ui| {
+            ui.label(RichText::new("Option 1: Allow Firefox to trust OS root certificates:").weak().small());
+            ui.monospace("about:config -> set security.enterprise_roots.enabled = true");
+            ui.add_space(4.0);
+            ui.label(RichText::new("Option 2: Import into Firefox Settings -> Privacy & Security -> Certificates -> View Certificates -> Authorities -> Import…").weak().small());
+        });
+
+    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id("trust_cli"), false)
+        .show_header(ui, |ui| { ui.strong("CLI / Node.js / Python"); })
+        .body(|ui| {
+            let node_cmd = format!("export NODE_EXTRA_CA_CERTS=\"{}\"", cert_path);
+            copyable_command(ui, "cli_node", "Node.js:", &node_cmd);
+            ui.add_space(4.0);
+            let ssl_cmd = format!("export SSL_CERT_FILE=\"{}\"", cert_path);
+            copyable_command(ui, "cli_python", "Python / OpenSSL:", &ssl_cmd);
+            ui.add_space(4.0);
+            let curl_cmd = format!("export CURL_CA_BUNDLE=\"{}\"", cert_path);
+            copyable_command(ui, "cli_curl", "cURL:", &curl_cmd);
+        });
+}
+
+fn copyable_command(ui: &mut egui::Ui, id_salt: &str, label: &str, cmd: &str) {
+    ui.label(RichText::new(label).weak().small());
+    ui.horizontal(|ui| {
+        let width = (ui.available_width() - 40.0).max(100.0);
+        ui.add(egui::TextEdit::singleline(&mut cmd.to_string()).desired_width(width));
+        let flash_id = ui.id().with(id_salt);
+        if ui.small_button("📋").on_hover_text("Copy command").clicked() {
+            ui.ctx().copy_text(cmd.to_string());
+            crate::widgets::flash::set(ui, flash_id, "Copied");
+        }
+        if let Some(msg) = crate::widgets::flash::current(ui, flash_id) {
+            ui.label(RichText::new(msg).color(theme::color(ui, Tone::Success)).small());
+        }
+    });
 }
 
 fn proxy_section(
