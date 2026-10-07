@@ -1,5 +1,6 @@
 mod view;
 
+use crate::features::request_editor::url_params::decode;
 use crate::widgets::message_pane::PaneState;
 
 pub use view::show;
@@ -30,36 +31,9 @@ fn query_params(url: &str) -> Vec<(String, String)> {
         .filter(|pair| !pair.is_empty())
         .map(|pair| {
             let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
-            (percent_decode(key), percent_decode(value))
+            (decode(key), decode(value))
         })
         .collect()
-}
-
-fn percent_decode(text: &str) -> String {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        let escaped = bytes
-            .get(i + 1..i + 3)
-            .filter(|hex| bytes[i] == b'%' && hex.iter().all(u8::is_ascii_hexdigit))
-            .and_then(|hex| u8::from_str_radix(std::str::from_utf8(hex).ok()?, 16).ok());
-        match (escaped, bytes[i]) {
-            (Some(b), _) => {
-                out.push(b);
-                i += 3;
-            }
-            (None, b'+') => {
-                out.push(b' ');
-                i += 1;
-            }
-            (None, b) => {
-                out.push(b);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
 }
 
 fn header_values<'a>(headers: &'a [(String, String)], name: &'a str) -> impl Iterator<Item = &'a str> {
