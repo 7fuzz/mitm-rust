@@ -1,6 +1,6 @@
 mod view;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use mitm_core::state::{ListenerConfig, ProxyMode};
 
@@ -53,6 +53,7 @@ pub struct ProxyState {
     pub running: bool,
     pub error: Option<String>,
     pub listener_errors: BTreeMap<u32, String>,
+    pub running_listeners: BTreeSet<u32>,
     pub listeners: Vec<ListenerConfig>,
     pub active_summary: String,
 }
@@ -64,6 +65,7 @@ impl Default for ProxyState {
             running: false,
             error: None,
             listener_errors: BTreeMap::new(),
+            running_listeners: BTreeSet::new(),
             listeners: Vec::new(),
             active_summary: String::new(),
         }

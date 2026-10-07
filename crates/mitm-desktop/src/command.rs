@@ -21,6 +21,7 @@ pub enum AppCommand {
     ToggleProxy,
     SetProxyMode(ProxyMode),
     SaveListeners(Vec<ListenerConfig>),
+    SetListenerEnabled { id: u32, enabled: bool },
 
     SelectFlow(i64),
     ClearTraffic,

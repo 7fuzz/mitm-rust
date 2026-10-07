@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use crossbeam_channel::Receiver;
 use eframe::egui;
@@ -14,6 +13,7 @@ use mitm_core::collections::execute::ExecutionResult;
 use mitm_core::repeater::RepeaterExecutionResult;
 use crate::features::collections::CollectionsCmd;
 use crate::features::fuzzer::FuzzerWorker;
+use crate::features::settings::ProxyState;
 use crate::format::{headers_to_text, Exchange};
 use crate::jobs::Jobs;
 use crate::state::AppState;
@@ -36,13 +36,12 @@ pub struct MitmApp {
 impl MitmApp {
     pub fn new(ctx: &egui::Context, storage: Option<&dyn eframe::Storage>, rt: Arc<Runtime>, core: Arc<MitmCore>) -> Self {
         let mut state = AppState::load(&core.db_path);
-        state.proxy.listeners = rt.block_on(core.get_listener_configs());
         state.traffic.set_history_limit(rt.block_on(core.get_history_settings()));
         state.proxy.mode = rt.block_on(core.proxy_mode());
         if state.proxy.mode.is_enabled() {
             state.proxy.set_started(rt.block_on(core.start_all_listeners()));
         }
-        state.proxy.listener_errors = listener_errors(&rt, &core);
+        refresh_listener_state(&rt, &core, &mut state.proxy);
 
         Self {
             dock: prefs::restore(storage, &mut state),
@@ -91,6 +90,10 @@ impl MitmApp {
             }
             AppCommand::SetProxyMode(mode) => self.set_proxy_mode(mode),
             AppCommand::SaveListeners(listeners) => self.save_listeners(listeners),
+            AppCommand::SetListenerEnabled { id, enabled } => {
+                let _ = self.rt.block_on(self.core.set_listener_enabled(id, enabled));
+                self.refresh_listeners();
+            }
 
             AppCommand::SelectFlow(id) => {
                 self.state.traffic.select(id, db_path);
@@ -238,7 +241,7 @@ impl MitmApp {
             }
             Err(e) => proxy.error = Some(e),
         }
-        proxy.listener_errors = listener_errors(&self.rt, &self.core);
+        self.refresh_listeners();
     }
 
     fn save_listeners(&mut self, listeners: Vec<ListenerConfig>) {
@@ -259,7 +262,11 @@ impl MitmApp {
             Ok(None) => {}
             Err(e) => self.state.proxy.error = Some(e),
         }
-        self.state.proxy.listener_errors = listener_errors(&self.rt, &self.core);
+        self.refresh_listeners();
+    }
+
+    fn refresh_listeners(&mut self) {
+        refresh_listener_state(&self.rt, &self.core, &mut self.state.proxy);
     }
 }
 
@@ -312,11 +319,19 @@ impl eframe::App for MitmApp {
     }
 }
 
-fn listener_errors(rt: &Runtime, core: &MitmCore) -> BTreeMap<u32, String> {
-    rt.block_on(core.listener_status())
-        .into_iter()
-        .filter_map(|status| Some((status.config.id, status.error?)))
-        .collect()
+fn refresh_listener_state(rt: &Runtime, core: &MitmCore, proxy: &mut ProxyState) {
+    let statuses = rt.block_on(core.listener_status());
+    proxy.listeners = statuses.iter().map(|s| s.config.clone()).collect();
+    proxy.running_listeners = statuses.iter().filter(|s| s.running).map(|s| s.config.id).collect();
+    proxy.listener_errors = statuses.iter().filter_map(|s| Some((s.config.id, s.error.clone()?))).collect();
+    if proxy.running {
+        let running_summaries: Vec<_> = statuses
+            .iter()
+            .filter(|s| s.running)
+            .map(|s| format!("{} ({})", s.config.label, s.config.address))
+            .collect();
+        proxy.active_summary = running_summaries.join("  |  ");
+    }
 }
 
 fn forward_core_events(rt: &Runtime, core: &MitmCore, ctx: &egui::Context) -> Receiver<CoreEvent> {

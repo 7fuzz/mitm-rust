@@ -59,17 +59,36 @@ fn proxy_section(
         .num_columns(6)
         .spacing([12.0, 8.0])
         .show(ui, |ui| {
+            ui.strong("Status");
             ui.strong("Enabled");
             ui.strong("Label");
             ui.strong("Address (IP:Port)");
             ui.strong("ID");
             ui.strong("");
-            ui.strong("");
             ui.end_row();
 
             for (idx, listener) in proxy.listeners.iter_mut().enumerate() {
+                let status_label = if proxy.listener_errors.contains_key(&listener.id) {
+                    RichText::new("●").color(theme::color(ui, Tone::Danger))
+                } else if proxy.running_listeners.contains(&listener.id) {
+                    RichText::new("●").color(theme::color(ui, Tone::Success))
+                } else {
+                    RichText::new("○").weak()
+                };
+                let tooltip = proxy.listener_errors.get(&listener.id).map(|s| s.as_str()).unwrap_or_else(|| {
+                    if proxy.running_listeners.contains(&listener.id) {
+                        "Bound and listening"
+                    } else {
+                        "Stopped"
+                    }
+                });
+                ui.label(status_label).on_hover_text(tooltip);
+
                 if ui.checkbox(&mut listener.enabled, "").changed() {
-                    modified = true;
+                    cmds.push(AppCommand::SetListenerEnabled {
+                        id: listener.id,
+                        enabled: listener.enabled,
+                    });
                 }
 
                 if ui.add(egui::TextEdit::singleline(&mut listener.label).desired_width(120.0)).lost_focus() {
@@ -82,17 +101,12 @@ fn proxy_section(
 
                 ui.label(listener.id.to_string());
 
-                match proxy.listener_errors.get(&listener.id) {
-                    Some(error) => {
-                        ui.label(RichText::new("⚠").color(theme::color(ui, Tone::Danger))).on_hover_text(error);
+                if listener.id != 0 {
+                    if ui.small_button("🗑").clicked() {
+                        to_remove = Some(idx);
                     }
-                    None => {
-                        ui.label("");
-                    }
-                }
-
-                if ui.small_button("🗑").clicked() {
-                    to_remove = Some(idx);
+                } else {
+                    ui.label("");
                 }
                 ui.end_row();
             }
