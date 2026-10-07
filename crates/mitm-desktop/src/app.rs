@@ -14,7 +14,7 @@ use crate::features::fuzzer::FuzzerWorker;
 use crate::features::repeater::RepeaterWorker;
 use crate::format::{headers_to_text, Exchange};
 use crate::state::AppState;
-use crate::{prefs, top_bar};
+use crate::{prefs, shortcuts, top_bar};
 
 pub struct MitmApp {
     dock: DockState<Tab>,
@@ -245,6 +245,7 @@ impl eframe::App for MitmApp {
         while let Ok(event) = self.core_events.try_recv() {
             self.apply_core_event(event);
         }
+        shortcuts::consume(ui.ctx(), &mut self.cmds);
         let now = ui.input(|i| i.time);
         self.repeater_worker.poll(&mut self.state.repeater, &self.core.db_path);
         self.state.repeater.flush_if_idle(&self.core.db_path, now);

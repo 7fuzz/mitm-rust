@@ -4,6 +4,7 @@ mod dock;
 mod features;
 mod format;
 mod prefs;
+mod shortcuts;
 mod state;
 mod theme;
 mod top_bar;

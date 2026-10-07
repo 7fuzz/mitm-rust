@@ -5,7 +5,7 @@ use crate::command::Commands;
 use crate::features;
 use crate::state::AppState;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Tab {
     Traffic,
     Repeater,
