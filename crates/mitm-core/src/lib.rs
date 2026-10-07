@@ -68,6 +68,7 @@ impl MitmCore {
         let configs = self.state.listener_configs.read().await.clone();
         let ca = self.get_ca();
         self.stop_all_listeners().await;
+        self.state.listener_errors.clear();
 
         let mut started = Vec::new();
 
