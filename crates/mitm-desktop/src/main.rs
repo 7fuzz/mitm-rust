@@ -1,5 +1,6 @@
 mod app;
 mod command;
+mod conflict;
 mod dock;
 mod features;
 mod files;

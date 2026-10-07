@@ -1,7 +1,9 @@
 use std::sync::Arc;
 use eframe::egui;
+use mitm_core::instance::{self, Claim};
 use tokio::runtime::Runtime;
 use crate::app::MitmApp;
+use crate::conflict::{self, Conflict};
 use crate::recovery::Recovery;
 use crate::startup::Starting;
 
@@ -11,6 +13,7 @@ pub struct Shell {
 }
 
 enum Screen {
+    Conflict(Conflict),
     Starting(Starting),
     Running(Box<MitmApp>),
     Recovery(Recovery),
@@ -20,7 +23,11 @@ impl Shell {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         let rt = Arc::new(Runtime::new().expect("Failed to initialize Tokio runtime"));
-        let screen = Screen::Starting(Starting::spawn(&rt, &cc.egui_ctx));
+        // Nothing that binds ports starts until this launch owns the instance lock.
+        let screen = match instance::try_claim(conflict::handlers(&cc.egui_ctx)) {
+            Claim::Conflict(other) => Screen::Conflict(Conflict::new(other)),
+            Claim::Primary | Claim::Unguarded => Screen::Starting(Starting::spawn(&rt, &cc.egui_ctx)),
+        };
         Self { rt, screen }
     }
 }
@@ -48,6 +55,9 @@ impl eframe::App for Shell {
                 Ok(core) => Screen::Running(Box::new(MitmApp::new(ui.ctx(), frame.storage(), Arc::clone(&self.rt), core))),
                 Err(error) => Screen::Recovery(Recovery::new(error)),
             }),
+            Screen::Conflict(conflict) => {
+                conflict.show(ui, &self.rt).then(|| Screen::Starting(Starting::spawn(&self.rt, ui.ctx())))
+            }
             Screen::Recovery(recovery) => {
                 recovery.show(ui, &self.rt).then(|| Screen::Starting(Starting::spawn(&self.rt, ui.ctx())))
             }
