@@ -8,7 +8,7 @@
 - [x] Traffic filter get data and better ui modal
 - [x] Repeater Assignment
 - [x] Env Assignment
-- [ ] Active environment is still not saved to db
+- [x] Active environment is still not saved to db
 - [ ] Repeater_group order index on import and create
 - [x] on import, repeater body is empty somehow
 - [x] On repeater the response body of json for content-encoding still not handled (see http_history)

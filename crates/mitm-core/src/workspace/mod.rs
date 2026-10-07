@@ -285,21 +285,35 @@ pub fn get_workspace_environments_db(
 ) -> Result<Vec<Environment>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
+    let active_id: Option<String> = conn
+        .query_row(
+            "SELECT active_environment_id FROM workspaces WHERE id = ?",
+            [workspace_id],
+            |row| row.get(0),
+        )
+        .ok()
+        .flatten();
+
     let mut stmt = conn
         .prepare("SELECT id, workspace_id, name, is_active, variables_json, created_at_ms, updated_at_ms FROM environments WHERE workspace_id = ? ORDER BY created_at_ms ASC")
         .map_err(|e| e.to_string())?;
 
     let envs = stmt
         .query_map([workspace_id], |row| {
+            let id: String = row.get(0)?;
             let vars_json: String = row.get(4)?;
             let variables: Vec<EnvironmentVariable> = serde_json::from_str(&vars_json).unwrap_or_default();
             let is_active_int: i32 = row.get(3)?;
+            let is_active = match &active_id {
+                Some(aid) => &id == aid,
+                None => is_active_int == 1,
+            };
 
             Ok(Environment {
-                id: row.get(0)?,
+                id,
                 workspace_id: row.get(1)?,
                 name: row.get(2)?,
-                is_active: is_active_int == 1,
+                is_active,
                 variables,
                 created_at_ms: row.get(5)?,
                 updated_at_ms: row.get(6)?,
@@ -322,15 +336,18 @@ pub fn save_workspace_environment_db(
     let is_active_int = if env.is_active { 1 } else { 0 };
 
     if env.is_active {
-        // Deactivate all other environments in this workspace
         let _ = conn.execute(
             "UPDATE environments SET is_active = 0 WHERE workspace_id = ?",
             params![env.workspace_id],
         );
-        // Update active_environment_id on workspace
         let _ = conn.execute(
             "UPDATE workspaces SET active_environment_id = ?, updated_at_ms = ? WHERE id = ?",
             params![env.id, ts, env.workspace_id],
+        );
+    } else {
+        let _ = conn.execute(
+            "UPDATE workspaces SET active_environment_id = NULL, updated_at_ms = ? WHERE id = ? AND active_environment_id = ?",
+            params![ts, env.workspace_id, env.id],
         );
     }
 
@@ -389,20 +406,26 @@ pub fn get_workspace_environment_db(
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
     let mut stmt = conn
-        .prepare("SELECT id, workspace_id, name, is_active, variables_json, created_at_ms, updated_at_ms FROM environments WHERE id = ?")
+        .prepare("SELECT e.id, e.workspace_id, e.name, e.is_active, e.variables_json, e.created_at_ms, e.updated_at_ms, w.active_environment_id FROM environments e LEFT JOIN workspaces w ON e.workspace_id = w.id WHERE e.id = ?")
         .map_err(|e| e.to_string())?;
 
     let mut rows = stmt
         .query_map([id], |row| {
+            let env_id: String = row.get(0)?;
             let vars_json: String = row.get(4)?;
             let variables: Vec<EnvironmentVariable> = serde_json::from_str(&vars_json).unwrap_or_default();
             let is_active_int: i32 = row.get(3)?;
+            let active_id: Option<String> = row.get(7)?;
+            let is_active = match &active_id {
+                Some(aid) => &env_id == aid,
+                None => is_active_int == 1,
+            };
 
             Ok(Environment {
-                id: row.get(0)?,
+                id: env_id,
                 workspace_id: row.get(1)?,
                 name: row.get(2)?,
-                is_active: is_active_int == 1,
+                is_active,
                 variables,
                 created_at_ms: row.get(5)?,
                 updated_at_ms: row.get(6)?,
@@ -1036,6 +1059,72 @@ mod tests {
         assert_eq!(variable_value_in_env(Some(&env), "DISABLED_KEY"), None);
         assert_eq!(variable_value_in_env(Some(&env), "user_id"), None);
         assert!(variable_value_in_env(Some(&env), "$guid").is_some());
+    }
+
+    #[test]
+    fn test_active_environment_survives_restart() {
+        let dir = std::env::temp_dir().join(format!("mitm-env-survive-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("test.db");
+        crate::db::init_database(&db, None).unwrap();
+
+        let ws = create_workspace_db(&db, "Main Workspace".to_string(), None).unwrap();
+        set_active_workspace_db(&db, &ws.id).unwrap();
+
+        let dev_env = Environment {
+            id: "env-dev".to_string(),
+            workspace_id: ws.id.clone(),
+            name: "Dev".to_string(),
+            is_active: true,
+            variables: vec![EnvironmentVariable {
+                key: "BASE_URL".to_string(),
+                value: "https://dev.example.com".to_string(),
+                enabled: true,
+                r#type: "default".to_string(),
+                active_index: 0,
+                variants: vec![],
+            }],
+            created_at_ms: now_ms(),
+            updated_at_ms: now_ms(),
+        };
+        save_workspace_environment_db(&db, dev_env).unwrap();
+
+        let prod_env = Environment {
+            id: "env-prod".to_string(),
+            workspace_id: ws.id.clone(),
+            name: "Prod".to_string(),
+            is_active: false,
+            variables: vec![EnvironmentVariable {
+                key: "BASE_URL".to_string(),
+                value: "https://prod.example.com".to_string(),
+                enabled: true,
+                r#type: "default".to_string(),
+                active_index: 0,
+                variants: vec![],
+            }],
+            created_at_ms: now_ms() + 1,
+            updated_at_ms: now_ms() + 1,
+        };
+        save_workspace_environment_db(&db, prod_env).unwrap();
+
+        set_active_environment_db(&db, &ws.id, Some("env-prod")).unwrap();
+
+        let reloaded_ws = get_active_workspace_db(&db).unwrap().unwrap();
+        assert_eq!(reloaded_ws.active_environment_id.as_deref(), Some("env-prod"));
+
+        let envs = get_workspace_environments_db(&db, &reloaded_ws.id).unwrap();
+        let active_env = envs.iter().find(|e| e.is_active).expect("active env found");
+        assert_eq!(active_env.id, "env-prod");
+        assert_eq!(active_env.name, "Prod");
+
+        let resolved = interpolate_variables(&db, &reloaded_ws.id, "{{BASE_URL}}/api");
+        assert_eq!(resolved, "https://prod.example.com/api");
+
+        set_active_environment_db(&db, &ws.id, None).unwrap();
+        let envs_none = get_workspace_environments_db(&db, &reloaded_ws.id).unwrap();
+        assert!(envs_none.iter().all(|e| !e.is_active));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 
