@@ -1,7 +1,10 @@
 pub mod actor;
+pub mod history_db;
 pub mod migrations;
 pub mod webhook_db;
 pub mod ws_db;
+
+pub use history_db::*;
 
 use std::path::PathBuf;
 use rusqlite::{params, Connection};

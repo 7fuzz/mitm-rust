@@ -26,6 +26,17 @@ impl CA {
     }
 }
 
+pub fn get_default_ca_dir() -> PathBuf {
+    let app_dir = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("mitm")
+        .join("ca");
+    if !app_dir.exists() {
+        let _ = std::fs::create_dir_all(&app_dir);
+    }
+    app_dir
+}
+
 pub fn get_ca(ca_dir: PathBuf) -> CA {
     let cert_path = ca_dir.join("ca.crt");
     let key_path = ca_dir.join("ca.key");

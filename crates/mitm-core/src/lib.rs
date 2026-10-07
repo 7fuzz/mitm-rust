@@ -48,4 +48,29 @@ impl MitmCore {
             db_path,
         })
     }
+
+    pub fn get_ca(&self) -> Arc<ca::CA> {
+        Arc::new(ca::get_ca(ca::get_default_ca_dir()))
+    }
+
+    pub async fn start_proxy(
+        &self,
+        port: u16,
+        label: String,
+        stop_rx: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<(), String> {
+        let addr: std::net::SocketAddr = format!("127.0.0.1:{}", port)
+            .parse()
+            .map_err(|e| format!("Invalid address: {}", e))?;
+        let listener = proxy::bind_proxy_listener(addr).await?;
+        let ca = self.get_ca();
+        proxy::start_proxy_server(
+            Some(self.event_bus.clone()),
+            Arc::clone(&self.state),
+            ca,
+            listener,
+            label,
+            stop_rx,
+        ).await
+    }
 }
