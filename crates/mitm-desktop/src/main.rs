@@ -9,12 +9,14 @@ mod state;
 mod views;
 
 use state::UiState;
+use views::collections::render_collections_view;
 use views::fuzzer::render_fuzzer_view;
 use views::inspector::render_inspector_view;
 use views::intercept::render_intercept_view;
 use views::repeater::render_repeater_view;
 use views::settings::render_settings_view;
 use views::traffic::render_traffic_view;
+use views::websockets::render_websockets_view;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TabKind {
@@ -23,6 +25,8 @@ pub enum TabKind {
     Repeater,
     Fuzzer,
     Intercept,
+    Collections,
+    WebSockets,
     Settings,
 }
 
@@ -50,6 +54,8 @@ impl<'a> egui_dock::TabViewer for TabViewerApp<'a> {
             TabKind::Inspector => "Inspector".into(),
             TabKind::Repeater => format!("Repeater ({})", self.state.repeater_tabs.len()).into(),
             TabKind::Fuzzer => "Fuzzer".into(),
+            TabKind::Collections => "Collections".into(),
+            TabKind::WebSockets => format!("WebSockets ({})", self.state.ws_connections.len()).into(),
             TabKind::Intercept => {
                 let count = self.state.pending_intercepts.len();
                 if count > 0 {
@@ -75,6 +81,12 @@ impl<'a> egui_dock::TabViewer for TabViewerApp<'a> {
             }
             TabKind::Fuzzer => {
                 render_fuzzer_view(ui, self.state);
+            }
+            TabKind::Collections => {
+                render_collections_view(ui, self.state, self.db_path);
+            }
+            TabKind::WebSockets => {
+                render_websockets_view(ui, self.state, self.db_path);
             }
             TabKind::Intercept => {
                 render_intercept_view(ui, self.state);
@@ -111,6 +123,8 @@ impl NativeMitmApp {
         if let Ok(rules) = mitm_core::db::load_intercept_rules(&core.db_path) {
             ui_state.intercept_rules = rules;
         }
+        ui_state.load_workspaces_and_collections(&core.db_path);
+        ui_state.load_ws_connections(&core.db_path);
 
         // Bridge Tokio broadcast channel to sync crossbeam channel
         let (event_tx, event_rx) = crossbeam_channel::unbounded::<CoreEvent>();
@@ -128,7 +142,7 @@ impl NativeMitmApp {
         let (fuzzer_result_tx, fuzzer_result_rx) = crossbeam_channel::unbounded();
 
         // Default layout: Traffic on top/left, Inspector on right, bottom tabs for Repeater/Fuzzer/Settings
-        let mut dock_state = DockState::new(vec![TabKind::Traffic]);
+        let mut dock_state = DockState::new(vec![TabKind::Traffic, TabKind::Collections]);
         let [_traffic_node, inspector_node] =
             dock_state.main_surface_mut().split_right(NodeIndex::root(), 0.55, vec![TabKind::Inspector]);
         let [_inspector_node, _tools_node] =
@@ -136,6 +150,7 @@ impl NativeMitmApp {
                 TabKind::Repeater,
                 TabKind::Fuzzer,
                 TabKind::Intercept,
+                TabKind::WebSockets,
                 TabKind::Settings,
             ]);
 

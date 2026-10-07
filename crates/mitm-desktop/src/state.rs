@@ -141,6 +141,19 @@ pub struct UiState {
     pub fuzzer_state: FuzzerState,
     pub fuzzer_action_queue: Vec<FuzzerActionCmd>,
 
+    // Workspaces & Collections state
+    pub workspaces: Vec<mitm_core::workspace::Workspace>,
+    pub active_workspace_id: String,
+    pub collection_trees: Vec<mitm_core::collections::CollectionTreeItem>,
+    pub selected_collection_request: Option<mitm_core::collections::RequestItem>,
+
+    // WebSocket state
+    pub ws_connections: Vec<mitm_core::state::WebSocketConn>,
+    pub selected_ws_connection_id: Option<i64>,
+    pub ws_messages: Vec<mitm_core::state::WebSocketMessage>,
+    pub ws_send_payload: String,
+    pub ws_filter_direction: String,
+
     // Active intercept editing buffers
     pub edit_intercept_url: String,
     pub edit_intercept_method: String,
@@ -188,6 +201,15 @@ impl Default for UiState {
             repeater_action_queue: Vec::new(),
             fuzzer_state: FuzzerState::default(),
             fuzzer_action_queue: Vec::new(),
+            workspaces: Vec::new(),
+            active_workspace_id: String::new(),
+            collection_trees: Vec::new(),
+            selected_collection_request: None,
+            ws_connections: Vec::new(),
+            selected_ws_connection_id: None,
+            ws_messages: Vec::new(),
+            ws_send_payload: String::new(),
+            ws_filter_direction: "ALL".to_string(),
             edit_intercept_url: String::new(),
             edit_intercept_method: "GET".to_string(),
             edit_intercept_headers: String::new(),
@@ -212,6 +234,35 @@ impl Default for UiState {
 impl UiState {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn load_workspaces_and_collections(&mut self, db_path: &PathBuf) {
+        if let Ok(workspaces) = mitm_core::workspace::get_workspaces_db(db_path) {
+            self.workspaces = workspaces;
+        }
+        if self.active_workspace_id.is_empty() {
+            if let Some(first) = self.workspaces.first() {
+                self.active_workspace_id = first.id.clone();
+            } else {
+                self.active_workspace_id = mitm_core::repeater::REPEATER_WORKSPACE_ID.to_string();
+            }
+        }
+        if let Ok(tree) = mitm_core::collections::get_collections_db(db_path, &self.active_workspace_id) {
+            self.collection_trees = tree;
+        }
+    }
+
+    pub fn load_ws_connections(&mut self, db_path: &PathBuf) {
+        if let Ok(conns) = mitm_core::db::ws_db::load_ws_connections(db_path) {
+            self.ws_connections = conns;
+        }
+    }
+
+    pub fn select_ws_connection(&mut self, conn_id: i64, db_path: &PathBuf) {
+        self.selected_ws_connection_id = Some(conn_id);
+        if let Ok(msgs) = mitm_core::db::ws_db::load_ws_messages(db_path, conn_id, None) {
+            self.ws_messages = msgs;
+        }
     }
 
     pub fn send_flow_to_repeater(&mut self, flow: &HistoryEntry, detail: Option<&HistoryDetail>) {
