@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use crossbeam_channel::Receiver;
 use eframe::egui;
@@ -41,6 +42,7 @@ impl MitmApp {
         if state.proxy.mode.is_enabled() {
             state.proxy.set_started(rt.block_on(core.start_all_listeners()));
         }
+        state.proxy.listener_errors = listener_errors(&rt, &core);
 
         Self {
             dock: prefs::restore(storage, &mut state),
@@ -236,6 +238,7 @@ impl MitmApp {
             }
             Err(e) => proxy.error = Some(e),
         }
+        proxy.listener_errors = listener_errors(&self.rt, &self.core);
     }
 
     fn save_listeners(&mut self, listeners: Vec<ListenerConfig>) {
@@ -256,6 +259,7 @@ impl MitmApp {
             Ok(None) => {}
             Err(e) => self.state.proxy.error = Some(e),
         }
+        self.state.proxy.listener_errors = listener_errors(&self.rt, &self.core);
     }
 }
 
@@ -306,6 +310,13 @@ impl eframe::App for MitmApp {
             ctx.request_repaint();
         }
     }
+}
+
+fn listener_errors(rt: &Runtime, core: &MitmCore) -> BTreeMap<u32, String> {
+    rt.block_on(core.listener_status())
+        .into_iter()
+        .filter_map(|status| Some((status.config.id, status.error?)))
+        .collect()
 }
 
 fn forward_core_events(rt: &Runtime, core: &MitmCore, ctx: &egui::Context) -> Receiver<CoreEvent> {

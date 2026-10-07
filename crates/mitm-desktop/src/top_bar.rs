@@ -42,6 +42,10 @@ fn proxy_controls(ui: &mut egui::Ui, state: &AppState, cmds: &mut Commands) {
             }
         }
     });
+    let problems = proxy.problems();
+    if !problems.is_empty() {
+        ui.label(RichText::new("⚠").color(theme::color(ui, Tone::Danger)).strong()).on_hover_text(problems.join("\n"));
+    }
     ui.separator();
 
     if proxy.running && !proxy.active_summary.is_empty() {

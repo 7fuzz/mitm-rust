@@ -25,13 +25,14 @@ pub fn show(
 
     egui::Grid::new("listeners_table_grid")
         .striped(true)
-        .num_columns(5)
+        .num_columns(6)
         .spacing([12.0, 8.0])
         .show(ui, |ui| {
             ui.strong("Enabled");
             ui.strong("Label");
             ui.strong("Address (IP:Port)");
             ui.strong("ID");
+            ui.strong("");
             ui.strong("");
             ui.end_row();
 
@@ -49,6 +50,15 @@ pub fn show(
                 }
 
                 ui.label(listener.id.to_string());
+
+                match proxy.listener_errors.get(&listener.id) {
+                    Some(error) => {
+                        ui.label(RichText::new("⚠").color(theme::color(ui, Tone::Danger))).on_hover_text(error);
+                    }
+                    None => {
+                        ui.label("");
+                    }
+                }
 
                 if ui.small_button("🗑").clicked() {
                     to_remove = Some(idx);

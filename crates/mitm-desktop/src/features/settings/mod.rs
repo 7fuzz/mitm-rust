@@ -1,5 +1,6 @@
 mod view;
 
+use std::collections::BTreeMap;
 use mitm_core::state::{ListenerConfig, ProxyMode};
 
 pub use view::show;
@@ -8,6 +9,7 @@ pub struct ProxyState {
     pub mode: ProxyMode,
     pub running: bool,
     pub error: Option<String>,
+    pub listener_errors: BTreeMap<u32, String>,
     pub listeners: Vec<ListenerConfig>,
     pub active_summary: String,
 }
@@ -18,6 +20,7 @@ impl Default for ProxyState {
             mode: ProxyMode::On,
             running: false,
             error: None,
+            listener_errors: BTreeMap::new(),
             listeners: Vec::new(),
             active_summary: String::new(),
         }
@@ -25,6 +28,14 @@ impl Default for ProxyState {
 }
 
 impl ProxyState {
+    pub fn problems(&self) -> Vec<String> {
+        let listener_problems = self.listener_errors.iter().map(|(id, error)| {
+            let label = self.listeners.iter().find(|l| l.id == *id).map_or("", |l| l.label.as_str());
+            format!("#{} {}: {}", id, label, error)
+        });
+        self.error.iter().cloned().chain(listener_problems).collect()
+    }
+
     pub fn set_started(&mut self, result: Result<Vec<String>, String>) {
         match result {
             Ok(started) => {
