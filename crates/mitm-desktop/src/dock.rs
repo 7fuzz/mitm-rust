@@ -1,6 +1,6 @@
 use std::path::Path;
 use eframe::egui;
-use egui_dock::{DockState, TabIndex};
+use egui_dock::{DockState, NodeIndex, TabIndex};
 use crate::command::Commands;
 use crate::features;
 use crate::state::AppState;
@@ -63,26 +63,23 @@ pub fn open_tab(dock: &mut DockState<Tab>, tab: Tab) {
     }
 
     let traffic = dock.find_main_surface_tab(&Tab::Traffic).map(|(node, _)| node);
-    let inspector = dock.find_main_surface_tab(&Tab::Inspector).map(|(node, _)| node);
 
-    match (&tab, traffic, inspector) {
-        (Tab::Inspector, Some(traffic), _) => {
-            dock.main_surface_mut().split_right(traffic, 0.55, vec![tab]);
+    match (&tab, traffic) {
+        (Tab::Inspector, Some(traffic)) => {
+            dock.main_surface_mut().split_below(traffic, 0.5, vec![tab]);
         }
-        (Tab::Inspector | Tab::Traffic, _, _) => dock.push_to_first_leaf(tab),
-        (_, _, Some(inspector)) => {
+        (Tab::Inspector | Tab::Traffic, _) => dock.push_to_first_leaf(tab),
+        (_, traffic) => {
             let tool_node = Tab::TOOLS.iter().find_map(|t| dock.find_main_surface_tab(t)).map(|(node, _)| node);
             if let Some(leaf) = tool_node.and_then(|node| dock.main_surface_mut().leaf_mut(node).ok()) {
                 leaf.tabs.push(tab);
                 leaf.active = TabIndex(leaf.tabs.len() - 1);
+            } else if traffic.is_some() {
+                dock.main_surface_mut().split_right(NodeIndex::root(), 0.6, vec![tab]);
             } else {
-                dock.main_surface_mut().split_below(inspector, 0.5, vec![tab]);
+                dock.push_to_first_leaf(tab);
             }
         }
-        (_, Some(traffic), None) => {
-            dock.main_surface_mut().split_right(traffic, 0.55, vec![tab]);
-        }
-        _ => dock.push_to_first_leaf(tab),
     }
 }
 
