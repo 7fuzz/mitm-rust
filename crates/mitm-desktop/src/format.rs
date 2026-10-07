@@ -141,6 +141,13 @@ pub fn display_body(body: &str, content_type: &str) -> String {
     pretty_json(body).unwrap_or_else(|| body.to_string())
 }
 
+pub fn body_bytes(body: &str) -> Vec<u8> {
+    use base64::Engine;
+    body.strip_prefix("base64:")
+        .and_then(|b64| base64::engine::general_purpose::STANDARD.decode(b64).ok())
+        .unwrap_or_else(|| body.as_bytes().to_vec())
+}
+
 pub fn local_clock(rfc3339: Option<&str>) -> Option<(String, String)> {
     let at = chrono::DateTime::parse_from_rfc3339(rfc3339?).ok()?.with_timezone(&chrono::Local);
     Some((at.format("%H:%M:%S%.3f").to_string(), at.format("%Y-%m-%d %H:%M:%S%.3f").to_string()))
