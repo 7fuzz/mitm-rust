@@ -10,6 +10,13 @@ pub fn horizontal(
     left: impl FnOnce(&mut egui::Ui),
     right: impl FnOnce(&mut egui::Ui),
 ) {
+    let [mut left_ui, mut right_ui] = regions(ui, id_salt, fraction);
+    left(&mut left_ui);
+    right(&mut right_ui);
+}
+
+/// Splits the remaining space into two child `Ui`s around a draggable divider.
+pub fn regions(ui: &mut egui::Ui, id_salt: impl AsIdSalt, fraction: &mut f32) -> [egui::Ui; 2] {
     let rect = ui.available_rect_before_wrap();
     let usable = (rect.width() - HANDLE_WIDTH).max(0.0);
     let min = MIN_PANE_WIDTH.min(usable / 2.0);
@@ -41,13 +48,14 @@ pub fn horizontal(
     };
     ui.painter().vline(handle_rect.center().x, rect.y_range(), stroke);
 
-    pane(ui, left_rect, (&id_salt, "left"), left);
-    pane(ui, right_rect, (&id_salt, "right"), right);
+    let left = pane(ui, left_rect, (&id_salt, "left"));
+    let right = pane(ui, right_rect, (&id_salt, "right"));
     ui.advance_cursor_after_rect(rect);
+    [left, right]
 }
 
-fn pane(ui: &mut egui::Ui, rect: Rect, id_salt: impl AsIdSalt, add: impl FnOnce(&mut egui::Ui)) {
+fn pane(ui: &mut egui::Ui, rect: Rect, id_salt: impl AsIdSalt) -> egui::Ui {
     let mut child = ui.new_child(UiBuilder::new().id_salt(id_salt).max_rect(rect));
     child.set_clip_rect(rect.intersect(ui.clip_rect()));
-    add(&mut child);
+    child
 }
