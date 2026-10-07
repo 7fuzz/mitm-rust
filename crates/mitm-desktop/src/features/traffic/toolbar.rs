@@ -1,6 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::state::ListenerConfig;
 use crate::command::{AppCommand, Commands};
+use crate::widgets::confirm::confirm_button;
 use crate::widgets::tri_state::tri_state_button;
 use super::{TrafficState, FLAGS, METHODS, STATUS_GROUPS};
 
@@ -19,7 +20,8 @@ pub fn show(
         request_count(ui, state, visible_count);
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("🗑").on_hover_text("Clear all traffic logs").clicked() {
+            let confirm_id = ui.id().with("clear_traffic");
+            if confirm_button(ui, confirm_id, RichText::new("🗑"), "🗑 Clear all?", "Clear all traffic logs") {
                 cmds.push(AppCommand::ClearTraffic);
             }
             limit_menu(ui, state, cmds);
