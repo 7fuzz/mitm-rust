@@ -7,6 +7,7 @@ use crate::features::request_editor::steps::{self, StepOption};
 use crate::features::request_editor::url_params::{build_url, new_id, parse_query};
 use crate::features::request_editor::{body_editor, extract_rules};
 use crate::format::pretty_json;
+use crate::widgets::template;
 use super::{EditorTab, RepeaterState};
 
 pub const METHODS: [&str; 7] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"];
@@ -30,9 +31,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
         ui.set_min_height(28.0);
         changed |= method_combo(ui, &mut tab.method);
         let width = ui.available_width() - 150.0;
+        let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
         let url = ui.add(
             egui::TextEdit::singleline(&mut tab.url)
                 .hint_text("https://api.example.com/v1/resource or {{BASE_URL}}/path")
+                .layouter(&mut layouter)
                 .font(egui::TextStyle::Monospace)
                 .desired_width(width),
         );

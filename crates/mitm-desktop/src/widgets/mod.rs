@@ -5,5 +5,6 @@ pub mod json_tree;
 pub mod pills;
 pub mod tri_state;
 pub mod split;
+pub mod template;
 pub mod message_pane;
 pub mod search;

@@ -6,6 +6,7 @@ use crate::features::request_editor::kv_table::{self, KvLabels};
 use crate::features::request_editor::steps::{self, StepOption};
 use crate::features::request_editor::{body_editor, extract_rules};
 use crate::theme::{self, Tone};
+use crate::widgets::template;
 use super::{docs, CollectionsCmd, CollectionsState, DocsMode, EditorTab, PreviewMode};
 
 const METHODS: [&str; 6] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"];
@@ -24,9 +25,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
     ui.horizontal(|ui| {
         ui.set_min_height(28.0);
         changed |= method_combo(ui, &mut request.method);
+        let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
         let url = ui.add(
             egui::TextEdit::singleline(&mut request.url)
                 .hint_text("https://api.example.com/v1/resource or {{BASE_URL}}/endpoint")
+                .layouter(&mut layouter)
                 .font(egui::TextStyle::Monospace)
                 .desired_width(ui.available_width() - 130.0),
         );

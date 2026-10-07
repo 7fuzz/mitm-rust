@@ -5,6 +5,7 @@ use mitm_core::fuzzer::FuzzTemplate;
 use crate::command::{AppCommand, Commands};
 use crate::format::{format_bytes, format_duration, parse_header_items};
 use crate::widgets::pills::{render_method_pill, render_status_pill};
+use crate::widgets::template;
 use super::FuzzerState;
 
 pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
@@ -23,9 +24,11 @@ pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
                 }
             });
 
+        let mut layouter = template::layouter(egui::TextStyle::Body, None);
         ui.add(
             egui::TextEdit::singleline(&mut fuzzer.url)
                 .hint_text("Target URL with placeholder e.g. https://target.com/api/{{id}}")
+                .layouter(&mut layouter)
                 .desired_width(ui.available_width() - 260.0),
         );
 
@@ -102,8 +105,10 @@ pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
 
             ui.add_space(6.0);
             ui.strong("Headers Template:");
+            let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
             ui.add(
                 egui::TextEdit::multiline(&mut fuzzer.headers)
+                    .layouter(&mut layouter)
                     .font(egui::TextStyle::Monospace)
                     .desired_rows(4)
                     .desired_width(f32::INFINITY),
@@ -111,8 +116,10 @@ pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
 
             ui.add_space(6.0);
             ui.strong("Body Template:");
+            let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
             ui.add(
                 egui::TextEdit::multiline(&mut fuzzer.body)
+                    .layouter(&mut layouter)
                     .font(egui::TextStyle::Monospace)
                     .desired_rows(6)
                     .desired_width(f32::INFINITY),

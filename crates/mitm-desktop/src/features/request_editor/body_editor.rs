@@ -3,6 +3,7 @@ use eframe::egui::{self, RichText};
 use mitm_core::encoding::MultipartFieldSpec;
 use crate::format::format_bytes;
 use crate::theme::{self, Tone};
+use crate::widgets::template;
 use super::body::{is_multipart, is_urlencoded, read_multipart, read_urlencoded, store_multipart, store_urlencoded, text_field};
 use super::kv_table::{self, KvLabels};
 
@@ -47,9 +48,11 @@ pub fn code_editor(ui: &mut egui::Ui, id_salt: &str, content: &mut String) -> bo
         .id_salt((id_salt, "code"))
         .auto_shrink([false, false])
         .show(ui, |ui| {
+            let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
             ui.add(
                 egui::TextEdit::multiline(content)
                     .code_editor()
+                    .layouter(&mut layouter)
                     .desired_width(f32::INFINITY)
                     .min_size(visible),
             )
@@ -87,8 +90,9 @@ fn multipart_table(ui: &mut egui::Ui, id_salt: &str, fields: &mut Vec<MultipartF
                     changed |= field.r#type != before;
                     let hint = if field.r#type == "file_path" { "/path/to/file" } else { "Value" };
                     let width = (ui.available_width() - 28.0).max(80.0);
+                    let mut layouter = template::layouter(egui::TextStyle::Body, None);
                     changed |= ui
-                        .add(egui::TextEdit::singleline(&mut field.value).hint_text(hint).desired_width(width))
+                        .add(egui::TextEdit::singleline(&mut field.value).hint_text(hint).desired_width(width).layouter(&mut layouter))
                         .changed();
                 }
 

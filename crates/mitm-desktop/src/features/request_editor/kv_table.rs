@@ -2,6 +2,7 @@ use eframe::egui::{self, RichText};
 use mitm_core::encoding::UrlEncodedParamSpec;
 use mitm_core::repeater::{HeaderItem, ParamItem};
 use crate::theme::{self, Tone};
+use crate::widgets::template;
 use super::url_params::new_id;
 
 pub trait KeyValueRow {
@@ -49,13 +50,9 @@ pub fn show<R: KeyValueRow>(
             ui.horizontal(|ui| {
                 changed |= ui.checkbox(enabled, "").changed();
                 let dim = !*enabled;
-                changed |= ui
-                    .add(text_field(ui, key, labels.key, dim).desired_width(key_width))
-                    .changed();
+                changed |= text_field(ui, key, labels.key, dim, key_width).changed();
                 let value_width = (ui.available_width() - 28.0).max(80.0);
-                changed |= ui
-                    .add(text_field(ui, value, labels.value, dim).desired_width(value_width))
-                    .changed();
+                changed |= text_field(ui, value, labels.value, dim, value_width).changed();
                 if ui.small_button(RichText::new("🗑").color(theme::color(ui, Tone::Danger))).on_hover_text("Delete row").clicked() {
                     remove = Some(index);
                 }
@@ -93,13 +90,10 @@ pub fn show<R: KeyValueRow>(
     changed
 }
 
-fn text_field<'a>(ui: &egui::Ui, text: &'a mut String, hint: &'a str, dim: bool) -> egui::TextEdit<'a> {
-    let edit = egui::TextEdit::singleline(text).hint_text(hint).font(egui::TextStyle::Monospace);
-    if dim {
-        edit.text_color(ui.visuals().weak_text_color())
-    } else {
-        edit
-    }
+fn text_field(ui: &mut egui::Ui, text: &mut String, hint: &str, dim: bool, width: f32) -> egui::Response {
+    let color = dim.then(|| ui.visuals().weak_text_color());
+    let mut layouter = template::layouter(egui::TextStyle::Monospace, color);
+    ui.add(egui::TextEdit::singleline(text).hint_text(hint).desired_width(width).font(egui::TextStyle::Monospace).layouter(&mut layouter))
 }
 
 pub fn standard_headers(content_type: &'static str) -> Vec<(&'static str, &'static str)> {
