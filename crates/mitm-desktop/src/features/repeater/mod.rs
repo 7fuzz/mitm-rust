@@ -9,11 +9,9 @@ use mitm_core::repeater::{
     self as core_repeater, HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab,
 };
 use mitm_core::state::{HistoryDetail, HistoryEntry};
-use crate::command::RequestDraft;
 use crate::features::request_editor::body::structured_from_capture;
 use crate::features::request_editor::run_list::Run;
 use crate::features::request_editor::url_params::{new_id, parse_query};
-use crate::format::parse_header_lines;
 use crate::widgets::message_pane::PaneState;
 
 pub use view::show;
@@ -189,19 +187,6 @@ impl RepeaterState {
             self.responses.insert(id.clone(), ShownResponse::from_run(&RepeaterHistoryItem { id: history_id, ..run }));
         }
         self.after_run(&id, db_path);
-    }
-
-    pub fn create_from_draft(&mut self, draft: RequestDraft, db_path: &PathBuf) {
-        let mut tab = blank_tab(db_path);
-        tab.params = parse_query(&draft.url, &[]);
-        tab.method = draft.method;
-        tab.url = draft.url;
-        tab.headers = header_items(&parse_header_lines(&draft.headers));
-        if !draft.body.is_empty() {
-            tab.body_type = "raw".to_string();
-            tab.body_content = Some(draft.body);
-        }
-        self.create(tab, db_path);
     }
 
     pub fn delete(&mut self, id: &str, db_path: &PathBuf) {

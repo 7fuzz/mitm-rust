@@ -2,6 +2,7 @@ use mitm_core::db::InterceptRule;
 use mitm_core::fuzzer::FuzzTemplate;
 use mitm_core::state::{HistorySettings, ListenerConfig};
 use crate::dock::Tab;
+use crate::features::collections::CollectionsCmd;
 use crate::format::CopyFormat;
 
 #[derive(Debug, Clone, Default)]
@@ -26,7 +27,6 @@ pub enum AppCommand {
     SendFlowToRepeater(i64),
     SendFlowToFuzzer(i64),
 
-    OpenInRepeater(RequestDraft),
     RepeaterNew,
     RepeaterSelect(String),
     RepeaterDelete(String),
@@ -44,7 +44,7 @@ pub enum AppCommand {
     ConfigureInterceptor { enabled: bool, mode: String },
     SaveInterceptRules(Vec<InterceptRule>),
 
-    ReloadCollections,
+    Collections(CollectionsCmd),
     ReloadWsConnections,
     SelectWsConnection(i64),
 }

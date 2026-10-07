@@ -9,6 +9,7 @@ use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
 use crate::command::{AppCommand, Commands, RequestDraft};
 use crate::dock::{self, Tab, TabViewer};
+use crate::features::collections::{CollectionsCmd, CollectionsWorker};
 use crate::features::fuzzer::FuzzerWorker;
 use crate::features::repeater::RepeaterWorker;
 use crate::format::{headers_to_text, Exchange};
@@ -23,6 +24,7 @@ pub struct MitmApp {
     rt: Arc<Runtime>,
     core_events: Receiver<CoreEvent>,
     repeater_worker: RepeaterWorker,
+    collections_worker: CollectionsWorker,
     fuzzer_worker: FuzzerWorker,
 }
 
@@ -47,6 +49,7 @@ impl MitmApp {
             core,
             rt,
             repeater_worker: RepeaterWorker::default(),
+            collections_worker: CollectionsWorker::default(),
             fuzzer_worker: FuzzerWorker::default(),
         }
     }
@@ -133,10 +136,6 @@ impl MitmApp {
                 }
             }
 
-            AppCommand::OpenInRepeater(draft) => {
-                self.state.repeater.create_from_draft(draft, db_path);
-                dock::open_tab(&mut self.dock, Tab::Repeater);
-            }
             AppCommand::RepeaterNew => self.state.repeater.create_blank(db_path),
             AppCommand::RepeaterSelect(id) => self.state.repeater.select(id, db_path),
             AppCommand::RepeaterDelete(id) => self.state.repeater.delete(&id, db_path),
@@ -173,7 +172,12 @@ impl MitmApp {
                 });
             }
 
-            AppCommand::ReloadCollections => self.state.collections.load(db_path),
+            AppCommand::Collections(CollectionsCmd::Execute(id)) => {
+                if self.state.collections.start_run(&id, db_path) {
+                    self.collections_worker.execute(&self.rt, ctx, db_path.clone(), id);
+                }
+            }
+            AppCommand::Collections(cmd) => self.state.collections.apply(cmd, db_path),
             AppCommand::ReloadWsConnections => self.state.websockets.load_connections(db_path),
             AppCommand::SelectWsConnection(id) => self.state.websockets.select(id, db_path),
         }
@@ -227,6 +231,7 @@ impl MitmApp {
 impl eframe::App for MitmApp {
     fn on_exit(&mut self) {
         self.state.repeater.flush(&self.core.db_path);
+        self.state.collections.flush(&self.core.db_path);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -236,6 +241,8 @@ impl eframe::App for MitmApp {
         let now = ui.input(|i| i.time);
         self.repeater_worker.poll(&mut self.state.repeater, &self.core.db_path);
         self.state.repeater.flush_if_idle(&self.core.db_path, now);
+        self.collections_worker.poll(&mut self.state.collections, &self.core.db_path);
+        self.state.collections.flush_if_idle(&self.core.db_path, now);
         self.fuzzer_worker.poll(&mut self.state.fuzzer);
 
         egui::Panel::top("top_panel").show(ui, |ui| {
