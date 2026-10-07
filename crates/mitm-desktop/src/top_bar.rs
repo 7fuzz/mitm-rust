@@ -1,4 +1,5 @@
 use eframe::egui::{self, RichText};
+use mitm_core::state::ProxyMode;
 use crate::theme::{self, Tone};
 use egui_dock::DockState;
 use crate::command::{AppCommand, Commands};
@@ -29,21 +30,43 @@ pub fn show(ui: &mut egui::Ui, state: &AppState, dock: &DockState<Tab>, cmds: &m
 
 fn proxy_controls(ui: &mut egui::Ui, state: &AppState, cmds: &mut Commands) {
     let proxy = &state.proxy;
-    let (status, button) = if proxy.running {
-        (RichText::new("● Running").color(theme::color(ui, Tone::Success)).strong(), "⏹ Stop Proxy")
-    } else {
-        (RichText::new("○ Stopped").weak(), "▶ Start Proxy")
-    };
-    ui.label(status);
-    if ui.button(button).clicked() {
+    let toggle_hint = if proxy.mode.is_enabled() { "Turn the proxy off" } else { "Turn the proxy on" };
+    if ui.button(mode_text(ui, proxy.mode).strong()).on_hover_text(toggle_hint).clicked() {
         cmds.push(AppCommand::ToggleProxy);
     }
+    ui.menu_button("⏷", |ui| {
+        for mode in ProxyMode::ALL {
+            if ui.selectable_label(proxy.mode == mode, mode_text(ui, mode)).clicked() {
+                cmds.push(AppCommand::SetProxyMode(mode));
+                ui.close();
+            }
+        }
+    });
     ui.separator();
 
     if proxy.running && !proxy.active_summary.is_empty() {
         ui.label(RichText::new(&proxy.active_summary).monospace().size(11.0));
         ui.separator();
     }
+}
+
+pub fn mode_label(mode: ProxyMode) -> &'static str {
+    match mode {
+        ProxyMode::On => "On",
+        ProxyMode::Off => "Off",
+        ProxyMode::BlockClient => "Block client",
+        ProxyMode::BlockAll => "Block all",
+    }
+}
+
+fn mode_text(ui: &egui::Ui, mode: ProxyMode) -> RichText {
+    let (dot, color) = match mode {
+        ProxyMode::On => ("●", theme::color(ui, Tone::Success)),
+        ProxyMode::Off => ("○", ui.visuals().weak_text_color()),
+        ProxyMode::BlockClient => ("●", theme::color(ui, Tone::Warn)),
+        ProxyMode::BlockAll => ("●", theme::color(ui, Tone::Danger)),
+    };
+    RichText::new(format!("{} {}", dot, mode_label(mode))).color(color)
 }
 
 fn add_panel_menu(ui: &mut egui::Ui, dock: &DockState<Tab>, cmds: &mut Commands) {

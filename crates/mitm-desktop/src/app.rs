@@ -4,7 +4,7 @@ use eframe::egui;
 use egui_dock::{DockArea, DockState};
 use mitm_core::db::InterceptRule;
 use mitm_core::events::CoreEvent;
-use mitm_core::state::ListenerConfig;
+use mitm_core::state::{ListenerConfig, ProxyMode};
 use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
 use crate::command::{AppCommand, Commands, RequestDraft};
@@ -37,7 +37,10 @@ impl MitmApp {
         let mut state = AppState::load(&core.db_path);
         state.proxy.listeners = rt.block_on(core.get_listener_configs());
         state.traffic.set_history_limit(rt.block_on(core.get_history_settings()));
-        state.proxy.set_started(rt.block_on(core.start_all_listeners()));
+        state.proxy.mode = rt.block_on(core.proxy_mode());
+        if state.proxy.mode.is_enabled() {
+            state.proxy.set_started(rt.block_on(core.start_all_listeners()));
+        }
 
         Self {
             dock: prefs::restore(storage, &mut state),
@@ -80,7 +83,11 @@ impl MitmApp {
             AppCommand::OpenTab(tab) => dock::open_tab(&mut self.dock, tab),
             AppCommand::FocusTabAt(index) => dock::focus_tab_at(&mut self.dock, index),
             AppCommand::CycleTab { forward } => dock::cycle_tab(&mut self.dock, forward),
-            AppCommand::ToggleProxy => self.toggle_proxy(),
+            AppCommand::ToggleProxy => {
+                let mode = if self.state.proxy.mode.is_enabled() { ProxyMode::Off } else { ProxyMode::On };
+                self.set_proxy_mode(mode);
+            }
+            AppCommand::SetProxyMode(mode) => self.set_proxy_mode(mode),
             AppCommand::SaveListeners(listeners) => self.save_listeners(listeners),
 
             AppCommand::SelectFlow(id) => {
@@ -217,12 +224,17 @@ impl MitmApp {
         })
     }
 
-    fn toggle_proxy(&mut self) {
-        if self.state.proxy.running {
-            self.rt.block_on(self.core.stop_all_listeners());
-            self.state.proxy.running = false;
-        } else {
-            self.state.proxy.set_started(self.rt.block_on(self.core.start_all_listeners()));
+    fn set_proxy_mode(&mut self, mode: ProxyMode) {
+        let proxy = &mut self.state.proxy;
+        match self.rt.block_on(self.core.set_proxy_mode(mode)) {
+            Ok(started) => {
+                proxy.mode = mode;
+                match started {
+                    Some(started) => proxy.set_started(Ok(started)),
+                    None => proxy.running &= mode.is_enabled(),
+                }
+            }
+            Err(e) => proxy.error = Some(e),
         }
     }
 

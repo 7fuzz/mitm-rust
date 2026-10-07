@@ -1,6 +1,6 @@
 use mitm_core::db::InterceptRule;
 use mitm_core::fuzzer::FuzzTemplate;
-use mitm_core::state::{HistorySettings, ListenerConfig};
+use mitm_core::state::{HistorySettings, ListenerConfig, ProxyMode};
 use crate::dock::Tab;
 use crate::features::collections::CollectionsCmd;
 use crate::format::CopyFormat;
@@ -19,6 +19,7 @@ pub enum AppCommand {
     FocusTabAt(usize),
     CycleTab { forward: bool },
     ToggleProxy,
+    SetProxyMode(ProxyMode),
     SaveListeners(Vec<ListenerConfig>),
 
     SelectFlow(i64),

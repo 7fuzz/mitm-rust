@@ -1,5 +1,6 @@
 use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
 use crate::command::{AppCommand, Commands};
+use mitm_core::state::ProxyMode;
 use crate::dock::Tab;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -10,6 +11,7 @@ pub enum Action {
     NextTab,
     PreviousTab,
     ToggleProxy,
+    SetProxyMode(ProxyMode),
     ToggleInterceptor,
     ClearTraffic,
 }
@@ -23,6 +25,7 @@ impl Action {
             Action::NextTab => "Next tab".to_string(),
             Action::PreviousTab => "Previous tab".to_string(),
             Action::ToggleProxy => "Toggle proxy".to_string(),
+            Action::SetProxyMode(mode) => format!("Proxy: {}", crate::top_bar::mode_label(mode).to_lowercase()),
             Action::ToggleInterceptor => "Toggle interceptor".to_string(),
             Action::ClearTraffic => "Clear traffic".to_string(),
         }
@@ -36,6 +39,7 @@ impl Action {
             Action::NextTab => AppCommand::CycleTab { forward: true },
             Action::PreviousTab => AppCommand::CycleTab { forward: false },
             Action::ToggleProxy => AppCommand::ToggleProxy,
+            Action::SetProxyMode(mode) => AppCommand::SetProxyMode(mode),
             Action::ToggleInterceptor => AppCommand::ToggleInterceptor,
             Action::ClearTraffic => AppCommand::ClearTraffic,
         }
@@ -65,7 +69,9 @@ pub fn shortcut_for(action: Action) -> Option<KeyboardShortcut> {
 
 pub fn palette_actions() -> Vec<Action> {
     let mut actions: Vec<Action> = Tab::ALL.into_iter().map(Action::OpenTab).collect();
-    actions.extend([Action::NextTab, Action::PreviousTab, Action::ToggleProxy, Action::ToggleInterceptor, Action::ClearTraffic]);
+    actions.extend([Action::NextTab, Action::PreviousTab, Action::ToggleProxy]);
+    actions.extend(ProxyMode::ALL.map(Action::SetProxyMode));
+    actions.extend([Action::ToggleInterceptor, Action::ClearTraffic]);
     actions
 }
 

@@ -1,15 +1,27 @@
 mod view;
 
-use mitm_core::state::ListenerConfig;
+use mitm_core::state::{ListenerConfig, ProxyMode};
 
 pub use view::show;
 
-#[derive(Default)]
 pub struct ProxyState {
+    pub mode: ProxyMode,
     pub running: bool,
     pub error: Option<String>,
     pub listeners: Vec<ListenerConfig>,
     pub active_summary: String,
+}
+
+impl Default for ProxyState {
+    fn default() -> Self {
+        Self {
+            mode: ProxyMode::On,
+            running: false,
+            error: None,
+            listeners: Vec::new(),
+            active_summary: String::new(),
+        }
+    }
 }
 
 impl ProxyState {
