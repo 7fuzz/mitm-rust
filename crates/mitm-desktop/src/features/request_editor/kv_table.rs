@@ -43,10 +43,6 @@ pub fn show<R: KeyValueRow>(
     let mut remove = None;
     let key_width = (ui.available_width() * 0.35).clamp(120.0, 260.0);
 
-    if rows.is_empty() {
-        ui.label(RichText::new("No items configured").weak().italics());
-    }
-
     for (index, row) in rows.iter_mut().enumerate() {
         let (enabled, key, value) = row.fields();
         ui.push_id((id_salt, index), |ui| {

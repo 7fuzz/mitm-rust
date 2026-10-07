@@ -1,6 +1,6 @@
 use eframe::egui::{self, RichText};
 use mitm_core::repeater::ExtractRuleItem;
-use crate::widgets::pills::{AMBER, ROSE};
+use crate::widgets::pills::ROSE;
 use super::url_params::new_id;
 
 const MODES: [(&str, &str, &str); 6] = [
@@ -15,27 +15,6 @@ const MODES: [(&str, &str, &str); 6] = [
 pub fn show(ui: &mut egui::Ui, id_salt: &str, rules: &mut Vec<ExtractRuleItem>) -> bool {
     let mut changed = false;
     let mut remove = None;
-
-    ui.horizontal(|ui| {
-        ui.label(RichText::new("Fill environment variables from each response").weak());
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button(RichText::new("➕ Add Rule").color(AMBER)).clicked() {
-                rules.push(ExtractRuleItem {
-                    id: new_id(),
-                    r#type: "json".to_string(),
-                    expression: "data.token".to_string(),
-                    target_variable: "AUTH_TOKEN".to_string(),
-                    enabled: true,
-                });
-                changed = true;
-            }
-        });
-    });
-    ui.separator();
-
-    if rules.is_empty() {
-        ui.label(RichText::new("No auto-extraction rules configured").weak().italics());
-    }
 
     for (index, rule) in rules.iter_mut().enumerate() {
         ui.push_id((id_salt, index), |ui| {
@@ -65,6 +44,16 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, rules: &mut Vec<ExtractRuleItem>) 
 
     if let Some(index) = remove {
         rules.remove(index);
+        changed = true;
+    }
+    if ui.button("➕ Add Rule").on_hover_text("Fill an environment variable from each response").clicked() {
+        rules.push(ExtractRuleItem {
+            id: new_id(),
+            r#type: "json".to_string(),
+            expression: "data.token".to_string(),
+            target_variable: "AUTH_TOKEN".to_string(),
+            enabled: true,
+        });
         changed = true;
     }
     changed

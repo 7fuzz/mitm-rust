@@ -62,10 +62,6 @@ fn multipart_table(ui: &mut egui::Ui, id_salt: &str, fields: &mut Vec<MultipartF
     let mut changed = false;
     let mut remove = None;
 
-    if fields.is_empty() {
-        ui.label(RichText::new("No fields configured").weak().italics());
-    }
-
     for (index, field) in fields.iter_mut().enumerate() {
         ui.push_id((id_salt, index), |ui| {
             ui.horizontal(|ui| {
