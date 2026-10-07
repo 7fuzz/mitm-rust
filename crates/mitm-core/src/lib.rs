@@ -73,4 +73,59 @@ impl MitmCore {
             stop_rx,
         ).await
     }
+
+    pub async fn toggle_interceptor(&self, enabled: bool, mode: String) -> Result<(), String> {
+        {
+            let mut cfg = self.state.proxy_config.write().await;
+            cfg.intercept_enabled = enabled;
+            cfg.intercept_mode = mode.clone();
+        }
+        let _ = db::set_preference(&self.db_path, "intercept_enabled", if enabled { "true" } else { "false" });
+        let _ = db::set_preference(&self.db_path, "intercept_mode", &mode);
+        Ok(())
+    }
+
+    pub fn forward_intercepted_flow(
+        &self,
+        flow_id: &str,
+        modified_url: Option<String>,
+        modified_method: Option<String>,
+        modified_headers: Option<Vec<(String, String)>>,
+        modified_body: Option<Vec<u8>>,
+    ) -> Result<(), String> {
+        if let Some((_, pending)) = self.state.pending_flows.remove(flow_id) {
+            let action = state::InterceptAction::Forward {
+                modified_url,
+                modified_method,
+                modified_headers,
+                modified_body,
+            };
+            let _ = pending.tx.send(action);
+            self.event_bus.emit(events::CoreEvent::InterceptResolved { flow_id: flow_id.to_string() });
+            Ok(())
+        } else {
+            Err(format!("Flow with ID {} not found", flow_id))
+        }
+    }
+
+    pub fn drop_intercepted_flow(&self, flow_id: &str) -> Result<(), String> {
+        if let Some((_, pending)) = self.state.pending_flows.remove(flow_id) {
+            let _ = pending.tx.send(state::InterceptAction::Drop);
+            self.event_bus.emit(events::CoreEvent::InterceptResolved { flow_id: flow_id.to_string() });
+            Ok(())
+        } else {
+            Err(format!("Flow with ID {} not found", flow_id))
+        }
+    }
+
+    pub async fn get_intercept_rules(&self) -> Vec<db::InterceptRule> {
+        self.state.rules.read().await.clone()
+    }
+
+    pub async fn update_intercept_rules(&self, rules: Vec<db::InterceptRule>) -> Result<(), String> {
+        db::save_intercept_rules(&self.db_path, &rules)?;
+        let mut r = self.state.rules.write().await;
+        *r = rules;
+        Ok(())
+    }
 }

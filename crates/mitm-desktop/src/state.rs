@@ -16,6 +16,20 @@ pub enum InspectorViewMode {
     Hex,
 }
 
+#[derive(Debug, Clone)]
+pub enum InterceptActionCmd {
+    Forward {
+        flow_id: String,
+        url: Option<String>,
+        method: Option<String>,
+        headers: Option<Vec<(String, String)>>,
+        body: Option<Vec<u8>>,
+    },
+    Drop { flow_id: String },
+    ToggleMaster { enabled: bool, mode: String },
+    SaveRules { rules: Vec<mitm_core::db::InterceptRule> },
+}
+
 pub struct UiState {
     pub flows: VecDeque<HistoryEntry>,
     pub max_flows: usize,
@@ -26,6 +40,27 @@ pub struct UiState {
     pub inspector_phase: InspectorPhase,
     pub inspector_mode: InspectorViewMode,
     pub header_search_query: String,
+
+    // Interception state
+    pub intercept_enabled: bool,
+    pub intercept_mode: String,
+    pub pending_intercepts: Vec<mitm_core::state::PendingFlowPayload>,
+    pub active_intercept_id: Option<String>,
+    pub intercept_rules: Vec<mitm_core::db::InterceptRule>,
+    pub intercept_action_queue: Vec<InterceptActionCmd>,
+
+    // Active intercept editing buffers
+    pub edit_intercept_url: String,
+    pub edit_intercept_method: String,
+    pub edit_intercept_headers: String,
+    pub edit_intercept_body: String,
+
+    // New rule builder fields
+    pub new_rule_phase: String,
+    pub new_rule_field: String,
+    pub new_rule_operator: String,
+    pub new_rule_value: String,
+    pub new_rule_action: String,
 
     // Search and filtering
     pub search_query: String,
@@ -50,6 +85,21 @@ impl Default for UiState {
             inspector_phase: InspectorPhase::Request,
             inspector_mode: InspectorViewMode::Headers,
             header_search_query: String::new(),
+            intercept_enabled: false,
+            intercept_mode: "request".to_string(),
+            pending_intercepts: Vec::new(),
+            active_intercept_id: None,
+            intercept_rules: Vec::new(),
+            intercept_action_queue: Vec::new(),
+            edit_intercept_url: String::new(),
+            edit_intercept_method: "GET".to_string(),
+            edit_intercept_headers: String::new(),
+            edit_intercept_body: String::new(),
+            new_rule_phase: "request".to_string(),
+            new_rule_field: "url".to_string(),
+            new_rule_operator: "contains".to_string(),
+            new_rule_value: String::new(),
+            new_rule_action: "intercept".to_string(),
             search_query: String::new(),
             method_filter: "ALL".to_string(),
             status_filter: "ALL".to_string(),
@@ -72,6 +122,60 @@ impl UiState {
         if let Ok(detail) = mitm_core::db::get_history_detail(db_path, flow_id) {
             self.selected_flow_detail = detail;
         }
+    }
+
+    pub fn add_pending_intercept(&mut self, payload: mitm_core::state::PendingFlowPayload) {
+        let is_first = self.pending_intercepts.is_empty();
+        let flow_id = payload.flow_id.clone();
+        self.pending_intercepts.push(payload);
+        if is_first || self.active_intercept_id.is_none() {
+            self.select_active_intercept(&flow_id);
+        }
+    }
+
+    pub fn remove_pending_intercept(&mut self, flow_id: &str) {
+        self.pending_intercepts.retain(|p| p.flow_id != flow_id);
+        if self.active_intercept_id.as_deref() == Some(flow_id) {
+            if let Some(next) = self.pending_intercepts.first() {
+                let id = next.flow_id.clone();
+                self.select_active_intercept(&id);
+            } else {
+                self.active_intercept_id = None;
+                self.edit_intercept_url.clear();
+                self.edit_intercept_body.clear();
+                self.edit_intercept_headers.clear();
+            }
+        }
+    }
+
+    pub fn select_active_intercept(&mut self, flow_id: &str) {
+        if let Some(p) = self.pending_intercepts.iter().find(|p| p.flow_id == flow_id) {
+            self.active_intercept_id = Some(flow_id.to_string());
+            self.edit_intercept_url = p.url.clone();
+            self.edit_intercept_method = p.method.clone();
+            self.edit_intercept_headers = p.headers
+                .iter()
+                .map(|(k, v)| format!("{}: {}", k, v))
+                .collect::<Vec<_>>()
+                .join("\n");
+            self.edit_intercept_body = p.body_text.clone();
+        }
+    }
+
+    pub fn parse_edited_headers(&self) -> Vec<(String, String)> {
+        self.edit_intercept_headers
+            .lines()
+            .filter_map(|line| {
+                let mut parts = line.splitn(2, ':');
+                let key = parts.next()?.trim().to_string();
+                let val = parts.next()?.trim().to_string();
+                if !key.is_empty() {
+                    Some((key, val))
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     pub fn load_history_from_db(&mut self, db_path: &PathBuf) {

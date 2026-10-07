@@ -10,6 +10,7 @@ mod views;
 
 use state::UiState;
 use views::inspector::render_inspector_view;
+use views::intercept::render_intercept_view;
 use views::settings::render_settings_view;
 use views::traffic::render_traffic_view;
 
@@ -39,7 +40,14 @@ impl<'a> egui_dock::TabViewer for TabViewerApp<'a> {
             TabKind::Traffic => format!("Traffic ({})", self.state.flows.len()).into(),
             TabKind::Inspector => "Inspector".into(),
             TabKind::Repeater => "Repeater".into(),
-            TabKind::Intercept => "Intercept".into(),
+            TabKind::Intercept => {
+                let count = self.state.pending_intercepts.len();
+                if count > 0 {
+                    format!("Intercept ({})", count).into()
+                } else {
+                    "Intercept".into()
+                }
+            }
             TabKind::Settings => "Settings".into(),
         }
     }
@@ -58,9 +66,7 @@ impl<'a> egui_dock::TabViewer for TabViewerApp<'a> {
                 ui.label("Send custom HTTP requests and view raw responses.");
             }
             TabKind::Intercept => {
-                ui.heading("Interception Rules");
-                ui.separator();
-                ui.label("Configure breakpoints for requests and responses.");
+                render_intercept_view(ui, self.state);
             }
             TabKind::Settings => {
                 render_settings_view(ui, self.state);
@@ -87,6 +93,9 @@ impl NativeMitmApp {
 
         let mut ui_state = UiState::new();
         ui_state.load_history_from_db(&core.db_path);
+        if let Ok(rules) = mitm_core::db::load_intercept_rules(&core.db_path) {
+            ui_state.intercept_rules = rules;
+        }
 
         // Bridge Tokio broadcast channel to sync crossbeam channel
         let (event_tx, event_rx) = crossbeam_channel::unbounded::<CoreEvent>();
@@ -155,6 +164,12 @@ impl eframe::App for NativeMitmApp {
                 CoreEvent::TrafficCleared => {
                     self.ui_state.clear_flows();
                 }
+                CoreEvent::InterceptPrompt(payload) => {
+                    self.ui_state.add_pending_intercept(payload);
+                }
+                CoreEvent::InterceptResolved { flow_id } => {
+                    self.ui_state.remove_pending_intercept(&flow_id);
+                }
                 _ => {}
             }
         }
@@ -185,6 +200,14 @@ impl eframe::App for NativeMitmApp {
                 ui.separator();
                 ui.label(format!("Port: {}", self.ui_state.proxy_port));
 
+                if !self.ui_state.pending_intercepts.is_empty() {
+                    ui.separator();
+                    let badge = egui::RichText::new(format!("⚠️ {} Paused Flow(s)", self.ui_state.pending_intercepts.len()))
+                        .color(egui::Color32::from_rgb(245, 158, 11))
+                        .strong();
+                    ui.label(badge);
+                }
+
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(egui::RichText::new(format!("{} flows in memory", self.ui_state.flows.len())).weak());
                 });
@@ -197,6 +220,32 @@ impl eframe::App for NativeMitmApp {
             db_path: &self.core.db_path,
         };
         DockArea::new(&mut self.dock_state).show_inside(ui, &mut tab_viewer);
+
+        // 4. Drain queued intercept actions
+        while let Some(cmd) = self.ui_state.intercept_action_queue.pop() {
+            match cmd {
+                crate::state::InterceptActionCmd::Forward { flow_id, url, method, headers, body } => {
+                    let _ = self.core.forward_intercepted_flow(&flow_id, url, method, headers, body);
+                    self.ui_state.remove_pending_intercept(&flow_id);
+                }
+                crate::state::InterceptActionCmd::Drop { flow_id } => {
+                    let _ = self.core.drop_intercepted_flow(&flow_id);
+                    self.ui_state.remove_pending_intercept(&flow_id);
+                }
+                crate::state::InterceptActionCmd::ToggleMaster { enabled, mode } => {
+                    let core = Arc::clone(&self.core);
+                    self.rt.spawn(async move {
+                        let _ = core.toggle_interceptor(enabled, mode).await;
+                    });
+                }
+                crate::state::InterceptActionCmd::SaveRules { rules } => {
+                    let core = Arc::clone(&self.core);
+                    self.rt.spawn(async move {
+                        let _ = core.update_intercept_rules(rules).await;
+                    });
+                }
+            }
+        }
     }
 }
 
