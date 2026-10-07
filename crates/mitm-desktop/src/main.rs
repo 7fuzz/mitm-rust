@@ -2,10 +2,13 @@ mod app;
 mod command;
 mod dock;
 mod features;
+mod files;
 mod format;
 mod jobs;
 mod palette;
 mod prefs;
+mod recovery;
+mod shell;
 mod shortcuts;
 mod state;
 mod theme;
@@ -23,6 +26,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "MITM",
         native_options,
-        Box::new(|cc| Ok(Box::new(app::MitmApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(shell::Shell::new(cc)))),
     )
 }

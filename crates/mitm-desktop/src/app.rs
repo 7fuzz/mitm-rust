@@ -33,25 +33,18 @@ pub struct MitmApp {
 }
 
 impl MitmApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let rt = Arc::new(Runtime::new().expect("Failed to initialize Tokio runtime"));
-        let core = {
-            let _guard = rt.enter();
-            Arc::new(MitmCore::init().expect("Failed to initialize mitm-core"))
-        };
-
-        egui_extras::install_image_loaders(&cc.egui_ctx);
+    pub fn new(ctx: &egui::Context, storage: Option<&dyn eframe::Storage>, rt: Arc<Runtime>, core: Arc<MitmCore>) -> Self {
         let mut state = AppState::load(&core.db_path);
         state.proxy.listeners = rt.block_on(core.get_listener_configs());
         state.traffic.set_history_limit(rt.block_on(core.get_history_settings()));
         state.proxy.set_started(rt.block_on(core.start_all_listeners()));
 
         Self {
-            dock: prefs::restore(cc.storage, &mut state),
+            dock: prefs::restore(storage, &mut state),
             state,
             cmds: Commands::default(),
             palette: PaletteState::default(),
-            core_events: forward_core_events(&rt, &core, &cc.egui_ctx),
+            core_events: forward_core_events(&rt, &core, ctx),
             core,
             rt,
             repeater_runs: Jobs::default(),

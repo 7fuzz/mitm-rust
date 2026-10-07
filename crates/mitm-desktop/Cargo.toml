@@ -19,3 +19,4 @@ serde_json = { version = "1", features = ["preserve_order"] }
 chrono = "0.4"
 base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
+rfd = "0.17"
