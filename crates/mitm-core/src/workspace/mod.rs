@@ -188,6 +188,45 @@ pub fn delete_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub fn get_workspace_db(db_path: &PathBuf, id: &str) -> Result<Option<Workspace>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    ensure_schema_columns(&conn);
+    let mut stmt = conn
+        .prepare("SELECT id, name, description, active_environment_id, created_at_ms, updated_at_ms FROM workspaces WHERE id = ?")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt
+        .query_map([id], |row| {
+            Ok(Workspace {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                active_environment_id: row.get(3)?,
+                created_at_ms: row.get(4)?,
+                updated_at_ms: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    if let Some(r) = rows.next() {
+        r.map(Some).map_err(|e| e.to_string())
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_active_workspace_db(db_path: &PathBuf) -> Result<Option<Workspace>, String> {
+    if let Some(active_id) = crate::db::get_preference(db_path, "active_workspace_id") {
+        if let Ok(Some(ws)) = get_workspace_db(db_path, &active_id) {
+            return Ok(Some(ws));
+        }
+    }
+    let all = get_workspaces_db(db_path)?;
+    if let Some(first) = all.into_iter().next() {
+        let _ = crate::db::set_preference(db_path, "active_workspace_id", &first.id);
+        return Ok(Some(first));
+    }
+    Ok(None)
+}
+
 pub fn set_active_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let ts = now_ms();
@@ -198,6 +237,29 @@ pub fn set_active_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String
     )
     .map_err(|e| e.to_string())?;
 
+    crate::db::set_preference(db_path, "active_workspace_id", id)?;
+    Ok(())
+}
+
+pub fn rename_workspace_db(db_path: &PathBuf, id: &str, new_name: &str) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let ts = now_ms();
+    conn.execute(
+        "UPDATE workspaces SET name = ?, updated_at_ms = ? WHERE id = ?",
+        params![new_name, ts, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn update_workspace_description_db(db_path: &PathBuf, id: &str, description: Option<&str>) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let ts = now_ms();
+    conn.execute(
+        "UPDATE workspaces SET description = ?, updated_at_ms = ? WHERE id = ?",
+        params![description, ts, id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -302,6 +364,104 @@ pub fn delete_workspace_environment_db(db_path: &PathBuf, id: &str) -> Result<()
     }
 
     tx.commit().map_err(|e| e.to_string())
+}
+
+pub fn get_workspace_environment_db(
+    db_path: &PathBuf,
+    id: &str,
+) -> Result<Option<Environment>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    ensure_schema_columns(&conn);
+    let mut stmt = conn
+        .prepare("SELECT id, workspace_id, name, is_active, variables_json, created_at_ms, updated_at_ms FROM environments WHERE id = ?")
+        .map_err(|e| e.to_string())?;
+
+    let mut rows = stmt
+        .query_map([id], |row| {
+            let vars_json: String = row.get(4)?;
+            let variables: Vec<EnvironmentVariable> = serde_json::from_str(&vars_json).unwrap_or_default();
+            let is_active_int: i32 = row.get(3)?;
+
+            Ok(Environment {
+                id: row.get(0)?,
+                workspace_id: row.get(1)?,
+                name: row.get(2)?,
+                is_active: is_active_int == 1,
+                variables,
+                created_at_ms: row.get(5)?,
+                updated_at_ms: row.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    if let Some(r) = rows.next() {
+        r.map(Some).map_err(|e| e.to_string())
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn set_active_environment_db(
+    db_path: &PathBuf,
+    workspace_id: &str,
+    env_id: Option<&str>,
+) -> Result<(), String> {
+    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let ts = now_ms();
+
+    if let Some(id) = env_id {
+        tx.execute(
+            "UPDATE environments SET is_active = CASE WHEN id = ? THEN 1 ELSE 0 END WHERE workspace_id = ?",
+            params![id, workspace_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        tx.execute(
+            "UPDATE workspaces SET active_environment_id = ?, updated_at_ms = ? WHERE id = ?",
+            params![id, ts, workspace_id],
+        )
+        .map_err(|e| e.to_string())?;
+    } else {
+        tx.execute(
+            "UPDATE environments SET is_active = 0 WHERE workspace_id = ?",
+            params![workspace_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        tx.execute(
+            "UPDATE workspaces SET active_environment_id = NULL, updated_at_ms = ? WHERE id = ?",
+            params![ts, workspace_id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().map_err(|e| e.to_string())
+}
+
+pub fn duplicate_workspace_environment_db(
+    db_path: &PathBuf,
+    id: &str,
+    new_name: Option<&str>,
+) -> Result<Environment, String> {
+    let src = get_workspace_environment_db(db_path, id)?
+        .ok_or_else(|| format!("Environment {} not found", id))?;
+    let now = now_ms();
+    let name = match new_name {
+        Some(n) => n.to_string(),
+        None => format!("{} (Copy)", src.name),
+    };
+    let new_env = Environment {
+        id: Uuid::new_v4().to_string(),
+        workspace_id: src.workspace_id,
+        name,
+        is_active: false,
+        variables: src.variables,
+        created_at_ms: now,
+        updated_at_ms: now,
+    };
+    save_workspace_environment_db(db_path, new_env.clone())?;
+    Ok(new_env)
 }
 
 pub fn resolve_dynamic_variable(key: &str) -> Option<String> {
@@ -683,6 +843,77 @@ mod tests {
 
         // Should not loop infinitely or panic
         let _ = interpolate_variables_with_env(&env, "{{a}}");
+    }
+
+    #[test]
+    fn test_workspace_and_environment_db_crud() {
+        let dir = std::env::temp_dir().join(format!("mitm-ws-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("test.db");
+        crate::db::init_database(&db, None).unwrap();
+
+        let ws = create_workspace_db(&db, "Test Workspace".to_string(), Some("Desc".to_string())).unwrap();
+        assert_eq!(ws.name, "Test Workspace");
+        assert_eq!(ws.description.as_deref(), Some("Desc"));
+
+        let list = get_workspaces_db(&db).unwrap();
+        assert!(list.iter().any(|w| w.id == ws.id));
+
+        let fetched = get_workspace_db(&db, &ws.id).unwrap().unwrap();
+        assert_eq!(fetched.id, ws.id);
+
+        rename_workspace_db(&db, &ws.id, "Renamed WS").unwrap();
+        update_workspace_description_db(&db, &ws.id, Some("New Desc")).unwrap();
+        let updated = get_workspace_db(&db, &ws.id).unwrap().unwrap();
+        assert_eq!(updated.name, "Renamed WS");
+        assert_eq!(updated.description.as_deref(), Some("New Desc"));
+
+        set_active_workspace_db(&db, &ws.id).unwrap();
+        let active_ws = get_active_workspace_db(&db).unwrap().unwrap();
+        assert_eq!(active_ws.id, ws.id);
+
+        let env = Environment {
+            id: Uuid::new_v4().to_string(),
+            workspace_id: ws.id.clone(),
+            name: "Dev".to_string(),
+            is_active: true,
+            variables: vec![EnvironmentVariable {
+                key: "HOST".to_string(),
+                value: "localhost".to_string(),
+                enabled: true,
+                r#type: "default".to_string(),
+                active_index: 0,
+                variants: vec![],
+            }],
+            created_at_ms: now_ms(),
+            updated_at_ms: now_ms(),
+        };
+        save_workspace_environment_db(&db, env.clone()).unwrap();
+
+        let envs = get_workspace_environments_db(&db, &ws.id).unwrap();
+        assert_eq!(envs.len(), 1);
+        assert_eq!(envs[0].name, "Dev");
+
+        let fetched_env = get_workspace_environment_db(&db, &env.id).unwrap().unwrap();
+        assert_eq!(fetched_env.name, "Dev");
+
+        let dup = duplicate_workspace_environment_db(&db, &env.id, None).unwrap();
+        assert_eq!(dup.name, "Dev (Copy)");
+        assert!(!dup.is_active);
+
+        set_active_environment_db(&db, &ws.id, Some(&dup.id)).unwrap();
+        let active_env = get_workspace_environment_db(&db, &dup.id).unwrap().unwrap();
+        assert!(active_env.is_active);
+        let orig_env = get_workspace_environment_db(&db, &env.id).unwrap().unwrap();
+        assert!(!orig_env.is_active);
+
+        delete_workspace_environment_db(&db, &dup.id).unwrap();
+        assert!(get_workspace_environment_db(&db, &dup.id).unwrap().is_none());
+
+        delete_workspace_db(&db, &ws.id).unwrap();
+        assert!(get_workspace_db(&db, &ws.id).unwrap().is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 

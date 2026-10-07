@@ -20,6 +20,7 @@ pub use ca::{CaFormat, CaInfo};
 pub use db::{DataCategory, DataCategoryCounts};
 pub use events::{CoreEvent, EventBus};
 pub use state::{AppState, HistoryEntry, RewriteHistoryEntry};
+pub use workspace::{Environment, EnvironmentVariable, VariableVariant, Workspace};
 
 pub struct MitmCore {
     pub state: Arc<AppState>,
@@ -406,5 +407,61 @@ impl MitmCore {
         }
         *self.state.history_settings.write().await = settings;
         Ok(())
+    }
+
+    pub fn get_workspaces(&self) -> Result<Vec<workspace::Workspace>, String> {
+        workspace::get_workspaces_db(&self.db_path)
+    }
+
+    pub fn get_workspace(&self, id: &str) -> Result<Option<workspace::Workspace>, String> {
+        workspace::get_workspace_db(&self.db_path, id)
+    }
+
+    pub fn get_active_workspace(&self) -> Result<Option<workspace::Workspace>, String> {
+        workspace::get_active_workspace_db(&self.db_path)
+    }
+
+    pub fn set_active_workspace(&self, id: &str) -> Result<(), String> {
+        workspace::set_active_workspace_db(&self.db_path, id)
+    }
+
+    pub fn create_workspace(&self, name: &str, description: Option<&str>) -> Result<workspace::Workspace, String> {
+        workspace::create_workspace_db(&self.db_path, name.to_string(), description.map(|s| s.to_string()))
+    }
+
+    pub fn rename_workspace(&self, id: &str, new_name: &str) -> Result<(), String> {
+        workspace::rename_workspace_db(&self.db_path, id, new_name)
+    }
+
+    pub fn update_workspace_description(&self, id: &str, description: Option<&str>) -> Result<(), String> {
+        workspace::update_workspace_description_db(&self.db_path, id, description)
+    }
+
+    pub fn delete_workspace(&self, id: &str) -> Result<(), String> {
+        workspace::delete_workspace_db(&self.db_path, id)
+    }
+
+    pub fn get_workspace_environments(&self, workspace_id: &str) -> Result<Vec<workspace::Environment>, String> {
+        workspace::get_workspace_environments_db(&self.db_path, workspace_id)
+    }
+
+    pub fn get_workspace_environment(&self, id: &str) -> Result<Option<workspace::Environment>, String> {
+        workspace::get_workspace_environment_db(&self.db_path, id)
+    }
+
+    pub fn save_workspace_environment(&self, env: workspace::Environment) -> Result<(), String> {
+        workspace::save_workspace_environment_db(&self.db_path, env)
+    }
+
+    pub fn delete_workspace_environment(&self, id: &str) -> Result<(), String> {
+        workspace::delete_workspace_environment_db(&self.db_path, id)
+    }
+
+    pub fn duplicate_workspace_environment(&self, id: &str, new_name: Option<&str>) -> Result<workspace::Environment, String> {
+        workspace::duplicate_workspace_environment_db(&self.db_path, id, new_name)
+    }
+
+    pub fn set_active_environment(&self, workspace_id: &str, env_id: Option<&str>) -> Result<(), String> {
+        workspace::set_active_environment_db(&self.db_path, workspace_id, env_id)
     }
 }
