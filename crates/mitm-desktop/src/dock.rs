@@ -112,6 +112,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
             Tab::Settings => features::settings::show(
                 ui,
+                &mut state.settings,
                 &mut state.proxy,
                 &mut state.listener_form,
                 &state.traffic,
@@ -123,7 +124,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
 
     fn scroll_bars(&self, tab: &Tab) -> [bool; 2] {
         match tab {
-            Tab::Collections | Tab::Intercept | Tab::Settings => [false, true],
+            Tab::Collections | Tab::Intercept => [false, true],
             _ => [false, false],
         }
     }

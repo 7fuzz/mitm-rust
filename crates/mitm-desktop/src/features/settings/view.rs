@@ -3,9 +3,43 @@ use eframe::egui::{self, RichText};
 use crate::theme::{self, Tone};
 use crate::command::{AppCommand, Commands};
 use crate::features::traffic::TrafficState;
-use super::{ListenerForm, ProxyState};
+use crate::widgets::split;
+use super::{ListenerForm, ProxyState, SettingsPrefs, SettingsSection};
 
 pub fn show(
+    ui: &mut egui::Ui,
+    prefs: &mut SettingsPrefs,
+    proxy: &mut ProxyState,
+    form: &mut ListenerForm,
+    traffic: &TrafficState,
+    db_path: &Path,
+    cmds: &mut Commands,
+) {
+    let [mut list, mut content] = split::side_by_side(ui, "settings_split", &mut prefs.list_fraction);
+    for section in SettingsSection::ALL {
+        list.selectable_value(&mut prefs.section, section, section.name());
+    }
+    egui::ScrollArea::vertical()
+        .id_salt(("settings", prefs.section))
+        .auto_shrink([false, false])
+        .show(&mut content, |ui| match prefs.section {
+            SettingsSection::Proxy => proxy_section(ui, proxy, form, traffic, db_path, cmds),
+            SettingsSection::Certificate => {
+                ui.heading("Certificate");
+            }
+            SettingsSection::Appearance => {
+                ui.heading("Appearance");
+            }
+            SettingsSection::Data => {
+                ui.heading("Data");
+            }
+            SettingsSection::Database => {
+                ui.heading("Database");
+            }
+        });
+}
+
+fn proxy_section(
     ui: &mut egui::Ui,
     proxy: &mut ProxyState,
     form: &mut ListenerForm,
@@ -13,9 +47,6 @@ pub fn show(
     db_path: &Path,
     cmds: &mut Commands,
 ) {
-    ui.heading("Proxy Listeners & System Settings");
-    ui.add_space(4.0);
-
     ui.strong("Configured Listeners (Multi-Source)");
     ui.label(RichText::new("Each listener binds to an IP and port with a named label so you can easily identify where traffic originated.").weak());
     ui.add_space(6.0);

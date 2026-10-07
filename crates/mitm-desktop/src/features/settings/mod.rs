@@ -1,9 +1,52 @@
 mod view;
 
 use std::collections::BTreeMap;
+use serde::{Deserialize, Serialize};
 use mitm_core::state::{ListenerConfig, ProxyMode};
 
 pub use view::show;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SettingsSection {
+    Proxy,
+    Certificate,
+    Appearance,
+    Data,
+    Database,
+}
+
+impl SettingsSection {
+    pub const ALL: [SettingsSection; 5] = [
+        SettingsSection::Proxy,
+        SettingsSection::Certificate,
+        SettingsSection::Appearance,
+        SettingsSection::Data,
+        SettingsSection::Database,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            SettingsSection::Proxy => "Proxy",
+            SettingsSection::Certificate => "Certificate",
+            SettingsSection::Appearance => "Appearance",
+            SettingsSection::Data => "Data",
+            SettingsSection::Database => "Database",
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SettingsPrefs {
+    pub section: SettingsSection,
+    pub list_fraction: f32,
+}
+
+impl Default for SettingsPrefs {
+    fn default() -> Self {
+        Self { section: SettingsSection::Proxy, list_fraction: 0.18 }
+    }
+}
 
 pub struct ProxyState {
     pub mode: ProxyMode,
