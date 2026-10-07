@@ -66,6 +66,11 @@ pub enum AppCommand {
     SelectWorkspace(String),
     SelectEnvironment(Option<String>),
     CreateWorkspace(String),
+
+    CreateEnvironment { workspace_id: String, name: String },
+    RenameEnvironment { id: String, name: String },
+    DuplicateEnvironment(String),
+    DeleteEnvironment(String),
 }
 
 #[derive(Default)]

@@ -309,6 +309,42 @@ impl MitmApp {
                     self.run_command(ctx, AppCommand::SelectWorkspace(ws.id));
                 }
             }
+            AppCommand::CreateEnvironment { workspace_id, name } => {
+                let now = chrono::Utc::now().timestamp_millis();
+                let new_env = mitm_core::workspace::Environment {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    workspace_id,
+                    name,
+                    is_active: false,
+                    variables: Vec::new(),
+                    created_at_ms: now,
+                    updated_at_ms: now,
+                };
+                let id = new_env.id.clone();
+                let _ = mitm_core::workspace::save_workspace_environment_db(db_path, new_env);
+                self.state.environments.reload_environments(db_path);
+                self.state.environments.selected_environment_id = Some(id);
+            }
+            AppCommand::RenameEnvironment { id, name } => {
+                if let Ok(Some(mut env)) = mitm_core::workspace::get_workspace_environment_db(db_path, &id) {
+                    env.name = name;
+                    let _ = mitm_core::workspace::save_workspace_environment_db(db_path, env);
+                    self.state.environments.reload_environments(db_path);
+                }
+            }
+            AppCommand::DuplicateEnvironment(id) => {
+                if let Ok(dup) = mitm_core::workspace::duplicate_workspace_environment_db(db_path, &id, None) {
+                    self.state.environments.reload_environments(db_path);
+                    self.state.environments.selected_environment_id = Some(dup.id);
+                }
+            }
+            AppCommand::DeleteEnvironment(id) => {
+                let _ = mitm_core::workspace::delete_workspace_environment_db(db_path, &id);
+                self.state.environments.reload_environments(db_path);
+                if self.state.environments.selected_environment_id.as_deref() == Some(&id) {
+                    self.state.environments.selected_environment_id = self.state.environments.environments.first().map(|e| e.id.clone());
+                }
+            }
         }
     }
 
