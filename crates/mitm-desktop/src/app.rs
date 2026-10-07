@@ -292,6 +292,23 @@ impl MitmApp {
             AppCommand::Collections(cmd) => self.state.collections.apply(cmd, db_path),
             AppCommand::ReloadWsConnections => self.state.websockets.load_connections(db_path),
             AppCommand::SelectWsConnection(id) => self.state.websockets.select(id, db_path),
+            AppCommand::SelectWorkspace(id) => {
+                let _ = mitm_core::workspace::set_active_workspace_db(db_path, &id);
+                self.state.environments.active_workspace_id = id.clone();
+                self.state.environments.reload_environments(db_path);
+                self.state.collections.apply(CollectionsCmd::SelectWorkspace(id), db_path);
+            }
+            AppCommand::SelectEnvironment(env_id) => {
+                let ws_id = self.state.environments.active_workspace_id.clone();
+                let _ = mitm_core::workspace::set_active_environment_db(db_path, &ws_id, env_id.as_deref());
+                self.state.environments.reload_environments(db_path);
+            }
+            AppCommand::CreateWorkspace(name) => {
+                if let Ok(ws) = mitm_core::workspace::create_workspace_db(db_path, name, None) {
+                    self.state.environments.workspaces.push(ws.clone());
+                    self.run_command(ctx, AppCommand::SelectWorkspace(ws.id));
+                }
+            }
         }
     }
 
@@ -384,7 +401,7 @@ impl eframe::App for MitmApp {
         }
 
         egui::Panel::top("top_panel").show(ui, |ui| {
-            top_bar::show(ui, &self.state, &self.dock, &mut self.cmds);
+            top_bar::show(ui, &mut self.state, &self.dock, &mut self.cmds);
         });
 
         let mut viewer = TabViewer {

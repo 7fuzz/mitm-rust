@@ -61,6 +61,10 @@ pub enum AppCommand {
     Collections(CollectionsCmd),
     ReloadWsConnections,
     SelectWsConnection(i64),
+
+    SelectWorkspace(String),
+    SelectEnvironment(Option<String>),
+    CreateWorkspace(String),
 }
 
 #[derive(Default)]

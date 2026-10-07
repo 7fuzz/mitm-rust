@@ -79,7 +79,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
     }
 }
 
-fn header(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands) {
+fn header(ui: &mut egui::Ui, state: &mut CollectionsState, _cmds: &mut Commands) {
     egui::Sides::new().show(
         ui,
         |ui| {
@@ -92,24 +92,6 @@ fn header(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands) 
         },
     );
 
-    if state.workspaces.len() > 1 {
-        let current = state
-            .workspaces
-            .iter()
-            .find(|w| w.id == state.active_workspace_id)
-            .map_or("Workspace".to_string(), |w| w.name.clone());
-        egui::ComboBox::from_id_salt("collections_workspace")
-            .selected_text(current)
-            .width(ui.available_width())
-            .truncate()
-            .show_ui(ui, |ui| {
-                for ws in &state.workspaces {
-                    if ui.selectable_label(ws.id == state.active_workspace_id, &ws.name).clicked() {
-                        cmds.push(AppCommand::Collections(CollectionsCmd::SelectWorkspace(ws.id.clone())));
-                    }
-                }
-            });
-    }
     search_field(ui, &mut state.search, "Search");
 }
 

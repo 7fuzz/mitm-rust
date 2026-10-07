@@ -164,7 +164,7 @@ impl CollectionsState {
         self.reload_tree(db_path);
     }
 
-    fn reload_tree(&mut self, db_path: &PathBuf) {
+    pub fn reload_tree(&mut self, db_path: &PathBuf) {
         self.flush(db_path);
         self.trees = core_collections::get_collections_db(db_path, &self.active_workspace_id).unwrap_or_default();
         let saved: HashMap<String, RequestItem> = all_requests(&self.trees).into_iter().map(|r| (r.id.clone(), r.clone())).collect();

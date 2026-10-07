@@ -13,17 +13,19 @@ pub enum Tab {
     Intercept,
     Collections,
     WebSockets,
+    Environments,
     Settings,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 7] = [
+    pub const ALL: [Tab; 8] = [
         Tab::Traffic,
         Tab::Repeater,
         Tab::Fuzzer,
         Tab::Intercept,
         Tab::Collections,
         Tab::WebSockets,
+        Tab::Environments,
         Tab::Settings,
     ];
 
@@ -35,6 +37,7 @@ impl Tab {
             Tab::Intercept => "Intercept",
             Tab::Collections => "Collections",
             Tab::WebSockets => "WebSockets",
+            Tab::Environments => "Environments",
             Tab::Settings => "Settings",
         }
     }
@@ -110,6 +113,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Tab::Intercept => features::intercept::show(ui, &mut state.intercept, cmds),
             Tab::Collections => features::collections::show(ui, &mut state.collections, cmds),
             Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
+            Tab::Environments => features::environments::show(ui, &mut state.environments, cmds, self.db_path),
             Tab::Settings => features::settings::show(
                 ui,
                 &mut state.settings,
