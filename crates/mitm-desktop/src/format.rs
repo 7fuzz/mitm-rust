@@ -97,3 +97,51 @@ pub fn curl_command(flow: &HistoryEntry, detail: Option<&HistoryDetail>) -> Stri
     }
     curl
 }
+
+#[derive(Debug, Clone, Copy)]
+pub enum CopyFormat {
+    Curl,
+    CurlAndResponse,
+    UrlBodyAndResponse,
+}
+
+pub fn flow_copy_text(flow: &HistoryEntry, detail: Option<&HistoryDetail>, format: CopyFormat) -> String {
+    let request_body = detail.map_or(flow.request_body.as_str(), |d| d.request_body.as_str());
+    let response_body = detail.map_or(flow.response_body.as_str(), |d| d.response_body.as_str());
+    let response = response_section(flow, response_body);
+
+    match format {
+        CopyFormat::Curl => curl_command(flow, detail),
+        CopyFormat::CurlAndResponse => format!("{}\n\n{}", curl_command(flow, detail), response),
+        CopyFormat::UrlBodyAndResponse => {
+            let mut request = format!("{} {}", flow.method, flow.url);
+            if !request_body.trim().is_empty() {
+                request.push('\n');
+                request.push_str(&display_body(request_body, ""));
+            }
+            format!("{}\n\n{}", request, response)
+        }
+    }
+}
+
+fn response_section(flow: &HistoryEntry, body: &str) -> String {
+    let code = if flow.status_code == 0 { 200 } else { flow.status_code };
+    if body.trim().is_empty() {
+        code.to_string()
+    } else {
+        format!("{}\n{}", code, display_body(body, &flow.content_type))
+    }
+}
+
+pub fn display_body(body: &str, content_type: &str) -> String {
+    if let Some(b64) = body.strip_prefix("base64:") {
+        let mime = if content_type.is_empty() { "application/octet-stream" } else { content_type };
+        return format!("[Binary Content ({}): {} chars base64]", mime, b64.len());
+    }
+    pretty_json(body).unwrap_or_else(|| body.to_string())
+}
+
+pub fn local_clock(rfc3339: Option<&str>) -> Option<(String, String)> {
+    let at = chrono::DateTime::parse_from_rfc3339(rfc3339?).ok()?.with_timezone(&chrono::Local);
+    Some((at.format("%H:%M:%S%.3f").to_string(), at.format("%Y-%m-%d %H:%M:%S%.3f").to_string()))
+}

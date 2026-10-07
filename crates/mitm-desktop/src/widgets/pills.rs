@@ -66,3 +66,23 @@ pub fn render_source_pill(ui: &mut egui::Ui, source: &str) {
             ui.add(egui::Label::new(text).selectable(false));
         });
 }
+
+pub const AMBER: Color32 = Color32::from_rgb(245, 158, 11);
+pub const ROSE: Color32 = Color32::from_rgb(244, 63, 94);
+pub const SKY: Color32 = Color32::from_rgb(14, 165, 233);
+
+pub fn tinted(color: Color32, alpha: u8) -> Color32 {
+    Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha)
+}
+
+pub fn badge(ui: &mut egui::Ui, text: &str, color: Color32) -> egui::Response {
+    let text = RichText::new(format!(" {} ", text)).color(color).size(10.0).strong();
+    egui::Frame::NONE
+        .fill(tinted(color, 38))
+        .stroke(egui::Stroke::new(1.0, tinted(color, 90)))
+        .corner_radius(CornerRadius::same(3))
+        .show(ui, |ui| {
+            ui.add(egui::Label::new(text).selectable(false));
+        })
+        .response
+}
