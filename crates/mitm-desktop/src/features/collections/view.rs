@@ -2,7 +2,7 @@ use eframe::egui::{self, RichText};
 use crate::command::{AppCommand, Commands};
 use crate::features::request_editor::response_panel::{self, header_pairs, ResponseData};
 use crate::features::request_editor::run_list::{self, local_time, Run, RunAction};
-use crate::widgets::pills::{render_method_pill, AMBER, ROSE};
+use crate::widgets::pills::{method_text, AMBER, ROSE};
 use crate::widgets::split;
 use super::{editor, extract_modal, tree, CollectionsCmd, CollectionsState};
 
@@ -51,32 +51,24 @@ fn tab_strip(ui: &mut egui::Ui, state: &CollectionsState, cmds: &mut Commands) {
     egui::ScrollArea::horizontal().id_salt("collections_tabs").show(ui, |ui| {
         ui.horizontal(|ui| {
             if state.open.is_empty() {
-                ui.label(RichText::new("Select or create a request in the tree to open it here").weak().italics());
+                ui.weak("Open a request from the tree");
             }
             for request in &state.open {
                 let active = state.active_id.as_deref() == Some(request.id.as_str());
-                let mut frame = egui::Frame::NONE.inner_margin(egui::Margin::symmetric(8, 4)).corner_radius(4.0);
-                if active {
-                    frame = frame.fill(ui.visuals().selection.bg_fill.gamma_multiply(0.3));
-                }
-                let response = frame
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            render_method_pill(ui, &request.method);
-                            ui.add(egui::Label::new(&request.name).selectable(false));
-                            if ui.small_button("✖").on_hover_text("Close tab").clicked() {
-                                cmds.push(AppCommand::Collections(CollectionsCmd::Close(request.id.clone())));
-                            }
-                        });
-                    })
-                    .response
-                    .interact(egui::Sense::click());
+                let style = ui.style().clone();
+                let mut text = egui::text::LayoutJob::default();
+                method_text(&request.method).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
+                RichText::new(format!(" {}", request.name)).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
+
+                let response = ui.add(egui::Button::selectable(active, text));
                 if response.clicked() {
                     cmds.push(AppCommand::Collections(CollectionsCmd::Activate(request.id.clone())));
                 }
-                if response.middle_clicked() {
+                let close = ui.small_button("✖").on_hover_text("Close tab").clicked();
+                if close || response.middle_clicked() {
                     cmds.push(AppCommand::Collections(CollectionsCmd::Close(request.id.clone())));
                 }
+                ui.add_space(6.0);
             }
         });
     });
