@@ -48,30 +48,33 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
 }
 
 fn tab_strip(ui: &mut egui::Ui, state: &CollectionsState, cmds: &mut Commands) {
-    egui::ScrollArea::horizontal().id_salt("collections_tabs").show(ui, |ui| {
-        ui.horizontal(|ui| {
-            if state.open.is_empty() {
-                ui.weak("Open a request from the tree");
-            }
-            for request in &state.open {
-                let active = state.active_id.as_deref() == Some(request.id.as_str());
-                let style = ui.style().clone();
-                let mut text = egui::text::LayoutJob::default();
-                method_text(&request.method).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
-                RichText::new(format!(" {}", request.name)).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
+    egui::ScrollArea::horizontal()
+        .id_salt("collections_tabs")
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                if state.open.is_empty() {
+                    ui.weak("Open a request from the tree");
+                }
+                for request in &state.open {
+                    let active = state.active_id.as_deref() == Some(request.id.as_str());
+                    let style = ui.style().clone();
+                    let mut text = egui::text::LayoutJob::default();
+                    method_text(&request.method).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
+                    RichText::new(format!(" {}", request.name)).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
 
-                let response = ui.add(egui::Button::selectable(active, text));
-                if response.clicked() {
-                    cmds.push(AppCommand::Collections(CollectionsCmd::Activate(request.id.clone())));
+                    let response = ui.add(egui::Button::selectable(active, text));
+                    if response.clicked() {
+                        cmds.push(AppCommand::Collections(CollectionsCmd::Activate(request.id.clone())));
+                    }
+                    let close = ui.small_button("✖").on_hover_text("Close tab").clicked();
+                    if close || response.middle_clicked() {
+                        cmds.push(AppCommand::Collections(CollectionsCmd::Close(request.id.clone())));
+                    }
+                    ui.add_space(6.0);
                 }
-                let close = ui.small_button("✖").on_hover_text("Close tab").clicked();
-                if close || response.middle_clicked() {
-                    cmds.push(AppCommand::Collections(CollectionsCmd::Close(request.id.clone())));
-                }
-                ui.add_space(6.0);
-            }
+            });
         });
-    });
 }
 
 fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str) {
