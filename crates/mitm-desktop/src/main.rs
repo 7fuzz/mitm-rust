@@ -3,6 +3,7 @@ mod command;
 mod dock;
 mod features;
 mod format;
+mod prefs;
 mod state;
 mod top_bar;
 mod widgets;

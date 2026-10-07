@@ -14,7 +14,7 @@ use crate::features::fuzzer::FuzzerWorker;
 use crate::features::repeater::RepeaterWorker;
 use crate::format::{headers_to_text, Exchange};
 use crate::state::AppState;
-use crate::top_bar;
+use crate::{prefs, top_bar};
 
 pub struct MitmApp {
     dock: DockState<Tab>,
@@ -42,7 +42,7 @@ impl MitmApp {
         state.proxy.set_started(rt.block_on(core.start_all_listeners()));
 
         Self {
-            dock: dock::initial_layout(),
+            dock: prefs::restore(cc.storage, &mut state),
             state,
             cmds: Commands::default(),
             core_events: forward_core_events(&rt, &core, &cc.egui_ctx),
@@ -232,6 +232,10 @@ impl MitmApp {
 }
 
 impl eframe::App for MitmApp {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        prefs::persist(storage, &self.dock, &self.state);
+    }
+
     fn on_exit(&mut self) {
         self.state.repeater.flush(&self.core.db_path);
         self.state.collections.flush(&self.core.db_path);

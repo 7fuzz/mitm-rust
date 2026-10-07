@@ -6,9 +6,9 @@ edition = "2021"
 [dependencies]
 mitm-core = { path = "../mitm-core" }
 
-eframe = "0.36.2"
+eframe = { version = "0.36.2", features = ["persistence"] }
 egui = "0.36.2"
-egui_dock = "0.21.1"
+egui_dock = { version = "0.21.1", features = ["serde"] }
 egui_extras = { version = "0.36.2", features = ["default"] }
 
 tokio = { version = "1", features = ["full"] }
