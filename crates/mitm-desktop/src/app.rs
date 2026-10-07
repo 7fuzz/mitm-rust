@@ -9,10 +9,12 @@ use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
 use crate::command::{AppCommand, Commands, RequestDraft};
 use crate::dock::{self, Tab, TabViewer};
-use crate::features::collections::{CollectionsCmd, CollectionsWorker};
+use mitm_core::collections::execute::ExecutionResult;
+use mitm_core::repeater::RepeaterExecutionResult;
+use crate::features::collections::CollectionsCmd;
 use crate::features::fuzzer::FuzzerWorker;
-use crate::features::repeater::RepeaterWorker;
 use crate::format::{headers_to_text, Exchange};
+use crate::jobs::Jobs;
 use crate::state::AppState;
 use crate::palette::{self, PaletteState};
 use crate::{prefs, shortcuts, top_bar};
@@ -25,8 +27,8 @@ pub struct MitmApp {
     core: Arc<MitmCore>,
     rt: Arc<Runtime>,
     core_events: Receiver<CoreEvent>,
-    repeater_worker: RepeaterWorker,
-    collections_worker: CollectionsWorker,
+    repeater_runs: Jobs<(String, Result<RepeaterExecutionResult, String>)>,
+    collection_runs: Jobs<(String, Result<ExecutionResult, String>)>,
     fuzzer_worker: FuzzerWorker,
 }
 
@@ -51,8 +53,8 @@ impl MitmApp {
             core_events: forward_core_events(&rt, &core, &cc.egui_ctx),
             core,
             rt,
-            repeater_worker: RepeaterWorker::default(),
-            collections_worker: CollectionsWorker::default(),
+            repeater_runs: Jobs::default(),
+            collection_runs: Jobs::default(),
             fuzzer_worker: FuzzerWorker::default(),
         }
     }
@@ -153,7 +155,11 @@ impl MitmApp {
                 repeater.flush(db_path);
                 if let Some(tab) = repeater.tabs.iter().find(|t| t.id == id).cloned() {
                     repeater.executing.insert(id);
-                    self.repeater_worker.send(&self.rt, ctx, db_path.clone(), tab);
+                    let db_path = db_path.clone();
+                    self.repeater_runs.spawn(&self.rt, ctx, async move {
+                        let result = mitm_core::repeater::execute::execute_repeater_tab(&db_path, &tab).await;
+                        (tab.id, result)
+                    });
                 }
             }
             AppCommand::StartFuzzer { template, payloads, concurrency } => {
@@ -189,7 +195,11 @@ impl MitmApp {
 
             AppCommand::Collections(CollectionsCmd::Execute(id)) => {
                 if self.state.collections.start_run(&id, db_path) {
-                    self.collections_worker.execute(&self.rt, ctx, db_path.clone(), id);
+                    let db_path = db_path.clone();
+                    self.collection_runs.spawn(&self.rt, ctx, async move {
+                        let result = mitm_core::collections::execute::execute_collection_request_db(&db_path, &id).await;
+                        (id, result)
+                    });
                 }
             }
             AppCommand::Collections(cmd) => self.state.collections.apply(cmd, db_path),
@@ -259,9 +269,13 @@ impl eframe::App for MitmApp {
         }
         shortcuts::consume(ui.ctx(), &mut self.cmds);
         let now = ui.input(|i| i.time);
-        self.repeater_worker.poll(&mut self.state.repeater, &self.core.db_path);
+        for (id, result) in self.repeater_runs.drain() {
+            self.state.repeater.finish_run(&id, result, &self.core.db_path);
+        }
         self.state.repeater.flush_if_idle(&self.core.db_path, now);
-        self.collections_worker.poll(&mut self.state.collections, &self.core.db_path);
+        for (id, result) in self.collection_runs.drain() {
+            self.state.collections.finish_run(&id, result, &self.core.db_path);
+        }
         self.state.collections.flush_if_idle(&self.core.db_path, now);
         self.fuzzer_worker.poll(&mut self.state.fuzzer);
 

@@ -1,7 +1,6 @@
 mod builder;
 mod sidebar;
 mod view;
-mod worker;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -16,7 +15,6 @@ use crate::features::request_editor::url_params::{new_id, parse_query};
 use crate::widgets::message_pane::PaneState;
 
 pub use view::show;
-pub use worker::RepeaterWorker;
 
 const SAVE_DELAY_SECS: f64 = 0.6;
 

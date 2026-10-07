@@ -3,6 +3,7 @@ mod command;
 mod dock;
 mod features;
 mod format;
+mod jobs;
 mod palette;
 mod prefs;
 mod shortcuts;

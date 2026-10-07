@@ -3,7 +3,6 @@ mod editor;
 mod extract_modal;
 mod tree;
 mod view;
-mod worker;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -16,7 +15,6 @@ use mitm_core::workspace::Workspace;
 use crate::widgets::message_pane::PaneState;
 
 pub use view::show;
-pub use worker::CollectionsWorker;
 
 const SAVE_DELAY_SECS: f64 = 0.6;
 
