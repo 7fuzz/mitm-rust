@@ -2,6 +2,14 @@ use std::collections::VecDeque;
 use std::path::PathBuf;
 use mitm_core::state::{HistoryDetail, HistoryEntry};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TriState {
+    #[default]
+    Neutral,
+    Include,
+    Exclude,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InspectorPhase {
     Request,
@@ -162,18 +170,30 @@ pub struct UiState {
     pub new_rule_action: String,
 
     pub search_query: String,
-    pub method_filter: String,
-    pub status_filter: String,
+    pub source_filter: String,
+    pub method_filters: std::collections::HashMap<String, TriState>,
+    pub status_filters: std::collections::HashMap<String, TriState>,
     pub auto_scroll: bool,
 
     pub proxy_running: bool,
-    pub proxy_port: u16,
-    pub proxy_label: String,
     pub proxy_error: Option<String>,
+    pub listeners: Vec<mitm_core::state::ListenerConfig>,
+    pub active_listeners_summary: String,
+    pub new_listener_label: String,
+    pub new_listener_address: String,
 }
 
 impl Default for UiState {
     fn default() -> Self {
+        let mut method_filters = std::collections::HashMap::new();
+        for m in &["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"] {
+            method_filters.insert(m.to_string(), TriState::Neutral);
+        }
+        let mut status_filters = std::collections::HashMap::new();
+        for s in &["2xx", "3xx", "4xx", "5xx", "ERR"] {
+            status_filters.insert(s.to_string(), TriState::Neutral);
+        }
+
         Self {
             flows: VecDeque::with_capacity(1000),
             max_flows: 10_000,
@@ -212,13 +232,16 @@ impl Default for UiState {
             new_rule_value: String::new(),
             new_rule_action: "intercept".to_string(),
             search_query: String::new(),
-            method_filter: "ALL".to_string(),
-            status_filter: "ALL".to_string(),
+            source_filter: "ALL".to_string(),
+            method_filters,
+            status_filters,
             auto_scroll: true,
             proxy_running: false,
-            proxy_port: 8080,
-            proxy_label: "default".to_string(),
             proxy_error: None,
+            listeners: Vec::new(),
+            active_listeners_summary: String::new(),
+            new_listener_label: String::new(),
+            new_listener_address: "127.0.0.1:8082".to_string(),
         }
     }
 }
@@ -433,28 +456,71 @@ impl UiState {
             .and_then(|id| self.flows.iter().find(|f| f.id == id))
     }
 
+    pub fn reset_filters(&mut self) {
+        self.search_query.clear();
+        self.source_filter = "ALL".to_string();
+        for v in self.method_filters.values_mut() {
+            *v = TriState::Neutral;
+        }
+        for v in self.status_filters.values_mut() {
+            *v = TriState::Neutral;
+        }
+    }
+
+    pub fn available_source_labels(&self) -> Vec<String> {
+        let mut labels = std::collections::BTreeSet::new();
+        for l in &self.listeners {
+            if !l.label.is_empty() {
+                labels.insert(l.label.clone());
+            }
+        }
+        for f in &self.flows {
+            if !f.listener_label.is_empty() {
+                labels.insert(f.listener_label.clone());
+            }
+        }
+        labels.into_iter().collect()
+    }
+
     pub fn filtered_flow_indices(&self) -> Vec<usize> {
         let search = self.search_query.trim().to_lowercase();
-        let method_filter = self.method_filter.to_uppercase();
-        let status_filter = self.status_filter.as_str();
+        let source_filter = self.source_filter.trim();
+
+        let has_included_methods = self.method_filters.values().any(|&s| s == TriState::Include);
+        let has_included_status = self.status_filters.values().any(|&s| s == TriState::Include);
 
         self.flows
             .iter()
             .enumerate()
             .filter(|(_, flow)| {
-                if method_filter != "ALL" && !flow.method.eq_ignore_ascii_case(&method_filter) {
+                if source_filter != "ALL" && !source_filter.is_empty() {
+                    let flow_label = if flow.listener_label.is_empty() { "default" } else { &flow.listener_label };
+                    if !flow_label.eq_ignore_ascii_case(source_filter) {
+                        return false;
+                    }
+                }
+
+                let m_state = self.method_filters.get(&flow.method.to_uppercase()).copied().unwrap_or(TriState::Neutral);
+                if m_state == TriState::Exclude {
+                    return false;
+                }
+                if has_included_methods && m_state != TriState::Include {
                     return false;
                 }
 
-                if status_filter != "ALL" {
-                    match status_filter {
-                        "2xx" => if flow.status_code < 200 || flow.status_code >= 300 { return false; },
-                        "3xx" => if flow.status_code < 300 || flow.status_code >= 400 { return false; },
-                        "4xx" => if flow.status_code < 400 || flow.status_code >= 500 { return false; },
-                        "5xx" => if flow.status_code < 500 || flow.status_code >= 600 { return false; },
-                        "ERR" => if flow.status_code != 0 && !flow.is_failed { return false; },
-                        _ => {}
-                    }
+                let status_cat = match flow.status_code {
+                    200..=299 => "2xx",
+                    300..=399 => "3xx",
+                    400..=499 => "4xx",
+                    500..=599 => "5xx",
+                    _ => "ERR",
+                };
+                let s_state = self.status_filters.get(status_cat).copied().unwrap_or(TriState::Neutral);
+                if s_state == TriState::Exclude {
+                    return false;
+                }
+                if has_included_status && s_state != TriState::Include {
+                    return false;
                 }
 
                 if !search.is_empty() {
@@ -463,7 +529,8 @@ impl UiState {
                     let matches_path = flow.path.to_lowercase().contains(&search);
                     let matches_method = flow.method.to_lowercase().contains(&search);
                     let matches_type = flow.content_type.to_lowercase().contains(&search);
-                    if !matches_url && !matches_host && !matches_path && !matches_method && !matches_type {
+                    let matches_src = flow.listener_label.to_lowercase().contains(&search);
+                    if !matches_url && !matches_host && !matches_path && !matches_method && !matches_type && !matches_src {
                         return false;
                     }
                 }

@@ -92,7 +92,7 @@ impl<'a> egui_dock::TabViewer for TabViewerApp<'a> {
                 render_intercept_view(ui, self.state);
             }
             TabKind::Settings => {
-                render_settings_view(ui, self.state);
+                render_settings_view(ui, self.state, self.core);
             }
         }
     }
@@ -117,7 +117,6 @@ pub struct NativeMitmApp {
     core: Arc<MitmCore>,
     rt: Arc<tokio::runtime::Runtime>,
     event_rx: Receiver<CoreEvent>,
-    proxy_stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
     repeater_result_tx: crossbeam_channel::Sender<(usize, Result<mitm_core::repeater::execute::SentRequest, String>)>,
     repeater_result_rx: crossbeam_channel::Receiver<(usize, Result<mitm_core::repeater::execute::SentRequest, String>)>,
     fuzzer_result_tx: crossbeam_channel::Sender<FuzzMsg>,
@@ -138,6 +137,17 @@ impl NativeMitmApp {
         }
         ui_state.load_workspaces_and_collections(&core.db_path);
         ui_state.load_ws_connections(&core.db_path);
+
+        let listeners = rt.block_on(core.get_listener_configs());
+        ui_state.listeners = listeners;
+
+        let (proxy_running, summary, proxy_error) = match rt.block_on(core.start_all_listeners()) {
+            Ok(started) => (true, started.join("  |  "), None),
+            Err(e) => (false, String::new(), Some(e)),
+        };
+        ui_state.proxy_running = proxy_running;
+        ui_state.active_listeners_summary = summary;
+        ui_state.proxy_error = proxy_error;
 
         let (event_tx, event_rx) = crossbeam_channel::unbounded::<CoreEvent>();
         let mut core_rx = core.event_bus.subscribe();
@@ -171,7 +181,6 @@ impl NativeMitmApp {
             core,
             rt,
             event_rx,
-            proxy_stop_tx: None,
             repeater_result_tx,
             repeater_result_rx,
             fuzzer_result_tx,
@@ -181,24 +190,24 @@ impl NativeMitmApp {
 
     fn toggle_proxy(&mut self) {
         if self.ui_state.proxy_running {
-            if let Some(stop_tx) = self.proxy_stop_tx.take() {
-                let _ = stop_tx.send(());
-            }
+            let core = Arc::clone(&self.core);
+            self.rt.spawn(async move {
+                core.stop_all_listeners().await;
+            });
             self.ui_state.proxy_running = false;
         } else {
-            let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
-            self.proxy_stop_tx = Some(stop_tx);
             let core = Arc::clone(&self.core);
-            let port = self.ui_state.proxy_port;
-            let label = self.ui_state.proxy_label.clone();
-            self.ui_state.proxy_running = true;
-            self.ui_state.proxy_error = None;
-
-            self.rt.spawn(async move {
-                if let Err(e) = core.start_proxy(port, label, stop_rx).await {
-                    eprintln!("Proxy server stopped with error: {}", e);
+            match self.rt.block_on(core.start_all_listeners()) {
+                Ok(started) => {
+                    self.ui_state.proxy_running = true;
+                    self.ui_state.active_listeners_summary = started.join("  |  ");
+                    self.ui_state.proxy_error = None;
                 }
-            });
+                Err(e) => {
+                    self.ui_state.proxy_error = Some(e);
+                    self.ui_state.proxy_running = false;
+                }
+            }
         }
     }
 }
@@ -265,9 +274,6 @@ impl eframe::App for NativeMitmApp {
 
         egui::Panel::top("top_panel").show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("MITM Native Inspector");
-                ui.separator();
-
                 let status_text = if self.ui_state.proxy_running {
                     egui::RichText::new("● Running").color(egui::Color32::GREEN).strong()
                 } else {
@@ -286,14 +292,18 @@ impl eframe::App for NativeMitmApp {
                 }
 
                 ui.separator();
-                ui.label(format!("Port: {}", self.ui_state.proxy_port));
+
+                if self.ui_state.proxy_running && !self.ui_state.active_listeners_summary.is_empty() {
+                    ui.label(egui::RichText::new(&self.ui_state.active_listeners_summary).monospace().size(11.0));
+                    ui.separator();
+                }
 
                 if !self.ui_state.pending_intercepts.is_empty() {
-                    ui.separator();
                     let badge = egui::RichText::new(format!("⚠️ {} Paused Flow(s)", self.ui_state.pending_intercepts.len()))
                         .color(egui::Color32::from_rgb(245, 158, 11))
                         .strong();
                     ui.label(badge);
+                    ui.separator();
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -436,12 +446,12 @@ fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
-            .with_title("MITM Native Inspector"),
+            .with_title("MITM"),
         ..Default::default()
     };
 
     eframe::run_native(
-        "MITM Native Inspector",
+        "MITM",
         native_options,
         Box::new(|cc| Ok(Box::new(NativeMitmApp::new(cc)))),
     )

@@ -60,6 +60,76 @@ impl MitmCore {
         Ok(())
     }
 
+    pub async fn start_all_listeners(&self) -> Result<Vec<String>, String> {
+        let configs = self.state.listener_configs.read().await.clone();
+        let ca = self.get_ca();
+        self.stop_all_listeners().await;
+
+        let mut started = Vec::new();
+
+        for config in configs.into_iter().filter(|c| c.enabled) {
+            let addr: std::net::SocketAddr = match config.address.parse() {
+                Ok(a) => a,
+                Err(e) => {
+                    self.state.listener_errors.insert(config.id, format!("Invalid address: {}", e));
+                    continue;
+                }
+            };
+            let tcp_listener = match proxy::bind_proxy_listener(addr).await {
+                Ok(l) => l,
+                Err(e) => {
+                    self.state.listener_errors.insert(config.id, e);
+                    continue;
+                }
+            };
+
+            let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
+            self.state.listeners.write().await.push(state::ListenerInstance {
+                id: config.id,
+                stop_tx: Some(stop_tx),
+            });
+
+            let event_bus = Some(self.event_bus.clone());
+            let state = Arc::clone(&self.state);
+            let ca_clone = Arc::clone(&ca);
+            let label = config.label.clone();
+            started.push(format!("{} ({})", config.label, config.address));
+
+            tokio::spawn(async move {
+                let _ = proxy::start_proxy_server(event_bus, state, ca_clone, tcp_listener, label, stop_rx).await;
+            });
+        }
+        self.state.proxy_active.store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(started)
+    }
+
+    pub async fn stop_all_listeners(&self) {
+        let mut listeners = self.state.listeners.write().await;
+        for instance in listeners.drain(..) {
+            if let Some(tx) = instance.stop_tx {
+                let _ = tx.send(());
+            }
+        }
+        self.state.proxy_active.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub async fn get_listener_configs(&self) -> Vec<state::ListenerConfig> {
+        self.state.listener_configs.read().await.clone()
+    }
+
+    pub async fn set_listener_configs(&self, configs: Vec<state::ListenerConfig>) -> Result<(), String> {
+        let json = serde_json::to_string(&configs).map_err(|e| e.to_string())?;
+        db::set_preference(&self.db_path, "proxy_listeners", &json)?;
+        {
+            let mut w = self.state.listener_configs.write().await;
+            *w = configs;
+        }
+        if self.state.proxy_active.load(std::sync::atomic::Ordering::SeqCst) {
+            let _ = self.start_all_listeners().await;
+        }
+        Ok(())
+    }
+
     pub async fn start_proxy(
         &self,
         port: u16,
