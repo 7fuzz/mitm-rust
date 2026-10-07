@@ -309,6 +309,30 @@ impl MitmApp {
                     self.run_command(ctx, AppCommand::SelectWorkspace(ws.id));
                 }
             }
+            AppCommand::RenameWorkspace { id, name } => {
+                let _ = mitm_core::workspace::rename_workspace_db(db_path, &id, &name);
+                if let Some(ws) = self.state.environments.workspaces.iter_mut().find(|w| w.id == id) {
+                    ws.name = name;
+                }
+            }
+            AppCommand::UpdateWorkspaceDescription { id, description } => {
+                let _ = mitm_core::workspace::update_workspace_description_db(db_path, &id, description.as_deref());
+                if let Some(ws) = self.state.environments.workspaces.iter_mut().find(|w| w.id == id) {
+                    ws.description = description;
+                }
+            }
+            AppCommand::DeleteWorkspace(id) => {
+                let _ = mitm_core::workspace::delete_workspace_db(db_path, &id);
+                self.state.environments.workspaces.retain(|w| w.id != id);
+                if self.state.environments.active_workspace_id == id {
+                    if let Some(first) = self.state.environments.workspaces.first().cloned() {
+                        self.run_command(ctx, AppCommand::SelectWorkspace(first.id));
+                    } else if let Ok(ws) = mitm_core::workspace::create_workspace_db(db_path, "Default Workspace".to_string(), None) {
+                        self.state.environments.workspaces.push(ws.clone());
+                        self.run_command(ctx, AppCommand::SelectWorkspace(ws.id));
+                    }
+                }
+            }
             AppCommand::CreateEnvironment { workspace_id, name } => {
                 let now = chrono::Utc::now().timestamp_millis();
                 let new_env = mitm_core::workspace::Environment {
