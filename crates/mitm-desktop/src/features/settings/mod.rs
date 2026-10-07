@@ -55,6 +55,7 @@ pub struct ProxyState {
     pub listener_errors: BTreeMap<u32, String>,
     pub running_listeners: BTreeSet<u32>,
     pub listeners: Vec<ListenerConfig>,
+    pub host_ips: Vec<mitm_core::proxy::host_ips::HostIp>,
     pub active_summary: String,
 }
 
@@ -67,12 +68,16 @@ impl Default for ProxyState {
             listener_errors: BTreeMap::new(),
             running_listeners: BTreeSet::new(),
             listeners: Vec::new(),
+            host_ips: Vec::new(),
             active_summary: String::new(),
         }
     }
 }
 
 impl ProxyState {
+    pub fn reload_host_ips(&mut self) {
+        self.host_ips = mitm_core::proxy::host_ips::list().unwrap_or_default();
+    }
     pub fn problems(&self) -> Vec<String> {
         let listener_problems = self.listener_errors.iter().map(|(id, error)| {
             let label = self.listeners.iter().find(|l| l.id == *id).map_or("", |l| l.label.as_str());

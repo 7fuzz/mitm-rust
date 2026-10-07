@@ -42,6 +42,7 @@ impl MitmApp {
             state.proxy.set_started(rt.block_on(core.start_all_listeners()));
         }
         refresh_listener_state(&rt, &core, &mut state.proxy);
+        state.proxy.reload_host_ips();
 
         Self {
             dock: prefs::restore(storage, &mut state),

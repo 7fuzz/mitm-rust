@@ -177,6 +177,73 @@ fn proxy_section(
         cmds.push(AppCommand::SaveListeners(proxy.listeners.clone()));
     }
 
+    ui.add_space(8.0);
+    let id = ui.make_persistent_id("host_addresses_collapsing");
+    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
+        .show_header(ui, |ui| {
+            ui.strong("Host addresses");
+            if ui.small_button("⟳").on_hover_text("Refresh host addresses").clicked() {
+                proxy.reload_host_ips();
+            }
+        })
+        .body(|ui| {
+            if proxy.host_ips.is_empty() {
+                proxy.reload_host_ips();
+            }
+            egui::Grid::new("host_ips_grid")
+                .striped(true)
+                .num_columns(4)
+                .spacing([12.0, 6.0])
+                .show(ui, |ui| {
+                    ui.strong("Status");
+                    ui.strong("IP");
+                    ui.strong("Interface");
+                    ui.strong("");
+                    ui.end_row();
+
+                    for ip_info in &proxy.host_ips {
+                        let (dot, tone, tooltip) = if ip_info.is_up {
+                            ("●", Tone::Success, "Interface up")
+                        } else {
+                            ("○", Tone::Neutral, "Interface down")
+                        };
+                        ui.label(RichText::new(dot).color(theme::color(ui, tone))).on_hover_text(tooltip);
+
+                        let ip_resp = ui.selectable_label(false, RichText::new(&ip_info.ip).monospace());
+                        let iface_resp = ui.label(&ip_info.interface);
+
+                        let ip = &ip_info.ip;
+                        ip_resp.context_menu(|ui| {
+                            if ui.button("Copy").clicked() {
+                                ui.ctx().copy_text(ip.clone());
+                                ui.close();
+                            }
+                            if ui.button("Use in new listener").clicked() {
+                                form.host = ip.clone();
+                                ui.close();
+                            }
+                        });
+                        iface_resp.context_menu(|ui| {
+                            if ui.button("Copy").clicked() {
+                                ui.ctx().copy_text(ip.clone());
+                                ui.close();
+                            }
+                            if ui.button("Use in new listener").clicked() {
+                                form.host = ip.clone();
+                                ui.close();
+                            }
+                        });
+
+                        if ip_info.is_link_local {
+                            ui.label(RichText::new("link-local").weak().small());
+                        } else {
+                            ui.label("");
+                        }
+                        ui.end_row();
+                    }
+                });
+        });
+
     ui.add_space(12.0);
     ui.separator();
     ui.add_space(6.0);
