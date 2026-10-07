@@ -14,12 +14,14 @@ use crate::features::fuzzer::FuzzerWorker;
 use crate::features::repeater::RepeaterWorker;
 use crate::format::{headers_to_text, Exchange};
 use crate::state::AppState;
+use crate::palette::{self, PaletteState};
 use crate::{prefs, shortcuts, top_bar};
 
 pub struct MitmApp {
     dock: DockState<Tab>,
     state: AppState,
     cmds: Commands,
+    palette: PaletteState,
     core: Arc<MitmCore>,
     rt: Arc<Runtime>,
     core_events: Receiver<CoreEvent>,
@@ -45,6 +47,7 @@ impl MitmApp {
             dock: prefs::restore(cc.storage, &mut state),
             state,
             cmds: Commands::default(),
+            palette: PaletteState::default(),
             core_events: forward_core_events(&rt, &core, &cc.egui_ctx),
             core,
             rt,
@@ -77,6 +80,7 @@ impl MitmApp {
     fn run_command(&mut self, ctx: &egui::Context, cmd: AppCommand) {
         let db_path = &self.core.db_path;
         match cmd {
+            AppCommand::OpenPalette => self.palette.open(),
             AppCommand::OpenTab(tab) => dock::open_tab(&mut self.dock, tab),
             AppCommand::ToggleProxy => self.toggle_proxy(),
             AppCommand::SaveListeners(listeners) => self.save_listeners(listeners),
@@ -167,6 +171,12 @@ impl MitmApp {
                 self.rt.spawn(async move {
                     let _ = core.toggle_interceptor(enabled, mode).await;
                 });
+            }
+            AppCommand::ToggleInterceptor => {
+                let intercept = &mut self.state.intercept;
+                intercept.enabled = !intercept.enabled;
+                let cmd = AppCommand::ConfigureInterceptor { enabled: intercept.enabled, mode: intercept.mode.clone() };
+                self.run_command(ctx, cmd);
             }
             AppCommand::SaveInterceptRules(rules) => {
                 let core = Arc::clone(&self.core);
@@ -263,6 +273,7 @@ impl eframe::App for MitmApp {
             db_path: &self.core.db_path,
         };
         DockArea::new(&mut self.dock).show_inside(ui, &mut viewer);
+        palette::show(ui.ctx(), &mut self.palette, &mut self.cmds);
 
         let cmds = self.cmds.take();
         if !cmds.is_empty() {

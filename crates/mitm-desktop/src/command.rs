@@ -14,6 +14,7 @@ pub struct RequestDraft {
 }
 
 pub enum AppCommand {
+    OpenPalette,
     OpenTab(Tab),
     ToggleProxy,
     SaveListeners(Vec<ListenerConfig>),
@@ -42,6 +43,7 @@ pub enum AppCommand {
     },
     DropIntercept { flow_id: String },
     ConfigureInterceptor { enabled: bool, mode: String },
+    ToggleInterceptor,
     SaveInterceptRules(Vec<InterceptRule>),
 
     Collections(CollectionsCmd),
