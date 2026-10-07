@@ -2,7 +2,7 @@ use eframe::egui::{self, RichText};
 use mitm_core::collections::RequestHistoryItem;
 use mitm_core::repeater::{HeaderItem, RepeaterHistoryItem};
 use crate::format::{CopyFormat, Exchange};
-use crate::widgets::pills::render_status_pill;
+use crate::widgets::pills::status_text;
 
 pub trait Run {
     fn id(&self) -> i64;
@@ -72,41 +72,28 @@ pub fn url_path(url: &str) -> &str {
 
 pub fn show<R: Run>(ui: &mut egui::Ui, id_salt: &str, runs: &[R], selected: Option<i64>, can_load: bool) -> Option<RunAction> {
     if runs.is_empty() {
-        ui.add_space(16.0);
-        ui.vertical_centered(|ui| ui.label(RichText::new("No runs recorded").weak().italics()));
+        ui.weak("No runs yet");
         return None;
     }
 
     let mut action = None;
     egui::ScrollArea::vertical().id_salt(id_salt).auto_shrink([false, false]).show(ui, |ui| {
         for run in runs {
+            let style = ui.style().clone();
+            let mut text = egui::text::LayoutJob::default();
+            status_text(run.status_code()).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
+            RichText::new(format!("  {} {}", run.method(), url_path(run.url())))
+                .monospace()
+                .append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
+
             let response = ui
-                .push_id(run.id(), |ui| {
-                    let frame = egui::Frame::NONE.inner_margin(egui::Margin::symmetric(6, 4));
-                    let frame = if selected == Some(run.id()) {
-                        frame.fill(ui.visuals().selection.bg_fill.gamma_multiply(0.35))
-                    } else {
-                        frame
-                    };
-                    frame
-                        .show(ui, |ui| {
-                            ui.set_width(ui.available_width());
-                            ui.horizontal(|ui| {
-                                render_status_pill(ui, run.status_code());
-                                ui.label(RichText::new(format!("{}ms", run.duration_ms())).weak().size(10.0));
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    ui.label(RichText::new(local_time(run.executed_at_ms())).weak().size(10.0));
-                                });
-                            });
-                            ui.horizontal(|ui| {
-                                ui.label(RichText::new(run.method()).weak().strong().size(10.0));
-                                ui.add(egui::Label::new(RichText::new(url_path(run.url())).monospace().size(11.0)).truncate());
-                            });
-                        })
-                        .response
-                        .interact(egui::Sense::click())
-                })
-                .inner;
+                .add(
+                    egui::Button::selectable(selected == Some(run.id()), text)
+                        .right_text(RichText::new(local_time(run.executed_at_ms())).weak().size(11.0))
+                        .truncate()
+                        .min_size(egui::vec2(ui.available_width(), 22.0)),
+                )
+                .on_hover_text(format!("{}\n{}ms", run.url(), run.duration_ms()));
 
             if response.clicked() {
                 action = Some(RunAction::Select(run.id()));
@@ -133,7 +120,6 @@ pub fn show<R: Run>(ui: &mut egui::Ui, id_salt: &str, runs: &[R], selected: Opti
                     }
                 });
             });
-            ui.separator();
         }
     });
     action
