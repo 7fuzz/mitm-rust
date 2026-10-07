@@ -2,6 +2,7 @@ pub mod actor;
 mod error;
 pub mod history_db;
 pub mod migrations;
+pub mod recovery;
 pub mod webhook_db;
 pub mod ws_db;
 
