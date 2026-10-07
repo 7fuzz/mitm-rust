@@ -2,11 +2,17 @@ use std::collections::HashSet;
 use std::path::Path;
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
-use mitm_core::workspace::{Environment, EnvironmentVariable, Workspace};
+use mitm_core::workspace::{Environment, EnvironmentVariable, VariableVariant, Workspace};
 use crate::command::{AppCommand, Commands};
 use crate::widgets::split;
 
 const SAVE_DELAY_SECS: f64 = 0.6;
+
+pub struct VariantModal {
+    pub var_idx: usize,
+    pub is_rename: bool,
+    pub name: String,
+}
 
 pub struct EnvironmentsState {
     pub workspaces: Vec<Workspace>,
@@ -23,6 +29,7 @@ pub struct EnvironmentsState {
     pub variable_filter: String,
     pub new_var_key: String,
     pub new_var_value: String,
+    pub variant_modal: Option<VariantModal>,
     dirty: HashSet<String>,
     last_edit: f64,
 }
@@ -44,6 +51,7 @@ impl Default for EnvironmentsState {
             variable_filter: String::new(),
             new_var_key: String::new(),
             new_var_value: String::new(),
+            variant_modal: None,
             dirty: HashSet::new(),
             last_edit: 0.0,
         }
@@ -257,6 +265,8 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &
     let filter = state.variable_filter.trim().to_lowercase();
     let mut changed = false;
     let mut delete_idx = None;
+    let mut open_variant_modal = None;
+    let mut delete_variant_idx = None;
 
     let total_vars = env.variables.len();
     let matching_indices: Vec<usize> = (0..total_vars)
@@ -305,11 +315,90 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &
                         ).changed();
                     });
                     row.col(|ui| {
-                        changed |= ui.add(
-                            egui::TextEdit::singleline(&mut var.value)
-                                .hint_text("Value")
-                                .desired_width(ui.available_width()),
-                        ).changed();
+                        ui.horizontal(|ui| {
+                            let has_variants = var.variants.len() > 1;
+                            if has_variants {
+                                let active_idx = var.active_index.min(var.variants.len() - 1);
+                                let name = &var.variants[active_idx].name;
+                                let cycler = ui.small_button(format!("‹ {} ›", name))
+                                    .on_hover_text("Click to cycle variant\nRight-click for options");
+                                if cycler.clicked() {
+                                    var.active_index = (active_idx + 1) % var.variants.len();
+                                    var.value = var.variants[var.active_index].value.clone();
+                                    changed = true;
+                                }
+                                cycler.context_menu(|ui| {
+                                    for (i, v) in var.variants.iter().enumerate() {
+                                        if ui.selectable_label(i == active_idx, &v.name).clicked() {
+                                            var.active_index = i;
+                                            var.value = v.value.clone();
+                                            changed = true;
+                                            ui.close();
+                                        }
+                                    }
+                                    ui.separator();
+                                    if ui.button("➕ Add variant…").clicked() {
+                                        open_variant_modal = Some((var_idx, false));
+                                        ui.close();
+                                    }
+                                    if ui.button("✏ Rename variant…").clicked() {
+                                        open_variant_modal = Some((var_idx, true));
+                                        ui.close();
+                                    }
+                                    if ui.button("🗑 Delete variant").clicked() {
+                                        delete_variant_idx = Some((var_idx, active_idx));
+                                        ui.close();
+                                    }
+                                });
+                            }
+
+                            let val_mut = if !var.variants.is_empty() {
+                                let idx = var.active_index.min(var.variants.len() - 1);
+                                &mut var.variants[idx].value
+                            } else {
+                                &mut var.value
+                            };
+
+                            let resp = ui.add(
+                                egui::TextEdit::singleline(val_mut)
+                                    .hint_text("Value")
+                                    .desired_width(ui.available_width()),
+                            );
+                            if resp.changed() {
+                                var.value = val_mut.clone();
+                                changed = true;
+                            }
+
+                            resp.context_menu(|ui| {
+                                if !var.variants.is_empty() {
+                                    let active_idx = var.active_index.min(var.variants.len() - 1);
+                                    for (i, v) in var.variants.iter().enumerate() {
+                                        if ui.selectable_label(i == active_idx, &v.name).clicked() {
+                                            var.active_index = i;
+                                            var.value = v.value.clone();
+                                            changed = true;
+                                            ui.close();
+                                        }
+                                    }
+                                    ui.separator();
+                                }
+                                if ui.button("➕ Add variant…").clicked() {
+                                    open_variant_modal = Some((var_idx, false));
+                                    ui.close();
+                                }
+                                if !var.variants.is_empty() {
+                                    let active_idx = var.active_index.min(var.variants.len() - 1);
+                                    if ui.button("✏ Rename variant…").clicked() {
+                                        open_variant_modal = Some((var_idx, true));
+                                        ui.close();
+                                    }
+                                    if ui.button("🗑 Delete variant").clicked() {
+                                        delete_variant_idx = Some((var_idx, active_idx));
+                                        ui.close();
+                                    }
+                                }
+                            });
+                        });
                     });
                     row.col(|ui| {
                         if ui.small_button("✖").on_hover_text("Delete variable").clicked() {
@@ -355,12 +444,155 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &
             });
         });
 
+    if let Some((v_idx, active_idx)) = delete_variant_idx {
+        let env = &mut state.environments[env_idx];
+        if v_idx < env.variables.len() {
+            let var = &mut env.variables[v_idx];
+            if active_idx < var.variants.len() {
+                var.variants.remove(active_idx);
+                if var.active_index >= var.variants.len() && !var.variants.is_empty() {
+                    var.active_index = var.variants.len() - 1;
+                }
+                var.value = var.current_value().to_string();
+                changed = true;
+            }
+        }
+    }
+
+    if let Some((v_idx, is_rename)) = open_variant_modal {
+        let env = &state.environments[env_idx];
+        if v_idx < env.variables.len() {
+            let var = &env.variables[v_idx];
+            let name = if is_rename {
+                if !var.variants.is_empty() {
+                    let idx = var.active_index.min(var.variants.len() - 1);
+                    var.variants[idx].name.clone()
+                } else {
+                    String::new()
+                }
+            } else {
+                format!("v{}", var.variants.len() + 1)
+            };
+            state.variant_modal = Some(VariantModal {
+                var_idx: v_idx,
+                is_rename,
+                name,
+            });
+        }
+    }
+
     if let Some(idx) = delete_idx {
-        env.variables.remove(idx);
+        state.environments[env_idx].variables.remove(idx);
         changed = true;
     }
 
     if changed {
         state.mark_dirty(&selected_id, now);
+    }
+
+    variant_modal(ui.ctx(), state, env_idx, now);
+}
+
+fn variant_modal(ctx: &egui::Context, state: &mut EnvironmentsState, env_idx: usize, now: f64) {
+    let Some(modal_state) = &mut state.variant_modal else { return; };
+    let mut close = false;
+    let mut commit = false;
+
+    egui::Modal::new(egui::Id::new("variant_modal")).show(ctx, |ui| {
+        ui.set_width(260.0);
+        let title = if modal_state.is_rename { "Rename Variant" } else { "Add Variant" };
+        ui.heading(title);
+        ui.add_space(6.0);
+        let resp = ui.add(
+            egui::TextEdit::singleline(&mut modal_state.name).hint_text("Variant name"),
+        );
+        resp.request_focus();
+        let name = modal_state.name.trim().to_string();
+        let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        if enter && !name.is_empty() {
+            commit = true;
+        }
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            close = true;
+        }
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            let can_commit = !name.is_empty();
+            if ui.add_enabled(can_commit, egui::Button::new(if modal_state.is_rename { "Rename" } else { "Add" })).clicked() {
+                commit = true;
+            }
+            if ui.button("Cancel").clicked() {
+                close = true;
+            }
+        });
+    });
+
+    if commit {
+        if let Some(modal) = state.variant_modal.take() {
+            let name = modal.name.trim().to_string();
+            if !name.is_empty() && env_idx < state.environments.len() {
+                let env = &mut state.environments[env_idx];
+                let env_id = env.id.clone();
+                if modal.var_idx < env.variables.len() {
+                    let var = &mut env.variables[modal.var_idx];
+                    if modal.is_rename {
+                        if !var.variants.is_empty() {
+                            let idx = var.active_index.min(var.variants.len() - 1);
+                            var.variants[idx].name = name;
+                        }
+                    } else if var.variants.is_empty() {
+                        var.variants.push(VariableVariant {
+                            name: "default".to_string(),
+                            value: var.value.clone(),
+                        });
+                        var.variants.push(VariableVariant {
+                            name,
+                            value: String::new(),
+                        });
+                        var.active_index = 1;
+                        var.value = String::new();
+                    } else {
+                        var.variants.push(VariableVariant {
+                            name,
+                            value: String::new(),
+                        });
+                        var.active_index = var.variants.len() - 1;
+                        var.value = String::new();
+                    }
+                    state.mark_dirty(&env_id, now);
+                }
+            }
+        }
+    } else if close {
+        state.variant_modal = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn variant_cycling_and_current_value() {
+        let mut var = EnvironmentVariable {
+            key: "host".to_string(),
+            value: "http://localhost".to_string(),
+            enabled: true,
+            r#type: "default".to_string(),
+            active_index: 0,
+            variants: vec![
+                VariableVariant {
+                    name: "local".to_string(),
+                    value: "http://localhost".to_string(),
+                },
+                VariableVariant {
+                    name: "prod".to_string(),
+                    value: "https://api.example.com".to_string(),
+                },
+            ],
+        };
+        assert_eq!(var.current_value(), "http://localhost");
+        var.active_index = (var.active_index + 1) % var.variants.len();
+        assert_eq!(var.current_value(), "https://api.example.com");
     }
 }
