@@ -16,6 +16,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
         .collect();
 
     let visuals = ui.visuals().clone();
+    let held_offset = offset_holding_rows_in_place(state, visible, ROW_HEIGHT + ui.spacing().item_spacing.y);
     egui::ScrollArea::horizontal()
         .id_salt("traffic_table_hscroll")
         .auto_shrink([false, false])
@@ -31,8 +32,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
             for col in &columns {
                 builder = builder.column(Column::initial(col.default_width()).at_least(40.0).clip(true));
             }
+            if let Some(offset) = held_offset {
+                builder = builder.vertical_scroll_offset(offset);
+            }
 
-            builder
+            let output = builder
                 .header(24.0, |mut header| {
                     for col in &columns {
                         header.col(|ui| {
@@ -51,6 +55,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
                         flow_row(&mut row, &visuals, &columns, flow, selected, cmds);
                     });
                 });
+            state.scroll_anchor = visible.first().map(|&i| (state.flows[i].id, output.state.offset.y));
         });
 
     if visible.is_empty() {
@@ -65,6 +70,16 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
             ui.ctx().copy_text(selected.url.clone());
         }
     }
+}
+
+// New flows are pushed on top; once scrolled away from the top, keep the rows being read where they are.
+fn offset_holding_rows_in_place(state: &TrafficState, visible: &[usize], row_step: f32) -> Option<f32> {
+    let (top_id, offset) = state.scroll_anchor?;
+    if offset < 1.0 {
+        return None;
+    }
+    let added = visible.iter().take_while(|&&i| state.flows[i].id > top_id).count();
+    (added > 0).then(|| offset + added as f32 * row_step)
 }
 
 fn flow_row(

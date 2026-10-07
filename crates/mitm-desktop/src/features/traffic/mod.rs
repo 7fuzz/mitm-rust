@@ -70,6 +70,8 @@ pub struct TrafficState {
     pub hidden_columns: Vec<ColumnId>,
     pub history_limit: HistorySettings,
     pub limit_draft: HistorySettings,
+    // Top visible flow id and vertical offset from the last frame.
+    scroll_anchor: Option<(i64, f32)>,
 }
 
 impl Default for TrafficState {
@@ -88,6 +90,7 @@ impl Default for TrafficState {
             hidden_columns: Vec::new(),
             history_limit: HistorySettings::default(),
             limit_draft: HistorySettings::default(),
+            scroll_anchor: None,
         }
     }
 }
