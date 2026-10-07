@@ -567,6 +567,10 @@ impl AppState {
         self.next_history_id.fetch_add(1, Ordering::SeqCst) as i64 + 1
     }
 
+    pub fn reset_history_id(&self) {
+        self.next_history_id.store(0, Ordering::SeqCst);
+    }
+
     pub fn next_rewrite_history_id(&self) -> i64 {
         self.next_rewrite_history_id.fetch_add(1, Ordering::SeqCst) as i64 + 1
     }

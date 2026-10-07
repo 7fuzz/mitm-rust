@@ -176,6 +176,9 @@ pub fn get_history_detail(
 
 pub fn clear_history(db_path: &PathBuf) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM history", []).map_err(|e| e.to_string())?;
+    conn.execute_batch(
+        "DELETE FROM history;
+         DELETE FROM sqlite_sequence WHERE name = 'history';"
+    ).map_err(|e| e.to_string())?;
     Ok(())
 }

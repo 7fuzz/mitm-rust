@@ -17,7 +17,7 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
 
     let detail = state.selected_flow_detail.as_ref();
 
-    // 1. Top bar: Phase selection, Status, Method, URL, cURL export
+    // 1. Top bar: Phase selection, Status, Method, Actions
     ui.horizontal(|ui| {
         // Request / Response toggle buttons
         let req_selected = state.inspector_phase == InspectorPhase::Request;
@@ -35,8 +35,6 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
         render_method_pill(ui, &flow.method);
         render_status_pill(ui, flow.status_code);
 
-        ui.separator();
-
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.button("📋 Copy cURL").on_hover_text("Copy as bash cURL command").clicked() {
                 let curl_cmd = build_curl_command(&flow, detail);
@@ -45,9 +43,18 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
             if ui.button("📋 Copy URL").on_hover_text("Copy URL to clipboard").clicked() {
                 ui.ctx().copy_text(flow.url.clone());
             }
-
-            ui.add(egui::Label::new(RichText::new(&flow.url).strong().text_style(egui::TextStyle::Monospace)).selectable(true));
         });
+    });
+
+    // 2. Dedicated URL Address Bar
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("URL:").weak().size(11.0));
+        let mut display_url = flow.url.clone();
+        ui.add(
+            egui::TextEdit::singleline(&mut display_url)
+                .desired_width(ui.available_width())
+                .font(egui::TextStyle::Monospace)
+        );
     });
 
     ui.separator();

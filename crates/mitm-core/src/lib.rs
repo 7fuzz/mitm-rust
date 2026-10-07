@@ -53,6 +53,13 @@ impl MitmCore {
         Arc::new(ca::get_ca(ca::get_default_ca_dir()))
     }
 
+    pub fn clear_all_traffic(&self) -> Result<(), String> {
+        db::clear_history(&self.db_path)?;
+        self.state.reset_history_id();
+        self.event_bus.emit(CoreEvent::TrafficCleared);
+        Ok(())
+    }
+
     pub async fn start_proxy(
         &self,
         port: u16,

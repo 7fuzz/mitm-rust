@@ -3,7 +3,11 @@ use egui_extras::{Column, TableBuilder};
 use crate::state::UiState;
 use crate::views::pills::{format_bytes, format_duration, render_method_pill, render_status_pill};
 
-pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std::path::PathBuf) {
+pub fn render_traffic_view(
+    ui: &mut egui::Ui,
+    state: &mut UiState,
+    core: &std::sync::Arc<mitm_core::MitmCore>,
+) {
     // 1. Toolbar on top
     ui.horizontal(|ui| {
         // Search bar
@@ -45,8 +49,9 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std
 
         ui.separator();
 
-        // Clear button
+        // Clear button (purges SQLite, resets id counter to 0, and empties frontend list)
         if ui.button(format!("🗑 Clear ({})", state.flows.len())).clicked() {
+            let _ = core.clear_all_traffic();
             state.clear_flows();
         }
     });
@@ -218,7 +223,7 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std
     }
 
     if let Some(id) = new_selection {
-        state.select_flow(id, db_path);
+        state.select_flow(id, &core.db_path);
     }
     let detail = state.selected_flow_detail.clone();
     if let Some(f) = send_to_repeater {
@@ -228,6 +233,7 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std
         state.send_flow_to_fuzzer(&f, detail.as_ref());
     }
     if should_clear {
+        let _ = core.clear_all_traffic();
         state.clear_flows();
     }
 }
