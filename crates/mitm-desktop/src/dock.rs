@@ -1,6 +1,6 @@
 use std::path::Path;
 use eframe::egui;
-use egui_dock::{DockState, NodeIndex, TabIndex};
+use egui_dock::DockState;
 use crate::command::Commands;
 use crate::features;
 use crate::state::AppState;
@@ -27,15 +27,6 @@ impl Tab {
         Tab::Settings,
     ];
 
-    const TOOLS: [Tab; 6] = [
-        Tab::Repeater,
-        Tab::Fuzzer,
-        Tab::Intercept,
-        Tab::Collections,
-        Tab::WebSockets,
-        Tab::Settings,
-    ];
-
     pub fn name(&self) -> &'static str {
         match self {
             Tab::Traffic => "Traffic",
@@ -50,27 +41,15 @@ impl Tab {
 }
 
 pub fn initial_layout() -> DockState<Tab> {
-    DockState::new(vec![Tab::Traffic])
+    DockState::new(vec![Tab::Traffic, Tab::Intercept, Tab::Repeater])
 }
 
 pub fn open_tab(dock: &mut DockState<Tab>, tab: Tab) {
-    if let Some(path) = dock.find_tab(&tab) {
-        let _ = dock.set_active_tab(path);
-        return;
-    }
-
-    if tab == Tab::Traffic {
-        dock.push_to_first_leaf(tab);
-        return;
-    }
-    let tool_node = Tab::TOOLS.iter().find_map(|t| dock.find_main_surface_tab(t)).map(|(node, _)| node);
-    if let Some(leaf) = tool_node.and_then(|node| dock.main_surface_mut().leaf_mut(node).ok()) {
-        leaf.tabs.push(tab);
-        leaf.active = TabIndex(leaf.tabs.len() - 1);
-    } else if dock.find_main_surface_tab(&Tab::Traffic).is_some() {
-        dock.main_surface_mut().split_right(NodeIndex::root(), 0.6, vec![tab]);
-    } else {
-        dock.push_to_first_leaf(tab);
+    match dock.find_tab(&tab) {
+        Some(path) => {
+            let _ = dock.set_active_tab(path);
+        }
+        None => dock.push_to_focused_leaf(tab),
     }
 }
 
