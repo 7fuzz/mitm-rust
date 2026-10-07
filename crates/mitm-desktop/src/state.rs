@@ -4,7 +4,7 @@ use crate::features::fuzzer::FuzzerState;
 use crate::features::inspector::InspectorState;
 use crate::features::intercept::InterceptState;
 use crate::features::repeater::RepeaterState;
-use crate::features::settings::{CertificateState, ListenerForm, ProxyState, SettingsPrefs};
+use crate::features::settings::{CertificateState, DataSectionState, ListenerForm, ProxyState, SettingsPrefs};
 use crate::features::traffic::TrafficState;
 use crate::features::websockets::WebSocketsState;
 
@@ -12,6 +12,7 @@ use crate::features::websockets::WebSocketsState;
 pub struct AppState {
     pub proxy: ProxyState,
     pub certificate: CertificateState,
+    pub data: DataSectionState,
     pub listener_form: ListenerForm,
     pub settings: SettingsPrefs,
     pub traffic: TrafficState,
@@ -33,6 +34,7 @@ impl AppState {
         }
         state.collections.load(db_path);
         state.websockets.load_connections(db_path);
+        state.data.counts = mitm_core::db::get_data_category_counts(db_path).ok();
         state
     }
 }

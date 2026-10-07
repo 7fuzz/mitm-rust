@@ -133,6 +133,48 @@ impl MitmApp {
                     }
                 }
             }
+            AppCommand::ClearDataCategory(category) => {
+                match self.core.clear_data_category(category) {
+                    Ok(()) => {
+                        if category == mitm_core::DataCategory::Traffic {
+                            self.state.traffic.clear();
+                        }
+                        self.state.data.counts = self.core.data_counts().ok();
+                        self.state.data.status = Some((format!("{} cleared", category.display_name()), Tone::Success));
+                    }
+                    Err(e) => {
+                        self.state.data.status = Some((e, Tone::Danger));
+                    }
+                }
+            }
+            AppCommand::RefreshDataCounts => {
+                self.state.data.counts = self.core.data_counts().ok();
+            }
+            AppCommand::FactoryReset => {
+                match self.rt.block_on(self.core.factory_reset()) {
+                    Ok(()) => {
+                        let event_bus = mitm_core::EventBus::default();
+                        if let Ok(new_core) = MitmCore::init_with_events(event_bus) {
+                            self.core = Arc::new(new_core);
+                            self.core_events = forward_core_events(&self.rt, &self.core, ctx);
+                        }
+                        self.state = AppState::load(&self.core.db_path);
+                        self.state.traffic.set_history_limit(self.rt.block_on(self.core.get_history_settings()));
+                        self.state.proxy.mode = self.rt.block_on(self.core.proxy_mode());
+                        if self.state.proxy.mode.is_enabled() {
+                            self.state.proxy.set_started(self.rt.block_on(self.core.start_all_listeners()));
+                        }
+                        refresh_listener_state(&self.rt, &self.core, &mut self.state.proxy);
+                        self.state.proxy.reload_host_ips();
+                        self.state.certificate.info = self.core.ca_info().ok();
+                        self.state.data.counts = self.core.data_counts().ok();
+                        self.state.data.status = Some(("Factory reset complete".to_string(), Tone::Success));
+                    }
+                    Err(e) => {
+                        self.state.data.status = Some((e, Tone::Danger));
+                    }
+                }
+            }
 
             AppCommand::SelectFlow(id) => {
                 self.state.traffic.select(id, db_path);

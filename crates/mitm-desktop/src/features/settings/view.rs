@@ -4,13 +4,14 @@ use crate::theme::{self, Tone};
 use crate::command::{AppCommand, Commands};
 use crate::features::traffic::TrafficState;
 use crate::widgets::split;
-use super::{CertificateState, ListenerForm, ProxyState, SettingsPrefs, SettingsSection};
+use super::{CertificateState, DataSectionState, ListenerForm, ProxyState, SettingsPrefs, SettingsSection};
 
 pub fn show(
     ui: &mut egui::Ui,
     prefs: &mut SettingsPrefs,
     proxy: &mut ProxyState,
     cert: &mut CertificateState,
+    data: &mut DataSectionState,
     form: &mut ListenerForm,
     traffic: &TrafficState,
     db_path: &Path,
@@ -27,9 +28,7 @@ pub fn show(
             SettingsSection::Proxy => proxy_section(ui, proxy, form, traffic, db_path, cmds),
             SettingsSection::Certificate => certificate_section(ui, cert, cmds),
             SettingsSection::Appearance => appearance_section(ui),
-            SettingsSection::Data => {
-                ui.heading("Data");
-            }
+            SettingsSection::Data => data_section(ui, data, cmds),
             SettingsSection::Database => {
                 ui.heading("Database");
             }
@@ -63,6 +62,104 @@ fn appearance_section(ui: &mut egui::Ui) {
     let mut zoom = ui.ctx().zoom_factor();
     if ui.add(egui::Slider::new(&mut zoom, 0.5..=2.5).text("Factor").step_by(0.1)).changed() {
         ui.ctx().set_zoom_factor(zoom);
+    }
+}
+
+fn data_section(ui: &mut egui::Ui, data: &mut DataSectionState, cmds: &mut Commands) {
+    ui.horizontal(|ui| {
+        ui.strong("Stored Data");
+        if ui.small_button("⟳").on_hover_text("Refresh row counts").clicked() {
+            cmds.push(AppCommand::RefreshDataCounts);
+        }
+    });
+    ui.add_space(4.0);
+
+    if let Some((msg, tone)) = &data.status {
+        ui.label(RichText::new(msg).color(theme::color(ui, *tone)));
+        ui.add_space(4.0);
+    }
+
+    let counts = data.counts.clone().unwrap_or_default();
+
+    egui::Grid::new("data_categories_grid")
+        .num_columns(3)
+        .spacing([24.0, 8.0])
+        .striped(true)
+        .show(ui, |ui| {
+            ui.strong("Category");
+            ui.strong("Count");
+            ui.strong("Action");
+            ui.end_row();
+
+            for category in mitm_core::DataCategory::ALL {
+                ui.label(category.display_name());
+                let count = counts.get(category);
+                ui.monospace(count.to_string());
+                let clear_id = ui.id().with(category);
+                if crate::widgets::confirm::confirm_button(
+                    ui,
+                    clear_id,
+                    RichText::new("Clear"),
+                    "Confirm clear?",
+                    &format!("Delete all {}", category.display_name().to_lowercase()),
+                ) {
+                    cmds.push(AppCommand::ClearDataCategory(category));
+                }
+                ui.end_row();
+            }
+        });
+
+    ui.add_space(16.0);
+    ui.separator();
+    ui.add_space(12.0);
+
+    ui.strong("Danger Zone");
+    ui.add_space(4.0);
+    ui.label(
+        RichText::new("Factory reset will wipe the database and CA certificate, and restart the core.")
+            .weak()
+            .small(),
+    );
+    ui.add_space(6.0);
+
+    if ui.button(RichText::new("Factory Reset…").color(theme::color(ui, Tone::Danger))).clicked() {
+        data.factory_reset_open = true;
+        data.factory_reset_input.clear();
+    }
+
+    if data.factory_reset_open {
+        let mut open = data.factory_reset_open;
+        egui::Window::new("Factory Reset")
+            .collapsible(false)
+            .resizable(false)
+            .open(&mut open)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ui.ctx(), |ui| {
+                ui.set_width(320.0);
+                ui.heading("Reset All Application Data");
+                ui.add_space(8.0);
+                ui.label(
+                    "This action wipes the database and root CA certificate. All traffic, rules, collections, and settings will be permanently lost."
+                );
+                ui.add_space(8.0);
+                ui.label(RichText::new("Type RESET below to proceed:").strong());
+                ui.add_space(4.0);
+                ui.add(egui::TextEdit::singleline(&mut data.factory_reset_input).desired_width(f32::INFINITY));
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    let can_reset = data.factory_reset_input.trim() == "RESET";
+                    if ui.add_enabled(can_reset, egui::Button::new(RichText::new("Factory Reset").color(theme::color(ui, Tone::Danger)))).clicked() {
+                        cmds.push(AppCommand::FactoryReset);
+                        data.factory_reset_open = false;
+                        data.factory_reset_input.clear();
+                    }
+                    if ui.button("Cancel").clicked() {
+                        data.factory_reset_open = false;
+                        data.factory_reset_input.clear();
+                    }
+                });
+            });
+        data.factory_reset_open = open;
     }
 }
 

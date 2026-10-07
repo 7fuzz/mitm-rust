@@ -62,6 +62,24 @@ impl Default for CertificateState {
     }
 }
 
+pub struct DataSectionState {
+    pub counts: Option<mitm_core::db::DataCategoryCounts>,
+    pub status: Option<(String, crate::theme::Tone)>,
+    pub factory_reset_open: bool,
+    pub factory_reset_input: String,
+}
+
+impl Default for DataSectionState {
+    fn default() -> Self {
+        Self {
+            counts: None,
+            status: None,
+            factory_reset_open: false,
+            factory_reset_input: String::new(),
+        }
+    }
+}
+
 pub struct ProxyState {
     pub mode: ProxyMode,
     pub running: bool,

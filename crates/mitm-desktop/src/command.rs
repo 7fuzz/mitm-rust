@@ -27,6 +27,10 @@ pub enum AppCommand {
     OpenCaFolder,
     RegenerateCa,
 
+    ClearDataCategory(mitm_core::DataCategory),
+    RefreshDataCounts,
+    FactoryReset,
+
     SelectFlow(i64),
     ClearTraffic,
     DeleteFlow(i64),
