@@ -3,7 +3,7 @@ use egui_extras::{Column, TableBuilder};
 use crate::state::UiState;
 use crate::views::pills::{format_bytes, format_duration, render_method_pill, render_status_pill};
 
-pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState) {
+pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &std::path::PathBuf) {
     // 1. Toolbar on top
     ui.horizontal(|ui| {
         // Search bar
@@ -60,6 +60,9 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState) {
     let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
     let row_height = text_height + 8.0;
 
+    let mut new_selection: Option<i64> = None;
+    let mut should_clear = false;
+
     TableBuilder::new(ui)
         .striped(true)
         .resizable(true)
@@ -88,6 +91,8 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState) {
                 let flow_idx = filtered_indices[row_idx];
                 let flow = &state.flows[flow_idx];
                 let flow_id = flow.id;
+                let flow_url = flow.url.clone();
+                let flow_clone = flow.clone();
                 let is_selected = state.selected_flow_id == Some(flow_id);
 
                 row.set_selected(is_selected);
@@ -95,7 +100,7 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState) {
                 // ID
                 row.col(|ui| {
                     if ui.selectable_label(is_selected, flow_id.to_string()).clicked() {
-                        state.selected_flow_id = Some(flow_id);
+                        new_selection = Some(flow_id);
                     }
                 });
 
@@ -139,9 +144,34 @@ pub fn render_traffic_view(ui: &mut egui::Ui, state: &mut UiState) {
                     ui.label(format_duration(flow.duration_ms));
                 });
 
-                if row.response().clicked() {
-                    state.selected_flow_id = Some(flow_id);
+                let response = row.response();
+                if response.clicked() {
+                    new_selection = Some(flow_id);
                 }
+
+                response.context_menu(|ui| {
+                    if ui.button("📋 Copy URL").clicked() {
+                        ui.ctx().copy_text(flow_url.clone());
+                        ui.close();
+                    }
+                    if ui.button("📋 Copy as cURL").clicked() {
+                        let curl_cmd = crate::views::inspector::build_curl_command(&flow_clone, state.selected_flow_detail.as_ref());
+                        ui.ctx().copy_text(curl_cmd);
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.button("🗑 Clear Flows").clicked() {
+                        should_clear = true;
+                        ui.close();
+                    }
+                });
             });
         });
+
+    if let Some(id) = new_selection {
+        state.select_flow(id, db_path);
+    }
+    if should_clear {
+        state.clear_flows();
+    }
 }

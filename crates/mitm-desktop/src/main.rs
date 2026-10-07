@@ -24,6 +24,7 @@ pub enum TabKind {
 
 struct TabViewerApp<'a> {
     state: &'a mut UiState,
+    db_path: &'a std::path::PathBuf,
 }
 
 impl<'a> egui_dock::TabViewer for TabViewerApp<'a> {
@@ -46,7 +47,7 @@ impl<'a> egui_dock::TabViewer for TabViewerApp<'a> {
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
         match tab {
             TabKind::Traffic => {
-                render_traffic_view(ui, self.state);
+                render_traffic_view(ui, self.state, self.db_path);
             }
             TabKind::Inspector => {
                 render_inspector_view(ui, self.state);
@@ -193,6 +194,7 @@ impl eframe::App for NativeMitmApp {
         // 3. Docking area fills remaining space
         let mut tab_viewer = TabViewerApp {
             state: &mut self.ui_state,
+            db_path: &self.core.db_path,
         };
         DockArea::new(&mut self.dock_state).show_inside(ui, &mut tab_viewer);
     }

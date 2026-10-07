@@ -1,11 +1,31 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use mitm_core::state::HistoryEntry;
+use mitm_core::state::{HistoryDetail, HistoryEntry};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InspectorPhase {
+    Request,
+    Response,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InspectorViewMode {
+    Headers,
+    Formatted,
+    Raw,
+    Hex,
+}
 
 pub struct UiState {
     pub flows: VecDeque<HistoryEntry>,
     pub max_flows: usize,
     pub selected_flow_id: Option<i64>,
+    pub selected_flow_detail: Option<HistoryDetail>,
+
+    // Inspector tab state
+    pub inspector_phase: InspectorPhase,
+    pub inspector_mode: InspectorViewMode,
+    pub header_search_query: String,
 
     // Search and filtering
     pub search_query: String,
@@ -26,6 +46,10 @@ impl Default for UiState {
             flows: VecDeque::with_capacity(1000),
             max_flows: 10_000,
             selected_flow_id: None,
+            selected_flow_detail: None,
+            inspector_phase: InspectorPhase::Request,
+            inspector_mode: InspectorViewMode::Headers,
+            header_search_query: String::new(),
             search_query: String::new(),
             method_filter: "ALL".to_string(),
             status_filter: "ALL".to_string(),
@@ -41,6 +65,13 @@ impl Default for UiState {
 impl UiState {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn select_flow(&mut self, flow_id: i64, db_path: &PathBuf) {
+        self.selected_flow_id = Some(flow_id);
+        if let Ok(detail) = mitm_core::db::get_history_detail(db_path, flow_id) {
+            self.selected_flow_detail = detail;
+        }
     }
 
     pub fn load_history_from_db(&mut self, db_path: &PathBuf) {
