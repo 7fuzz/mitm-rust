@@ -37,7 +37,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
 
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let mut fraction = state.split;
-            let [mut request_ui, mut response_ui] = split::regions(ui, "collections_split", &mut fraction);
+            let [mut request_ui, mut response_ui] = split::side_by_side(ui, "collections_split", &mut fraction);
             state.split = fraction;
             editor::show(&mut request_ui, state, cmds, now);
             response(&mut response_ui, state, &active_id);

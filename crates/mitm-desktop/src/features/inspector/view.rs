@@ -44,13 +44,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficStat
         cookies: Some(response_cookies(response_headers)),
     };
 
-    split::horizontal(
-        ui,
-        "inspector_split",
-        &mut state.split,
-        |ui| pane::show(ui, "inspector_request", &mut state.request, &request),
-        |ui| pane::show(ui, "inspector_response", &mut state.response, &response),
-    );
+    let mut fraction = state.split;
+    let [mut request_ui, mut response_ui] = split::side_by_side(ui, "inspector_split", &mut fraction);
+    state.split = fraction;
+    pane::show(&mut request_ui, "inspector_request", &mut state.request, &request);
+    pane::show(&mut response_ui, "inspector_response", &mut state.response, &response);
 }
 
 fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags) {

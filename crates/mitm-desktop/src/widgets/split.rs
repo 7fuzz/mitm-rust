@@ -1,36 +1,41 @@
-use eframe::egui::{self, AsIdSalt, CursorIcon, Rect, Sense, Stroke, UiBuilder};
+use eframe::egui::{self, pos2, AsIdSalt, CursorIcon, Rect, Sense, Stroke, UiBuilder};
 
-const HANDLE_WIDTH: f32 = 6.0;
-const MIN_PANE_WIDTH: f32 = 120.0;
+const HANDLE_SIZE: f32 = 6.0;
+const MIN_PANE_SIZE: f32 = 100.0;
 
-pub fn horizontal(
-    ui: &mut egui::Ui,
-    id_salt: impl AsIdSalt,
-    fraction: &mut f32,
-    left: impl FnOnce(&mut egui::Ui),
-    right: impl FnOnce(&mut egui::Ui),
-) {
-    let [mut left_ui, mut right_ui] = regions(ui, id_salt, fraction);
-    left(&mut left_ui);
-    right(&mut right_ui);
+pub fn side_by_side(ui: &mut egui::Ui, id_salt: impl AsIdSalt, fraction: &mut f32) -> [egui::Ui; 2] {
+    regions(ui, id_salt, fraction, false)
 }
 
-pub fn regions(ui: &mut egui::Ui, id_salt: impl AsIdSalt, fraction: &mut f32) -> [egui::Ui; 2] {
-    let rect = ui.available_rect_before_wrap();
-    let usable = (rect.width() - HANDLE_WIDTH).max(0.0);
-    let min = MIN_PANE_WIDTH.min(usable / 2.0);
-    let left_width = (usable * *fraction).clamp(min, usable - min);
+pub fn stacked(ui: &mut egui::Ui, id_salt: impl AsIdSalt, fraction: &mut f32) -> [egui::Ui; 2] {
+    regions(ui, id_salt, fraction, true)
+}
 
-    let left_rect = Rect::from_min_max(rect.min, egui::pos2(rect.left() + left_width, rect.bottom()));
-    let handle_rect = Rect::from_min_max(
-        egui::pos2(left_rect.right(), rect.top()),
-        egui::pos2(left_rect.right() + HANDLE_WIDTH, rect.bottom()),
-    );
-    let right_rect = Rect::from_min_max(egui::pos2(handle_rect.right(), rect.top()), rect.max);
+fn regions(ui: &mut egui::Ui, id_salt: impl AsIdSalt, fraction: &mut f32, stacked: bool) -> [egui::Ui; 2] {
+    let rect = ui.available_rect_before_wrap();
+    let (start, length) = if stacked { (rect.top(), rect.height()) } else { (rect.left(), rect.width()) };
+    let usable = (length - HANDLE_SIZE).max(0.0);
+    let min = MIN_PANE_SIZE.min(usable / 2.0);
+    let at = start + (usable * *fraction).clamp(min, usable - min);
+
+    let (first, handle_rect, second) = if stacked {
+        (
+            Rect::from_min_max(rect.min, pos2(rect.right(), at)),
+            Rect::from_min_max(pos2(rect.left(), at), pos2(rect.right(), at + HANDLE_SIZE)),
+            Rect::from_min_max(pos2(rect.left(), at + HANDLE_SIZE), rect.max),
+        )
+    } else {
+        (
+            Rect::from_min_max(rect.min, pos2(at, rect.bottom())),
+            Rect::from_min_max(pos2(at, rect.top()), pos2(at + HANDLE_SIZE, rect.bottom())),
+            Rect::from_min_max(pos2(at + HANDLE_SIZE, rect.top()), rect.max),
+        )
+    };
 
     let handle = ui.interact(handle_rect, ui.id().with(&id_salt), Sense::click_and_drag());
     if let (true, Some(pointer)) = (handle.dragged(), handle.interact_pointer_pos()) {
-        *fraction = ((pointer.x - rect.left() - HANDLE_WIDTH / 2.0) / usable).clamp(0.1, 0.9);
+        let along = if stacked { pointer.y } else { pointer.x };
+        *fraction = ((along - start - HANDLE_SIZE / 2.0) / usable).clamp(0.1, 0.9);
     }
     if handle.double_clicked() {
         *fraction = 0.5;
@@ -38,19 +43,24 @@ pub fn regions(ui: &mut egui::Ui, id_salt: impl AsIdSalt, fraction: &mut f32) ->
 
     let active = handle.hovered() || handle.dragged();
     if active {
-        ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
+        ui.ctx().set_cursor_icon(if stacked { CursorIcon::ResizeVertical } else { CursorIcon::ResizeHorizontal });
     }
     let stroke = if active {
         Stroke::new(2.0, ui.visuals().selection.bg_fill)
     } else {
         ui.visuals().widgets.noninteractive.bg_stroke
     };
-    ui.painter().vline(handle_rect.center().x, rect.y_range(), stroke);
+    let center = handle_rect.center();
+    if stacked {
+        ui.painter().hline(rect.x_range(), center.y, stroke);
+    } else {
+        ui.painter().vline(center.x, rect.y_range(), stroke);
+    }
 
-    let left = pane(ui, left_rect, (&id_salt, "left"));
-    let right = pane(ui, right_rect, (&id_salt, "right"));
+    let first = pane(ui, first, (&id_salt, "first"));
+    let second = pane(ui, second, (&id_salt, "second"));
     ui.advance_cursor_after_rect(rect);
-    [left, right]
+    [first, second]
 }
 
 fn pane(ui: &mut egui::Ui, rect: Rect, id_salt: impl AsIdSalt) -> egui::Ui {

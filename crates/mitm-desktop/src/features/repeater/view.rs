@@ -38,7 +38,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
 
     egui::CentralPanel::no_frame().show(ui, |ui| {
         let mut fraction = state.split;
-        let [mut request_ui, mut response_ui] = split::regions(ui, "repeater_split", &mut fraction);
+        let [mut request_ui, mut response_ui] = split::side_by_side(ui, "repeater_split", &mut fraction);
         state.split = fraction;
         builder::show(&mut request_ui, state, cmds, now);
         response(&mut response_ui, state, &active_id);
