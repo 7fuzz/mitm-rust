@@ -9,7 +9,6 @@ pub fn render_repeater_view(ui: &mut egui::Ui, state: &mut UiState) {
         state.active_repeater_index = 0;
     }
 
-    // 1. Horizontal tab bar
     let mut close_tab_idx: Option<usize> = None;
     let mut add_new_tab = false;
 
@@ -50,7 +49,6 @@ pub fn render_repeater_view(ui: &mut egui::Ui, state: &mut UiState) {
     let tab_idx = state.active_repeater_index;
     let tab = &mut state.repeater_tabs[tab_idx];
 
-    // 2. Request action bar: Method, URL, Send button
     let mut should_send = false;
 
     ui.horizontal(|ui| {
@@ -85,9 +83,7 @@ pub fn render_repeater_view(ui: &mut egui::Ui, state: &mut UiState) {
 
     ui.separator();
 
-    // 3. Panes: Request on top/left, Response on bottom/right
     ui.columns(2, |columns| {
-        // Left Column: Request Headers & Body
         columns[0].vertical(|ui| {
             ui.heading("Request");
             ui.add_space(4.0);
@@ -112,7 +108,6 @@ pub fn render_repeater_view(ui: &mut egui::Ui, state: &mut UiState) {
             );
         });
 
-        // Right Column: Response Details
         columns[1].vertical(|ui| {
             ui.heading("Response");
             ui.add_space(4.0);
@@ -138,7 +133,6 @@ pub fn render_repeater_view(ui: &mut egui::Ui, state: &mut UiState) {
                 ui.separator();
 
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    // Response headers toggle
                     ui.collapsing(format!("Headers ({})", res.response_headers.len()), |ui| {
                         egui::Grid::new("repeater_res_headers_grid")
                             .striped(true)
@@ -156,7 +150,6 @@ pub fn render_repeater_view(ui: &mut egui::Ui, state: &mut UiState) {
                     ui.separator();
                     ui.strong("Response Body:");
 
-                    // Pretty JSON if applicable
                     let pretty_json = serde_json::from_str::<serde_json::Value>(&res.response_body)
                         .ok()
                         .and_then(|v| serde_json::to_string_pretty(&v).ok());
@@ -190,7 +183,6 @@ pub fn render_repeater_view(ui: &mut egui::Ui, state: &mut UiState) {
         tab.is_loading = true;
         tab.error = None;
 
-        // Parse headers from multiline text
         let headers: Vec<HeaderItem> = tab
             .headers
             .lines()

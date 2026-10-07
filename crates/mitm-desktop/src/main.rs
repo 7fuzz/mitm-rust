@@ -99,13 +99,11 @@ impl<'a> egui_dock::TabViewer for TabViewerApp<'a> {
 
     fn scroll_bars(&self, tab: &Self::Tab) -> [bool; 2] {
         match tab {
-            // Self-scrolling views with fixed toolbars
             TabKind::Traffic => [false, false],
             TabKind::Inspector => [false, false],
             TabKind::Repeater => [false, false],
             TabKind::Fuzzer => [false, false],
             TabKind::WebSockets => [false, false],
-            // Vertically scrollable form views
             TabKind::Collections => [false, true],
             TabKind::Intercept => [false, true],
             TabKind::Settings => [false, true],
@@ -141,7 +139,6 @@ impl NativeMitmApp {
         ui_state.load_workspaces_and_collections(&core.db_path);
         ui_state.load_ws_connections(&core.db_path);
 
-        // Bridge Tokio broadcast channel to sync crossbeam channel
         let (event_tx, event_rx) = crossbeam_channel::unbounded::<CoreEvent>();
         let mut core_rx = core.event_bus.subscribe();
         let egui_ctx = cc.egui_ctx.clone();
@@ -156,7 +153,6 @@ impl NativeMitmApp {
         let (repeater_result_tx, repeater_result_rx) = crossbeam_channel::unbounded();
         let (fuzzer_result_tx, fuzzer_result_rx) = crossbeam_channel::unbounded();
 
-        // Default layout: Traffic on top/left, Inspector on right, bottom tabs for Repeater/Fuzzer/Settings
         let mut dock_state = DockState::new(vec![TabKind::Traffic, TabKind::Collections]);
         let [_traffic_node, inspector_node] =
             dock_state.main_surface_mut().split_right(NodeIndex::root(), 0.55, vec![TabKind::Inspector]);
@@ -209,7 +205,6 @@ impl NativeMitmApp {
 
 impl eframe::App for NativeMitmApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // 1. Drain incoming events from background Tokio thread
         while let Ok(event) = self.event_rx.try_recv() {
             match event {
                 CoreEvent::TrafficCaptured(ev) => {
@@ -240,7 +235,6 @@ impl eframe::App for NativeMitmApp {
             }
         }
 
-        // Drain repeater results
         while let Ok((tab_idx, res)) = self.repeater_result_rx.try_recv() {
             if let Some(tab) = self.ui_state.repeater_tabs.get_mut(tab_idx) {
                 tab.is_loading = false;
@@ -257,7 +251,6 @@ impl eframe::App for NativeMitmApp {
             }
         }
 
-        // Drain fuzzer results
         while let Ok(msg) = self.fuzzer_result_rx.try_recv() {
             match msg {
                 FuzzMsg::Result(row) => {
@@ -270,7 +263,6 @@ impl eframe::App for NativeMitmApp {
             }
         }
 
-        // 2. Top status/control bar
         egui::Panel::top("top_panel").show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("MITM Native Inspector");
@@ -310,14 +302,12 @@ impl eframe::App for NativeMitmApp {
             });
         });
 
-        // 3. Docking area fills remaining space
         let mut tab_viewer = TabViewerApp {
             state: &mut self.ui_state,
             core: &self.core,
         };
         DockArea::new(&mut self.dock_state).show_inside(ui, &mut tab_viewer);
 
-        // 4. Drain queued intercept actions
         while let Some(cmd) = self.ui_state.intercept_action_queue.pop() {
             match cmd {
                 crate::state::InterceptActionCmd::Forward { flow_id, url, method, headers, body } => {
@@ -343,7 +333,6 @@ impl eframe::App for NativeMitmApp {
             }
         }
 
-        // 5. Drain queued repeater actions
         while let Some(cmd) = self.ui_state.repeater_action_queue.pop() {
             match cmd {
                 crate::state::RepeaterActionCmd::Send { tab_index, tab } => {
@@ -356,7 +345,6 @@ impl eframe::App for NativeMitmApp {
             }
         }
 
-        // 6. Drain queued fuzzer actions
         while let Some(cmd) = self.ui_state.fuzzer_action_queue.pop() {
             match cmd {
                 crate::state::FuzzerActionCmd::Start { template, payloads, concurrency } => {

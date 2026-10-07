@@ -8,7 +8,6 @@ pub fn render_collections_view(ui: &mut egui::Ui, state: &mut UiState, db_path: 
     ui.heading("Workspaces & Collections");
     ui.add_space(4.0);
 
-    // 1. Workspace switcher
     let mut ws_changed = false;
     let mut reload_clicked = false;
 
@@ -43,7 +42,6 @@ pub fn render_collections_view(ui: &mut egui::Ui, state: &mut UiState, db_path: 
 
     ui.separator();
 
-    // 2. Tree rendering
     if state.collection_trees.is_empty() {
         ui.vertical_centered(|ui| {
             ui.add_space(40.0);
@@ -98,12 +96,10 @@ fn render_collection_node(
     let header_text = format!("📁 {} ({} reqs)", item.name, item.requests.len());
 
     ui.collapsing(RichText::new(header_text).strong(), |ui| {
-        // Render nested sub-collections
         for sub in &item.children {
             render_collection_node(ui, sub, send_to_repeater);
         }
 
-        // Render requests in this folder
         for req in &item.requests {
             ui.horizontal(|ui| {
                 render_method_pill(ui, &req.method);

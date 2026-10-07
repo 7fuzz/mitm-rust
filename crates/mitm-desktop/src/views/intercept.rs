@@ -3,7 +3,6 @@ use crate::state::{InterceptActionCmd, UiState};
 use crate::views::pills::render_method_pill;
 
 pub fn render_intercept_view(ui: &mut egui::Ui, state: &mut UiState) {
-    // 1. Master Intercept Controls
     ui.horizontal(|ui| {
         ui.heading("Interception & Breakpoints");
         ui.separator();
@@ -59,7 +58,6 @@ pub fn render_intercept_view(ui: &mut egui::Ui, state: &mut UiState) {
 
     ui.separator();
 
-    // 2. Main content: Pending Breakpoints vs Rules Manager
     egui::ScrollArea::vertical().show(ui, |ui| {
         if !state.pending_intercepts.is_empty() {
             render_paused_flows_editor(ui, state);
@@ -75,7 +73,6 @@ pub fn render_intercept_view(ui: &mut egui::Ui, state: &mut UiState) {
 fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut UiState) {
     ui.heading("Paused Flows");
 
-    // Flow selector tabs/list
     let mut selected_id: Option<String> = None;
     ui.horizontal_wrapped(|ui| {
         let active_id = state.active_intercept_id.clone();
@@ -106,7 +103,6 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut UiState) {
         None => return,
     };
 
-    // Breakpoint action buttons
     ui.horizontal(|ui| {
         if ui.button(RichText::new("▶ Forward (with changes)").color(Color32::from_rgb(34, 197, 94)).strong()).clicked() {
             let headers = state.parse_edited_headers();
@@ -142,7 +138,6 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut UiState) {
 
     ui.separator();
 
-    // Editor fields
     egui::Grid::new("intercept_editor_grid")
         .num_columns(2)
         .spacing([12.0, 8.0])
@@ -195,7 +190,6 @@ fn render_rules_manager(ui: &mut egui::Ui, state: &mut UiState) {
     let mut rules = state.intercept_rules.clone();
     let mut modified = false;
 
-    // Rules Table
     egui::Grid::new("rules_table_grid")
         .striped(true)
         .num_columns(7)
@@ -238,7 +232,6 @@ fn render_rules_manager(ui: &mut egui::Ui, state: &mut UiState) {
     ui.separator();
     ui.add_space(6.0);
 
-    // Add Rule Form
     ui.strong("Add Intercept Rule");
     ui.horizontal(|ui| {
         egui::ComboBox::from_id_salt("new_rule_phase")

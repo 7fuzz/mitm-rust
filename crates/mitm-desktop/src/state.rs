@@ -119,12 +119,10 @@ pub struct UiState {
     pub selected_flow_id: Option<i64>,
     pub selected_flow_detail: Option<HistoryDetail>,
 
-    // Inspector tab state
     pub inspector_phase: InspectorPhase,
     pub inspector_mode: InspectorViewMode,
     pub header_search_query: String,
 
-    // Interception state
     pub intercept_enabled: bool,
     pub intercept_mode: String,
     pub pending_intercepts: Vec<mitm_core::state::PendingFlowPayload>,
@@ -132,23 +130,19 @@ pub struct UiState {
     pub intercept_rules: Vec<mitm_core::db::InterceptRule>,
     pub intercept_action_queue: Vec<InterceptActionCmd>,
 
-    // Repeater state
     pub repeater_tabs: Vec<RepeaterTabState>,
     pub active_repeater_index: usize,
     pub repeater_action_queue: Vec<RepeaterActionCmd>,
 
-    // Fuzzer state
     pub fuzzer_state: FuzzerState,
     pub fuzzer_action_queue: Vec<FuzzerActionCmd>,
 
-    // Workspaces & Collections state
     pub workspaces: Vec<mitm_core::workspace::Workspace>,
     pub active_workspace_id: String,
     pub collection_trees: Vec<mitm_core::collections::CollectionTreeItem>,
     #[allow(dead_code)]
     pub selected_collection_request: Option<mitm_core::collections::RequestItem>,
 
-    // WebSocket state
     pub ws_connections: Vec<mitm_core::state::WebSocketConn>,
     pub selected_ws_connection_id: Option<i64>,
     pub ws_messages: Vec<mitm_core::state::WebSocketMessage>,
@@ -156,26 +150,22 @@ pub struct UiState {
     pub ws_send_payload: String,
     pub ws_filter_direction: String,
 
-    // Active intercept editing buffers
     pub edit_intercept_url: String,
     pub edit_intercept_method: String,
     pub edit_intercept_headers: String,
     pub edit_intercept_body: String,
 
-    // New rule builder fields
     pub new_rule_phase: String,
     pub new_rule_field: String,
     pub new_rule_operator: String,
     pub new_rule_value: String,
     pub new_rule_action: String,
 
-    // Search and filtering
     pub search_query: String,
     pub method_filter: String,
     pub status_filter: String,
     pub auto_scroll: bool,
 
-    // Proxy runtime state
     pub proxy_running: bool,
     pub proxy_port: u16,
     pub proxy_label: String,
@@ -377,7 +367,6 @@ impl UiState {
     pub fn load_history_from_db(&mut self, db_path: &PathBuf) {
         if let Ok(entries) = mitm_core::db::get_history_logs(db_path, 500, 0, None, None, None, false) {
             self.flows.clear();
-            // DB returns descending (newest first). Pushing in order keeps newest at top (index 0).
             for entry in entries {
                 self.flows.push_back(entry);
             }
@@ -385,7 +374,6 @@ impl UiState {
     }
 
     pub fn add_or_update_flow(&mut self, entry: HistoryEntry) {
-        // 1. If this flow already exists in memory, update in-place without duplicating or reordering
         if let Some(existing) = self.flows.iter_mut().find(|f| f.id == entry.id) {
             existing.status_code = entry.status_code;
             existing.response_size = entry.response_size;
@@ -407,7 +395,6 @@ impl UiState {
             return;
         }
 
-        // 2. New flow: push to front so newer traffic is always on top
         if self.flows.len() >= self.max_flows {
             self.flows.pop_back();
         }
@@ -455,12 +442,10 @@ impl UiState {
             .iter()
             .enumerate()
             .filter(|(_, flow)| {
-                // Method filter
                 if method_filter != "ALL" && !flow.method.eq_ignore_ascii_case(&method_filter) {
                     return false;
                 }
 
-                // Status category filter
                 if status_filter != "ALL" {
                     match status_filter {
                         "2xx" => if flow.status_code < 200 || flow.status_code >= 300 { return false; },
@@ -472,7 +457,6 @@ impl UiState {
                     }
                 }
 
-                // Search query match across url, host, path, method
                 if !search.is_empty() {
                     let matches_url = flow.url.to_lowercase().contains(&search);
                     let matches_host = flow.host.to_lowercase().contains(&search);

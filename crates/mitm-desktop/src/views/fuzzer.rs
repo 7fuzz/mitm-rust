@@ -8,7 +8,6 @@ use crate::views::pills::{format_bytes, format_duration, render_method_pill, ren
 pub fn render_fuzzer_view(ui: &mut egui::Ui, state: &mut UiState) {
     let fuzzer = &mut state.fuzzer_state;
 
-    // 1. Top action & status bar
     ui.horizontal(|ui| {
         ui.heading("HTTP Fuzzer");
         ui.separator();
@@ -101,9 +100,7 @@ pub fn render_fuzzer_view(ui: &mut egui::Ui, state: &mut UiState) {
 
     ui.separator();
 
-    // 2. Panes: Wordlist & Template on Left, Results Matrix on Right
     ui.columns(2, |columns| {
-        // Left Column: Configuration & Wordlist
         columns[0].vertical(|ui| {
             ui.heading("Wordlist & Markers");
             ui.label(RichText::new("Use {{variable}} anywhere in the URL, headers, or body.").weak());
@@ -142,7 +139,6 @@ pub fn render_fuzzer_view(ui: &mut egui::Ui, state: &mut UiState) {
             );
         });
 
-        // Right Column: Live Results Table
         columns[1].vertical(|ui| {
             ui.heading(format!("Results ({})", fuzzer.results.len()));
             ui.add_space(4.0);
@@ -155,11 +151,11 @@ pub fn render_fuzzer_view(ui: &mut egui::Ui, state: &mut UiState) {
                 .striped(true)
                 .resizable(true)
                 .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                .column(Column::exact(45.0))    // #
-                .column(Column::remainder())    // Payload
-                .column(Column::exact(55.0))    // Status
-                .column(Column::exact(65.0))    // Size
-                .column(Column::exact(60.0))    // Time
+                .column(Column::exact(45.0))
+                .column(Column::remainder())
+                .column(Column::exact(55.0))
+                .column(Column::exact(65.0))
+                .column(Column::exact(60.0))
                 .header(22.0, |mut header| {
                     header.col(|ui| { ui.strong("#"); });
                     header.col(|ui| { ui.strong("Payload"); });

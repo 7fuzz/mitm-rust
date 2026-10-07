@@ -15,9 +15,7 @@ pub fn render_websockets_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &
 
     ui.separator();
 
-    // Split: Sessions List on Left, Messages Timeline on Right
     ui.columns(2, |columns| {
-        // Left Column: Sessions Table
         columns[0].vertical(|ui| {
             ui.heading(format!("Sessions ({})", state.ws_connections.len()));
             ui.add_space(4.0);
@@ -37,10 +35,10 @@ pub fn render_websockets_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &
                 .striped(true)
                 .resizable(true)
                 .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                .column(Column::exact(45.0))    // #
-                .column(Column::remainder())    // URL
-                .column(Column::exact(70.0))    // Status
-                .column(Column::exact(50.0))    // Msgs
+                .column(Column::exact(45.0))
+                .column(Column::remainder())
+                .column(Column::exact(70.0))
+                .column(Column::exact(50.0))
                 .header(22.0, |mut header| {
                     header.col(|ui| { ui.strong("#"); });
                     header.col(|ui| { ui.strong("URL"); });
@@ -83,7 +81,6 @@ pub fn render_websockets_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &
             }
         });
 
-        // Right Column: Messages Timeline
         columns[1].vertical(|ui| {
             let conn_id = match state.selected_ws_connection_id {
                 Some(id) => id,
@@ -108,7 +105,6 @@ pub fn render_websockets_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &
 
             ui.separator();
 
-            // Direction Filter
             ui.horizontal(|ui| {
                 ui.label("Filter:");
                 ui.selectable_value(&mut state.ws_filter_direction, "ALL".to_string(), "All");
@@ -118,7 +114,6 @@ pub fn render_websockets_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &
 
             ui.separator();
 
-            // Messages table
             let filtered_messages: Vec<&mitm_core::state::WebSocketMessage> = state
                 .ws_messages
                 .iter()
@@ -144,9 +139,9 @@ pub fn render_websockets_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &
                 .striped(true)
                 .resizable(true)
                 .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                .column(Column::exact(70.0))    // Dir
-                .column(Column::exact(55.0))    // Size
-                .column(Column::remainder())    // Payload Preview
+                .column(Column::exact(70.0))
+                .column(Column::exact(55.0))
+                .column(Column::remainder())
                 .header(22.0, |mut header| {
                     header.col(|ui| { ui.strong("Dir"); });
                     header.col(|ui| { ui.strong("Size"); });

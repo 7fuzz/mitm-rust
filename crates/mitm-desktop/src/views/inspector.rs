@@ -17,9 +17,7 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
 
     let detail = state.selected_flow_detail.as_ref();
 
-    // 1. Top bar: Phase selection, Status, Method, Actions
     ui.horizontal(|ui| {
-        // Request / Response toggle buttons
         let req_selected = state.inspector_phase == InspectorPhase::Request;
         let res_selected = state.inspector_phase == InspectorPhase::Response;
 
@@ -46,7 +44,6 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
         });
     });
 
-    // 2. Dedicated URL Address Bar
     ui.horizontal(|ui| {
         ui.label(RichText::new("URL:").weak().size(11.0));
         let mut display_url = flow.url.clone();
@@ -59,7 +56,6 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
 
     ui.separator();
 
-    // 2. Metadata info line
     ui.horizontal(|ui| {
         ui.label(RichText::new("Duration:").weak());
         ui.label(format_duration(flow.duration_ms));
@@ -81,7 +77,6 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
 
     ui.separator();
 
-    // 3. Sub-tabs bar: Headers, Formatted, Raw, Hex
     let (headers, body_str) = match state.inspector_phase {
         InspectorPhase::Request => {
             let h = detail.map(|d| &d.request_headers).unwrap_or(&flow.request_headers);
@@ -122,7 +117,6 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
 
     ui.separator();
 
-    // 4. Content Area
     match state.inspector_mode {
         InspectorViewMode::Headers => {
             render_headers_view(ui, &mut state.header_search_query, headers);
@@ -214,7 +208,6 @@ fn render_formatted_view(ui: &mut egui::Ui, body: &str) {
         return;
     }
 
-    // Attempt to pretty print JSON
     let formatted_json = serde_json::from_str::<serde_json::Value>(body)
         .ok()
         .and_then(|v| serde_json::to_string_pretty(&v).ok());
