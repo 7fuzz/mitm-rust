@@ -96,6 +96,21 @@ impl<'a> egui_dock::TabViewer for TabViewerApp<'a> {
             }
         }
     }
+
+    fn scroll_bars(&self, tab: &Self::Tab) -> [bool; 2] {
+        match tab {
+            // Self-scrolling views with fixed toolbars
+            TabKind::Traffic => [false, false],
+            TabKind::Inspector => [false, false],
+            TabKind::Repeater => [false, false],
+            TabKind::Fuzzer => [false, false],
+            TabKind::WebSockets => [false, false],
+            // Vertically scrollable form views
+            TabKind::Collections => [false, true],
+            TabKind::Intercept => [false, true],
+            TabKind::Settings => [false, true],
+        }
+    }
 }
 
 pub struct NativeMitmApp {
