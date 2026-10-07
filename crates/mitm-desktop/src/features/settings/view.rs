@@ -26,9 +26,7 @@ pub fn show(
         .show(&mut content, |ui| match prefs.section {
             SettingsSection::Proxy => proxy_section(ui, proxy, form, traffic, db_path, cmds),
             SettingsSection::Certificate => certificate_section(ui, cert, cmds),
-            SettingsSection::Appearance => {
-                ui.heading("Appearance");
-            }
+            SettingsSection::Appearance => appearance_section(ui),
             SettingsSection::Data => {
                 ui.heading("Data");
             }
@@ -36,6 +34,36 @@ pub fn show(
                 ui.heading("Database");
             }
         });
+}
+
+fn appearance_section(ui: &mut egui::Ui) {
+    ui.strong("Theme");
+    ui.horizontal(|ui| {
+        let current_theme = ui.ctx().options(|opt| opt.theme_preference);
+        for (preference, label) in [
+            (egui::ThemePreference::System, "System"),
+            (egui::ThemePreference::Light, "Light"),
+            (egui::ThemePreference::Dark, "Dark"),
+        ] {
+            if ui.selectable_label(current_theme == preference, label).clicked() {
+                ui.ctx().set_theme(preference);
+            }
+        }
+    });
+
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
+
+    ui.strong("Zoom");
+    ui.horizontal(|ui| {
+        egui::gui_zoom::zoom_menu_buttons(ui);
+    });
+    ui.add_space(6.0);
+    let mut zoom = ui.ctx().zoom_factor();
+    if ui.add(egui::Slider::new(&mut zoom, 0.5..=2.5).text("Factor").step_by(0.1)).changed() {
+        ui.ctx().set_zoom_factor(zoom);
+    }
 }
 
 fn certificate_section(
