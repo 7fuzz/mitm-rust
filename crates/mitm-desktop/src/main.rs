@@ -10,6 +10,7 @@ mod prefs;
 mod recovery;
 mod shell;
 mod shortcuts;
+mod startup;
 mod state;
 mod theme;
 mod top_bar;

@@ -1,8 +1,6 @@
 use std::path::PathBuf;
-use std::sync::Arc;
 use eframe::egui::{self, RichText};
 use mitm_core::db::{recovery, InitError};
-use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
 use crate::files;
 use crate::jobs::Jobs;
@@ -26,8 +24,8 @@ impl Recovery {
         }
     }
 
-    /// Returns the core once a retry or reset gets the database working.
-    pub fn show(&mut self, ui: &mut egui::Ui, rt: &Runtime) -> Option<Arc<MitmCore>> {
+    /// Returns true when the core should be started again.
+    pub fn show(&mut self, ui: &mut egui::Ui, rt: &Runtime) -> bool {
         for result in self.exports.drain().flatten() {
             self.status = Some(match result {
                 Ok(path) => (format!("Exported to {}", path.display()), Tone::Success),
@@ -35,7 +33,7 @@ impl Recovery {
             });
         }
 
-        let mut started = None;
+        let mut restart = false;
         egui::CentralPanel::default().show(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space((ui.available_height() * 0.3).max(24.0));
@@ -46,12 +44,10 @@ impl Recovery {
                 ui.label(RichText::new(self.db_path.display().to_string()).monospace().weak().small());
                 ui.add_space(16.0);
                 ui.horizontal(|ui| {
-                    if ui.button("Retry migrations").clicked() {
-                        started = self.retry(rt);
-                    }
+                    restart |= ui.button("Retry migrations").clicked();
                     let id = ui.id().with("backup_reset");
                     if confirm_button(ui, id, RichText::new("Back up & reset"), "Confirm reset", "Moves the database aside and starts empty") {
-                        started = self.backup_and_reset(rt);
+                        restart |= self.backup_and_reset();
                     }
                     if ui.button("Export DB…").clicked() {
                         self.export(rt, ui.ctx());
@@ -66,26 +62,17 @@ impl Recovery {
                 }
             });
         });
-        started
+        restart
     }
 
-    fn retry(&mut self, rt: &Runtime) -> Option<Arc<MitmCore>> {
-        match start_core(rt) {
-            Ok(core) => Some(core),
+    fn backup_and_reset(&mut self) -> bool {
+        match recovery::backup_and_reset(&self.db_path, None) {
+            Ok(_) => true,
             Err(error) => {
-                self.error = error;
-                self.status = Some(("Still failing".to_string(), Tone::Danger));
-                None
+                self.status = Some((error.to_string(), Tone::Danger));
+                false
             }
         }
-    }
-
-    fn backup_and_reset(&mut self, rt: &Runtime) -> Option<Arc<MitmCore>> {
-        if let Err(error) = recovery::backup_and_reset(&self.db_path, None) {
-            self.status = Some((error.to_string(), Tone::Danger));
-            return None;
-        }
-        self.retry(rt)
     }
 
     fn export(&self, rt: &Runtime, ctx: &egui::Context) {
@@ -98,11 +85,6 @@ impl Recovery {
             Some(copy.await.unwrap_or_else(|e| Err(e.to_string())))
         });
     }
-}
-
-pub fn start_core(rt: &Runtime) -> Result<Arc<MitmCore>, InitError> {
-    let _guard = rt.enter();
-    MitmCore::init().map(Arc::new)
 }
 
 fn heading(error: &InitError) -> &'static str {
