@@ -1,10 +1,10 @@
-use std::path::PathBuf;
 use eframe::egui::{self, Color32, RichText};
 use mitm_core::collections::{CollectionTreeItem, RequestItem};
-use crate::state::{RepeaterTabState, UiState};
-use crate::views::pills::render_method_pill;
+use crate::command::{AppCommand, Commands, RequestDraft};
+use crate::widgets::pills::render_method_pill;
+use super::CollectionsState;
 
-pub fn render_collections_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &PathBuf) {
+pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands) {
     ui.heading("Workspaces & Collections");
     ui.add_space(4.0);
 
@@ -37,12 +37,12 @@ pub fn render_collections_view(ui: &mut egui::Ui, state: &mut UiState, db_path: 
     });
 
     if ws_changed || reload_clicked {
-        state.load_workspaces_and_collections(db_path);
+        cmds.push(AppCommand::ReloadCollections);
     }
 
     ui.separator();
 
-    if state.collection_trees.is_empty() {
+    if state.trees.is_empty() {
         ui.vertical_centered(|ui| {
             ui.add_space(40.0);
             ui.label(RichText::new("No collections found in this workspace.").weak());
@@ -53,38 +53,30 @@ pub fn render_collections_view(ui: &mut egui::Ui, state: &mut UiState, db_path: 
     let mut send_request_to_repeater: Option<RequestItem> = None;
 
     egui::ScrollArea::vertical().show(ui, |ui| {
-        for collection in &state.collection_trees {
+        for collection in &state.trees {
             render_collection_node(ui, collection, &mut send_request_to_repeater);
         }
     });
 
     if let Some(req) = send_request_to_repeater {
-        let headers_str = req
-            .headers
-            .iter()
-            .map(|h| format!("{}: {}", h.key, h.value))
-            .collect::<Vec<_>>()
-            .join("\n");
+        cmds.push(AppCommand::OpenInRepeater(request_draft(req)));
+    }
+}
 
-        let body_str = req
-            .body_raw
-            .or(req.body_json)
-            .or(req.body_form_data)
-            .unwrap_or_default();
+fn request_draft(req: RequestItem) -> RequestDraft {
+    let headers = req
+        .headers
+        .iter()
+        .map(|h| format!("{}: {}", h.key, h.value))
+        .collect::<Vec<_>>()
+        .join("\n");
 
-        let tab = RepeaterTabState {
-            id: uuid::Uuid::new_v4().to_string(),
-            name: req.name.clone(),
-            method: req.method.clone(),
-            url: req.url.clone(),
-            headers: headers_str,
-            body: body_str,
-            is_loading: false,
-            last_result: None,
-            error: None,
-        };
-        state.repeater_tabs.push(tab);
-        state.active_repeater_index = state.repeater_tabs.len() - 1;
+    RequestDraft {
+        name: req.name,
+        method: req.method,
+        url: req.url,
+        headers,
+        body: req.body_raw.or(req.body_json).or(req.body_form_data).unwrap_or_default(),
     }
 }
 

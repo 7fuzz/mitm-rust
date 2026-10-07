@@ -1,12 +1,12 @@
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder};
 use mitm_core::fuzzer::FuzzTemplate;
-use mitm_core::repeater::HeaderItem;
-use crate::state::{FuzzerActionCmd, UiState};
-use crate::views::pills::{format_bytes, format_duration, render_method_pill, render_status_pill};
+use crate::command::{AppCommand, Commands};
+use crate::format::{format_bytes, format_duration, parse_header_items};
+use crate::widgets::pills::{render_method_pill, render_status_pill};
+use super::FuzzerState;
 
-pub fn render_fuzzer_view(ui: &mut egui::Ui, state: &mut UiState) {
-    let fuzzer = &mut state.fuzzer_state;
+pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
 
     ui.horizontal(|ui| {
         ui.heading("HTTP Fuzzer");
@@ -30,7 +30,6 @@ pub fn render_fuzzer_view(ui: &mut egui::Ui, state: &mut UiState) {
 
         if fuzzer.is_running {
             if ui.button(RichText::new("⏹ Stop").color(Color32::from_rgb(239, 68, 68)).strong()).clicked() {
-                state.fuzzer_action_queue.push(FuzzerActionCmd::Stop);
                 fuzzer.is_running = false;
             }
             ui.spinner();
@@ -53,36 +52,16 @@ pub fn render_fuzzer_view(ui: &mut egui::Ui, state: &mut UiState) {
                     fuzzer.progress_total = payloads.len();
                     fuzzer.results.clear();
 
-                    let headers: Vec<HeaderItem> = fuzzer
-                        .headers
-                        .lines()
-                        .filter_map(|line| {
-                            let mut parts = line.splitn(2, ':');
-                            let key = parts.next()?.trim().to_string();
-                            let value = parts.next()?.trim().to_string();
-                            if !key.is_empty() {
-                                Some(HeaderItem {
-                                    id: uuid::Uuid::new_v4().to_string(),
-                                    key,
-                                    value,
-                                    enabled: true,
-                                })
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-
                     let template = FuzzTemplate {
                         method: fuzzer.method.clone(),
                         url: fuzzer.url.clone(),
-                        headers,
+                        headers: parse_header_items(&fuzzer.headers),
                         params: Vec::new(),
                         body_type: "raw".to_string(),
                         body: if fuzzer.body.is_empty() { None } else { Some(fuzzer.body.clone()) },
                     };
 
-                    state.fuzzer_action_queue.push(FuzzerActionCmd::Start {
+                    cmds.push(AppCommand::StartFuzzer {
                         template,
                         payloads,
                         concurrency: fuzzer.concurrency,
@@ -176,9 +155,12 @@ pub fn render_fuzzer_view(ui: &mut egui::Ui, state: &mut UiState) {
                             ui.label(RichText::new(&r.payload).strong());
                         });
 
-                        row.col(|ui| {
+                        let (_, status_cell) = row.col(|ui| {
                             render_status_pill(ui, r.status_code);
                         });
+                        if let Some(err) = &r.error {
+                            status_cell.on_hover_text(err);
+                        }
 
                         row.col(|ui| {
                             ui.label(format_bytes(r.size));

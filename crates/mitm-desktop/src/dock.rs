@@ -1,0 +1,144 @@
+use std::path::Path;
+use eframe::egui;
+use egui_dock::{DockState, TabIndex};
+use crate::command::Commands;
+use crate::features;
+use crate::state::AppState;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Tab {
+    Traffic,
+    Inspector,
+    Repeater,
+    Fuzzer,
+    Intercept,
+    Collections,
+    WebSockets,
+    Settings,
+}
+
+impl Tab {
+    pub const ALL: [Tab; 8] = [
+        Tab::Traffic,
+        Tab::Inspector,
+        Tab::Repeater,
+        Tab::Fuzzer,
+        Tab::Intercept,
+        Tab::Collections,
+        Tab::WebSockets,
+        Tab::Settings,
+    ];
+
+    const TOOLS: [Tab; 6] = [
+        Tab::Repeater,
+        Tab::Fuzzer,
+        Tab::Intercept,
+        Tab::Collections,
+        Tab::WebSockets,
+        Tab::Settings,
+    ];
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Tab::Traffic => "Traffic",
+            Tab::Inspector => "Inspector",
+            Tab::Repeater => "Repeater",
+            Tab::Fuzzer => "Fuzzer",
+            Tab::Intercept => "Intercept",
+            Tab::Collections => "Collections",
+            Tab::WebSockets => "WebSockets",
+            Tab::Settings => "Settings",
+        }
+    }
+}
+
+pub fn initial_layout() -> DockState<Tab> {
+    DockState::new(vec![Tab::Traffic])
+}
+
+pub fn open_tab(dock: &mut DockState<Tab>, tab: Tab) {
+    if let Some(path) = dock.find_tab(&tab) {
+        let _ = dock.set_active_tab(path);
+        return;
+    }
+
+    let traffic = dock.find_main_surface_tab(&Tab::Traffic).map(|(node, _)| node);
+    let inspector = dock.find_main_surface_tab(&Tab::Inspector).map(|(node, _)| node);
+
+    match (&tab, traffic, inspector) {
+        (Tab::Inspector, Some(traffic), _) => {
+            dock.main_surface_mut().split_right(traffic, 0.55, vec![tab]);
+        }
+        (Tab::Inspector | Tab::Traffic, _, _) => dock.push_to_first_leaf(tab),
+        (_, _, Some(inspector)) => {
+            let tool_node = Tab::TOOLS.iter().find_map(|t| dock.find_main_surface_tab(t)).map(|(node, _)| node);
+            if let Some(leaf) = tool_node.and_then(|node| dock.main_surface_mut().leaf_mut(node).ok()) {
+                leaf.tabs.push(tab);
+                leaf.active = TabIndex(leaf.tabs.len() - 1);
+            } else {
+                dock.main_surface_mut().split_below(inspector, 0.5, vec![tab]);
+            }
+        }
+        (_, Some(traffic), None) => {
+            dock.main_surface_mut().split_right(traffic, 0.55, vec![tab]);
+        }
+        _ => dock.push_to_first_leaf(tab),
+    }
+}
+
+pub struct TabViewer<'a> {
+    pub state: &'a mut AppState,
+    pub cmds: &'a mut Commands,
+    pub db_path: &'a Path,
+}
+
+impl egui_dock::TabViewer for TabViewer<'_> {
+    type Tab = Tab;
+
+    fn id(&mut self, tab: &mut Tab) -> egui::Id {
+        egui::Id::new(&*tab)
+    }
+
+    fn title(&mut self, tab: &mut Tab) -> egui::WidgetText {
+        let count = match tab {
+            Tab::Traffic => Some(self.state.traffic.flows.len()),
+            Tab::Repeater => Some(self.state.repeater.tabs.len()),
+            Tab::WebSockets => Some(self.state.websockets.connections.len()),
+            Tab::Intercept => Some(self.state.intercept.pending.len()).filter(|&n| n > 0),
+            _ => None,
+        };
+        match count {
+            Some(n) => format!("{} ({})", tab.name(), n).into(),
+            None => tab.name().into(),
+        }
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Tab) {
+        let state = &mut *self.state;
+        let cmds = &mut *self.cmds;
+        match tab {
+            Tab::Traffic => features::traffic::show(ui, &mut state.traffic, &state.proxy.listeners, cmds),
+            Tab::Inspector => features::inspector::show(ui, &mut state.inspector, &state.traffic),
+            Tab::Repeater => features::repeater::show(ui, &mut state.repeater, cmds),
+            Tab::Fuzzer => features::fuzzer::show(ui, &mut state.fuzzer, cmds),
+            Tab::Intercept => features::intercept::show(ui, &mut state.intercept, cmds),
+            Tab::Collections => features::collections::show(ui, &mut state.collections, cmds),
+            Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
+            Tab::Settings => features::settings::show(
+                ui,
+                &mut state.proxy,
+                &mut state.listener_form,
+                &state.traffic,
+                self.db_path,
+                cmds,
+            ),
+        }
+    }
+
+    fn scroll_bars(&self, tab: &Tab) -> [bool; 2] {
+        match tab {
+            Tab::Collections | Tab::Intercept | Tab::Settings => [false, true],
+            _ => [false, false],
+        }
+    }
+}

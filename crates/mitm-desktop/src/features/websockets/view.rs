@@ -1,15 +1,15 @@
-use std::path::PathBuf;
 use eframe::egui::{self, Color32, CornerRadius, RichText};
 use egui_extras::{Column, TableBuilder};
-use crate::state::UiState;
-use crate::views::pills::format_bytes;
+use crate::command::{AppCommand, Commands};
+use crate::format::format_bytes;
+use super::WebSocketsState;
 
-pub fn render_websockets_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &PathBuf) {
+pub fn show(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
     ui.horizontal(|ui| {
         ui.heading("WebSocket Sessions");
         ui.separator();
         if ui.button("🔄 Refresh Sessions").clicked() {
-            state.load_ws_connections(db_path);
+            cmds.push(AppCommand::ReloadWsConnections);
         }
     });
 
@@ -17,15 +17,15 @@ pub fn render_websockets_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &
 
     ui.columns(2, |columns| {
         columns[0].vertical(|ui| {
-            ui.heading(format!("Sessions ({})", state.ws_connections.len()));
+            ui.heading(format!("Sessions ({})", state.connections.len()));
             ui.add_space(4.0);
 
-            if state.ws_connections.is_empty() {
+            if state.connections.is_empty() {
                 ui.label(RichText::new("No WebSocket connections captured.").weak());
                 return;
             }
 
-            let num_rows = state.ws_connections.len();
+            let num_rows = state.connections.len();
             let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
             let row_height = text_height + 6.0;
 
@@ -48,8 +48,8 @@ pub fn render_websockets_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &
                 .body(|body| {
                     body.rows(row_height, num_rows, |mut row| {
                         let idx = row.index();
-                        let conn = &state.ws_connections[idx];
-                        let is_selected = state.selected_ws_connection_id == Some(conn.connection_id);
+                        let conn = &state.connections[idx];
+                        let is_selected = state.selected_id == Some(conn.connection_id);
                         row.set_selected(is_selected);
 
                         row.col(|ui| {
@@ -77,12 +77,12 @@ pub fn render_websockets_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &
                 });
 
             if let Some(id) = new_conn_selection {
-                state.select_ws_connection(id, db_path);
+                cmds.push(AppCommand::SelectWsConnection(id));
             }
         });
 
         columns[1].vertical(|ui| {
-            let conn_id = match state.selected_ws_connection_id {
+            let conn_id = match state.selected_id {
                 Some(id) => id,
                 None => {
                     ui.vertical_centered(|ui| {
@@ -95,10 +95,10 @@ pub fn render_websockets_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &
             };
 
             ui.horizontal(|ui| {
-                ui.heading(format!("Session #{} Messages ({})", conn_id, state.ws_messages.len()));
+                ui.heading(format!("Session #{} Messages ({})", conn_id, state.messages.len()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("🔄 Refresh Messages").clicked() {
-                        state.select_ws_connection(conn_id, db_path);
+                        cmds.push(AppCommand::SelectWsConnection(conn_id));
                     }
                 });
             });
@@ -107,18 +107,18 @@ pub fn render_websockets_view(ui: &mut egui::Ui, state: &mut UiState, db_path: &
 
             ui.horizontal(|ui| {
                 ui.label("Filter:");
-                ui.selectable_value(&mut state.ws_filter_direction, "ALL".to_string(), "All");
-                ui.selectable_value(&mut state.ws_filter_direction, "IN".to_string(), "Incoming (Server → Client)");
-                ui.selectable_value(&mut state.ws_filter_direction, "OUT".to_string(), "Outgoing (Client → Server)");
+                ui.selectable_value(&mut state.direction_filter, "ALL".to_string(), "All");
+                ui.selectable_value(&mut state.direction_filter, "IN".to_string(), "Incoming (Server → Client)");
+                ui.selectable_value(&mut state.direction_filter, "OUT".to_string(), "Outgoing (Client → Server)");
             });
 
             ui.separator();
 
             let filtered_messages: Vec<&mitm_core::state::WebSocketMessage> = state
-                .ws_messages
+                .messages
                 .iter()
                 .filter(|m| {
-                    match state.ws_filter_direction.as_str() {
+                    match state.direction_filter.as_str() {
                         "IN" => m.direction.eq_ignore_ascii_case("server") || m.direction.eq_ignore_ascii_case("incoming"),
                         "OUT" => m.direction.eq_ignore_ascii_case("client") || m.direction.eq_ignore_ascii_case("outgoing"),
                         _ => true,

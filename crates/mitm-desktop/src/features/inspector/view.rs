@@ -1,9 +1,11 @@
 use eframe::egui::{self, Color32, RichText};
-use crate::state::{InspectorPhase, InspectorViewMode, UiState};
-use crate::views::pills::{format_bytes, format_duration, render_method_pill, render_status_pill};
+use crate::features::traffic::TrafficState;
+use crate::format::{curl_command, format_bytes, format_duration, hex_dump, pretty_json};
+use crate::widgets::pills::{render_method_pill, render_status_pill};
+use super::{InspectorState, Phase as InspectorPhase, ViewMode as InspectorViewMode};
 
-pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
-    let flow = match state.selected_flow() {
+pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficState) {
+    let flow = match traffic.selected_flow() {
         Some(f) => f.clone(),
         None => {
             ui.vertical_centered(|ui| {
@@ -15,17 +17,17 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
         }
     };
 
-    let detail = state.selected_flow_detail.as_ref();
+    let detail = traffic.selected_detail.as_ref();
 
     ui.horizontal(|ui| {
-        let req_selected = state.inspector_phase == InspectorPhase::Request;
-        let res_selected = state.inspector_phase == InspectorPhase::Response;
+        let req_selected = state.phase == InspectorPhase::Request;
+        let res_selected = state.phase == InspectorPhase::Response;
 
         if ui.selectable_label(req_selected, "Request").clicked() {
-            state.inspector_phase = InspectorPhase::Request;
+            state.phase = InspectorPhase::Request;
         }
         if ui.selectable_label(res_selected, "Response").clicked() {
-            state.inspector_phase = InspectorPhase::Response;
+            state.phase = InspectorPhase::Response;
         }
 
         ui.separator();
@@ -35,7 +37,7 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.button("📋 Copy cURL").on_hover_text("Copy as bash cURL command").clicked() {
-                let curl_cmd = build_curl_command(&flow, detail);
+                let curl_cmd = curl_command(&flow, detail);
                 ui.ctx().copy_text(curl_cmd);
             }
             if ui.button("📋 Copy URL").on_hover_text("Copy URL to clipboard").clicked() {
@@ -77,7 +79,7 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
 
     ui.separator();
 
-    let (headers, body_str) = match state.inspector_phase {
+    let (headers, body_str) = match state.phase {
         InspectorPhase::Request => {
             let h = detail.map(|d| &d.request_headers).unwrap_or(&flow.request_headers);
             let b = detail.map(|d| d.request_body.as_str()).unwrap_or(flow.request_body.as_str());
@@ -92,20 +94,20 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
 
     ui.horizontal(|ui| {
         let headers_label = format!("Headers ({})", headers.len());
-        if ui.selectable_label(state.inspector_mode == InspectorViewMode::Headers, headers_label).clicked() {
-            state.inspector_mode = InspectorViewMode::Headers;
+        if ui.selectable_label(state.mode == InspectorViewMode::Headers, headers_label).clicked() {
+            state.mode = InspectorViewMode::Headers;
         }
 
-        if ui.selectable_label(state.inspector_mode == InspectorViewMode::Formatted, "Formatted").clicked() {
-            state.inspector_mode = InspectorViewMode::Formatted;
+        if ui.selectable_label(state.mode == InspectorViewMode::Formatted, "Formatted").clicked() {
+            state.mode = InspectorViewMode::Formatted;
         }
 
-        if ui.selectable_label(state.inspector_mode == InspectorViewMode::Raw, "Raw").clicked() {
-            state.inspector_mode = InspectorViewMode::Raw;
+        if ui.selectable_label(state.mode == InspectorViewMode::Raw, "Raw").clicked() {
+            state.mode = InspectorViewMode::Raw;
         }
 
-        if ui.selectable_label(state.inspector_mode == InspectorViewMode::Hex, "Hex Dump").clicked() {
-            state.inspector_mode = InspectorViewMode::Hex;
+        if ui.selectable_label(state.mode == InspectorViewMode::Hex, "Hex Dump").clicked() {
+            state.mode = InspectorViewMode::Hex;
         }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -117,9 +119,9 @@ pub fn render_inspector_view(ui: &mut egui::Ui, state: &mut UiState) {
 
     ui.separator();
 
-    match state.inspector_mode {
+    match state.mode {
         InspectorViewMode::Headers => {
-            render_headers_view(ui, &mut state.header_search_query, headers);
+            render_headers_view(ui, &mut state.header_search, headers);
         }
         InspectorViewMode::Formatted => {
             render_formatted_view(ui, body_str);
@@ -208,9 +210,7 @@ fn render_formatted_view(ui: &mut egui::Ui, body: &str) {
         return;
     }
 
-    let formatted_json = serde_json::from_str::<serde_json::Value>(body)
-        .ok()
-        .and_then(|v| serde_json::to_string_pretty(&v).ok());
+    let formatted_json = pretty_json(body);
 
     egui::ScrollArea::vertical().show(ui, |ui| {
         if let Some(json) = formatted_json {
@@ -250,7 +250,7 @@ fn render_hex_view(ui: &mut egui::Ui, body: &str) {
         return;
     }
 
-    let hex_dump = generate_hex_dump(body.as_bytes());
+    let hex_dump = hex_dump(body.as_bytes());
 
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.add(
@@ -259,48 +259,4 @@ fn render_hex_view(ui: &mut egui::Ui, body: &str) {
                 .desired_width(f32::INFINITY),
         );
     });
-}
-
-pub fn generate_hex_dump(bytes: &[u8]) -> String {
-    let mut output = String::new();
-    for (i, chunk) in bytes.chunks(16).enumerate() {
-        output.push_str(&format!("{:08x}:  ", i * 16));
-
-        for j in 0..16 {
-            if j == 8 {
-                output.push(' ');
-            }
-            if j < chunk.len() {
-                output.push_str(&format!("{:02x} ", chunk[j]));
-            } else {
-                output.push_str("   ");
-            }
-        }
-
-        output.push_str(" |");
-        for &b in chunk {
-            if b.is_ascii_graphic() || b == b' ' {
-                output.push(b as char);
-            } else {
-                output.push('.');
-            }
-        }
-        output.push_str("|\n");
-    }
-    output
-}
-
-pub fn build_curl_command(flow: &mitm_core::state::HistoryEntry, detail: Option<&mitm_core::state::HistoryDetail>) -> String {
-    let mut curl = format!("curl -X {} '{}'", flow.method, flow.url);
-    if let Some(detail) = detail {
-        for (k, v) in &detail.request_headers {
-            if !k.eq_ignore_ascii_case("content-length") {
-                curl.push_str(&format!(" \\\n  -H '{}: {}'", k, v.replace('\'', "'\\''")));
-            }
-        }
-        if !detail.request_body.is_empty() {
-            curl.push_str(&format!(" \\\n  --data-raw '{}'", detail.request_body.replace('\'', "'\\''")));
-        }
-    }
-    curl
 }

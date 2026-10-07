@@ -1,27 +1,29 @@
 use eframe::egui::{self, Color32, RichText};
-use mitm_core::repeater::{HeaderItem, RepeaterTab};
-use crate::state::{RepeaterActionCmd, RepeaterTabState, UiState};
-use crate::views::pills::{format_bytes, format_duration, render_method_pill, render_status_pill};
+use mitm_core::repeater::RepeaterTab;
+use crate::command::{AppCommand, Commands};
+use crate::format::{format_bytes, format_duration, parse_header_items, pretty_json};
+use crate::widgets::pills::{render_method_pill, render_status_pill};
+use super::{RepeaterState, RepeaterTabState};
 
-pub fn render_repeater_view(ui: &mut egui::Ui, state: &mut UiState) {
-    if state.repeater_tabs.is_empty() {
-        state.repeater_tabs.push(RepeaterTabState::default());
-        state.active_repeater_index = 0;
+pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
+    if state.tabs.is_empty() {
+        state.tabs.push(RepeaterTabState::default());
+        state.active = 0;
     }
 
     let mut close_tab_idx: Option<usize> = None;
     let mut add_new_tab = false;
 
     ui.horizontal_wrapped(|ui| {
-        for (idx, tab) in state.repeater_tabs.iter().enumerate() {
-            let is_active = idx == state.active_repeater_index;
+        for (idx, tab) in state.tabs.iter().enumerate() {
+            let is_active = idx == state.active;
             let title = if tab.name.is_empty() { "Request".to_string() } else { tab.name.clone() };
 
             ui.horizontal(|ui| {
                 if ui.selectable_label(is_active, title).clicked() {
-                    state.active_repeater_index = idx;
+                    state.active = idx;
                 }
-                if state.repeater_tabs.len() > 1 && ui.small_button("✖").clicked() {
+                if state.tabs.len() > 1 && ui.small_button("✖").clicked() {
                     close_tab_idx = Some(idx);
                 }
             });
@@ -33,21 +35,21 @@ pub fn render_repeater_view(ui: &mut egui::Ui, state: &mut UiState) {
     });
 
     if let Some(idx) = close_tab_idx {
-        state.repeater_tabs.remove(idx);
-        if state.active_repeater_index >= state.repeater_tabs.len() {
-            state.active_repeater_index = state.repeater_tabs.len().saturating_sub(1);
+        state.tabs.remove(idx);
+        if state.active >= state.tabs.len() {
+            state.active = state.tabs.len().saturating_sub(1);
         }
     }
 
     if add_new_tab {
-        state.repeater_tabs.push(RepeaterTabState::default());
-        state.active_repeater_index = state.repeater_tabs.len() - 1;
+        state.tabs.push(RepeaterTabState::default());
+        state.active = state.tabs.len() - 1;
     }
 
     ui.separator();
 
-    let tab_idx = state.active_repeater_index;
-    let tab = &mut state.repeater_tabs[tab_idx];
+    let tab_idx = state.active;
+    let tab = &mut state.tabs[tab_idx];
 
     let mut should_send = false;
 
@@ -150,11 +152,7 @@ pub fn render_repeater_view(ui: &mut egui::Ui, state: &mut UiState) {
                     ui.separator();
                     ui.strong("Response Body:");
 
-                    let pretty_json = serde_json::from_str::<serde_json::Value>(&res.response_body)
-                        .ok()
-                        .and_then(|v| serde_json::to_string_pretty(&v).ok());
-
-                    if let Some(json) = pretty_json {
+                    if let Some(json) = pretty_json(&res.response_body) {
                         ui.add(
                             egui::TextEdit::multiline(&mut json.as_str())
                                 .font(egui::TextStyle::Monospace)
@@ -183,31 +181,11 @@ pub fn render_repeater_view(ui: &mut egui::Ui, state: &mut UiState) {
         tab.is_loading = true;
         tab.error = None;
 
-        let headers: Vec<HeaderItem> = tab
-            .headers
-            .lines()
-            .filter_map(|line| {
-                let mut parts = line.splitn(2, ':');
-                let key = parts.next()?.trim().to_string();
-                let value = parts.next()?.trim().to_string();
-                if !key.is_empty() {
-                    Some(HeaderItem {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        key,
-                        value,
-                        enabled: true,
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect();
-
         let req_tab = RepeaterTab {
             id: tab.id.clone(),
             method: tab.method.clone(),
             url: tab.url.clone(),
-            headers,
+            headers: parse_header_items(&tab.headers),
             params: Vec::new(),
             body_type: "raw".to_string(),
             body_content: if tab.body.is_empty() { None } else { Some(tab.body.clone()) },
@@ -222,9 +200,9 @@ pub fn render_repeater_view(ui: &mut egui::Ui, state: &mut UiState) {
             last_duration_ms: None,
         };
 
-        state.repeater_action_queue.push(RepeaterActionCmd::Send {
-            tab_index: tab_idx,
-            tab: req_tab,
+        cmds.push(AppCommand::SendRepeaterRequest {
+            tab_id: tab.id.clone(),
+            request: req_tab,
         });
     }
 }

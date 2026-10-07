@@ -52,24 +52,6 @@ pub fn render_status_pill(ui: &mut egui::Ui, status: u16) {
         });
 }
 
-pub fn format_bytes(bytes: u64) -> String {
-    if bytes < 1024 {
-        format!("{} B", bytes)
-    } else if bytes < 1024 * 1024 {
-        format!("{:.1} KB", bytes as f64 / 1024.0)
-    } else {
-        format!("{:.2} MB", bytes as f64 / (1024.0 * 1024.0))
-    }
-}
-
-pub fn format_duration(ms: Option<u64>) -> String {
-    match ms {
-        Some(m) if m < 1000 => format!("{}ms", m),
-        Some(m) => format!("{:.2}s", m as f64 / 1000.0),
-        None => "-".to_string(),
-    }
-}
-
 pub fn render_source_pill(ui: &mut egui::Ui, source: &str) {
     let label = if source.is_empty() { "default" } else { source };
     let text = RichText::new(format!(" {} ", label))
@@ -83,43 +65,4 @@ pub fn render_source_pill(ui: &mut egui::Ui, source: &str) {
         .show(ui, |ui| {
             ui.add(egui::Label::new(text).selectable(false));
         });
-}
-
-pub fn render_tri_state_button(ui: &mut egui::Ui, label: &str, state: &mut crate::state::TriState) -> bool {
-    use crate::state::TriState;
-    let (bg_color, stroke_color, text) = match state {
-        TriState::Neutral => (
-            Color32::from_rgb(31, 41, 55),
-            Color32::from_rgb(75, 85, 99),
-            RichText::new(label).color(Color32::from_rgb(156, 163, 175)).size(11.0),
-        ),
-        TriState::Include => (
-            Color32::from_rgb(20, 83, 45),
-            Color32::from_rgb(34, 197, 94),
-            RichText::new(label).color(Color32::from_rgb(187, 247, 208)).size(11.0).strong(),
-        ),
-        TriState::Exclude => (
-            Color32::from_rgb(127, 29, 29),
-            Color32::from_rgb(239, 68, 68),
-            RichText::new(label).color(Color32::from_rgb(254, 202, 202)).size(11.0).strikethrough().strong(),
-        ),
-    };
-
-    let btn = egui::Button::new(text)
-        .fill(bg_color)
-        .stroke(egui::Stroke::new(1.0, stroke_color))
-        .corner_radius(CornerRadius::same(3))
-        .small();
-
-    let response = ui.add(btn);
-    if response.clicked() {
-        *state = match *state {
-            TriState::Neutral => TriState::Include,
-            TriState::Include => TriState::Exclude,
-            TriState::Exclude => TriState::Neutral,
-        };
-        true
-    } else {
-        false
-    }
 }

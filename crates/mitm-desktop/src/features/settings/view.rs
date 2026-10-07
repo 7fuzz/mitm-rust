@@ -1,9 +1,17 @@
-use std::sync::Arc;
+use std::path::Path;
 use eframe::egui::{self, Color32, RichText};
-use mitm_core::MitmCore;
-use crate::state::UiState;
+use crate::command::{AppCommand, Commands};
+use crate::features::traffic::TrafficState;
+use super::{ListenerForm, ProxyState};
 
-pub fn render_settings_view(ui: &mut egui::Ui, state: &mut UiState, core: &Arc<MitmCore>) {
+pub fn show(
+    ui: &mut egui::Ui,
+    proxy: &mut ProxyState,
+    form: &mut ListenerForm,
+    traffic: &TrafficState,
+    db_path: &Path,
+    cmds: &mut Commands,
+) {
     ui.heading("Proxy Listeners & System Settings");
     ui.add_space(4.0);
 
@@ -26,16 +34,16 @@ pub fn render_settings_view(ui: &mut egui::Ui, state: &mut UiState, core: &Arc<M
             ui.strong("");
             ui.end_row();
 
-            for (idx, listener) in state.listeners.iter_mut().enumerate() {
+            for (idx, listener) in proxy.listeners.iter_mut().enumerate() {
                 if ui.checkbox(&mut listener.enabled, "").changed() {
                     modified = true;
                 }
 
-                if ui.add(egui::TextEdit::singleline(&mut listener.label).desired_width(120.0)).changed() {
+                if ui.add(egui::TextEdit::singleline(&mut listener.label).desired_width(120.0)).lost_focus() {
                     modified = true;
                 }
 
-                if ui.add(egui::TextEdit::singleline(&mut listener.address).desired_width(180.0)).changed() {
+                if ui.add(egui::TextEdit::singleline(&mut listener.address).desired_width(180.0)).lost_focus() {
                     modified = true;
                 }
 
@@ -49,7 +57,7 @@ pub fn render_settings_view(ui: &mut egui::Ui, state: &mut UiState, core: &Arc<M
         });
 
     if let Some(idx) = to_remove {
-        state.listeners.remove(idx);
+        proxy.listeners.remove(idx);
         modified = true;
     }
 
@@ -60,31 +68,27 @@ pub fn render_settings_view(ui: &mut egui::Ui, state: &mut UiState, core: &Arc<M
     ui.strong("Add New Listener");
     ui.horizontal(|ui| {
         ui.label("Label:");
-        ui.add(egui::TextEdit::singleline(&mut state.new_listener_label).hint_text("e.g. Mobile, Docker").desired_width(120.0));
+        ui.add(egui::TextEdit::singleline(&mut form.label).hint_text("e.g. Mobile, Docker").desired_width(120.0));
 
         ui.label("Address:");
-        ui.add(egui::TextEdit::singleline(&mut state.new_listener_address).hint_text("127.0.0.1:8081").desired_width(160.0));
+        ui.add(egui::TextEdit::singleline(&mut form.address).hint_text("127.0.0.1:8081").desired_width(160.0));
 
-        let can_add = !state.new_listener_label.trim().is_empty() && !state.new_listener_address.trim().is_empty();
+        let can_add = !form.label.trim().is_empty() && !form.address.trim().is_empty();
         if ui.add_enabled(can_add, egui::Button::new("➕ Add Listener")).clicked() {
-            let next_id = state.listeners.iter().map(|l| l.id).max().unwrap_or(0) + 1;
-            state.listeners.push(mitm_core::state::ListenerConfig {
+            let next_id = proxy.listeners.iter().map(|l| l.id).max().unwrap_or(0) + 1;
+            proxy.listeners.push(mitm_core::state::ListenerConfig {
                 id: next_id,
-                label: state.new_listener_label.trim().to_string(),
-                address: state.new_listener_address.trim().to_string(),
+                label: form.label.trim().to_string(),
+                address: form.address.trim().to_string(),
                 enabled: true,
             });
-            state.new_listener_label.clear();
+            form.label.clear();
             modified = true;
         }
     });
 
     if modified {
-        let listeners_clone = state.listeners.clone();
-        let core_clone = Arc::clone(core);
-        tokio::spawn(async move {
-            let _ = core_clone.set_listener_configs(listeners_clone).await;
-        });
+        cmds.push(AppCommand::SaveListeners(proxy.listeners.clone()));
     }
 
     ui.add_space(12.0);
@@ -97,7 +101,7 @@ pub fn render_settings_view(ui: &mut egui::Ui, state: &mut UiState, core: &Arc<M
         .spacing([12.0, 6.0])
         .show(ui, |ui| {
             ui.strong("Proxy Status:");
-            if state.proxy_running {
+            if proxy.running {
                 ui.label(RichText::new("● Active").color(Color32::GREEN).strong());
             } else {
                 ui.label(RichText::new("○ Stopped").color(Color32::GRAY));
@@ -105,15 +109,15 @@ pub fn render_settings_view(ui: &mut egui::Ui, state: &mut UiState, core: &Arc<M
             ui.end_row();
 
             ui.strong("Active Listeners:");
-            ui.label(&state.active_listeners_summary);
+            ui.label(&proxy.active_summary);
             ui.end_row();
 
             ui.strong("Total Flows in Memory:");
-            ui.label(format!("{}/{}", state.flows.len(), state.max_flows));
+            ui.label(format!("{}/{}", traffic.flows.len(), traffic.max_flows));
             ui.end_row();
 
             ui.strong("Database Location:");
-            ui.label(core.db_path.to_string_lossy());
+            ui.label(db_path.to_string_lossy());
             ui.end_row();
         });
 }
