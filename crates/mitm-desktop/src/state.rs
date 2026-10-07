@@ -10,6 +10,18 @@ pub enum TriState {
     Exclude,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TabKind {
+    Traffic,
+    Inspector,
+    Repeater,
+    Fuzzer,
+    Intercept,
+    Collections,
+    WebSockets,
+    Settings,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InspectorPhase {
     Request,
@@ -181,6 +193,7 @@ pub struct UiState {
     pub active_listeners_summary: String,
     pub new_listener_label: String,
     pub new_listener_address: String,
+    pub request_open_tab: Option<TabKind>,
 }
 
 impl Default for UiState {
@@ -242,6 +255,7 @@ impl Default for UiState {
             active_listeners_summary: String::new(),
             new_listener_label: String::new(),
             new_listener_address: "127.0.0.1:8082".to_string(),
+            request_open_tab: None,
         }
     }
 }

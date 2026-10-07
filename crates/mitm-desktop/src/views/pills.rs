@@ -20,7 +20,7 @@ pub fn render_method_pill(ui: &mut egui::Ui, method: &str) {
         .fill(bg_color)
         .corner_radius(CornerRadius::same(3))
         .show(ui, |ui| {
-            ui.label(text);
+            ui.add(egui::Label::new(text).selectable(false));
         });
 }
 
@@ -48,7 +48,7 @@ pub fn render_status_pill(ui: &mut egui::Ui, status: u16) {
         .fill(bg_color)
         .corner_radius(CornerRadius::same(3))
         .show(ui, |ui| {
-            ui.label(text);
+            ui.add(egui::Label::new(text).selectable(false));
         });
 }
 
@@ -81,7 +81,7 @@ pub fn render_source_pill(ui: &mut egui::Ui, source: &str) {
         .fill(Color32::from_rgb(49, 46, 129))
         .corner_radius(CornerRadius::same(3))
         .show(ui, |ui| {
-            ui.label(text);
+            ui.add(egui::Label::new(text).selectable(false));
         });
 }
 

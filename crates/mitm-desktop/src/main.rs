@@ -1,14 +1,14 @@
 use std::sync::Arc;
 use crossbeam_channel::Receiver;
 use eframe::egui;
-use egui_dock::{DockArea, DockState, NodeIndex};
+use egui_dock::{DockArea, DockState};
 use mitm_core::events::CoreEvent;
 use mitm_core::MitmCore;
 
 mod state;
 mod views;
 
-use state::UiState;
+use state::{TabKind, UiState};
 use views::collections::render_collections_view;
 use views::fuzzer::render_fuzzer_view;
 use views::inspector::render_inspector_view;
@@ -17,18 +17,6 @@ use views::repeater::render_repeater_view;
 use views::settings::render_settings_view;
 use views::traffic::render_traffic_view;
 use views::websockets::render_websockets_view;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TabKind {
-    Traffic,
-    Inspector,
-    Repeater,
-    Fuzzer,
-    Intercept,
-    Collections,
-    WebSockets,
-    Settings,
-}
 
 #[derive(Debug, Clone)]
 pub enum FuzzMsg {
@@ -163,17 +151,7 @@ impl NativeMitmApp {
         let (repeater_result_tx, repeater_result_rx) = crossbeam_channel::unbounded();
         let (fuzzer_result_tx, fuzzer_result_rx) = crossbeam_channel::unbounded();
 
-        let mut dock_state = DockState::new(vec![TabKind::Traffic, TabKind::Collections]);
-        let [_traffic_node, inspector_node] =
-            dock_state.main_surface_mut().split_right(NodeIndex::root(), 0.55, vec![TabKind::Inspector]);
-        let [_inspector_node, _tools_node] =
-            dock_state.main_surface_mut().split_below(inspector_node, 0.5, vec![
-                TabKind::Repeater,
-                TabKind::Fuzzer,
-                TabKind::Intercept,
-                TabKind::WebSockets,
-                TabKind::Settings,
-            ]);
+        let dock_state = DockState::new(vec![TabKind::Traffic]);
 
         Self {
             dock_state,
@@ -185,6 +163,54 @@ impl NativeMitmApp {
             repeater_result_rx,
             fuzzer_result_tx,
             fuzzer_result_rx,
+        }
+    }
+
+    fn open_tab(&mut self, tab: TabKind) {
+        if let Some(tab_path) = self.dock_state.find_tab(&tab) {
+            let _ = self.dock_state.set_active_tab(tab_path);
+            return;
+        }
+
+        match tab {
+            TabKind::Inspector => {
+                if let Some((traffic_node, _)) = self.dock_state.find_main_surface_tab(&TabKind::Traffic) {
+                    self.dock_state.main_surface_mut().split_right(traffic_node, 0.55, vec![TabKind::Inspector]);
+                } else {
+                    self.dock_state.push_to_first_leaf(TabKind::Inspector);
+                }
+            }
+            TabKind::Traffic => {
+                self.dock_state.push_to_first_leaf(TabKind::Traffic);
+            }
+            _ => {
+                if let Some((inspector_node, _)) = self.dock_state.find_main_surface_tab(&TabKind::Inspector) {
+                    let existing_tool_node = [
+                        TabKind::Repeater,
+                        TabKind::Fuzzer,
+                        TabKind::Intercept,
+                        TabKind::Collections,
+                        TabKind::WebSockets,
+                        TabKind::Settings,
+                    ]
+                    .iter()
+                    .find_map(|t| self.dock_state.find_main_surface_tab(t));
+
+                    if let Some((tool_node, _)) = existing_tool_node {
+                        if let Ok(leaf) = self.dock_state.main_surface_mut().leaf_mut(tool_node) {
+                            leaf.tabs.push(tab);
+                            leaf.active = egui_dock::TabIndex(leaf.tabs.len() - 1);
+                            return;
+                        }
+                    }
+
+                    self.dock_state.main_surface_mut().split_below(inspector_node, 0.5, vec![tab]);
+                } else if let Some((traffic_node, _)) = self.dock_state.find_main_surface_tab(&TabKind::Traffic) {
+                    self.dock_state.main_surface_mut().split_right(traffic_node, 0.55, vec![tab]);
+                } else {
+                    self.dock_state.push_to_first_leaf(tab);
+                }
+            }
         }
     }
 
@@ -306,11 +332,49 @@ impl eframe::App for NativeMitmApp {
                     ui.separator();
                 }
 
+                let all_panels = [
+                    (TabKind::Traffic, "Traffic"),
+                    (TabKind::Inspector, "Inspector"),
+                    (TabKind::Repeater, "Repeater"),
+                    (TabKind::Fuzzer, "Fuzzer"),
+                    (TabKind::Intercept, "Intercept"),
+                    (TabKind::Collections, "Collections"),
+                    (TabKind::WebSockets, "WebSockets"),
+                    (TabKind::Settings, "Settings"),
+                ];
+
+                let absent_panels: Vec<_> = all_panels
+                    .iter()
+                    .filter(|(tab, _)| self.dock_state.find_tab(tab).is_none())
+                    .collect();
+
+                let mut tab_to_add = None;
+                ui.menu_button("➕ Add Panel ▾", |ui| {
+                    if absent_panels.is_empty() {
+                        ui.label(egui::RichText::new("All panels are open").weak());
+                    } else {
+                        for (tab, label) in &absent_panels {
+                            if ui.button(*label).clicked() {
+                                tab_to_add = Some((*tab).clone());
+                                ui.close();
+                            }
+                        }
+                    }
+                });
+
+                if let Some(tab) = tab_to_add {
+                    self.open_tab(tab);
+                }
+
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(egui::RichText::new(format!("{} flows in memory", self.ui_state.flows.len())).weak());
                 });
             });
         });
+
+        if let Some(tab) = self.ui_state.request_open_tab.take() {
+            self.open_tab(tab);
+        }
 
         let mut tab_viewer = TabViewerApp {
             state: &mut self.ui_state,

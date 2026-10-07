@@ -11,70 +11,67 @@ pub fn render_traffic_view(
     state: &mut UiState,
     core: &Arc<MitmCore>,
 ) {
-    egui::ScrollArea::horizontal()
-        .id_salt("traffic_toolbar_scroll")
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("🔍");
-                ui.add(
-                    egui::TextEdit::singleline(&mut state.search_query)
-                        .hint_text("Filter URL, host, path...")
-                        .desired_width(160.0),
-                );
+    ui.horizontal(|ui| {
+        ui.label("🔍");
+        ui.add(
+            egui::TextEdit::singleline(&mut state.search_query)
+                .hint_text("Filter URL, host, path...")
+                .desired_width(170.0),
+        );
 
-                if !state.search_query.is_empty() && ui.small_button("✖").clicked() {
-                    state.search_query.clear();
-                }
+        if !state.search_query.is_empty() && ui.small_button("✖").clicked() {
+            state.search_query.clear();
+        }
 
-                ui.separator();
+        let sources = state.available_source_labels();
+        if !sources.is_empty() {
+            ui.separator();
+            egui::ComboBox::from_id_salt("traffic_source_filter_combo")
+                .selected_text(format!("Src: {}", state.source_filter))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut state.source_filter, "ALL".to_string(), "All Sources");
+                    for src in &sources {
+                        ui.selectable_value(&mut state.source_filter, src.clone(), src);
+                    }
+                });
+        }
 
-                let sources = state.available_source_labels();
-                if !sources.is_empty() {
-                    egui::ComboBox::from_id_salt("traffic_source_filter_combo")
-                        .selected_text(format!("Src: {}", state.source_filter))
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut state.source_filter, "ALL".to_string(), "All Sources");
-                            for src in &sources {
-                                ui.selectable_value(&mut state.source_filter, src.clone(), src);
-                            }
-                        });
-                    ui.separator();
-                }
+        ui.separator();
+        ui.checkbox(&mut state.auto_scroll, "Auto-scroll");
 
-                ui.label(RichText::new("Method:").weak().size(11.0));
-                for m in &["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"] {
-                    let s = state.method_filters.entry(m.to_string()).or_default();
-                    render_tri_state_button(ui, m, s);
-                }
+        ui.separator();
+        if ui.button(format!("🗑 Clear ({})", state.flows.len())).clicked() {
+            let _ = core.clear_all_traffic();
+            state.clear_flows();
+        }
+    });
 
-                ui.separator();
+    ui.horizontal_wrapped(|ui| {
+        ui.label(RichText::new("Method:").weak().size(11.0));
+        for m in &["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"] {
+            let s = state.method_filters.entry(m.to_string()).or_default();
+            render_tri_state_button(ui, m, s);
+        }
 
-                ui.label(RichText::new("Status:").weak().size(11.0));
-                for st in &["2xx", "3xx", "4xx", "5xx", "ERR"] {
-                    let s = state.status_filters.entry(st.to_string()).or_default();
-                    render_tri_state_button(ui, st, s);
-                }
+        ui.separator();
 
-                let has_active_filters = state.source_filter != "ALL"
-                    || state.method_filters.values().any(|&v| v != TriState::Neutral)
-                    || state.status_filters.values().any(|&v| v != TriState::Neutral);
+        ui.label(RichText::new("Status:").weak().size(11.0));
+        for st in &["2xx", "3xx", "4xx", "5xx", "ERR"] {
+            let s = state.status_filters.entry(st.to_string()).or_default();
+            render_tri_state_button(ui, st, s);
+        }
 
-                if has_active_filters && ui.small_button("↺ Reset").on_hover_text("Reset all filters").clicked() {
-                    state.reset_filters();
-                }
+        let has_active_filters = state.source_filter != "ALL"
+            || state.method_filters.values().any(|&v| v != TriState::Neutral)
+            || state.status_filters.values().any(|&v| v != TriState::Neutral);
 
-                ui.separator();
-
-                ui.checkbox(&mut state.auto_scroll, "Auto-scroll");
-
-                ui.separator();
-
-                if ui.button(format!("🗑 Clear ({})", state.flows.len())).clicked() {
-                    let _ = core.clear_all_traffic();
-                    state.clear_flows();
-                }
-            });
-        });
+        if has_active_filters {
+            ui.separator();
+            if ui.small_button("↺ Reset").on_hover_text("Reset all filters").clicked() {
+                state.reset_filters();
+            }
+        }
+    });
 
     ui.separator();
 
@@ -139,8 +136,10 @@ pub fn render_traffic_view(
 
                         row.set_selected(is_selected);
 
+                        let mut text_cells: Vec<egui::Response> = Vec::new();
+
                         row.col(|ui| {
-                            ui.label(flow_id.to_string());
+                            text_cells.push(ui.label(flow_id.to_string()));
                         });
 
                         row.col(|ui| {
@@ -156,7 +155,7 @@ pub fn render_traffic_view(
                         });
 
                         row.col(|ui| {
-                            ui.add(egui::Label::new(&flow.host).truncate());
+                            text_cells.push(ui.add(egui::Label::new(&flow.host).truncate()));
                         });
 
                         row.col(|ui| {
@@ -164,25 +163,29 @@ pub fn render_traffic_view(
                             if flow.is_failed {
                                 path_text = path_text.color(Color32::from_rgb(248, 113, 113));
                             }
-                            ui.add(egui::Label::new(path_text).truncate());
+                            text_cells.push(ui.add(egui::Label::new(path_text).truncate()));
                         });
 
                         row.col(|ui| {
                             let short_type = flow.content_type.split(';').next().unwrap_or("-");
-                            ui.add(egui::Label::new(short_type).truncate());
+                            text_cells.push(ui.add(egui::Label::new(short_type).truncate()));
                         });
 
                         row.col(|ui| {
-                            ui.label(format_bytes(flow.response_size));
+                            text_cells.push(ui.label(format_bytes(flow.response_size)));
                         });
 
                         row.col(|ui| {
-                            ui.label(format_duration(flow.duration_ms));
+                            text_cells.push(ui.label(format_duration(flow.duration_ms)));
                         });
 
-                        let response = row.response().interact(egui::Sense::click());
-                        if response.clicked() {
+                        // Selectable labels swallow clicks; a drag-to-select never registers as a click, so merging keeps text selection usable.
+                        let response = text_cells
+                            .into_iter()
+                            .fold(row.response().interact(egui::Sense::click()), |acc, r| acc | r);
+                        if response.clicked() || response.double_clicked() {
                             new_selection = Some(flow_id);
+                            state.request_open_tab = Some(crate::state::TabKind::Inspector);
                         }
                         if response.double_clicked() {
                             egui_ctx.copy_text(flow_url.clone());
@@ -224,10 +227,12 @@ pub fn render_traffic_view(
                             ui.separator();
                             if ui.button("🔁 Send to Repeater").clicked() {
                                 send_to_repeater = Some(flow_clone.clone());
+                                state.request_open_tab = Some(crate::state::TabKind::Repeater);
                                 ui.close();
                             }
                             if ui.button("⚡ Send to Fuzzer").clicked() {
                                 send_to_fuzzer = Some(flow_clone.clone());
+                                state.request_open_tab = Some(crate::state::TabKind::Fuzzer);
                                 ui.close();
                             }
                             ui.separator();
