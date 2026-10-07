@@ -1,3 +1,4 @@
+pub mod confirm;
 pub mod flash;
 pub mod pills;
 pub mod tri_state;

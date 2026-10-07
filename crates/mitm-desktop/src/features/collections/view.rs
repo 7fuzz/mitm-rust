@@ -3,6 +3,7 @@ use crate::command::{AppCommand, Commands};
 use crate::features::request_editor::response_panel::{self, header_pairs, ResponseData};
 use crate::features::request_editor::run_list::{self, local_time, Run, RunAction};
 use crate::theme::{self, Tone};
+use crate::widgets::confirm::confirm_button;
 use crate::widgets::pills::method_text;
 use crate::widgets::split;
 use super::{editor, extract_modal, tree, CollectionsCmd, CollectionsState};
@@ -136,8 +137,6 @@ fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str) {
 
 fn history_drawer(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str, cmds: &mut Commands) {
     let runs = state.runs.get(request_id).map(Vec::as_slice).unwrap_or_default();
-    let confirm_id = ui.id().with(("clear_runs", request_id));
-    let mut confirming: bool = ui.data_mut(|d| d.get_temp(confirm_id)).unwrap_or(false);
 
     ui.horizontal(|ui| {
         ui.label(RichText::new(format!("🕘 Run History ({})", runs.len())).strong());
@@ -145,21 +144,13 @@ fn history_drawer(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &
             if ui.small_button("✖").on_hover_text("Close run history").clicked() {
                 state.prefs.history_open = false;
             }
-            if !runs.is_empty() {
-                let label = if confirming { RichText::new("🗑 Clear all?").color(theme::color(ui, Tone::Danger)) } else { RichText::new("🗑") };
-                let button = ui.small_button(label).on_hover_text("Delete all recorded runs of this request");
-                if button.clicked() {
-                    if confirming {
-                        cmds.push(AppCommand::Collections(CollectionsCmd::ClearRuns(request_id.to_string())));
-                    }
-                    confirming = !confirming;
-                } else if confirming && !button.hovered() {
-                    confirming = false;
-                }
+            let confirm_id = ui.id().with(("clear_runs", request_id));
+            let hover = "Delete all recorded runs of this request";
+            if !runs.is_empty() && confirm_button(ui, confirm_id, RichText::new("🗑"), "🗑 Clear all?", hover) {
+                cmds.push(AppCommand::Collections(CollectionsCmd::ClearRuns(request_id.to_string())));
             }
         });
     });
-    ui.data_mut(|d| d.insert_temp(confirm_id, confirming));
     ui.separator();
 
     let selected = state.selected_run.get(request_id).copied().or_else(|| runs.first().map(|r| r.id));
