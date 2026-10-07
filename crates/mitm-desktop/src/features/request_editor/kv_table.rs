@@ -32,7 +32,6 @@ pub struct KvLabels<'a> {
     pub value: &'a str,
 }
 
-/// Editable rows with an enable toggle; returns true when anything changed.
 pub fn show<R: KeyValueRow>(
     ui: &mut egui::Ui,
     id_salt: &str,

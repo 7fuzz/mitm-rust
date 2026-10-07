@@ -4,12 +4,9 @@ use serde::Deserialize;
 
 use crate::workspace::interpolate_variables;
 
-/// A collection request with its workspace variables filled in, rendered three ways.
 #[derive(Debug, Clone)]
 pub struct RequestPreview {
-    /// Request line with the full URL.
     pub full_url_request: String,
-    /// Request line with the path and a Host header, as sent on the wire.
     pub full_request: String,
     pub curl_command: String,
 }

@@ -14,7 +14,6 @@ pub struct ResponseData<'a> {
     pub body: &'a str,
 }
 
-/// The request currently in the editor, for the Request section of the copy menu.
 pub struct RequestCopy {
     pub method: String,
     pub url: String,

@@ -12,7 +12,6 @@ const MODES: [(&str, &str, &str); 6] = [
     ("body_regex", "Regex Pattern", "token=([^;]+)"),
 ];
 
-/// Returns true when any rule changed.
 pub fn show(ui: &mut egui::Ui, id_salt: &str, rules: &mut Vec<ExtractRuleItem>) -> bool {
     let mut changed = false;
     let mut remove = None;

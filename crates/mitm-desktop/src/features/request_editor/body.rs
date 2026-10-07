@@ -69,7 +69,6 @@ pub fn text_field(key: String, value: String) -> MultipartFieldSpec {
     }
 }
 
-/// The body type and stored content that the request editors use for a captured raw body.
 pub fn structured_from_capture(content_type: &str, body: &str) -> (String, String) {
     let ct = content_type.to_lowercase();
     let trimmed = body.trim();
@@ -95,7 +94,6 @@ pub fn structured_from_capture(content_type: &str, body: &str) -> (String, Strin
     ("raw".into(), body.to_string())
 }
 
-/// Carries content across a body type switch so the new editor doesn't open empty.
 pub fn convert(from: &str, to: &str, content: &str) -> String {
     if from == to || content.trim().is_empty() {
         return content.to_string();

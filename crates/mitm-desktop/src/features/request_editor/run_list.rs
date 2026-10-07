@@ -4,7 +4,6 @@ use mitm_core::repeater::{HeaderItem, RepeaterHistoryItem};
 use crate::format::{CopyFormat, Exchange};
 use crate::widgets::pills::render_status_pill;
 
-/// A recorded send of a Repeater or collection request.
 pub trait Run {
     fn id(&self) -> i64;
     fn method(&self) -> &str;

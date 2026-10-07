@@ -33,7 +33,6 @@ impl Default for PaneState {
 }
 
 pub struct PaneData<'a> {
-    /// Identifies the body for the formatted-text cache; change it when the body source changes.
     pub cache_key: u64,
     pub title: &'a str,
     pub headers: &'a [(String, String)],

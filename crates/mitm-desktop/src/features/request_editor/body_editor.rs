@@ -6,7 +6,6 @@ use crate::widgets::pills::ROSE;
 use super::body::{is_multipart, is_urlencoded, read_multipart, read_urlencoded, store_multipart, store_urlencoded, text_field};
 use super::kv_table::{self, KvLabels};
 
-/// Edits the stored content for `body_type`; returns true when it changed.
 pub fn show(ui: &mut egui::Ui, id_salt: &str, body_type: &str, content: &mut String) -> bool {
     match body_type {
         "none" => {

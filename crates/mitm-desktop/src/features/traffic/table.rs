@@ -20,7 +20,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
         .auto_shrink([false, false])
         .show(ui, |ui| {
             let mut builder = TableBuilder::new(ui)
-                // Resized widths are remembered per column index, so each column set keeps its own.
+                // egui keeps resized widths per column index, so key them by the visible column set.
                 .id_salt(("traffic_table", &columns))
                 .striped(true)
                 .resizable(true)
@@ -86,7 +86,7 @@ fn flow_row(row: &mut TableRow, columns: &[ColumnId], flow: &HistoryEntry, selec
         });
     }
 
-    // Selectable labels swallow clicks; a drag-to-select never registers as a click, so merging keeps text selection usable.
+    // Selectable labels swallow row clicks; drag-to-select never counts as a click.
     let response = text_cells.into_iter().fold(row.response(), |acc, r| acc | r);
 
     if response.clicked() || response.double_clicked() {

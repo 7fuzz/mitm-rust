@@ -1,13 +1,11 @@
 use eframe::egui::{self, RichText};
 use crate::widgets::pills::ROSE;
 
-/// A request that can run before or after another one.
 pub struct StepOption {
     pub id: String,
     pub label: String,
 }
 
-/// Edits the pre/post request lists; returns true when either changed.
 pub fn show(ui: &mut egui::Ui, pre: &mut Vec<String>, post: &mut Vec<String>, options: &[StepOption]) -> bool {
     let pre_changed = step_list(ui, "PRE-REQUESTS", "pre", pre, options);
     ui.add_space(12.0);

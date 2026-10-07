@@ -207,7 +207,7 @@ impl MitmApp {
         let was_running = self.state.proxy.running;
         let core = &self.core;
         let result = self.rt.block_on(async {
-            // Stopping first keeps set_listener_configs from restarting on its own, so the restart below reports what bound.
+            // Stopped first so set_listener_configs doesn't restart them itself; the restart below reports what bound.
             core.stop_all_listeners().await;
             core.set_listener_configs(listeners).await?;
             if was_running {

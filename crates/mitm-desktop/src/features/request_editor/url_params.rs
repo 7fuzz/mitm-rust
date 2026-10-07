@@ -4,7 +4,6 @@ pub fn new_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
-/// Query params from the URL, keeping ids of unchanged rows and disabled rows the URL can't express.
 pub fn parse_query(url: &str, existing: &[ParamItem]) -> Vec<ParamItem> {
     let disabled = existing.iter().filter(|p| !p.enabled);
     let Some((_, query)) = url.split_once('?') else {
@@ -35,7 +34,7 @@ pub fn build_url(url: &str, params: &[ParamItem]) -> String {
     let query: Vec<String> = params
         .iter()
         .filter(|p| p.enabled && (!p.key.trim().is_empty() || !p.value.trim().is_empty()))
-        .map(|p| format!("{}={}", encode(&p.key), encode(&p.value)))
+        .map(|p| format!("{}={}", encode_keeping_placeholders(&p.key), encode_keeping_placeholders(&p.value)))
         .collect();
     if query.is_empty() {
         base.to_string()
@@ -44,8 +43,7 @@ pub fn build_url(url: &str, params: &[ParamItem]) -> String {
     }
 }
 
-/// Percent-encodes like encodeURIComponent but leaves `{{variable}}` placeholders intact.
-fn encode(text: &str) -> String {
+fn encode_keeping_placeholders(text: &str) -> String {
     let mut out = String::new();
     let mut rest = text;
     while let Some(start) = rest.find("{{") {

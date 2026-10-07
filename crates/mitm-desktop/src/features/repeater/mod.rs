@@ -19,7 +19,6 @@ use crate::widgets::message_pane::PaneState;
 pub use view::show;
 pub use worker::RepeaterWorker;
 
-/// Edits are written to the database once typing pauses for this long.
 const SAVE_DELAY_SECS: f64 = 0.6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,7 +150,6 @@ impl RepeaterState {
         self.create(tab, db_path);
     }
 
-    /// Captured flow becomes a new tab whose first run is the captured exchange.
     pub fn create_from_flow(&mut self, flow: &HistoryEntry, detail: Option<&HistoryDetail>, db_path: &PathBuf) {
         let request_headers = detail.map_or(&flow.request_headers, |d| &d.request_headers);
         let request_body = detail.map_or(&flow.request_body, |d| &d.request_body);
@@ -233,7 +231,6 @@ impl RepeaterState {
         self.history.insert(id.to_string(), runs);
     }
 
-    /// Refresh run history and the hit/last-status stats after a send.
     pub fn after_run(&mut self, id: &str, db_path: &PathBuf) {
         self.reload_history(id, db_path);
         let Ok(stored) = core_repeater::get_repeater_tab_by_id(db_path, id) else { return };

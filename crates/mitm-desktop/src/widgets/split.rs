@@ -15,7 +15,6 @@ pub fn horizontal(
     right(&mut right_ui);
 }
 
-/// Splits the remaining space into two child `Ui`s around a draggable divider.
 pub fn regions(ui: &mut egui::Ui, id_salt: impl AsIdSalt, fraction: &mut f32) -> [egui::Ui; 2] {
     let rect = ui.available_rect_before_wrap();
     let usable = (rect.width() - HANDLE_WIDTH).max(0.0);

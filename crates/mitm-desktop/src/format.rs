@@ -83,7 +83,6 @@ pub fn hex_dump(bytes: &[u8]) -> String {
     output
 }
 
-/// A request and its response, whatever recorded them (proxy flow, Repeater run, collection run).
 pub struct Exchange {
     pub method: String,
     pub url: String,
