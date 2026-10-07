@@ -1,6 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::repeater::HeaderItem;
 use crate::format::{format_bytes, CopyFormat, Exchange};
+use crate::widgets::flash;
 use crate::widgets::message_pane::{self, PaneData, PaneState};
 use crate::widgets::pills::status_text;
 
@@ -112,14 +113,9 @@ fn copy_menu(
     exchange: Option<&Exchange>,
 ) {
     let flash_id = ui.id().with((id_salt, "copied"));
-    let now = ui.input(|i| i.time);
-    let flash: Option<(String, f64)> = ui.data_mut(|d| d.get_temp(flash_id));
-    let title = match &flash {
-        Some((message, at)) if now - at < 1.8 => {
-            ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
-            format!("✔ {}", message)
-        }
-        _ => "📋 Copy ⏷".to_string(),
+    let title = match flash::current(ui, flash_id) {
+        Some(message) => format!("✔ {}", message),
+        None => "📋 Copy ⏷".to_string(),
     };
 
     let mut copied: Option<(&str, String)> = None;
@@ -171,7 +167,7 @@ fn copy_menu(
     if let Some((label, text)) = copied {
         ui.ctx().copy_text(text);
         let message = label.trim_start_matches("Copy ").to_string() + " copied";
-        ui.data_mut(|d| d.insert_temp(flash_id, (message, now)));
+        flash::set(ui, flash_id, message);
         ui.close();
     }
 }
