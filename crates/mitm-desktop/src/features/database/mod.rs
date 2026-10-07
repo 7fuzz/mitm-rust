@@ -32,11 +32,8 @@ pub struct DatabaseState {
 
     pub error: Option<String>,
 
-    #[allow(dead_code)]
     pub sql_query: String,
-    #[allow(dead_code)]
     pub query_result: Option<DbQueryResult>,
-    #[allow(dead_code)]
     pub query_error: Option<String>,
 }
 
@@ -168,5 +165,22 @@ impl DatabaseState {
         }
         self.page = 0;
         self.load_current_page(db_path);
+    }
+
+    pub fn run_query(&mut self, db_path: &Path) {
+        let sql = self.sql_query.trim();
+        if sql.is_empty() {
+            return;
+        }
+        match mitm_core::db::browser::run_db_query(db_path, sql) {
+            Ok(result) => {
+                self.query_result = Some(result);
+                self.query_error = None;
+            }
+            Err(e) => {
+                self.query_result = None;
+                self.query_error = Some(e);
+            }
+        }
     }
 }

@@ -277,6 +277,100 @@ fn render_detail(ui: &mut egui::Ui, state: &mut DatabaseState) {
         });
 }
 
-fn query_view(ui: &mut egui::Ui, _state: &mut DatabaseState, _db_path: &Path) {
-    ui.label(RichText::new("SQL Query editor").weak().italics());
+fn query_view(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
+    ui.horizontal(|ui| {
+        ui.strong("SQL Editor");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let can_run = !state.sql_query.trim().is_empty();
+            let is_ctrl_enter = ui.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(egui::Key::Enter));
+            if ui.add_enabled(can_run, egui::Button::new("Run (Ctrl+Enter)")).clicked() || (can_run && is_ctrl_enter) {
+                state.run_query(db_path);
+            }
+        });
+    });
+    ui.add_space(4.0);
+
+    let mut layouter = crate::widgets::code_view::sql_layouter();
+
+    ui.add(
+        egui::TextEdit::multiline(&mut state.sql_query)
+            .font(egui::TextStyle::Monospace)
+            .desired_rows(6)
+            .desired_width(f32::INFINITY)
+            .layouter(&mut layouter),
+    );
+
+    if let Some(error) = &state.query_error {
+        ui.add_space(6.0);
+        ui.label(RichText::new(error).color(theme::color(ui, Tone::Danger)).strong());
+    }
+
+    if let Some(result) = &state.query_result {
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new(format!(
+                    "{} rows returned in {}ms{}",
+                    result.rows.len(),
+                    result.elapsed_ms,
+                    if result.truncated { " (truncated to 1000 rows)" } else { "" }
+                ))
+                .weak()
+                .small(),
+            );
+        });
+        ui.add_space(4.0);
+        render_query_grid(ui, result);
+    }
+}
+
+fn render_query_grid(ui: &mut egui::Ui, result: &mitm_core::db::browser::DbQueryResult) {
+    if result.rows.is_empty() {
+        ui.vertical_centered(|ui| {
+            ui.add_space(20.0);
+            ui.label(RichText::new("Query returned 0 rows").weak().italics());
+        });
+        return;
+    }
+
+    egui::ScrollArea::horizontal()
+        .id_salt("db_query_table_hscroll")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            let mut builder = TableBuilder::new(ui)
+                .striped(true)
+                .resizable(true)
+                .auto_shrink([false, false]);
+
+            for _ in 0..result.columns.len() {
+                builder = builder.column(Column::initial(130.0).at_least(60.0).clip(true));
+            }
+
+            builder
+                .header(24.0, |mut header| {
+                    for col_name in &result.columns {
+                        header.col(|ui| {
+                            ui.strong(col_name);
+                        });
+                    }
+                })
+                .body(|body| {
+                    body.rows(22.0, result.rows.len(), |mut row| {
+                        let idx = row.index();
+                        for cell in &result.rows[idx] {
+                            row.col(|ui| match cell {
+                                serde_json::Value::Null => {
+                                    ui.label(RichText::new("NULL").weak().italics());
+                                }
+                                serde_json::Value::String(s) => {
+                                    ui.add(egui::Label::new(s).truncate());
+                                }
+                                other => {
+                                    ui.add(egui::Label::new(other.to_string()).truncate());
+                                }
+                            });
+                        }
+                    });
+                });
+        });
 }

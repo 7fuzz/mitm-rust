@@ -9,6 +9,7 @@ pub enum Lang {
     Json,
     Markup,
     Plain,
+    Sql,
 }
 
 pub fn detect(content_type: &str, text: &str) -> Lang {
@@ -62,8 +63,81 @@ pub fn layout_job(style: &Style, text: &str, lang: Lang) -> LayoutJob {
         Lang::Json => json(&mut job, &palette, text),
         Lang::Markup => markup(&mut job, &palette, text),
         Lang::Plain => palette.push(&mut job, text, palette.text),
+        Lang::Sql => sql(&mut job, &palette, text),
     }
     job
+}
+
+pub fn sql_layouter() -> impl FnMut(&eframe::egui::Ui, &dyn eframe::egui::TextBuffer, f32) -> std::sync::Arc<eframe::egui::Galley> {
+    |ui, buf, wrap_width| {
+        let mut job = layout_job(ui.style(), buf.as_str(), Lang::Sql);
+        job.wrap.max_width = wrap_width;
+        ui.fonts_mut(|f| f.layout_job(job))
+    }
+}
+
+fn sql(job: &mut LayoutJob, p: &Palette, text: &str) {
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let start = i;
+        match bytes[i] {
+            b'\'' | b'"' => {
+                let quote = bytes[i];
+                i += 1;
+                while i < bytes.len() && bytes[i] != quote {
+                    if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                        i += 2;
+                    } else {
+                        i += 1;
+                    }
+                }
+                if i < bytes.len() {
+                    i += 1;
+                }
+                p.push(job, &text[start..i], p.string);
+            }
+            b'-' if i + 1 < bytes.len() && bytes[i + 1] == b'-' => {
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                p.push(job, &text[start..i], p.punct);
+            }
+            b'0'..=b'9' => {
+                while i < bytes.len() && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
+                    i += 1;
+                }
+                p.push(job, &text[start..i], p.number);
+            }
+            b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
+                while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                    i += 1;
+                }
+                let word = &text[start..i];
+                let is_kw = matches!(
+                    word.to_ascii_uppercase().as_str(),
+                    "SELECT" | "FROM" | "WHERE" | "INSERT" | "INTO" | "UPDATE" | "DELETE" |
+                    "ORDER" | "BY" | "GROUP" | "HAVING" | "LIMIT" | "OFFSET" | "JOIN" |
+                    "LEFT" | "RIGHT" | "INNER" | "OUTER" | "ON" | "AS" | "AND" | "OR" |
+                    "NOT" | "IN" | "IS" | "NULL" | "LIKE" | "CAST" | "PRAGMA" | "TABLE" |
+                    "CREATE" | "DROP" | "ALTER" | "INDEX" | "ASC" | "DESC" | "DISTINCT" |
+                    "UNION" | "ALL" | "EXISTS" | "BETWEEN" | "CASE" | "WHEN" | "THEN" | "ELSE" | "END"
+                );
+                let color = if is_kw { p.keyword } else { p.text };
+                p.push(job, word, color);
+            }
+            b' ' | b'\t' | b'\r' | b'\n' => {
+                while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+                    i += 1;
+                }
+                p.push(job, &text[start..i], p.text);
+            }
+            _ => {
+                p.push(job, &text[start..=start], p.punct);
+                i += 1;
+            }
+        }
+    }
 }
 
 fn json(job: &mut LayoutJob, p: &Palette, text: &str) {
@@ -234,5 +308,15 @@ mod tests {
         assert_eq!(detect("", "  [1]"), Lang::Json);
         assert_eq!(detect("text/html", ""), Lang::Markup);
         assert_eq!(detect("text/plain", "hello"), Lang::Plain);
+    }
+
+    #[test]
+    fn sql_keeps_every_byte_and_splits_tokens() {
+        let text = "SELECT id, name FROM users WHERE id = 42 AND active = 'yes'; -- comment";
+        let parts = spans(text, Lang::Sql);
+        assert_eq!(parts.concat(), text);
+        assert!(parts.contains(&"SELECT".to_string()));
+        assert!(parts.contains(&"'yes'".to_string()));
+        assert!(parts.contains(&"42".to_string()));
     }
 }
