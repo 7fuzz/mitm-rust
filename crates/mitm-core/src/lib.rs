@@ -147,6 +147,30 @@ impl MitmCore {
         Ok(())
     }
 
+    pub fn list_db_tables(&self) -> Result<Vec<db::browser::DbTable>, String> {
+        db::browser::list_db_tables(&self.db_path)
+    }
+
+    pub fn query_db_table(
+        &self,
+        table: &str,
+        offset: i64,
+        limit: i64,
+        order_by: Option<&str>,
+        order_desc: Option<bool>,
+        search: Option<&str>,
+    ) -> Result<db::browser::DbRows, String> {
+        db::browser::query_db_table(&self.db_path, table, offset, limit, order_by, order_desc, search)
+    }
+
+    pub fn get_db_row(&self, table: &str, rowid: i64) -> Result<Vec<serde_json::Value>, String> {
+        db::browser::get_db_row(&self.db_path, table, rowid)
+    }
+
+    pub fn run_db_query(&self, sql: &str) -> Result<db::browser::DbQueryResult, String> {
+        db::browser::run_db_query(&self.db_path, sql)
+    }
+
     pub async fn start_all_listeners(&self) -> Result<Vec<String>, String> {
         let configs = self.state.listener_configs.read().await.clone();
         let ca = self.get_ca();

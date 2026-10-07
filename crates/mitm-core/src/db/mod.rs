@@ -1,4 +1,5 @@
 pub mod actor;
+pub mod browser;
 mod error;
 pub mod history_db;
 pub mod migrations;
