@@ -1,6 +1,6 @@
 use std::path::Path;
 use eframe::egui;
-use egui_dock::DockState;
+use egui_dock::{DockState, TabIndex};
 use crate::command::Commands;
 use crate::features;
 use crate::state::AppState;
@@ -50,6 +50,26 @@ pub fn open_tab(dock: &mut DockState<Tab>, tab: Tab) {
             let _ = dock.set_active_tab(path);
         }
         None => dock.push_to_focused_leaf(tab),
+    }
+}
+
+pub fn focus_tab_at(dock: &mut DockState<Tab>, index: usize) {
+    let Some(path) = dock.focused_leaf() else { return };
+    if let Ok(leaf) = dock.leaf_mut(path) {
+        if index < leaf.tabs.len() {
+            leaf.active = TabIndex(index);
+        }
+    }
+}
+
+pub fn cycle_tab(dock: &mut DockState<Tab>, forward: bool) {
+    let Some(path) = dock.focused_leaf() else { return };
+    if let Ok(leaf) = dock.leaf_mut(path) {
+        let count = leaf.tabs.len();
+        if count > 0 {
+            let step = if forward { 1 } else { count - 1 };
+            leaf.active = TabIndex((leaf.active.0 + step) % count);
+        }
     }
 }
 

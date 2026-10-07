@@ -82,6 +82,8 @@ impl MitmApp {
         match cmd {
             AppCommand::OpenPalette => self.palette.open(),
             AppCommand::OpenTab(tab) => dock::open_tab(&mut self.dock, tab),
+            AppCommand::FocusTabAt(index) => dock::focus_tab_at(&mut self.dock, index),
+            AppCommand::CycleTab { forward } => dock::cycle_tab(&mut self.dock, forward),
             AppCommand::ToggleProxy => self.toggle_proxy(),
             AppCommand::SaveListeners(listeners) => self.save_listeners(listeners),
 

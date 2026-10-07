@@ -16,6 +16,8 @@ pub struct RequestDraft {
 pub enum AppCommand {
     OpenPalette,
     OpenTab(Tab),
+    FocusTabAt(usize),
+    CycleTab { forward: bool },
     ToggleProxy,
     SaveListeners(Vec<ListenerConfig>),
 
