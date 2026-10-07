@@ -1,87 +1,328 @@
+mod builder;
+mod sidebar;
 mod view;
 mod worker;
 
-use mitm_core::repeater::execute::SentRequest;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+use mitm_core::repeater::{
+    self as core_repeater, HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab,
+};
+use mitm_core::state::{HistoryDetail, HistoryEntry};
 use crate::command::RequestDraft;
+use crate::features::request_editor::body::structured_from_capture;
+use crate::features::request_editor::run_list::Run;
+use crate::features::request_editor::url_params::{new_id, parse_query};
+use crate::format::parse_header_lines;
+use crate::widgets::message_pane::PaneState;
 
 pub use view::show;
 pub use worker::RepeaterWorker;
 
-#[derive(Debug, Clone)]
-pub struct RepeaterTabState {
-    pub id: String,
-    pub name: String,
-    pub method: String,
-    pub url: String,
-    pub headers: String,
+/// Edits are written to the database once typing pauses for this long.
+const SAVE_DELAY_SECS: f64 = 0.6;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditorTab {
+    Params,
+    Headers,
+    Body,
+    Extract,
+    Steps,
+}
+
+pub struct ShownResponse {
+    pub history_id: i64,
+    pub status_code: u16,
+    pub status_text: String,
+    pub headers: Vec<HeaderItem>,
     pub body: String,
-    pub is_loading: bool,
-    pub last_result: Option<SentRequest>,
-    pub error: Option<String>,
+    pub duration_ms: u64,
+    pub size: u64,
 }
 
-impl Default for RepeaterTabState {
-    fn default() -> Self {
-        Self::from_draft(RequestDraft {
-            name: "New Request".to_string(),
-            method: "GET".to_string(),
-            url: "https://httpbin.org/get".to_string(),
-            headers: "User-Agent: MITM-Native/0.2\nAccept: */*".to_string(),
-            body: String::new(),
-        })
-    }
-}
-
-impl RepeaterTabState {
-    fn from_draft(draft: RequestDraft) -> Self {
+impl ShownResponse {
+    fn from_result(result: RepeaterExecutionResult) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
-            name: draft.name,
-            method: draft.method,
-            url: draft.url,
-            headers: draft.headers,
-            body: draft.body,
-            is_loading: false,
-            last_result: None,
-            error: None,
+            history_id: result.history_id,
+            status_code: result.status_code,
+            status_text: result.status_text,
+            headers: result.response_headers,
+            body: result.response_body,
+            duration_ms: result.duration_ms,
+            size: result.response_size,
+        }
+    }
+
+    fn from_run(run: &RepeaterHistoryItem) -> Self {
+        let body = run.response_body.clone().unwrap_or_default();
+        Self {
+            history_id: run.id,
+            status_code: run.status_code,
+            status_text: String::new(),
+            headers: run.response_headers.clone(),
+            size: body.len() as u64,
+            body,
+            duration_ms: run.duration_ms,
         }
     }
 }
 
 pub struct RepeaterState {
-    pub tabs: Vec<RepeaterTabState>,
-    pub active: usize,
+    pub tabs: Vec<RepeaterTab>,
+    pub active_id: Option<String>,
+    pub search: String,
+    pub editor_tab: EditorTab,
+    pub response_pane: PaneState,
+    pub split: f32,
+    pub history_open: bool,
+    pub responses: HashMap<String, ShownResponse>,
+    pub executing: HashSet<String>,
+    pub history: HashMap<String, Vec<RepeaterHistoryItem>>,
+    dirty: HashSet<String>,
+    last_edit: f64,
 }
 
 impl Default for RepeaterState {
     fn default() -> Self {
         Self {
-            tabs: vec![RepeaterTabState::default()],
-            active: 0,
+            tabs: Vec::new(),
+            active_id: None,
+            search: String::new(),
+            editor_tab: EditorTab::Body,
+            response_pane: PaneState::default(),
+            split: 0.5,
+            history_open: false,
+            responses: HashMap::new(),
+            executing: HashSet::new(),
+            history: HashMap::new(),
+            dirty: HashSet::new(),
+            last_edit: 0.0,
         }
     }
 }
 
 impl RepeaterState {
-    pub fn open(&mut self, draft: RequestDraft) {
-        self.tabs.push(RepeaterTabState::from_draft(draft));
-        self.active = self.tabs.len() - 1;
+    pub fn load(&mut self, db_path: &PathBuf) {
+        self.tabs = core_repeater::get_repeater_tabs_db(db_path).unwrap_or_default();
+        if let Some(first) = self.tabs.first().map(|t| t.id.clone()) {
+            self.select(first, db_path);
+        }
     }
 
-    pub fn apply_result(&mut self, tab_id: &str, result: Result<SentRequest, String>) {
-        let Some(tab) = self.tabs.iter_mut().find(|t| t.id == tab_id) else {
-            return;
-        };
-        tab.is_loading = false;
-        match result {
-            Ok(r) => {
-                tab.last_result = Some(r);
-                tab.error = None;
-            }
-            Err(e) => {
-                tab.error = Some(e);
-                tab.last_result = None;
+    pub fn select(&mut self, id: String, db_path: &PathBuf) {
+        self.reload_history(&id, db_path);
+        self.active_id = Some(id);
+    }
+
+    pub fn mark_dirty(&mut self, id: &str, now: f64) {
+        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+            tab.updated_at_ms = chrono::Utc::now().timestamp_millis();
+        }
+        self.dirty.insert(id.to_string());
+        self.last_edit = now;
+    }
+
+    pub fn flush_if_idle(&mut self, db_path: &PathBuf, now: f64) {
+        if !self.dirty.is_empty() && now - self.last_edit >= SAVE_DELAY_SECS {
+            self.flush(db_path);
+        }
+    }
+
+    pub fn flush(&mut self, db_path: &PathBuf) {
+        for id in std::mem::take(&mut self.dirty) {
+            if let Some(tab) = self.tabs.iter().find(|t| t.id == id) {
+                let _ = core_repeater::update_repeater_tab_db(db_path, tab);
             }
         }
+    }
+
+    pub fn create(&mut self, tab: RepeaterTab, db_path: &PathBuf) -> String {
+        let _ = core_repeater::create_repeater_tab_db(db_path, &tab);
+        let id = tab.id.clone();
+        self.tabs.insert(0, tab);
+        self.search.clear();
+        self.select(id.clone(), db_path);
+        id
+    }
+
+    pub fn create_blank(&mut self, db_path: &PathBuf) {
+        let tab = blank_tab(db_path);
+        self.create(tab, db_path);
+    }
+
+    /// Captured flow becomes a new tab whose first run is the captured exchange.
+    pub fn create_from_flow(&mut self, flow: &HistoryEntry, detail: Option<&HistoryDetail>, db_path: &PathBuf) {
+        let request_headers = detail.map_or(&flow.request_headers, |d| &d.request_headers);
+        let request_body = detail.map_or(&flow.request_body, |d| &d.request_body);
+        let response_headers = detail.map_or(&flow.response_headers, |d| &d.response_headers);
+        let response_body = detail.map_or(&flow.response_body, |d| &d.response_body);
+
+        let content_type = request_headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+            .map_or("", |(_, v)| v.as_str());
+        let (body_type, body_content) = structured_from_capture(content_type, request_body);
+        let headers = header_items(request_headers);
+
+        let mut tab = blank_tab(db_path);
+        tab.method = flow.method.clone();
+        tab.url = flow.url.clone();
+        tab.params = parse_query(&flow.url, &[]);
+        tab.headers = headers.clone();
+        tab.body_type = body_type;
+        tab.body_content = Some(body_content.clone());
+        let id = self.create(tab, db_path);
+
+        let run = RepeaterHistoryItem {
+            id: 0,
+            repeater_id: id.clone(),
+            method: flow.method.clone(),
+            url: flow.url.clone(),
+            request_headers: headers,
+            request_body: Some(body_content),
+            status_code: flow.status_code,
+            response_headers: header_items(response_headers),
+            response_body: Some(response_body.clone()),
+            duration_ms: flow.duration_ms.unwrap_or(0),
+            executed_at_ms: chrono::Utc::now().timestamp_millis(),
+        };
+        if let Ok(history_id) = core_repeater::insert_repeater_history_db(db_path, &run) {
+            self.responses.insert(id.clone(), ShownResponse::from_run(&RepeaterHistoryItem { id: history_id, ..run }));
+        }
+        self.after_run(&id, db_path);
+    }
+
+    pub fn create_from_draft(&mut self, draft: RequestDraft, db_path: &PathBuf) {
+        let mut tab = blank_tab(db_path);
+        tab.params = parse_query(&draft.url, &[]);
+        tab.method = draft.method;
+        tab.url = draft.url;
+        tab.headers = header_items(&parse_header_lines(&draft.headers));
+        if !draft.body.is_empty() {
+            tab.body_type = "raw".to_string();
+            tab.body_content = Some(draft.body);
+        }
+        self.create(tab, db_path);
+    }
+
+    pub fn delete(&mut self, id: &str, db_path: &PathBuf) {
+        let _ = core_repeater::delete_repeater_tab_db(db_path, id);
+        self.tabs.retain(|t| t.id != id);
+        for tab in &mut self.tabs {
+            let before = tab.pre_requests.len() + tab.post_requests.len();
+            tab.pre_requests.retain(|step| step != id);
+            tab.post_requests.retain(|step| step != id);
+            if tab.pre_requests.len() + tab.post_requests.len() != before {
+                self.dirty.insert(tab.id.clone());
+            }
+        }
+        self.responses.remove(id);
+        self.history.remove(id);
+        self.dirty.remove(id);
+        if self.active_id.as_deref() == Some(id) {
+            self.active_id = None;
+            if let Some(next) = self.tabs.first().map(|t| t.id.clone()) {
+                self.select(next, db_path);
+            }
+        }
+    }
+
+    pub fn reload_history(&mut self, id: &str, db_path: &PathBuf) {
+        let runs = core_repeater::get_repeater_history_db(db_path, id, 1, 100).unwrap_or_default();
+        self.history.insert(id.to_string(), runs);
+    }
+
+    /// Refresh run history and the hit/last-status stats after a send.
+    pub fn after_run(&mut self, id: &str, db_path: &PathBuf) {
+        self.reload_history(id, db_path);
+        let Ok(stored) = core_repeater::get_repeater_tab_by_id(db_path, id) else { return };
+        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+            tab.execution_count = stored.execution_count;
+            tab.last_status_code = stored.last_status_code;
+            tab.last_duration_ms = stored.last_duration_ms;
+        }
+    }
+
+    pub fn finish_run(&mut self, id: &str, result: Result<RepeaterExecutionResult, String>, db_path: &PathBuf) {
+        self.executing.remove(id);
+        let shown = match result {
+            Ok(result) => ShownResponse::from_result(result),
+            Err(error) => ShownResponse {
+                history_id: 0,
+                status_code: 0,
+                status_text: "Request failed".to_string(),
+                headers: Vec::new(),
+                size: error.len() as u64,
+                body: error,
+                duration_ms: 0,
+            },
+        };
+        self.responses.insert(id.to_string(), shown);
+        self.after_run(id, db_path);
+    }
+
+    pub fn show_run(&mut self, tab_id: &str, run_id: i64) {
+        if let Some(run) = self.history.get(tab_id).and_then(|runs| runs.iter().find(|r| r.id == run_id)) {
+            self.responses.insert(tab_id.to_string(), ShownResponse::from_run(run));
+        }
+    }
+
+    pub fn load_run(&mut self, tab_id: &str, run_id: i64, now: f64) {
+        let Some(run) = self.history.get(tab_id).and_then(|runs| runs.iter().find(|r| r.id() == run_id)).cloned() else {
+            return;
+        };
+        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == tab_id) {
+            tab.params = parse_query(&run.url, &tab.params);
+            tab.method = run.method.clone();
+            tab.url = run.url.clone();
+            tab.headers = run.request_headers.clone();
+            tab.body_content = run.request_body.clone();
+        }
+        self.responses.insert(tab_id.to_string(), ShownResponse::from_run(&run));
+        self.mark_dirty(tab_id, now);
+    }
+}
+
+fn header_items(headers: &[(String, String)]) -> Vec<HeaderItem> {
+    headers
+        .iter()
+        .map(|(key, value)| HeaderItem { id: new_id(), key: key.clone(), value: value.clone(), enabled: true })
+        .collect()
+}
+
+fn header(key: &str, value: &str, enabled: bool) -> HeaderItem {
+    HeaderItem { id: new_id(), key: key.to_string(), value: value.to_string(), enabled }
+}
+
+fn blank_tab(db_path: &PathBuf) -> RepeaterTab {
+    let now = chrono::Utc::now().timestamp_millis();
+    RepeaterTab {
+        id: new_id(),
+        method: "GET".to_string(),
+        url: "https://httpbin.org/get".to_string(),
+        headers: vec![
+            header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36", true),
+            header("Accept", "*/*", true),
+            header("Accept-Language", "en-US,en;q=0.9", true),
+            header("Accept-Encoding", "gzip, deflate, br, zstd", true),
+            header("Connection", "keep-alive", true),
+            header("Sec-Fetch-Dest", "empty", true),
+            header("Sec-Fetch-Mode", "cors", true),
+            header("Sec-Fetch-Site", "same-site", true),
+            header("Content-Type", "application/json", false),
+        ],
+        params: Vec::new(),
+        body_type: "none".to_string(),
+        body_content: Some(String::new()),
+        extract_rules: Vec::new(),
+        pre_requests: Vec::new(),
+        post_requests: Vec::new(),
+        order_index: core_repeater::top_order_index_db(db_path).unwrap_or(0),
+        created_at_ms: now,
+        updated_at_ms: now,
+        execution_count: 0,
+        last_status_code: None,
+        last_duration_ms: None,
     }
 }

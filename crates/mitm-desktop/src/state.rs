@@ -25,6 +25,7 @@ impl AppState {
     pub fn load(db_path: &PathBuf) -> Self {
         let mut state = Self::default();
         state.traffic.load_from_db(db_path);
+        state.repeater.load(db_path);
         if let Ok(rules) = mitm_core::db::load_intercept_rules(db_path) {
             state.intercept.rules = rules;
         }

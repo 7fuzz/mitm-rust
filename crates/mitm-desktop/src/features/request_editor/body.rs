@@ -12,14 +12,6 @@ pub const REPEATER_BODY_TYPES: [(&str, &str); 6] = [
     ("binary", "Binary"),
 ];
 
-pub const COLLECTION_BODY_TYPES: [(&str, &str); 5] = [
-    ("none", "none"),
-    ("json", "json"),
-    ("raw", "raw"),
-    ("form-data", "form-data"),
-    ("urlencoded", "x-www-form-urlencoded"),
-];
-
 const BINARY_PREFIX: &str = "base64:";
 
 pub fn is_urlencoded(body_type: &str) -> bool {

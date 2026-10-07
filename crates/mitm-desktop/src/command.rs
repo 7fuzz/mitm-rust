@@ -1,13 +1,11 @@
 use mitm_core::db::InterceptRule;
 use mitm_core::fuzzer::FuzzTemplate;
-use mitm_core::repeater::RepeaterTab;
 use mitm_core::state::{HistorySettings, ListenerConfig};
 use crate::dock::Tab;
 use crate::format::CopyFormat;
 
 #[derive(Debug, Clone, Default)]
 pub struct RequestDraft {
-    pub name: String,
     pub method: String,
     pub url: String,
     pub headers: String,
@@ -29,7 +27,10 @@ pub enum AppCommand {
     SendFlowToFuzzer(i64),
 
     OpenInRepeater(RequestDraft),
-    SendRepeaterRequest { tab_id: String, request: RepeaterTab },
+    RepeaterNew,
+    RepeaterSelect(String),
+    RepeaterDelete(String),
+    RepeaterSend(String),
     StartFuzzer { template: FuzzTemplate, payloads: Vec<String>, concurrency: usize },
 
     ForwardIntercept {

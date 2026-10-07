@@ -72,7 +72,6 @@ fn request_draft(req: RequestItem) -> RequestDraft {
         .join("\n");
 
     RequestDraft {
-        name: req.name,
         method: req.method,
         url: req.url,
         headers,

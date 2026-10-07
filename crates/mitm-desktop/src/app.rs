@@ -120,8 +120,9 @@ impl MitmApp {
                 dock::open_tab(&mut self.dock, Tab::Intercept);
             }
             AppCommand::SendFlowToRepeater(id) => {
-                if let Some(draft) = self.flow_draft(id) {
-                    self.state.repeater.open(draft);
+                if let Some(flow) = self.state.traffic.flow(id).cloned() {
+                    let detail = mitm_core::db::get_history_detail(db_path, id).ok().flatten();
+                    self.state.repeater.create_from_flow(&flow, detail.as_ref(), db_path);
                     dock::open_tab(&mut self.dock, Tab::Repeater);
                 }
             }
@@ -133,11 +134,19 @@ impl MitmApp {
             }
 
             AppCommand::OpenInRepeater(draft) => {
-                self.state.repeater.open(draft);
+                self.state.repeater.create_from_draft(draft, db_path);
                 dock::open_tab(&mut self.dock, Tab::Repeater);
             }
-            AppCommand::SendRepeaterRequest { tab_id, request } => {
-                self.repeater_worker.send(&self.rt, ctx, tab_id, request);
+            AppCommand::RepeaterNew => self.state.repeater.create_blank(db_path),
+            AppCommand::RepeaterSelect(id) => self.state.repeater.select(id, db_path),
+            AppCommand::RepeaterDelete(id) => self.state.repeater.delete(&id, db_path),
+            AppCommand::RepeaterSend(id) => {
+                let repeater = &mut self.state.repeater;
+                repeater.flush(db_path);
+                if let Some(tab) = repeater.tabs.iter().find(|t| t.id == id).cloned() {
+                    repeater.executing.insert(id);
+                    self.repeater_worker.send(&self.rt, ctx, db_path.clone(), tab);
+                }
             }
             AppCommand::StartFuzzer { template, payloads, concurrency } => {
                 self.fuzzer_worker.start(&self.rt, ctx, template, payloads, concurrency);
@@ -178,7 +187,6 @@ impl MitmApp {
             None => (&flow.request_headers, &flow.request_body),
         };
         Some(RequestDraft {
-            name: format!("{} {}", flow.method, flow.path.chars().take(20).collect::<String>()),
             method: flow.method.clone(),
             url: flow.url.clone(),
             headers: headers_to_text(headers),
@@ -217,11 +225,17 @@ impl MitmApp {
 }
 
 impl eframe::App for MitmApp {
+    fn on_exit(&mut self) {
+        self.state.repeater.flush(&self.core.db_path);
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         while let Ok(event) = self.core_events.try_recv() {
             self.apply_core_event(event);
         }
-        self.repeater_worker.poll(&mut self.state.repeater);
+        let now = ui.input(|i| i.time);
+        self.repeater_worker.poll(&mut self.state.repeater, &self.core.db_path);
+        self.state.repeater.flush_if_idle(&self.core.db_path, now);
         self.fuzzer_worker.poll(&mut self.state.fuzzer);
 
         egui::Panel::top("top_panel").show(ui, |ui| {
