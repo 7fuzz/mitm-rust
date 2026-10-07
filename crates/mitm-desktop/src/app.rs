@@ -2,6 +2,7 @@ use std::sync::Arc;
 use crossbeam_channel::Receiver;
 use eframe::egui;
 use egui_dock::{DockArea, DockState};
+use mitm_core::db::InterceptRule;
 use mitm_core::events::CoreEvent;
 use mitm_core::state::ListenerConfig;
 use mitm_core::MitmCore;
@@ -10,7 +11,7 @@ use crate::command::{AppCommand, Commands, RequestDraft};
 use crate::dock::{self, Tab, TabViewer};
 use crate::features::fuzzer::FuzzerWorker;
 use crate::features::repeater::RepeaterWorker;
-use crate::format::{curl_command, headers_to_text};
+use crate::format::{flow_copy_text, headers_to_text};
 use crate::state::AppState;
 use crate::top_bar;
 
@@ -35,6 +36,7 @@ impl MitmApp {
 
         let mut state = AppState::load(&core.db_path);
         state.proxy.listeners = rt.block_on(core.get_listener_configs());
+        state.traffic.set_history_limit(rt.block_on(core.get_history_settings()));
         state.proxy.set_started(rt.block_on(core.start_all_listeners()));
 
         Self {
@@ -81,11 +83,41 @@ impl MitmApp {
                 let _ = self.core.clear_all_traffic();
                 self.state.traffic.clear();
             }
-            AppCommand::CopyFlowAsCurl(id) => {
+            AppCommand::DeleteFlow(id) => {
+                let _ = mitm_core::db::delete_history_entry(db_path, id);
+                self.state.traffic.remove(id);
+            }
+            AppCommand::CopyFlow(id, format) => {
                 if let Some(flow) = self.state.traffic.flow(id) {
                     let detail = mitm_core::db::get_history_detail(db_path, id).ok().flatten();
-                    ctx.copy_text(curl_command(flow, detail.as_ref()));
+                    ctx.copy_text(flow_copy_text(flow, detail.as_ref(), format));
                 }
+            }
+            AppCommand::SetHistoryLimit(settings) => {
+                if self.rt.block_on(self.core.set_history_settings(settings.clone())).is_ok() {
+                    self.state.traffic.set_history_limit(settings);
+                    self.state.traffic.load_from_db(db_path);
+                }
+            }
+            AppCommand::AddInterceptRuleForHost(host) => {
+                let rules = &mut self.state.intercept.rules;
+                rules.push(InterceptRule {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    is_enabled: true,
+                    target_phase: "request".to_string(),
+                    match_field: "host".to_string(),
+                    operator: "equals".to_string(),
+                    match_value: host,
+                    order_index: rules.len() as i32,
+                    created_at_ms: chrono::Utc::now().timestamp_millis(),
+                    action: "intercept".to_string(),
+                });
+                let rules = rules.clone();
+                let core = Arc::clone(&self.core);
+                self.rt.spawn(async move {
+                    let _ = core.update_intercept_rules(rules).await;
+                });
+                dock::open_tab(&mut self.dock, Tab::Intercept);
             }
             AppCommand::SendFlowToRepeater(id) => {
                 if let Some(draft) = self.flow_draft(id) {

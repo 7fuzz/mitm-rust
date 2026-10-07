@@ -1,15 +1,59 @@
-mod view;
+mod columns;
+mod table;
+mod toolbar;
 
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
-use mitm_core::state::{HistoryDetail, HistoryEntry, ListenerConfig};
+use mitm_core::state::{HistoryDetail, HistoryEntry, HistorySettings};
 use crate::widgets::tri_state::TriState;
 
-pub use view::show;
+pub use columns::ColumnId;
 
-pub const METHODS: [&str; 7] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"];
-pub const STATUS_GROUPS: [&str; 5] = ["2xx", "3xx", "4xx", "5xx", "ERR"];
-const ALL_SOURCES: &str = "ALL";
+pub const METHODS: [&str; 6] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"];
+pub const STATUS_GROUPS: [&str; 4] = ["2xx", "3xx", "4xx", "5xx"];
+pub const FLAGS: [(&str, &str); 4] = [
+    ("waiting", "Waiting"),
+    ("intercepted", "Intercepted"),
+    ("rewritten", "Rewritten"),
+    ("failed", "Failed"),
+];
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FlowFlags {
+    pub pending_response: bool,
+    pub pending_intercept: bool,
+    pub failed: bool,
+    pub intercepted: bool,
+    pub rewritten: bool,
+}
+
+impl FlowFlags {
+    pub fn of(flow: &HistoryEntry) -> Self {
+        let pending_response = flow.phase == "request";
+        let pending_intercept = matches!(flow.phase.as_str(), "intercepted_request" | "intercepted_response");
+        Self {
+            pending_response,
+            pending_intercept,
+            failed: flow.is_failed && !pending_response && !pending_intercept,
+            intercepted: flow.is_intercepted && !pending_intercept,
+            rewritten: flow.is_rewritten,
+        }
+    }
+
+    pub fn is_pending(&self) -> bool {
+        self.pending_response || self.pending_intercept
+    }
+
+    fn matches(&self, flag: &str) -> bool {
+        match flag {
+            "waiting" => self.pending_response,
+            "intercepted" => self.intercepted || self.pending_intercept,
+            "rewritten" => self.rewritten,
+            "failed" => self.failed,
+            _ => false,
+        }
+    }
+}
 
 pub struct TrafficState {
     pub flows: VecDeque<HistoryEntry>,
@@ -17,10 +61,14 @@ pub struct TrafficState {
     pub selected_id: Option<i64>,
     pub selected_detail: Option<HistoryDetail>,
     pub search_query: String,
-    pub source_filter: String,
+    pub filters_open: bool,
+    pub source_filter: Option<String>,
     pub method_filters: HashMap<String, TriState>,
     pub status_filters: HashMap<String, TriState>,
-    pub auto_scroll: bool,
+    pub flag_filters: HashMap<String, TriState>,
+    pub hidden_columns: Vec<ColumnId>,
+    pub history_limit: HistorySettings,
+    pub limit_draft: HistorySettings,
 }
 
 impl Default for TrafficState {
@@ -31,10 +79,14 @@ impl Default for TrafficState {
             selected_id: None,
             selected_detail: None,
             search_query: String::new(),
-            source_filter: ALL_SOURCES.to_string(),
-            method_filters: METHODS.iter().map(|m| (m.to_string(), TriState::Neutral)).collect(),
-            status_filters: STATUS_GROUPS.iter().map(|s| (s.to_string(), TriState::Neutral)).collect(),
-            auto_scroll: true,
+            filters_open: false,
+            source_filter: None,
+            method_filters: neutral_filters(METHODS),
+            status_filters: neutral_filters(STATUS_GROUPS),
+            flag_filters: neutral_filters(FLAGS.map(|(key, _)| key)),
+            hidden_columns: Vec::new(),
+            history_limit: HistorySettings::default(),
+            limit_draft: HistorySettings::default(),
         }
     }
 }
@@ -44,6 +96,11 @@ impl TrafficState {
         if let Ok(entries) = mitm_core::db::get_history_logs(db_path, 500, 0, None, None, None, false) {
             self.flows = entries.into();
         }
+    }
+
+    pub fn set_history_limit(&mut self, settings: HistorySettings) {
+        self.limit_draft = settings.clone();
+        self.history_limit = settings;
     }
 
     pub fn upsert(&mut self, entry: HistoryEntry) {
@@ -83,6 +140,14 @@ impl TrafficState {
         }
     }
 
+    pub fn remove(&mut self, id: i64) {
+        self.flows.retain(|f| f.id != id);
+        if self.selected_id == Some(id) {
+            self.selected_id = None;
+            self.selected_detail = None;
+        }
+    }
+
     pub fn clear(&mut self) {
         self.flows.clear();
         self.selected_id = None;
@@ -108,43 +173,31 @@ impl TrafficState {
         self.selected_id.and_then(|id| self.flow(id))
     }
 
-    pub fn has_active_filters(&self) -> bool {
-        self.source_filter != ALL_SOURCES
-            || self.method_filters.values().any(|&v| v != TriState::Neutral)
-            || self.status_filters.values().any(|&v| v != TriState::Neutral)
+    pub fn active_filter_count(&self) -> usize {
+        let count = |filters: &HashMap<String, TriState>| filters.values().filter(|&&v| v != TriState::Neutral).count();
+        count(&self.method_filters)
+            + count(&self.status_filters)
+            + count(&self.flag_filters)
+            + usize::from(self.source_filter.is_some())
     }
 
     pub fn reset_filters(&mut self) {
-        self.search_query.clear();
-        self.source_filter = ALL_SOURCES.to_string();
-        self.method_filters.values_mut().for_each(|v| *v = TriState::Neutral);
-        self.status_filters.values_mut().for_each(|v| *v = TriState::Neutral);
-    }
-
-    pub fn source_labels(&self, listeners: &[ListenerConfig]) -> Vec<String> {
-        let from_listeners = listeners.iter().map(|l| &l.label);
-        let from_flows = self.flows.iter().map(|f| &f.listener_label);
-        from_listeners
-            .chain(from_flows)
-            .filter(|l| !l.is_empty())
-            .cloned()
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect()
+        self.source_filter = None;
+        for filters in [&mut self.method_filters, &mut self.status_filters, &mut self.flag_filters] {
+            filters.values_mut().for_each(|v| *v = TriState::Neutral);
+        }
     }
 
     pub fn filtered_indices(&self) -> Vec<usize> {
         let search = self.search_query.trim().to_lowercase();
-        let has_included_methods = self.method_filters.values().any(|&s| s == TriState::Include);
-        let has_included_status = self.status_filters.values().any(|&s| s == TriState::Include);
-
         self.flows
             .iter()
             .enumerate()
             .filter(|(_, flow)| {
                 self.matches_source(flow)
-                    && passes_tri_state(&self.method_filters, &flow.method.to_uppercase(), has_included_methods)
-                    && passes_tri_state(&self.status_filters, status_group(flow.status_code), has_included_status)
+                    && passes_tri_state(&self.method_filters, Some(&flow.method.to_uppercase()))
+                    && passes_tri_state(&self.status_filters, status_group(flow.status_code))
+                    && self.passes_flags(FlowFlags::of(flow))
                     && matches_search(flow, &search)
             })
             .map(|(idx, _)| idx)
@@ -152,31 +205,67 @@ impl TrafficState {
     }
 
     fn matches_source(&self, flow: &HistoryEntry) -> bool {
-        let filter = self.source_filter.trim();
-        if filter == ALL_SOURCES || filter.is_empty() {
+        let Some(filter) = &self.source_filter else {
             return true;
-        }
-        let label = if flow.listener_label.is_empty() { "default" } else { &flow.listener_label };
+        };
+        let label = if flow.listener_label.is_empty() { "Default" } else { &flow.listener_label };
         label.eq_ignore_ascii_case(filter)
     }
+
+    fn passes_flags(&self, flags: FlowFlags) -> bool {
+        let state_of = |flag: &str| self.flag_filters.get(flag).copied().unwrap_or_default();
+        let mut has_include = false;
+        let mut matches_include = false;
+        for (flag, _) in FLAGS {
+            match state_of(flag) {
+                TriState::Exclude if flags.matches(flag) => return false,
+                TriState::Include => {
+                    has_include = true;
+                    matches_include |= flags.matches(flag);
+                }
+                _ => {}
+            }
+        }
+        !has_include || matches_include
+    }
+}
+
+pub fn flow_status_badge(ui: &mut eframe::egui::Ui, code: u16, flags: &FlowFlags) {
+    use crate::widgets::pills::{badge, render_status_pill, AMBER, ROSE};
+    if flags.pending_intercept {
+        badge(ui, "PAUSED", AMBER);
+    } else if flags.pending_response {
+        badge(ui, "WAITING", ROSE);
+    } else if code == 0 {
+        badge(ui, "FAIL", ROSE);
+    } else if flags.failed {
+        badge(ui, &format!("{} (ERR)", code), ROSE);
+    } else {
+        render_status_pill(ui, code);
+    }
+}
+
+fn neutral_filters<const N: usize>(keys: [&str; N]) -> HashMap<String, TriState> {
+    keys.iter().map(|k| (k.to_string(), TriState::Neutral)).collect()
 }
 
 fn load_detail(db_path: &PathBuf, id: i64) -> Option<HistoryDetail> {
     mitm_core::db::get_history_detail(db_path, id).ok().flatten()
 }
 
-fn status_group(code: u16) -> &'static str {
+fn status_group(code: u16) -> Option<&'static str> {
     match code {
-        200..=299 => "2xx",
-        300..=399 => "3xx",
-        400..=499 => "4xx",
-        500..=599 => "5xx",
-        _ => "ERR",
+        200..=299 => Some("2xx"),
+        300..=399 => Some("3xx"),
+        400..=499 => Some("4xx"),
+        500.. => Some("5xx"),
+        _ => None,
     }
 }
 
-fn passes_tri_state(filters: &HashMap<String, TriState>, key: &str, has_includes: bool) -> bool {
-    match filters.get(key).copied().unwrap_or_default() {
+fn passes_tri_state(filters: &HashMap<String, TriState>, key: Option<&str>) -> bool {
+    let has_includes = filters.values().any(|&s| s == TriState::Include);
+    match key.and_then(|k| filters.get(k)).copied().unwrap_or_default() {
         TriState::Exclude => false,
         TriState::Include => true,
         TriState::Neutral => !has_includes,
@@ -187,7 +276,20 @@ fn matches_search(flow: &HistoryEntry, search: &str) -> bool {
     if search.is_empty() {
         return true;
     }
-    [&flow.url, &flow.host, &flow.path, &flow.method, &flow.content_type, &flow.listener_label]
-        .iter()
-        .any(|field| field.to_lowercase().contains(search))
+    flow.status_code.to_string().contains(search)
+        || [&flow.url, &flow.host, &flow.path, &flow.method, &flow.content_type, &flow.listener_label]
+            .iter()
+            .any(|field| field.to_lowercase().contains(search))
+}
+
+pub fn show(
+    ui: &mut eframe::egui::Ui,
+    state: &mut TrafficState,
+    listeners: &[mitm_core::state::ListenerConfig],
+    cmds: &mut crate::command::Commands,
+) {
+    let visible = state.filtered_indices();
+    toolbar::show(ui, state, listeners, visible.len(), cmds);
+    ui.separator();
+    table::show(ui, state, &visible, cmds);
 }

@@ -1,8 +1,9 @@
 use mitm_core::db::InterceptRule;
 use mitm_core::fuzzer::FuzzTemplate;
 use mitm_core::repeater::RepeaterTab;
-use mitm_core::state::ListenerConfig;
+use mitm_core::state::{HistorySettings, ListenerConfig};
 use crate::dock::Tab;
+use crate::format::CopyFormat;
 
 #[derive(Debug, Clone, Default)]
 pub struct RequestDraft {
@@ -20,7 +21,10 @@ pub enum AppCommand {
 
     SelectFlow(i64),
     ClearTraffic,
-    CopyFlowAsCurl(i64),
+    DeleteFlow(i64),
+    CopyFlow(i64, CopyFormat),
+    SetHistoryLimit(HistorySettings),
+    AddInterceptRuleForHost(String),
     SendFlowToRepeater(i64),
     SendFlowToFuzzer(i64),
 
