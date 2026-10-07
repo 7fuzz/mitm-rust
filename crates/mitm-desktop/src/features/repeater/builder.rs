@@ -45,8 +45,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
         if ui.add_enabled(!executing, button).on_hover_text("Ctrl+Enter").clicked() {
             send = true;
         }
-        if ui.selectable_label(state.history_open, "🕘").on_hover_text("Execution history").clicked() {
-            state.history_open = !state.history_open;
+        if ui.selectable_label(state.prefs.history_open, "🕘").on_hover_text("Execution history").clicked() {
+            state.prefs.history_open = !state.prefs.history_open;
         }
     });
     let hotkey = ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Enter));

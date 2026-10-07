@@ -35,9 +35,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
         let label = if executing { "Sending..." } else { "▶ Send" };
         let button = egui::Button::new(RichText::new(label).strong()).fill(ui.visuals().selection.bg_fill);
         send |= ui.add_enabled(!executing, button).on_hover_text("Ctrl+Enter").clicked();
-        let history_hint = if state.history_open { "Hide run history" } else { "Show run history" };
-        if ui.selectable_label(state.history_open, "🕘").on_hover_text(history_hint).clicked() {
-            state.history_open = !state.history_open;
+        let history_hint = if state.prefs.history_open { "Hide run history" } else { "Show run history" };
+        if ui.selectable_label(state.prefs.history_open, "🕘").on_hover_text(history_hint).clicked() {
+            state.prefs.history_open = !state.prefs.history_open;
         }
     });
     let hotkey = ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Enter));

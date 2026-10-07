@@ -294,13 +294,12 @@ pub fn show(
     toolbar::show(ui, state, listeners, visible.len(), cmds);
     ui.separator();
 
-    if !inspector.open || state.selected_flow().is_none() {
+    if !inspector.prefs.open || state.selected_flow().is_none() {
         table::show(ui, state, &visible, cmds);
         return;
     }
-    let mut fraction = inspector.table_fraction;
-    let [mut table_ui, mut inspector_ui] = crate::widgets::split::stacked(ui, "traffic_inspector_split", &mut fraction);
-    inspector.table_fraction = fraction;
+    let [mut table_ui, mut inspector_ui] =
+        crate::widgets::split::stacked(ui, "traffic_inspector_split", &mut inspector.prefs.table_fraction);
     table::show(&mut table_ui, state, &visible, cmds);
     crate::features::inspector::show(&mut inspector_ui, inspector, state);
 }

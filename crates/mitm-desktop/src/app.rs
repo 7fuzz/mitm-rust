@@ -83,7 +83,7 @@ impl MitmApp {
 
             AppCommand::SelectFlow(id) => {
                 self.state.traffic.select(id, db_path);
-                self.state.inspector.open = true;
+                self.state.inspector.prefs.open = true;
             }
             AppCommand::ClearTraffic => {
                 let _ = self.core.clear_all_traffic();

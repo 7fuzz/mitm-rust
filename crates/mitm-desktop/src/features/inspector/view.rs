@@ -13,7 +13,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficStat
     let detail = traffic.selected_detail.as_ref().filter(|d| d.id == flow.id);
     let flags = FlowFlags::of(flow);
 
-    summary(ui, flow, &flags, &mut state.open);
+    summary(ui, flow, &flags, &mut state.prefs.open);
     url_bar(ui, &flow.url);
     ui.separator();
 
@@ -38,9 +38,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficStat
         cookies: Some(response_cookies(response_headers)),
     };
 
-    let mut fraction = state.split;
-    let [mut request_ui, mut response_ui] = split::side_by_side(ui, "inspector_split", &mut fraction);
-    state.split = fraction;
+    let [mut request_ui, mut response_ui] = split::side_by_side(ui, "inspector_split", &mut state.prefs.split);
     pane::show(&mut request_ui, "inspector_request", &mut state.request, &request);
     pane::show(&mut response_ui, "inspector_response", &mut state.response, &response);
 }

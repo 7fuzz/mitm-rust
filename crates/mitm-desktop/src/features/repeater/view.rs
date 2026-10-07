@@ -28,7 +28,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
         return;
     };
 
-    if state.history_open {
+    if state.prefs.history_open {
         egui::Panel::right("repeater_history")
             .resizable(true)
             .default_size(288.0)
@@ -37,9 +37,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
     }
 
     egui::CentralPanel::no_frame().show(ui, |ui| {
-        let mut fraction = state.split;
-        let [mut request_ui, mut response_ui] = split::side_by_side(ui, "repeater_split", &mut fraction);
-        state.split = fraction;
+        let [mut request_ui, mut response_ui] = split::side_by_side(ui, "repeater_split", &mut state.prefs.split);
         builder::show(&mut request_ui, state, cmds, now);
         response(&mut response_ui, state, &active_id);
     });
@@ -87,7 +85,7 @@ fn history_drawer(ui: &mut egui::Ui, state: &mut RepeaterState, tab_id: &str, no
         ui.label(RichText::new(format!("🕘 Execution History ({})", runs.len())).strong());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.small_button("✖").on_hover_text("Close").clicked() {
-                state.history_open = false;
+                state.prefs.history_open = false;
             }
         });
     });

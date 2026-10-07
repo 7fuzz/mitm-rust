@@ -5,6 +5,7 @@ mod worker;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
 use mitm_core::repeater::{
     self as core_repeater, HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab,
 };
@@ -65,14 +66,26 @@ impl ShownResponse {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RepeaterPrefs {
+    pub split: f32,
+    pub history_open: bool,
+}
+
+impl Default for RepeaterPrefs {
+    fn default() -> Self {
+        Self { split: 0.5, history_open: false }
+    }
+}
+
 pub struct RepeaterState {
+    pub prefs: RepeaterPrefs,
     pub tabs: Vec<RepeaterTab>,
     pub active_id: Option<String>,
     pub search: String,
     pub editor_tab: EditorTab,
     pub response_pane: PaneState,
-    pub split: f32,
-    pub history_open: bool,
     pub responses: HashMap<String, ShownResponse>,
     pub executing: HashSet<String>,
     pub history: HashMap<String, Vec<RepeaterHistoryItem>>,
@@ -83,13 +96,12 @@ pub struct RepeaterState {
 impl Default for RepeaterState {
     fn default() -> Self {
         Self {
+            prefs: RepeaterPrefs::default(),
             tabs: Vec::new(),
             active_id: None,
             search: String::new(),
             editor_tab: EditorTab::Body,
             response_pane: PaneState::default(),
-            split: 0.5,
-            history_open: false,
             responses: HashMap::new(),
             executing: HashSet::new(),
             history: HashMap::new(),

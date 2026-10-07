@@ -1,28 +1,30 @@
 mod view;
 
+use serde::{Deserialize, Serialize};
 use crate::features::request_editor::url_params::decode;
 use crate::widgets::message_pane::PaneState;
 
 pub use view::show;
 
-pub struct InspectorState {
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InspectorPrefs {
     pub open: bool,
     pub table_fraction: f32,
-    pub request: PaneState,
-    pub response: PaneState,
     pub split: f32,
 }
 
-impl Default for InspectorState {
+impl Default for InspectorPrefs {
     fn default() -> Self {
-        Self {
-            open: false,
-            table_fraction: 0.5,
-            request: PaneState::default(),
-            response: PaneState::default(),
-            split: 0.5,
-        }
+        Self { open: false, table_fraction: 0.5, split: 0.5 }
     }
+}
+
+#[derive(Default)]
+pub struct InspectorState {
+    pub prefs: InspectorPrefs,
+    pub request: PaneState,
+    pub response: PaneState,
 }
 
 fn query_params(url: &str) -> Vec<(String, String)> {

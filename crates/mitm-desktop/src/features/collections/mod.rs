@@ -7,6 +7,7 @@ mod worker;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
 use mitm_core::collections::execute::ExecutionResult;
 use mitm_core::collections::preview::{preview_request_db, RequestPreview};
 use mitm_core::collections::{self as core_collections, Collection, CollectionTreeItem, RequestHistoryItem, RequestItem};
@@ -79,7 +80,21 @@ pub enum CollectionsCmd {
     SaveExtractRules { request_id: String, rules: Vec<ExtractRuleItem> },
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CollectionsPrefs {
+    pub split: f32,
+    pub history_open: bool,
+}
+
+impl Default for CollectionsPrefs {
+    fn default() -> Self {
+        Self { split: 0.5, history_open: false }
+    }
+}
+
 pub struct CollectionsState {
+    pub prefs: CollectionsPrefs,
     pub workspaces: Vec<Workspace>,
     pub active_workspace_id: String,
     pub trees: Vec<CollectionTreeItem>,
@@ -98,8 +113,6 @@ pub struct CollectionsState {
     pub latest: HashMap<String, ExecutionResult>,
     pub runs: HashMap<String, Vec<RequestHistoryItem>>,
     pub selected_run: HashMap<String, i64>,
-    pub history_open: bool,
-    pub split: f32,
     pub response_pane: PaneState,
     pub extract_modal: Option<ExtractModal>,
     dirty: HashSet<String>,
@@ -109,6 +122,7 @@ pub struct CollectionsState {
 impl Default for CollectionsState {
     fn default() -> Self {
         Self {
+            prefs: CollectionsPrefs::default(),
             workspaces: Vec::new(),
             active_workspace_id: String::new(),
             trees: Vec::new(),
@@ -127,8 +141,6 @@ impl Default for CollectionsState {
             latest: HashMap::new(),
             runs: HashMap::new(),
             selected_run: HashMap::new(),
-            history_open: false,
-            split: 0.5,
             response_pane: PaneState::default(),
             extract_modal: None,
             dirty: HashSet::new(),
