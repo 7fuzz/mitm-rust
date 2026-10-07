@@ -6,53 +6,57 @@ on:
       - 'v*'
 
 jobs:
-  publish-tauri:
+  publish-native:
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest' # for Arm based macs (M1 and above)
-            args: '--target aarch64-apple-darwin'
-          - platform: 'macos-latest' # for Intel based macs
-            args: '--target x86_64-apple-darwin'
+          - platform: 'macos-latest'
+            target: 'aarch64-apple-darwin'
+            binary_name: 'mitm-desktop'
+            asset_name: 'mitm-desktop-macos-arm64'
+          - platform: 'macos-latest'
+            target: 'x86_64-apple-darwin'
+            binary_name: 'mitm-desktop'
+            asset_name: 'mitm-desktop-macos-x64'
           - platform: 'ubuntu-22.04'
-            args: ''
+            target: 'x86_64-unknown-linux-gnu'
+            binary_name: 'mitm-desktop'
+            asset_name: 'mitm-desktop-linux-x64'
           - platform: 'windows-latest'
-            args: ''
+            target: 'x86_64-pc-windows-msvc'
+            binary_name: 'mitm-desktop.exe'
+            asset_name: 'mitm-desktop-windows-x64.exe'
 
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          # Those targets are only used on macos runners so it's skip on windows and ubuntu.
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.target }}
 
-      - name: install dependencies (ubuntu only)
+      - name: install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
 
-      - name: install frontend dependencies
-        run: npm install
+      - name: build release binary
+        run: cargo build --release --target ${{ matrix.target }} -p mitm-desktop
 
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: package binary
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+          cp ${{ matrix.binary_name }} ../../../${{ matrix.asset_name }}
+
+      - name: upload release asset
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          tagName: v__VERSION__ # the version of the tag to create
-          releaseName: "App v__VERSION__"
-          releaseBody: "See the assets below to download the latest version."
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+          files: ${{ matrix.asset_name }}
+          draft: true

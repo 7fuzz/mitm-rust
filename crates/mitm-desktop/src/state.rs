@@ -145,12 +145,14 @@ pub struct UiState {
     pub workspaces: Vec<mitm_core::workspace::Workspace>,
     pub active_workspace_id: String,
     pub collection_trees: Vec<mitm_core::collections::CollectionTreeItem>,
+    #[allow(dead_code)]
     pub selected_collection_request: Option<mitm_core::collections::RequestItem>,
 
     // WebSocket state
     pub ws_connections: Vec<mitm_core::state::WebSocketConn>,
     pub selected_ws_connection_id: Option<i64>,
     pub ws_messages: Vec<mitm_core::state::WebSocketMessage>,
+    #[allow(dead_code)]
     pub ws_send_payload: String,
     pub ws_filter_direction: String,
 

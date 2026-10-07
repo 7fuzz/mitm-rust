@@ -1,133 +1,90 @@
-# MITM Real - Rust Migration (Tauri & React)
+# MITM Native - Pure Rust Intercepting Proxy & Debugger
 
-A powerful, developer-centric intercepting proxy and debugging dashboard. This version is a migration from the Next.js/Python stack to a unified Rust/Tauri application for easier distribution and performance.
+A high-performance, developer-centric intercepting proxy and security debugging desktop application built in **pure native Rust** using `eframe` (egui) and `tokio`.
 
-## 🚀 Development Setup
+This native version completely eliminates WebKitGTK, DOM, and Node.js dependencies, reducing memory footprint from **350+ MB** to **~35–50 MB RSS** with instantaneous startup.
 
-### 1. Prerequisites
+---
 
-- **Rust**: [Install Rust](https://www.rust-lang.org/tools/install)
-- **Node.js**: [Install Node.js](https://nodejs.org/)
-- **Tauri Dependencies**: Follow the [Tauri Setup Guide](https://tauri.app/v1/guides/getting-started/prerequisites) for your OS.
+## 🚀 Quick Start
 
-### 2. Install Dependencies
+### Prerequisites
 
-```bash
-npm install
-```
-
-### 3. Run in Development
-
-```bash
-npm run tauri dev
-```
-
-### 4. Build for Production (Manual)
-
-```bash
-npm run tauri build
-```
-
-### 5. Automated Releases (CI/CD)
-
-This project uses **GitHub Actions** to automatically build and release the application for Windows, macOS, and Linux.
-
-- **Trigger**: Pushing a tag starting with `v` (e.g., `v1.0.0`).
-- **Process**: The [publish workflow](.github/workflows/release.yml) compiles the app for all platforms and creates a **Draft Release** on GitHub.
-- **How to release**:
+- **Rust**: [Install Rust](https://www.rust-lang.org/tools/install) (1.80+ recommended)
+- **Linux GUI Build Dependencies** (Ubuntu / Debian):
   ```bash
-  # Update version in src-tauri/tauri.conf.json and package.json first
-  git tag v1.0.0
-  git push origin v1.0.0
+  sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
   ```
----
 
-## 🏃 Features & Migration Status
+### Run in Development
 
-### 1. HTTP History (Ported)
+```bash
+cargo run -p mitm-desktop
+```
 
-- [x] Traffic capture in Rust (Custom Hyper/Rustls engine).
-- [x] Real-time update via Tauri Events.
-- [x] Advanced Traffic Filter (Allow/Block rules, multiple patterns).
-- [x] Search and filter UI.
+### Build for Production
 
-### 2. Intercept & Modify (Ported)
+```bash
+cargo build --release -p mitm-desktop
+```
 
-- [x] Request/Response pausing logic in Rust.
-- [x] UI for editing URL, headers, and body.
-- [x] Stage to Repeater logic.
-
-### 3. Repeater (Ported)
-
-- [x] Backend Execution Engine (Rust/Hyper).
-- [x] Multi-value header support (Set-Cookie preservation).
-- [x] Collection management (Groups).
-- [x] Persistent workspace (SQLite via Rust).
-- [x] **Import/Export**: Selectively import projects with environments, variables, and collections (see [IMPORT.md](IMPORT.md)).
-
-### 4. Environments & Variables (Ported)
-
-- [x] Variable storage and variants.
-- [x] Workspace context switching.
-- [ ] Dynamic interpolation engine in Rust.
-
-### 5. Maintenance & UI
-
-- [x] Unified Data Synchronization engine (Atomic bulk fetch).
-- [x] Database maintenance tools (Manual Sync, Integrity check).
-- [x] Standardized Semantic Theme system (Light/Dark support).
+The compiled standalone binary is placed at:
+```bash
+./target/release/mitm-desktop
+```
 
 ---
 
-## 🏗️ Technical Architecture (New)
+## 🏗️ Workspace Architecture
 
-The application follows a modular, backend-heavy architecture designed for high performance and reliable persistence.
+The application is structured as a modular Cargo workspace:
 
-1. **Backend (Rust/Tauri)**:
-    - **Modular Design**: Logic is separated into specialized modules (`repeater`, `workspace`, `proxy`, etc.) for maintainability.
-    - **Proxy Engine**: Custom `Hyper` and `Tokio` based listener handling TLS termination and traffic modification.
-    - **State Management**: Unified synchronization engine that bulk-fetches all application data in a single transaction.
-    - **Persistence**: SQLite database with a robust migration system and an `init_database` safety layer.
-2. **Frontend (React/Vite)**:
-    - **Modern React 19**: Utilizing the latest React features and a centralized theme system.
-    - **Unified IPC**: All communication is handled via Tauri `invoke` commands, completely removing dependency on traditional REST APIs.
-    - **Semantic UI**: Standardized styling using theme-aware CSS variables for consistent light/dark mode support.
-
-## 📁 File Structure
-
-### 🦀 Rust Backend (`src-tauri/src/`)
-
-- **`lib.rs`**: The heart of the app. Handles command registration and lifecycle management.
-- **`db.rs`**: Database engine. Handles SQLite initialization, migrations, and path resolving.
-- **`models.rs`**: Centralized data models. Shared structs and state definitions.
-- **`proxy.rs`**: The intercepting proxy core. Manages traffic flow and TLS.
-- **`repeater.rs`**: Manual request engine. Handles collection CRUD and HTTP execution.
-- **`workspace.rs`**: Management logic for Environments, Variables, and Replacements.
-- **`state.rs`**: Global application state, preferences, and the bulk sync engine.
-- **`history.rs`**: Management of the main traffic history log.
-- **`ca.rs`**: Certificate Authority logic for generating and managing the Root CA.
-
-### ⚛️ React Frontend (`src/`)
-
-- **`hooks/traffic/`**: Encapsulated state logic for each major feature.
-- **`components/View/`**: Main application views (History, Intercept, Repeater, etc.).
-- **`components/ui/`**: Reusable, theme-aware component library.
-- **`index.css`**: Centralized semantic theme definition using CSS variables.
+```text
+├── crates/
+│   ├── mitm-core/          # Headless core proxy & persistence engine
+│   │   ├── ca/             # Dynamic Root CA & host TLS certificate generation (rcgen)
+│   │   ├── db/             # Embedded SQLite database (WAL mode, auto-migrations)
+│   │   ├── proxy/          # Hyper + Rustls proxy with TLS SNI interception
+│   │   ├── repeater/       # Manual HTTP request builder & executor
+│   │   ├── fuzzer/         # Concurrent payload fuzzer engine
+│   │   ├── ws/             # Bidirectional WebSocket proxy pipeline
+│   │   ├── workspace/      # Workspaces, environments, and variable replacement
+│   │   └── events.rs       # Broadcast event bus (CoreEvent)
+│   │
+│   └── mitm-desktop/       # Pure native desktop UI (eframe + egui_dock)
+│       ├── assets/         # App icons and embedded resources
+│       ├── state.rs        # Reactive UI state and event loop bridging
+│       ├── views/          # Modular dockable views:
+│       │   ├── traffic.rs      # Virtualized HTTP traffic table
+│       │   ├── inspector.rs    # Headers, JSON, Raw, Hex dump inspector
+│       │   ├── intercept.rs    # Live request/response breakpoint manager
+│       │   ├── repeater.rs     # Multi-tab request builder
+│       │   ├── fuzzer.rs       # Concurrent fuzzer matrix
+│       │   ├── collections.rs  # Collapsible request tree
+│       │   ├── websockets.rs   # WebSocket session & timeline viewer
+│       │   └── settings.rs     # Proxy & CA certificate settings
+│       └── main.rs         # Desktop application lifecycle & dock layout
+```
 
 ---
 
-## 📝 Developer Patterns & Resources
+## 🏃 Key Features
 
-- **Variable Syntax**: Still uses `{{variable_name}}`.
-- **Persistence**: Using SQLite via Rust for high-performance state management.
-- **Commands**: All major operations are implemented as `#[tauri::command]`.
-- **Import/Export**: See [IMPORT.md](IMPORT.md) for project import documentation.
+- **Blazing Fast Native UI**: Zero WebKit/Blink overhead. Rendered with hardware-accelerated immediate-mode GUI (`egui`).
+- **Live Traffic Monitoring**: Virtualized table supporting high flow volumes with instant search, method, and status filtering.
+- **Deep Flow Inspector**: Request and response tabs with formatted JSON viewer, raw text, and 3-column Hex dump (`Offset | Hex | ASCII`).
+- **Live Interception & Breakpoints**: Pause requests or responses matching configured rules. Modify URLs, headers, or body before forwarding or dropping.
+- **HTTP Repeater**: Multi-tab request construction with header and parameter editing, variable substitution (`{{var}}`), and full response analysis.
+- **Concurrent Fuzzer**: Variable payload injection (`{{marker}}`) with configurable concurrency semaphore and live results matrix.
+- **WebSocket Inspector**: Inspect active and historical WebSocket sessions with message timeline filtering.
+- **Collections & Workspaces**: Organize saved requests hierarchically into collection folders with workspace switching.
+- **SQLite Persistence**: Embedded SQLite storage operating in Write-Ahead Logging (WAL) mode for low-latency traffic streaming.
 
 ---
 
 ## 🔒 SSL Certificate Setup
 
-To intercept HTTPS traffic, the application will generate and manage a Root CA certificate.
-
-1. Trust the certificate generated by the app (Exportable from settings).
-2. Enable full trust for the certificate on your target device.
+To intercept HTTPS traffic:
+1. Export or inspect the Root CA certificate from the **Settings** view.
+2. Install and trust the certificate on your host machine or target mobile device.
+3. Configure your HTTP proxy settings to point to `127.0.0.1:8080` (or your configured port).
