@@ -287,11 +287,13 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &
         .striped(true)
         .resizable(true)
         .auto_shrink([false, false])
-        .column(Column::exact(30.0))
-        .column(Column::initial(180.0).at_least(80.0).clip(true))
+        .column(Column::exact(28.0))
+        .column(Column::exact(28.0))
+        .column(Column::initial(160.0).at_least(80.0).clip(true))
         .column(Column::remainder().at_least(120.0).clip(true))
         .column(Column::exact(28.0))
         .header(22.0, |mut header| {
+            header.col(|ui| { ui.strong(""); });
             header.col(|ui| { ui.strong(""); });
             header.col(|ui| { ui.strong("Key"); });
             header.col(|ui| { ui.strong("Value"); });
@@ -306,6 +308,24 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &
 
                     row.col(|ui| {
                         changed |= ui.checkbox(&mut var.enabled, "").changed();
+                    });
+                    row.col(|ui| {
+                        let is_secret = var.r#type == "secret";
+                        let icon = if is_secret { "🔒" } else { "🔓" };
+                        let tip = if is_secret {
+                            "Secret variable (masked)\nClick to change to plain"
+                        } else {
+                            "Plain text variable\nClick to mask as secret"
+                        };
+                        let btn = if is_secret {
+                            egui::Button::new(RichText::new(icon).color(ui.visuals().warn_fg_color))
+                        } else {
+                            egui::Button::new(RichText::new(icon).weak())
+                        };
+                        if ui.add(btn).on_hover_text(tip).clicked() {
+                            var.r#type = if is_secret { "default".to_string() } else { "secret".to_string() };
+                            changed = true;
+                        }
                     });
                     row.col(|ui| {
                         changed |= ui.add(
@@ -352,6 +372,15 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &
                                 });
                             }
 
+                            let is_secret = var.r#type == "secret";
+                            let mut revealed = false;
+                            if is_secret {
+                                let eye = ui.add(egui::Button::new("👁").sense(egui::Sense::drag()))
+                                    .on_hover_text("Hold to reveal secret");
+                                revealed = eye.is_pointer_button_down_on()
+                                    || (eye.hovered() && ui.input(|i| i.pointer.primary_down()));
+                            }
+
                             let val_mut = if !var.variants.is_empty() {
                                 let idx = var.active_index.min(var.variants.len() - 1);
                                 &mut var.variants[idx].value
@@ -359,11 +388,14 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &
                                 &mut var.value
                             };
 
-                            let resp = ui.add(
-                                egui::TextEdit::singleline(val_mut)
-                                    .hint_text("Value")
-                                    .desired_width(ui.available_width()),
-                            );
+                            let mut edit = egui::TextEdit::singleline(val_mut)
+                                .hint_text("Value")
+                                .desired_width(ui.available_width());
+                            if is_secret && !revealed {
+                                edit = edit.password(true);
+                            }
+
+                            let resp = ui.add(edit);
                             if resp.changed() {
                                 var.value = val_mut.clone();
                                 changed = true;
@@ -409,6 +441,7 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &
                     row.col(|ui| {
                         ui.add_enabled(false, egui::Checkbox::new(&mut true, ""));
                     });
+                    row.col(|_| {});
                     let mut key_changed = false;
                     let mut val_changed = false;
                     row.col(|ui| {
