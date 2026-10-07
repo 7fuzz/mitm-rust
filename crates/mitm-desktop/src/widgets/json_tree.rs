@@ -81,6 +81,9 @@ impl JsonTree {
         let flash_id = ui.id().with((id_salt, "json_tree_copied"));
         ui.horizontal(|ui| {
             ui.checkbox(&mut self.matching_only, "Matching only");
+            if ui.button("Reset view").clicked() {
+                self.reset_view();
+            }
             if let Some(message) = flash::current(ui, flash_id) {
                 ui.label(RichText::new(message).weak());
             }
@@ -120,6 +123,11 @@ impl JsonTree {
             }
         }
         self.hits = Some(hits);
+    }
+
+    fn reset_view(&mut self) {
+        self.collapsed.clear();
+        self.expanded_arrays.clear();
     }
 }
 
@@ -446,6 +454,15 @@ mod tests {
         tree.query = "1".to_string();
         tree.refresh_hits();
         assert!(tree.hits.unwrap().nodes.is_empty());
+    }
+
+    #[test]
+    fn reset_view_returns_to_first_item_only() {
+        let mut tree = JsonTree::new(json!({ "list": [1, 2, 3] }));
+        tree.expanded_arrays.insert("$.list".to_string());
+        tree.collapsed.insert("$".to_string());
+        tree.reset_view();
+        assert!(tree.expanded_arrays.is_empty() && tree.collapsed.is_empty());
     }
 
     #[test]
