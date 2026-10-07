@@ -27,10 +27,14 @@ pub struct MitmCore {
 
 impl MitmCore {
     pub fn init() -> Result<Self, db::InitError> {
+        Self::init_with_events(EventBus::default())
+    }
+
+    /// Like `init`, but on a bus the caller already subscribed to, so migration progress is observable.
+    pub fn init_with_events(event_bus: EventBus) -> Result<Self, db::InitError> {
         let _ = rustls::crypto::ring::default_provider().install_default();
 
         let db_path = db::get_default_db_path();
-        let event_bus = EventBus::default();
 
         db::init_database(&db_path, Some(&event_bus))?;
 
