@@ -34,10 +34,15 @@ impl<T: Send + 'static> Jobs<T> {
     }
 }
 
-#[derive(Clone)]
 pub struct Reply<T> {
     tx: Sender<T>,
     ctx: egui::Context,
+}
+
+impl<T> Clone for Reply<T> {
+    fn clone(&self) -> Self {
+        Self { tx: self.tx.clone(), ctx: self.ctx.clone() }
+    }
 }
 
 impl<T> Reply<T> {

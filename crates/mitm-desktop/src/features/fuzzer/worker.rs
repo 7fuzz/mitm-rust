@@ -1,8 +1,8 @@
 use std::sync::Arc;
-use crossbeam_channel::{Receiver, Sender};
 use eframe::egui;
 use mitm_core::fuzzer::FuzzTemplate;
 use mitm_core::repeater::{HeaderItem, RepeaterTab};
+use crate::jobs::Jobs;
 use super::{FuzzResultRow, FuzzerState};
 
 enum FuzzMsg {
@@ -10,16 +10,9 @@ enum FuzzMsg {
     Done,
 }
 
+#[derive(Default)]
 pub struct FuzzerWorker {
-    tx: Sender<FuzzMsg>,
-    rx: Receiver<FuzzMsg>,
-}
-
-impl Default for FuzzerWorker {
-    fn default() -> Self {
-        let (tx, rx) = crossbeam_channel::unbounded();
-        Self { tx, rx }
-    }
+    jobs: Jobs<FuzzMsg>,
 }
 
 impl FuzzerWorker {
@@ -31,8 +24,7 @@ impl FuzzerWorker {
         payloads: Vec<String>,
         concurrency: usize,
     ) {
-        let tx = self.tx.clone();
-        let ctx = ctx.clone();
+        let reply = self.jobs.reply(ctx);
         rt.spawn(async move {
             let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency));
             let handles: Vec<_> = payloads
@@ -41,13 +33,10 @@ impl FuzzerWorker {
                 .map(|(idx, payload)| {
                     let semaphore = Arc::clone(&semaphore);
                     let template = template.clone();
-                    let tx = tx.clone();
-                    let ctx = ctx.clone();
+                    let reply = reply.clone();
                     tokio::spawn(async move {
                         let _permit = semaphore.acquire().await.ok();
-                        let row = run_payload(&template, idx, payload).await;
-                        let _ = tx.send(FuzzMsg::Result(row));
-                        ctx.request_repaint();
+                        reply.send(FuzzMsg::Result(run_payload(&template, idx, payload).await));
                     })
                 })
                 .collect();
@@ -55,13 +44,12 @@ impl FuzzerWorker {
             for handle in handles {
                 let _ = handle.await;
             }
-            let _ = tx.send(FuzzMsg::Done);
-            ctx.request_repaint();
+            reply.send(FuzzMsg::Done);
         });
     }
 
     pub fn poll(&self, state: &mut FuzzerState) {
-        while let Ok(msg) = self.rx.try_recv() {
+        for msg in self.jobs.drain() {
             match msg {
                 FuzzMsg::Result(row) => {
                     state.progress_completed += 1;
