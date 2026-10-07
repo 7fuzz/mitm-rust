@@ -83,19 +83,70 @@ pub fn hex_dump(bytes: &[u8]) -> String {
     output
 }
 
-pub fn curl_command(flow: &HistoryEntry, detail: Option<&HistoryDetail>) -> String {
-    let mut curl = format!("curl -X {} '{}'", flow.method, flow.url);
-    if let Some(detail) = detail {
-        for (k, v) in &detail.request_headers {
-            if !k.eq_ignore_ascii_case("content-length") {
-                curl.push_str(&format!(" \\\n  -H '{}: {}'", k, v.replace('\'', "'\\''")));
-            }
-        }
-        if !detail.request_body.is_empty() {
-            curl.push_str(&format!(" \\\n  --data-raw '{}'", detail.request_body.replace('\'', "'\\''")));
+/// A request and its response, whatever recorded them (proxy flow, Repeater run, collection run).
+pub struct Exchange {
+    pub method: String,
+    pub url: String,
+    pub request_headers: Vec<(String, String)>,
+    pub request_body: String,
+    pub status_code: u16,
+    pub response_body: String,
+    pub content_type: String,
+}
+
+impl Exchange {
+    pub fn from_flow(flow: &HistoryEntry, detail: Option<&HistoryDetail>) -> Self {
+        Self {
+            method: flow.method.clone(),
+            url: flow.url.clone(),
+            request_headers: detail.map_or(&flow.request_headers, |d| &d.request_headers).clone(),
+            request_body: detail.map_or(&flow.request_body, |d| &d.request_body).clone(),
+            status_code: flow.status_code,
+            response_body: detail.map_or(&flow.response_body, |d| &d.response_body).clone(),
+            content_type: flow.content_type.clone(),
         }
     }
-    curl
+
+    pub fn curl(&self) -> String {
+        let mut curl = format!("curl -X {} '{}'", self.method, self.url);
+        for (k, v) in &self.request_headers {
+            if !k.eq_ignore_ascii_case("content-length") {
+                curl.push_str(&format!(" \\\n  -H '{}: {}'", k, shell_quote(v)));
+            }
+        }
+        if !self.request_body.is_empty() {
+            curl.push_str(&format!(" \\\n  --data-raw '{}'", shell_quote(&self.request_body)));
+        }
+        curl
+    }
+
+    pub fn copy_text(&self, format: CopyFormat) -> String {
+        match format {
+            CopyFormat::Curl => self.curl(),
+            CopyFormat::CurlAndResponse => format!("{}\n\n{}", self.curl(), self.response_section()),
+            CopyFormat::UrlBodyAndResponse => {
+                let mut request = format!("{} {}", self.method, self.url);
+                if !self.request_body.trim().is_empty() {
+                    request.push('\n');
+                    request.push_str(&display_body(&self.request_body, ""));
+                }
+                format!("{}\n\n{}", request, self.response_section())
+            }
+        }
+    }
+
+    fn response_section(&self) -> String {
+        let code = if self.status_code == 0 { 200 } else { self.status_code };
+        if self.response_body.trim().is_empty() {
+            code.to_string()
+        } else {
+            format!("{}\n{}", code, display_body(&self.response_body, &self.content_type))
+        }
+    }
+}
+
+fn shell_quote(text: &str) -> String {
+    text.replace('\'', "'\\''")
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -103,34 +154,6 @@ pub enum CopyFormat {
     Curl,
     CurlAndResponse,
     UrlBodyAndResponse,
-}
-
-pub fn flow_copy_text(flow: &HistoryEntry, detail: Option<&HistoryDetail>, format: CopyFormat) -> String {
-    let request_body = detail.map_or(flow.request_body.as_str(), |d| d.request_body.as_str());
-    let response_body = detail.map_or(flow.response_body.as_str(), |d| d.response_body.as_str());
-    let response = response_section(flow, response_body);
-
-    match format {
-        CopyFormat::Curl => curl_command(flow, detail),
-        CopyFormat::CurlAndResponse => format!("{}\n\n{}", curl_command(flow, detail), response),
-        CopyFormat::UrlBodyAndResponse => {
-            let mut request = format!("{} {}", flow.method, flow.url);
-            if !request_body.trim().is_empty() {
-                request.push('\n');
-                request.push_str(&display_body(request_body, ""));
-            }
-            format!("{}\n\n{}", request, response)
-        }
-    }
-}
-
-fn response_section(flow: &HistoryEntry, body: &str) -> String {
-    let code = if flow.status_code == 0 { 200 } else { flow.status_code };
-    if body.trim().is_empty() {
-        code.to_string()
-    } else {
-        format!("{}\n{}", code, display_body(body, &flow.content_type))
-    }
 }
 
 pub fn display_body(body: &str, content_type: &str) -> String {

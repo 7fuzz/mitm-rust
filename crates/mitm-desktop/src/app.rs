@@ -11,7 +11,7 @@ use crate::command::{AppCommand, Commands, RequestDraft};
 use crate::dock::{self, Tab, TabViewer};
 use crate::features::fuzzer::FuzzerWorker;
 use crate::features::repeater::RepeaterWorker;
-use crate::format::{flow_copy_text, headers_to_text};
+use crate::format::{headers_to_text, Exchange};
 use crate::state::AppState;
 use crate::top_bar;
 
@@ -90,7 +90,7 @@ impl MitmApp {
             AppCommand::CopyFlow(id, format) => {
                 if let Some(flow) = self.state.traffic.flow(id) {
                     let detail = mitm_core::db::get_history_detail(db_path, id).ok().flatten();
-                    ctx.copy_text(flow_copy_text(flow, detail.as_ref(), format));
+                    ctx.copy_text(Exchange::from_flow(flow, detail.as_ref()).copy_text(format));
                 }
             }
             AppCommand::SetHistoryLimit(settings) => {
