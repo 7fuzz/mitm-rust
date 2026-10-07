@@ -94,7 +94,7 @@ fn history_drawer(ui: &mut egui::Ui, state: &mut RepeaterState, tab_id: &str, no
     ui.separator();
 
     let selected = state.responses.get(tab_id).map(|s| s.history_id);
-    match run_list::show(ui, "repeater_runs", runs, selected) {
+    match run_list::show(ui, "repeater_runs", runs, selected, true) {
         Some(RunAction::Select(run_id)) => state.show_run(tab_id, run_id),
         Some(RunAction::Load(run_id)) => state.load_run(tab_id, run_id, now),
         None => {}

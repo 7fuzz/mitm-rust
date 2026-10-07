@@ -70,7 +70,7 @@ pub fn url_path(url: &str) -> &str {
     without_scheme.find('/').map_or("/", |i| &without_scheme[i..])
 }
 
-pub fn show<R: Run>(ui: &mut egui::Ui, id_salt: &str, runs: &[R], selected: Option<i64>) -> Option<RunAction> {
+pub fn show<R: Run>(ui: &mut egui::Ui, id_salt: &str, runs: &[R], selected: Option<i64>, can_load: bool) -> Option<RunAction> {
     if runs.is_empty() {
         ui.add_space(16.0);
         ui.vertical_centered(|ui| ui.label(RichText::new("No runs recorded").weak().italics()));
@@ -116,7 +116,7 @@ pub fn show<R: Run>(ui: &mut egui::Ui, id_salt: &str, runs: &[R], selected: Opti
                     action = Some(RunAction::Select(run.id()));
                     ui.close();
                 }
-                if ui.button("Load into Editor").clicked() {
+                if can_load && ui.button("Load into Editor").clicked() {
                     action = Some(RunAction::Load(run.id()));
                     ui.close();
                 }
