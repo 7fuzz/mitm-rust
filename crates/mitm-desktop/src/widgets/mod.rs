@@ -1,6 +1,7 @@
 pub mod code_view;
 pub mod confirm;
 pub mod flash;
+pub mod json_tree;
 pub mod pills;
 pub mod tri_state;
 pub mod split;

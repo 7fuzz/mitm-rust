@@ -3,6 +3,7 @@ use eframe::egui::{self, Galley, RichText};
 use crate::theme::{self, Tone};
 use crate::format::{body_bytes, display_body, hex_dump};
 use crate::widgets::code_view::{self, Lang};
+use crate::widgets::json_tree::JsonTree;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaneTab {
@@ -15,6 +16,7 @@ pub enum PaneTab {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BodyFormat {
     Pretty,
+    Tree,
     Raw,
     Hex,
 }
@@ -26,6 +28,7 @@ pub struct PaneState {
     pub tab: PaneTab,
     pub format: BodyFormat,
     rendered: Option<(RenderKey, Arc<Galley>)>,
+    tree: Option<((u64, usize), Option<JsonTree>)>,
 }
 
 impl Default for PaneState {
@@ -34,6 +37,7 @@ impl Default for PaneState {
             tab: PaneTab::Body,
             format: BodyFormat::Pretty,
             rendered: None,
+            tree: None,
         }
     }
 }
@@ -49,6 +53,7 @@ pub struct PaneData<'a> {
 }
 
 pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneData) {
+    let is_json = !data.body.is_empty() && code_view::detect(data.content_type, data.body) == Lang::Json;
     ui.horizontal(|ui| {
         if !data.title.is_empty() {
             ui.label(RichText::new(data.title).strong());
@@ -68,10 +73,18 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
                 for (format, label) in [(BodyFormat::Hex, "Hex"), (BodyFormat::Raw, "Raw"), (BodyFormat::Pretty, "Pretty")] {
                     ui.selectable_value(&mut pane.format, format, label);
                 }
+                if is_json {
+                    ui.selectable_value(&mut pane.format, BodyFormat::Tree, "Tree");
+                }
             });
         }
     });
     ui.separator();
+
+    if pane.tab == PaneTab::Body && pane.format == BodyFormat::Tree && is_json {
+        tree(ui, id_salt, pane, data);
+        return;
+    }
 
     egui::ScrollArea::both()
         .id_salt(id_salt)
@@ -102,7 +115,7 @@ fn body(ui: &mut egui::Ui, pane: &mut PaneState, data: &PaneData) {
     );
     if pane.rendered.as_ref().is_none_or(|(cached, _)| *cached != key) {
         let (text, lang) = match pane.format {
-            BodyFormat::Pretty => {
+            BodyFormat::Pretty | BodyFormat::Tree => {
                 let text = display_body(data.body, data.content_type);
                 let lang = code_view::detect(data.content_type, &text);
                 (text, lang)
@@ -115,6 +128,18 @@ fn body(ui: &mut egui::Ui, pane: &mut PaneState, data: &PaneData) {
     }
     if let Some((_, galley)) = &pane.rendered {
         ui.add(egui::Label::new(galley.clone()));
+    }
+}
+
+fn tree(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneData) {
+    let key = (data.cache_key, data.body.len());
+    if pane.tree.as_ref().is_none_or(|(cached, _)| *cached != key) {
+        let parsed = serde_json::from_str(data.body).ok().map(JsonTree::new);
+        pane.tree = Some((key, parsed));
+    }
+    match pane.tree.as_mut().and_then(|(_, tree)| tree.as_mut()) {
+        Some(tree) => tree.show(ui, id_salt),
+        None => empty(ui, "Not valid JSON"),
     }
 }
 
