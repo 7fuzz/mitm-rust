@@ -4,7 +4,7 @@ use crate::features::traffic::{flow_status_badge, FlowFlags, TrafficState};
 use crate::format::{format_bytes, format_duration};
 use crate::widgets::pills::{badge, render_method_pill, render_source_pill, AMBER, ROSE, SKY};
 use crate::widgets::split;
-use super::pane::{self, PaneData};
+use crate::widgets::message_pane::{self as pane, PaneData};
 use super::{query_params, request_cookies, response_cookies, InspectorState};
 
 pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficState) {
@@ -26,22 +26,22 @@ pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficStat
     let request_headers = detail.map_or(&flow.request_headers, |d| &d.request_headers);
     let response_headers = detail.map_or(&flow.response_headers, |d| &d.response_headers);
     let request = PaneData {
-        flow_id: flow.id,
+        cache_key: flow.id as u64,
         title: "Request",
         headers: request_headers,
         body: detail.map_or(&flow.request_body, |d| &d.request_body),
         content_type: "",
         params: Some(query_params(&flow.url)),
-        cookies: request_cookies(request_headers),
+        cookies: Some(request_cookies(request_headers)),
     };
     let response = PaneData {
-        flow_id: flow.id,
+        cache_key: flow.id as u64,
         title: "Response",
         headers: response_headers,
         body: detail.map_or(&flow.response_body, |d| &d.response_body),
         content_type: &flow.content_type,
         params: None,
-        cookies: response_cookies(response_headers),
+        cookies: Some(response_cookies(response_headers)),
     };
 
     split::horizontal(

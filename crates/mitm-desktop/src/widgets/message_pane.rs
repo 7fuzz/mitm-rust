@@ -1,27 +1,62 @@
 use eframe::egui::{self, Color32, RichText};
 use crate::format::{body_bytes, display_body, hex_dump};
-use super::{BodyFormat, PaneState, PaneTab};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaneTab {
+    Body,
+    Headers,
+    Params,
+    Cookies,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BodyFormat {
+    Pretty,
+    Raw,
+    Hex,
+}
+
+pub struct PaneState {
+    pub tab: PaneTab,
+    pub format: BodyFormat,
+    rendered: Option<((u64, usize, BodyFormat), String)>,
+}
+
+impl Default for PaneState {
+    fn default() -> Self {
+        Self {
+            tab: PaneTab::Body,
+            format: BodyFormat::Pretty,
+            rendered: None,
+        }
+    }
+}
 
 pub struct PaneData<'a> {
-    pub flow_id: i64,
+    /// Identifies the body for the formatted-text cache; change it when the body source changes.
+    pub cache_key: u64,
     pub title: &'a str,
     pub headers: &'a [(String, String)],
     pub body: &'a str,
     pub content_type: &'a str,
     pub params: Option<Vec<(String, String)>>,
-    pub cookies: Vec<(String, String)>,
+    pub cookies: Option<Vec<(String, String)>>,
 }
 
 pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneData) {
     ui.horizontal(|ui| {
-        ui.label(RichText::new(data.title).strong());
-        ui.separator();
+        if !data.title.is_empty() {
+            ui.label(RichText::new(data.title).strong());
+            ui.separator();
+        }
         tab_label(ui, pane, PaneTab::Body, "Body".to_string());
         tab_label(ui, pane, PaneTab::Headers, format!("Headers ({})", data.headers.len()));
         if let Some(params) = &data.params {
             tab_label(ui, pane, PaneTab::Params, format!("Params ({})", params.len()));
         }
-        tab_label(ui, pane, PaneTab::Cookies, format!("Cookies ({})", data.cookies.len()));
+        if let Some(cookies) = &data.cookies {
+            tab_label(ui, pane, PaneTab::Cookies, format!("Cookies ({})", cookies.len()));
+        }
 
         if pane.tab == PaneTab::Body {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -40,7 +75,7 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
             PaneTab::Body => body(ui, pane, data),
             PaneTab::Headers => key_values(ui, id_salt, data.headers),
             PaneTab::Params => key_values(ui, id_salt, data.params.as_deref().unwrap_or_default()),
-            PaneTab::Cookies => key_values(ui, id_salt, &data.cookies),
+            PaneTab::Cookies => key_values(ui, id_salt, data.cookies.as_deref().unwrap_or_default()),
         });
 }
 
@@ -53,7 +88,7 @@ fn body(ui: &mut egui::Ui, pane: &mut PaneState, data: &PaneData) {
         empty(ui, "No body content");
         return;
     }
-    let key = (data.flow_id, data.body.len(), pane.format);
+    let key = (data.cache_key, data.body.len(), pane.format);
     if pane.rendered.as_ref().is_none_or(|(cached, _)| *cached != key) {
         let text = match pane.format {
             BodyFormat::Pretty => display_body(data.body, data.content_type),

@@ -1,38 +1,8 @@
-mod pane;
 mod view;
 
+use crate::widgets::message_pane::PaneState;
+
 pub use view::show;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PaneTab {
-    Body,
-    Headers,
-    Params,
-    Cookies,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum BodyFormat {
-    Pretty,
-    Raw,
-    Hex,
-}
-
-pub struct PaneState {
-    pub tab: PaneTab,
-    pub format: BodyFormat,
-    rendered: Option<((i64, usize, BodyFormat), String)>,
-}
-
-impl Default for PaneState {
-    fn default() -> Self {
-        Self {
-            tab: PaneTab::Body,
-            format: BodyFormat::Pretty,
-            rendered: None,
-        }
-    }
-}
 
 pub struct InspectorState {
     pub request: PaneState,
