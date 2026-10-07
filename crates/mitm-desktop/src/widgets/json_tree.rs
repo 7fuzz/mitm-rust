@@ -9,14 +9,15 @@ use crate::widgets::flash;
 use crate::widgets::search::search_field;
 
 const ROOT: &str = "$";
-const CHUNK: usize = 100;
+const ICON_WIDTH: f32 = 14.0;
 const MAX_PREVIEW_CHARS: usize = 400;
 const MAX_DECODED_TEXT_CHARS: usize = 64 * 1024;
 const MAX_DECODED_HEX_BYTES: usize = 4096;
 
 pub struct JsonTree {
     root: Value,
-    open: HashSet<String>,
+    collapsed: HashSet<String>,
+    expanded_arrays: HashSet<String>,
     query: String,
     matching_only: bool,
     hits: Option<Hits>,
@@ -63,7 +64,8 @@ impl JsonTree {
     pub fn new(root: Value) -> Self {
         Self {
             root,
-            open: HashSet::from([ROOT.to_string()]),
+            collapsed: HashSet::new(),
+            expanded_arrays: HashSet::new(),
             query: String::new(),
             matching_only: false,
             hits: None,
@@ -87,7 +89,8 @@ impl JsonTree {
         self.refresh_hits();
 
         let mut view = View {
-            open: &mut self.open,
+            collapsed: &mut self.collapsed,
+            expanded_arrays: &mut self.expanded_arrays,
             decoded: &mut self.decoded,
             hits: self.hits.as_ref(),
             matching_only: self.matching_only,
@@ -96,7 +99,7 @@ impl JsonTree {
         egui::ScrollArea::both()
             .id_salt((id_salt, "json_tree"))
             .auto_shrink([false, false])
-            .show(ui, |ui| view.node(ui, None, &self.root, ROOT, true));
+            .show(ui, |ui| view.node(ui, None, &self.root, ROOT, true, false));
         if let Some(message) = view.copied {
             flash::set(ui, flash_id, message);
         }
@@ -111,14 +114,18 @@ impl JsonTree {
         if !hits.query.is_empty() {
             let query = hits.query.clone();
             collect_hits(&mut hits, &query, None, &self.root, ROOT);
-            self.open.extend(hits.branches.iter().cloned());
+            for branch in &hits.branches {
+                self.collapsed.remove(branch);
+                self.expanded_arrays.insert(branch.clone());
+            }
         }
         self.hits = Some(hits);
     }
 }
 
 struct View<'a> {
-    open: &'a mut HashSet<String>,
+    collapsed: &'a mut HashSet<String>,
+    expanded_arrays: &'a mut HashSet<String>,
     decoded: &'a mut HashMap<String, Decoded>,
     hits: Option<&'a Hits>,
     matching_only: bool,
@@ -141,97 +148,97 @@ impl View<'_> {
         }
     }
 
-    fn node(&mut self, ui: &mut egui::Ui, key: Option<&str>, value: &Value, path: &str, filtered: bool) {
+    fn node(&mut self, ui: &mut egui::Ui, key: Option<&str>, value: &Value, path: &str, filtered: bool, comma: bool) {
         if !self.is_visible(path, filtered) {
             return;
         }
         let matched = self.is_match(path);
-        let children = match value {
-            Value::Object(map) => map.len(),
-            Value::Array(items) => items.len(),
+        let weak = ui.visuals().weak_text_color();
+        let mut job = Line::new(ui);
+        if let Some(key) = key {
+            job.push(&format!("\"{}\"", key), Tone::Info.color(ui.visuals()), matched);
+            job.push(": ", weak, false);
+        }
+
+        let (open_bracket, close_bracket, len, unit) = match value {
+            Value::Object(map) => ("{", "}", map.len(), "keys"),
+            Value::Array(items) => ("[", "]", items.len(), "items"),
             _ => {
-                let response = ui.add(egui::Label::new(self.row(ui, key, value, matched, false)).sense(egui::Sense::click()));
+                let (text, tone) = leaf_display(value);
+                job.push(&text, tone.color(ui.visuals()), matched);
+                job.comma(comma, weak);
+                let response = row(ui, None, job.0);
                 self.context_menu(&response, value, path);
                 self.decoded_block(ui, path);
                 return;
             }
         };
 
-        let open = self.open.contains(path);
-        let response = ui.add(egui::Label::new(self.row(ui, key, value, matched, open)).sense(egui::Sense::click()));
-        if response.clicked() {
-            toggle(self.open, path);
+        let collapsed = len == 0 || self.collapsed.contains(path);
+        job.push(open_bracket, weak, false);
+        if collapsed {
+            if len > 0 {
+                job.push(" … ", weak, false);
+            }
+            job.push(close_bracket, weak, false);
+            job.comma(comma, weak);
+            if len > 0 {
+                job.push(&format!("  {} {}", len, unit), weak, false);
+            }
+        }
+        let response = row(ui, (len > 0).then_some(!collapsed), job.0);
+        if len > 0 && response.clicked() {
+            toggle(self.collapsed, path);
         }
         self.context_menu(&response, value, path);
-        if !open {
+        if collapsed {
             return;
         }
-        let filtered = filtered && !matched;
-        ui.indent(path, |ui| {
-            if children <= CHUNK {
-                self.children(ui, value, path, 0..children, filtered);
-                return;
-            }
-            for start in (0..children).step_by(CHUNK) {
-                let range = start..(start + CHUNK).min(children);
-                let chunk = chunk_path(path, start);
-                if !self.is_visible(&chunk, filtered) {
-                    continue;
-                }
-                let open = self.open.contains(&chunk);
-                let label = format!("{} [{} … {}]", arrow(open), range.start, range.end - 1);
-                if ui.add(egui::Label::new(RichText::new(label).monospace().weak()).sense(egui::Sense::click())).clicked() {
-                    toggle(self.open, &chunk);
-                }
-                if open {
-                    ui.indent(&chunk, |ui| self.children(ui, value, path, range, filtered));
-                }
-            }
-        });
+
+        ui.indent(path, |ui| self.children(ui, value, path, filtered && !matched));
+        let mut closing = Line::new(ui);
+        closing.push(close_bracket, weak, false);
+        closing.comma(comma, weak);
+        row(ui, None, closing.0);
     }
 
-    fn children(&mut self, ui: &mut egui::Ui, value: &Value, path: &str, range: std::ops::Range<usize>, filtered: bool) {
-        match value {
-            Value::Object(map) => {
-                for (key, child) in map.iter().skip(range.start).take(range.len()) {
-                    self.node(ui, Some(key), child, &key_path(path, key), filtered);
+    fn children(&mut self, ui: &mut egui::Ui, value: &Value, path: &str, filtered: bool) {
+        let first_only = matches!(value, Value::Array(_)) && !self.expanded_arrays.contains(path);
+        let limit = if first_only { 1 } else { usize::MAX };
+        let mut shown = Vec::new();
+        let total = if filtered && self.matching_only && self.searching().is_some() {
+            let mut count = 0;
+            for (key, child, child_path) in entries(value, path) {
+                if self.is_visible(&child_path, true) {
+                    if shown.len() < limit {
+                        shown.push((key, child, child_path));
+                    }
+                    count += 1;
                 }
             }
-            Value::Array(items) => {
-                for (index, child) in items[range.clone()].iter().enumerate() {
-                    let index = range.start + index;
-                    self.node(ui, Some(&index.to_string()), child, &index_path(path, index), filtered);
-                }
+            count
+        } else {
+            shown.extend(entries(value, path).take(limit));
+            match value {
+                Value::Object(map) => map.len(),
+                Value::Array(items) => items.len(),
+                _ => 0,
             }
-            _ => {}
-        }
-    }
+        };
 
-    fn row(&self, ui: &egui::Ui, key: Option<&str>, value: &Value, matched: bool, open: bool) -> egui::text::LayoutJob {
-        let visuals = ui.visuals();
-        let font = egui::TextStyle::Monospace.resolve(ui.style());
-        let highlight = if matched { Tone::Warn.tint(visuals, 60) } else { Color32::TRANSPARENT };
-        let mut job = egui::text::LayoutJob::default();
-        let mut push = |text: &str, color: Color32, background: Color32| {
-            job.append(text, 0.0, egui::TextFormat { font_id: font.clone(), color, background, ..Default::default() });
-        };
-        let is_branch = matches!(value, Value::Object(_) | Value::Array(_));
-        push(if is_branch { arrow(open) } else { " " }, visuals.weak_text_color(), Color32::TRANSPARENT);
-        push(" ", visuals.text_color(), Color32::TRANSPARENT);
-        if let Some(key) = key {
-            push(key, Tone::Info.color(visuals), highlight);
-            push(": ", visuals.weak_text_color(), Color32::TRANSPARENT);
+        let shown_len = shown.len();
+        for (index, (key, child, child_path)) in shown.into_iter().enumerate() {
+            self.node(ui, key, child, &child_path, filtered, index + 1 < total);
         }
-        let (text, color) = match value {
-            Value::Object(map) => (format!("{{{}}}", map.len()), visuals.weak_text_color()),
-            Value::Array(items) => (format!("[{}]", items.len()), visuals.weak_text_color()),
-            Value::String(s) => (format!("\"{}\"", truncate(s)), Tone::Success.color(visuals)),
-            Value::Number(n) => (n.to_string(), Tone::Caution.color(visuals)),
-            Value::Bool(b) => (b.to_string(), Tone::Accent.color(visuals)),
-            Value::Null => ("null".to_string(), Tone::Accent.color(visuals)),
-        };
-        push(&text, color, if is_branch { Color32::TRANSPARENT } else { highlight });
-        job
+        if total > shown_len {
+            let more = RichText::new(format!("+ {} more items", total - shown_len)).color(Tone::Warn.color(ui.visuals()));
+            ui.horizontal(|ui| {
+                ui.add_space(ICON_WIDTH);
+                if ui.add(egui::Label::new(more).sense(egui::Sense::click())).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                    self.expanded_arrays.insert(path.to_string());
+                }
+            });
+        }
     }
 
     fn decoded_block(&mut self, ui: &mut egui::Ui, path: &str) {
@@ -303,29 +310,65 @@ fn collect_hits(hits: &mut Hits, query: &str, key: Option<&str>, value: &Value, 
     if key.is_some_and(matches) || leaf_text(value).is_some_and(|t| matches(&t)) {
         hits.nodes.insert(path.to_string());
     }
-    let chunked = match value {
-        Value::Object(map) => map.len() > CHUNK,
-        Value::Array(items) => items.len() > CHUNK,
-        _ => false,
-    };
     let mut any = false;
-    let mut visit = |index: usize, child_key: &str, child: &Value, child_path: String| {
-        if collect_hits(hits, query, Some(child_key), child, &child_path) {
-            any = true;
-            if chunked {
-                hits.branches.insert(chunk_path(path, index / CHUNK * CHUNK));
-            }
-        }
-    };
-    match value {
-        Value::Object(map) => map.iter().enumerate().for_each(|(i, (k, v))| visit(i, k, v, key_path(path, k))),
-        Value::Array(items) => items.iter().enumerate().for_each(|(i, v)| visit(i, &i.to_string(), v, index_path(path, i))),
-        _ => {}
+    for (child_key, child, child_path) in entries(value, path) {
+        any |= collect_hits(hits, query, child_key, child, &child_path);
     }
     if any {
         hits.branches.insert(path.to_string());
     }
     any || hits.nodes.contains(path)
+}
+
+fn entries<'a>(value: &'a Value, path: &'a str) -> Box<dyn Iterator<Item = (Option<&'a str>, &'a Value, String)> + 'a> {
+    match value {
+        Value::Object(map) => Box::new(map.iter().map(move |(k, v)| (Some(k.as_str()), v, key_path(path, k)))),
+        Value::Array(items) => Box::new(items.iter().enumerate().map(move |(i, v)| (None, v, index_path(path, i)))),
+        _ => Box::new(std::iter::empty()),
+    }
+}
+
+struct Line(egui::text::LayoutJob, egui::FontId, Color32);
+
+impl Line {
+    fn new(ui: &egui::Ui) -> Self {
+        Self(Default::default(), egui::TextStyle::Monospace.resolve(ui.style()), Tone::Warn.tint(ui.visuals(), 60))
+    }
+
+    fn push(&mut self, text: &str, color: Color32, highlighted: bool) {
+        let background = if highlighted { self.2 } else { Color32::TRANSPARENT };
+        self.0.append(text, 0.0, egui::TextFormat { font_id: self.1.clone(), color, background, ..Default::default() });
+    }
+
+    fn comma(&mut self, comma: bool, color: Color32) {
+        if comma {
+            self.push(",", color, false);
+        }
+    }
+}
+
+fn row(ui: &mut egui::Ui, arrow: Option<bool>, job: egui::text::LayoutJob) -> egui::Response {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        let height = ui.text_style_height(&egui::TextStyle::Monospace);
+        let (rect, icon) = ui.allocate_exact_size(egui::vec2(ICON_WIDTH, height), egui::Sense::click());
+        if let Some(open) = arrow {
+            let font = egui::TextStyle::Monospace.resolve(ui.style());
+            let glyph = if open { "⏷" } else { "⏵" };
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, glyph, font, ui.visuals().weak_text_color());
+        }
+        icon | ui.add(egui::Label::new(job).sense(egui::Sense::click()))
+    })
+    .inner
+}
+
+fn leaf_display(value: &Value) -> (String, Tone) {
+    match value {
+        Value::String(s) => (format!("\"{}\"", truncate(s)), Tone::Success),
+        Value::Number(n) => (n.to_string(), Tone::Caution),
+        Value::Bool(b) => (b.to_string(), Tone::Accent),
+        _ => ("null".to_string(), Tone::Danger),
+    }
 }
 
 fn leaf_text(value: &Value) -> Option<String> {
@@ -340,10 +383,6 @@ fn toggle(open: &mut HashSet<String>, path: &str) {
     if !open.remove(path) {
         open.insert(path.to_string());
     }
-}
-
-fn arrow(open: bool) -> &'static str {
-    if open { "⏷" } else { "⏵" }
 }
 
 fn truncate(text: &str) -> String {
@@ -372,10 +411,6 @@ fn index_path(parent: &str, index: usize) -> String {
     format!("{}[{}]", parent, index)
 }
 
-// `#` never appears in generated paths, so chunk ids can't collide with real nodes.
-fn chunk_path(parent: &str, start: usize) -> String {
-    format!("{}#{}", parent, start)
-}
 
 #[cfg(test)]
 mod tests {
@@ -393,6 +428,7 @@ mod tests {
     #[test]
     fn hits_mark_matches_and_their_ancestors() {
         let mut tree = JsonTree::new(json!({ "user": { "Name": "Ada", "age": 36 }, "tags": ["x", "ada"] }));
+        tree.collapsed.insert("$.user".to_string());
         tree.query = "ada".to_string();
         tree.refresh_hits();
         let hits = tree.hits.as_ref().unwrap();
@@ -400,17 +436,16 @@ mod tests {
         assert!(hits.nodes.contains("$.tags[1]"));
         assert!(!hits.nodes.contains("$.user.age"));
         assert!(hits.branches.contains("$.user") && hits.branches.contains("$.tags"));
-        assert!(tree.open.contains("$.user"));
+        assert!(!tree.collapsed.contains("$.user"));
+        assert!(tree.expanded_arrays.contains("$.tags"));
     }
 
     #[test]
-    fn hits_open_the_chunk_holding_a_match() {
-        let items: Vec<Value> = (0..250).map(|i| json!(i)).collect();
-        let mut tree = JsonTree::new(Value::Array(items));
-        tree.query = "201".to_string();
+    fn array_indexes_are_not_searchable() {
+        let mut tree = JsonTree::new(json!(["a", "b"]));
+        tree.query = "1".to_string();
         tree.refresh_hits();
-        assert!(tree.open.contains("$#200"));
-        assert!(!tree.open.contains("$#0"));
+        assert!(tree.hits.unwrap().nodes.is_empty());
     }
 
     #[test]
