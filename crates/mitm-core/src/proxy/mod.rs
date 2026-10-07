@@ -24,9 +24,18 @@ use crate::proxy::intercept::handle_intercept_hook;
 use crate::state::{AppState, HistoryEntry, InterceptAction, InterceptPhase, TrafficCapturedEvent};
 
 pub async fn bind_proxy_listener(addr: SocketAddr) -> Result<TcpListener, String> {
-    TcpListener::bind(addr)
-        .await
-        .map_err(|e| format!("Failed to bind {}: {}", addr, e))
+    // On restart the previous listener task may not have dropped its socket yet.
+    let mut attempts = 0;
+    loop {
+        match TcpListener::bind(addr).await {
+            Ok(listener) => return Ok(listener),
+            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse && attempts < 10 => {
+                attempts += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            Err(e) => return Err(format!("Failed to bind {}: {}", addr, e)),
+        }
+    }
 }
 
 pub async fn start_proxy_server(
