@@ -1,5 +1,5 @@
-//! Single-instance guard. The first instance binds a fixed localhost port and answers PING / QUIT
-//! on it; binding is atomic, so two instances launched together can't both win.
+//! Single-instance guard. The first instance binds a fixed localhost port and answers PING / QUIT /
+//! FOCUS on it; binding is atomic, so two instances launched together can't both win.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
@@ -28,10 +28,18 @@ pub enum Claim {
     Unguarded,
 }
 
-pub fn try_claim(on_quit: Option<Box<dyn Fn() + Send + 'static>>) -> Claim {
+/// What the primary instance does when another launch asks it to. Without `on_quit` it exits the
+/// process; without `on_focus` FOCUS is ignored.
+#[derive(Default)]
+pub struct Handlers {
+    pub on_quit: Option<Box<dyn Fn() + Send + 'static>>,
+    pub on_focus: Option<Box<dyn Fn() + Send + 'static>>,
+}
+
+pub fn try_claim(handlers: Handlers) -> Claim {
     match TcpListener::bind(INSTANCE_ADDR) {
         Ok(listener) => {
-            serve(listener, on_quit);
+            serve(listener, handlers);
             Claim::Primary
         }
         Err(_) => match ping() {
@@ -54,6 +62,10 @@ pub fn request_quit() -> bool {
     send("QUIT").as_deref() == Some("BYE")
 }
 
+pub fn request_focus() -> bool {
+    send("FOCUS").as_deref() == Some("OK")
+}
+
 fn send(command: &str) -> Option<String> {
     let addr = INSTANCE_ADDR.parse().ok()?;
     let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(500)).ok()?;
@@ -64,7 +76,7 @@ fn send(command: &str) -> Option<String> {
     Some(reply.trim().to_string())
 }
 
-fn serve(listener: TcpListener, on_quit: Option<Box<dyn Fn() + Send + 'static>>) {
+fn serve(listener: TcpListener, handlers: Handlers) {
     let pid = std::process::id();
     let started_at_ms = chrono::Local::now().timestamp_millis();
     std::thread::spawn(move || {
@@ -82,10 +94,16 @@ fn serve(listener: TcpListener, on_quit: Option<Box<dyn Fn() + Send + 'static>>)
                 "QUIT" => {
                     let _ = writeln!(writer, "BYE");
                     let _ = writer.flush();
-                    if let Some(ref cb) = on_quit {
+                    if let Some(ref cb) = handlers.on_quit {
                         cb();
                     } else {
                         std::process::exit(0);
+                    }
+                }
+                "FOCUS" => {
+                    let _ = writeln!(writer, "OK");
+                    if let Some(ref cb) = handlers.on_focus {
+                        cb();
                     }
                 }
                 _ => {}
