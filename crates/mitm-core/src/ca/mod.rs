@@ -5,6 +5,35 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaInfo {
+    pub common_name: String,
+    pub organization: String,
+    pub not_before: String,
+    pub not_after: String,
+    pub fingerprint: String,
+    pub cert_path: String,
+    pub ca_dir: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CaFormat {
+    Pem,
+    Der,
+}
+
+fn dn_value_to_string(v: &rcgen::DnValue) -> String {
+    match v {
+        rcgen::DnValue::Utf8String(s) => s.clone(),
+        rcgen::DnValue::PrintableString(s) => s.to_string(),
+        _ => format!("{:?}", v),
+    }
+}
+
 pub struct CA {
     pub cert: Certificate,
     pub key_pair: KeyPair,
@@ -23,6 +52,43 @@ impl CA {
             key_pair,
             cert_pem: self.cert_pem.clone(),
         }
+    }
+
+    pub fn info(&self, ca_dir: &std::path::Path) -> Result<CaInfo, String> {
+        let params = CertificateParams::from_ca_cert_pem(&self.cert_pem)
+            .map_err(|e| format!("Failed to parse CA cert: {}", e))?;
+        let common_name = params.distinguished_name.get(&DnType::CommonName)
+            .map(dn_value_to_string)
+            .unwrap_or_default();
+        let organization = params.distinguished_name.get(&DnType::OrganizationName)
+            .map(dn_value_to_string)
+            .unwrap_or_default();
+        let not_before = params.not_before
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_else(|_| params.not_before.to_string());
+        let not_after = params.not_after
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_else(|_| params.not_after.to_string());
+        let hash = ring::digest::digest(&ring::digest::SHA256, self.cert.der().as_ref());
+        let fingerprint = hash.as_ref().iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(":");
+
+        Ok(CaInfo {
+            common_name,
+            organization,
+            not_before,
+            not_after,
+            fingerprint,
+            cert_path: ca_dir.join("ca.crt").to_string_lossy().to_string(),
+            ca_dir: ca_dir.to_string_lossy().to_string(),
+        })
+    }
+
+    pub fn export(&self, path: &std::path::Path, format: CaFormat) -> Result<(), String> {
+        let bytes = match format {
+            CaFormat::Pem => self.cert_pem.as_bytes(),
+            CaFormat::Der => self.cert.der().as_ref(),
+        };
+        fs::write(path, bytes).map_err(|e| format!("Failed to write CA file {}: {}", path.display(), e))
     }
 }
 
@@ -94,4 +160,33 @@ pub fn delete_ca(ca_dir: PathBuf) {
     let key_path = ca_dir.join("ca.key");
     let _ = fs::remove_file(cert_path);
     let _ = fs::remove_file(key_path);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ca_lifecycle_and_info() {
+        let temp_dir = std::env::temp_dir().join(format!("mitm_ca_test_{}", uuid::Uuid::new_v4()));
+        let ca = get_ca(temp_dir.clone());
+        let info = ca.info(&temp_dir).unwrap();
+        assert_eq!(info.common_name, "MITM Rust CA");
+        assert_eq!(info.organization, "MITM Rust");
+        assert!(!info.fingerprint.is_empty());
+        assert!(info.fingerprint.contains(':'));
+
+        let pem_path = temp_dir.join("export.crt");
+        ca.export(&pem_path, CaFormat::Pem).unwrap();
+        let pem_content = std::fs::read_to_string(&pem_path).unwrap();
+        assert!(pem_content.contains("BEGIN CERTIFICATE"));
+
+        let der_path = temp_dir.join("export.cer");
+        ca.export(&der_path, CaFormat::Der).unwrap();
+        let der_content = std::fs::read(&der_path).unwrap();
+        assert_eq!(der_content, ca.cert.der().as_ref());
+
+        delete_ca(temp_dir.clone());
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
 }
