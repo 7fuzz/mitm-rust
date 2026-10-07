@@ -40,6 +40,7 @@ impl MitmApp {
             Arc::new(MitmCore::init().expect("Failed to initialize mitm-core"))
         };
 
+        egui_extras::install_image_loaders(&cc.egui_ctx);
         let mut state = AppState::load(&core.db_path);
         state.proxy.listeners = rt.block_on(core.get_listener_configs());
         state.traffic.set_history_limit(rt.block_on(core.get_history_settings()));
