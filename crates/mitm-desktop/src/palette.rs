@@ -1,6 +1,7 @@
 use eframe::egui::{self, Align2, Key, Modifiers, RichText};
-use crate::command::Commands;
-use crate::shortcuts::{self, Action};
+use crate::command::{AppCommand, Commands};
+use crate::shortcuts;
+use crate::state::AppState;
 
 #[derive(Default)]
 pub struct PaletteState {
@@ -15,11 +16,59 @@ impl PaletteState {
     }
 }
 
-pub fn show(ctx: &egui::Context, state: &mut PaletteState, cmds: &mut Commands) {
+#[derive(Clone)]
+pub struct PaletteItem {
+    pub label: String,
+    pub command: AppCommand,
+    pub shortcut: Option<String>,
+}
+
+pub fn palette_items(state: &AppState, ctx: &egui::Context) -> Vec<PaletteItem> {
+    let mut items = Vec::new();
+
+    for action in shortcuts::palette_actions() {
+        let shortcut = shortcuts::shortcut_for(action).map(|s| ctx.format_shortcut(&s));
+        items.push(PaletteItem {
+            label: action.label(),
+            command: action.command(),
+            shortcut,
+        });
+    }
+
+    for ws in &state.environments.workspaces {
+        let is_active = ws.id == state.environments.active_workspace_id;
+        items.push(PaletteItem {
+            label: format!("Switch workspace: {}{}", ws.name, if is_active { " (current)" } else { "" }),
+            command: AppCommand::SelectWorkspace(ws.id.clone()),
+            shortcut: None,
+        });
+    }
+
+    let is_none_active = state.environments.active_environment_id.is_none();
+    items.push(PaletteItem {
+        label: format!("Switch environment: No environment{}", if is_none_active { " (current)" } else { "" }),
+        command: AppCommand::SelectEnvironment(None),
+        shortcut: None,
+    });
+
+    for env in &state.environments.environments {
+        let is_active = Some(&env.id) == state.environments.active_environment_id.as_ref();
+        items.push(PaletteItem {
+            label: format!("Switch environment: {}{}", env.name, if is_active { " (current)" } else { "" }),
+            command: AppCommand::SelectEnvironment(Some(env.id.clone())),
+            shortcut: None,
+        });
+    }
+
+    items
+}
+
+pub fn show(ctx: &egui::Context, state: &mut PaletteState, app_state: &AppState, cmds: &mut Commands) {
     if !state.open {
         return;
     }
-    let matches = matching(&state.query);
+    let all_items = palette_items(app_state, ctx);
+    let matches = matching(&all_items, &state.query);
     state.selected = state.selected.min(matches.len().saturating_sub(1));
 
     let id = egui::Id::new("command_palette");
@@ -44,20 +93,20 @@ pub fn show(ctx: &egui::Context, state: &mut PaletteState, cmds: &mut Commands) 
                 state.selected = state.selected.saturating_sub(1);
             }
             if i.consume_key(Modifiers::NONE, Key::Enter) {
-                chosen = matches.get(state.selected).copied();
+                chosen = matches.get(state.selected).cloned();
             }
         });
         ui.separator();
 
         egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
-            for (index, action) in matches.iter().enumerate() {
+            for (index, item) in matches.iter().enumerate() {
                 let selected = index == state.selected;
                 let response = egui::Sides::new().show(
                     ui,
-                    |ui| ui.add(egui::Button::selectable(selected, action.label()).frame_when_inactive(false)),
+                    |ui| ui.add(egui::Button::selectable(selected, &item.label).frame_when_inactive(false)),
                     |ui| {
-                        if let Some(shortcut) = shortcuts::shortcut_for(*action) {
-                            ui.label(RichText::new(ui.ctx().format_shortcut(&shortcut)).weak().monospace());
+                        if let Some(shortcut) = &item.shortcut {
+                            ui.label(RichText::new(shortcut).weak().monospace());
                         }
                     },
                 );
@@ -65,28 +114,28 @@ pub fn show(ctx: &egui::Context, state: &mut PaletteState, cmds: &mut Commands) 
                     response.0.scroll_to_me(None);
                 }
                 if response.0.clicked() {
-                    chosen = Some(*action);
+                    chosen = Some(item.clone());
                 }
             }
         });
     });
 
-    if let Some(action) = chosen {
-        cmds.push(action.command());
+    if let Some(item) = chosen {
+        cmds.push(item.command);
         state.open = false;
     } else if modal.should_close() {
         state.open = false;
     }
 }
 
-fn matching(query: &str) -> Vec<Action> {
+fn matching(items: &[PaletteItem], query: &str) -> Vec<PaletteItem> {
     let query = query.trim().to_lowercase();
-    let mut scored: Vec<(usize, Action)> = shortcuts::palette_actions()
-        .into_iter()
-        .filter_map(|action| fuzzy_score(&action.label().to_lowercase(), &query).map(|score| (score, action)))
+    let mut scored: Vec<(usize, PaletteItem)> = items
+        .iter()
+        .filter_map(|item| fuzzy_score(&item.label.to_lowercase(), &query).map(|score| (score, item.clone())))
         .collect();
     scored.sort_by_key(|(score, _)| *score);
-    scored.into_iter().map(|(_, action)| action).collect()
+    scored.into_iter().map(|(_, item)| item).collect()
 }
 
 // Lower is better: substring hits rank first, then subsequences by how spread out they are.
@@ -118,5 +167,33 @@ mod tests {
         let subsequence = fuzzy_score("open repeater", "orp").unwrap();
         assert!(substring < subsequence);
         assert_eq!(fuzzy_score("open traffic", "xyz"), None);
+    }
+
+    #[test]
+    fn palette_items_include_workspaces_and_environments() {
+        let mut state = crate::state::AppState::default();
+        state.environments.workspaces.push(mitm_core::workspace::Workspace {
+            id: "ws-1".to_string(),
+            name: "Backend WS".to_string(),
+            description: None,
+            active_environment_id: None,
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        });
+        state.environments.environments.push(mitm_core::workspace::Environment {
+            id: "env-1".to_string(),
+            workspace_id: "ws-1".to_string(),
+            name: "Staging".to_string(),
+            is_active: false,
+            variables: vec![],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        });
+
+        let ctx = egui::Context::default();
+        let items = super::palette_items(&state, &ctx);
+        assert!(items.iter().any(|i| i.label.contains("Backend WS")));
+        assert!(items.iter().any(|i| i.label.contains("Staging")));
+        assert!(items.iter().any(|i| i.label.contains("No environment")));
     }
 }

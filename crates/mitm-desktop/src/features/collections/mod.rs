@@ -57,6 +57,7 @@ pub struct ExtractModal {
     pub rules: Vec<ExtractRuleItem>,
 }
 
+#[derive(Clone)]
 pub enum CollectionsCmd {
     SelectWorkspace(String),
     CreateFolder { parent: Option<String>, name: String },

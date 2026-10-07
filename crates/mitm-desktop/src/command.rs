@@ -13,6 +13,7 @@ pub struct RequestDraft {
     pub body: String,
 }
 
+#[derive(Clone)]
 pub enum AppCommand {
     OpenPalette,
     OpenTab(Tab),

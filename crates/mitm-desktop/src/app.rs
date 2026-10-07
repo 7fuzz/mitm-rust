@@ -410,7 +410,7 @@ impl eframe::App for MitmApp {
             db_path: &self.core.db_path,
         };
         DockArea::new(&mut self.dock).show_inside(ui, &mut viewer);
-        palette::show(ui.ctx(), &mut self.palette, &mut self.cmds);
+        palette::show(ui.ctx(), &mut self.palette, &self.state, &mut self.cmds);
 
         let cmds = self.cmds.take();
         if !cmds.is_empty() {
