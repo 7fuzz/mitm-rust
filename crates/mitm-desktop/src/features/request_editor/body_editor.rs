@@ -9,41 +9,49 @@ use super::kv_table::{self, KvLabels};
 pub fn show(ui: &mut egui::Ui, id_salt: &str, body_type: &str, content: &mut String) -> bool {
     match body_type {
         "none" => {
-            ui.label(RichText::new("This request has no body").weak().italics());
+            ui.weak("No body");
             false
         }
-        t if is_urlencoded(t) => {
-            let mut rows = read_urlencoded(content);
-            let labels = KvLabels { key: "Key", value: "Value" };
-            let changed = kv_table::show(ui, id_salt, &mut rows, labels, &[]);
-            if changed {
-                *content = store_urlencoded(&rows);
-            }
-            changed
-        }
-        t if is_multipart(t) => {
-            let mut fields = read_multipart(content);
-            let changed = multipart_table(ui, id_salt, &mut fields);
-            if changed {
-                *content = store_multipart(&fields);
-            }
-            changed
-        }
-        "binary" => binary(ui, id_salt, content),
+        t if is_urlencoded(t) || is_multipart(t) || t == "binary" => egui::ScrollArea::vertical()
+            .id_salt((id_salt, "rows"))
+            .auto_shrink([false, false])
+            .show(ui, |ui| structured(ui, id_salt, body_type, content))
+            .inner,
         _ => code_editor(ui, id_salt, content),
     }
 }
 
+fn structured(ui: &mut egui::Ui, id_salt: &str, body_type: &str, content: &mut String) -> bool {
+    if is_urlencoded(body_type) {
+        let mut rows = read_urlencoded(content);
+        let changed = kv_table::show(ui, id_salt, &mut rows, KvLabels { key: "Key", value: "Value" }, &[]);
+        if changed {
+            *content = store_urlencoded(&rows);
+        }
+        changed
+    } else if is_multipart(body_type) {
+        let mut fields = read_multipart(content);
+        let changed = multipart_table(ui, id_salt, &mut fields);
+        if changed {
+            *content = store_multipart(&fields);
+        }
+        changed
+    } else {
+        binary(ui, id_salt, content)
+    }
+}
+
 pub fn code_editor(ui: &mut egui::Ui, id_salt: &str, content: &mut String) -> bool {
-    egui::ScrollArea::both()
+    let visible = ui.available_size();
+    egui::ScrollArea::vertical()
         .id_salt((id_salt, "code"))
         .auto_shrink([false, false])
         .show(ui, |ui| {
             ui.add(
                 egui::TextEdit::multiline(content)
                     .code_editor()
-                    .desired_rows(16)
-                    .desired_width(f32::INFINITY),
+                    .desired_width(f32::INFINITY)
+                    .min_size(visible),
             )
             .changed()
         })
