@@ -1,5 +1,6 @@
 use std::path::Path;
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
+use crate::theme::{self, Tone};
 use crate::command::{AppCommand, Commands};
 use crate::features::traffic::TrafficState;
 use super::{ListenerForm, ProxyState};
@@ -102,9 +103,9 @@ pub fn show(
         .show(ui, |ui| {
             ui.strong("Proxy Status:");
             if proxy.running {
-                ui.label(RichText::new("● Active").color(Color32::GREEN).strong());
+                ui.label(RichText::new("● Active").color(theme::color(ui, Tone::Success)).strong());
             } else {
-                ui.label(RichText::new("○ Stopped").color(Color32::GRAY));
+                ui.label(RichText::new("○ Stopped").weak());
             }
             ui.end_row();
 

@@ -50,11 +50,11 @@ pub fn show<R: KeyValueRow>(
                 changed |= ui.checkbox(enabled, "").changed();
                 let dim = !*enabled;
                 changed |= ui
-                    .add(text_field(key, labels.key, dim).desired_width(key_width))
+                    .add(text_field(ui, key, labels.key, dim).desired_width(key_width))
                     .changed();
                 let value_width = (ui.available_width() - 28.0).max(80.0);
                 changed |= ui
-                    .add(text_field(value, labels.value, dim).desired_width(value_width))
+                    .add(text_field(ui, value, labels.value, dim).desired_width(value_width))
                     .changed();
                 if ui.small_button(RichText::new("🗑").color(theme::color(ui, Tone::Danger))).on_hover_text("Delete row").clicked() {
                     remove = Some(index);
@@ -93,10 +93,10 @@ pub fn show<R: KeyValueRow>(
     changed
 }
 
-fn text_field<'a>(text: &'a mut String, hint: &'a str, dim: bool) -> egui::TextEdit<'a> {
+fn text_field<'a>(ui: &egui::Ui, text: &'a mut String, hint: &'a str, dim: bool) -> egui::TextEdit<'a> {
     let edit = egui::TextEdit::singleline(text).hint_text(hint).font(egui::TextStyle::Monospace);
     if dim {
-        edit.text_color(egui::Color32::GRAY)
+        edit.text_color(ui.visuals().weak_text_color())
     } else {
         edit
     }

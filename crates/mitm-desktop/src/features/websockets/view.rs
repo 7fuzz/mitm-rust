@@ -1,7 +1,9 @@
-use eframe::egui::{self, Color32, CornerRadius, RichText};
+use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use crate::command::{AppCommand, Commands};
 use crate::format::format_bytes;
+use crate::theme::Tone;
+use crate::widgets::pills::badge;
 use super::WebSocketsState;
 
 pub fn show(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
@@ -175,42 +177,15 @@ pub fn show(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands)
 }
 
 fn render_ws_status_badge(ui: &mut egui::Ui, status: &str) {
-    let (bg_color, text_color) = if status.eq_ignore_ascii_case("connected") || status.eq_ignore_ascii_case("open") {
-        (Color32::from_rgb(20, 83, 45), Color32::from_rgb(187, 247, 208))
-    } else {
-        (Color32::from_rgb(55, 65, 81), Color32::from_rgb(209, 213, 219))
-    };
-
-    let text = RichText::new(format!(" {} ", status.to_uppercase()))
-        .color(text_color)
-        .size(10.0)
-        .strong();
-
-    egui::Frame::NONE
-        .fill(bg_color)
-        .corner_radius(CornerRadius::same(3))
-        .show(ui, |ui| {
-            ui.label(text);
-        });
+    let open = status.eq_ignore_ascii_case("connected") || status.eq_ignore_ascii_case("open");
+    badge(ui, &status.to_uppercase(), if open { Tone::Success } else { Tone::Neutral });
 }
 
 fn render_ws_direction_badge(ui: &mut egui::Ui, direction: &str) {
-    let is_incoming = direction.eq_ignore_ascii_case("server") || direction.eq_ignore_ascii_case("incoming");
-    let (bg_color, text_color, label) = if is_incoming {
-        (Color32::from_rgb(20, 83, 45), Color32::from_rgb(187, 247, 208), "▼ SVR")
+    let incoming = direction.eq_ignore_ascii_case("server") || direction.eq_ignore_ascii_case("incoming");
+    if incoming {
+        badge(ui, "▼ SVR", Tone::Success);
     } else {
-        (Color32::from_rgb(30, 64, 175), Color32::from_rgb(191, 219, 254), "▲ CLI")
-    };
-
-    let text = RichText::new(format!(" {} ", label))
-        .color(text_color)
-        .size(10.0)
-        .strong();
-
-    egui::Frame::NONE
-        .fill(bg_color)
-        .corner_radius(CornerRadius::same(3))
-        .show(ui, |ui| {
-            ui.label(text);
-        });
+        badge(ui, "▲ CLI", Tone::Info);
+    }
 }

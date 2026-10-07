@@ -1,4 +1,5 @@
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
+use crate::theme::{self, Tone};
 use egui_extras::{Column, TableBuilder};
 use mitm_core::fuzzer::FuzzTemplate;
 use crate::command::{AppCommand, Commands};
@@ -29,14 +30,14 @@ pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
         );
 
         if fuzzer.is_running {
-            if ui.button(RichText::new("⏹ Stop").color(Color32::from_rgb(239, 68, 68)).strong()).clicked() {
+            if ui.button(RichText::new("⏹ Stop").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
                 fuzzer.is_running = false;
             }
             ui.spinner();
             ui.label(format!("{}/{}", fuzzer.progress_completed, fuzzer.progress_total));
         } else {
             let start_btn = RichText::new("▶ Start Fuzzing")
-                .color(Color32::from_rgb(34, 197, 94))
+                .color(theme::color(ui, Tone::Success))
                 .strong();
             if ui.button(start_btn).clicked() {
                 let payloads: Vec<String> = fuzzer

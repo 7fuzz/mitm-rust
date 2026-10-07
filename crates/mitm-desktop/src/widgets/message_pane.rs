@@ -1,4 +1,5 @@
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
+use crate::theme::{self, Tone};
 use crate::format::{body_bytes, display_body, hex_dump};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,7 +113,7 @@ fn key_values(ui: &mut egui::Ui, id_salt: &str, rows: &[(String, String)]) {
         .spacing([12.0, 4.0])
         .show(ui, |ui| {
             for (key, value) in rows {
-                ui.label(RichText::new(key).color(Color32::from_rgb(147, 197, 253)).strong());
+                ui.label(RichText::new(key).color(theme::color(ui, Tone::Info)).strong());
                 ui.label(RichText::new(value).monospace());
                 ui.end_row();
             }

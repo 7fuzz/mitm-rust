@@ -1,4 +1,5 @@
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
+use crate::theme::{self, Tone};
 use crate::command::{AppCommand, Commands};
 use crate::widgets::pills::render_method_pill;
 use super::InterceptState;
@@ -10,9 +11,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) 
 
         let mut enabled = state.enabled;
         let toggle_label = if enabled {
-            RichText::new("● Interceptor ON").color(Color32::from_rgb(239, 68, 68)).strong()
+            RichText::new("● Interceptor ON").color(theme::color(ui, Tone::Danger)).strong()
         } else {
-            RichText::new("○ Interceptor OFF").color(Color32::GRAY)
+            RichText::new("○ Interceptor OFF").weak()
         };
 
         if ui.selectable_label(enabled, toggle_label).clicked() {
@@ -49,7 +50,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) 
         let count = state.pending.len();
         if count > 0 {
             let badge = RichText::new(format!("⚠️ {} Paused Flow(s)", count))
-                .color(Color32::from_rgb(245, 158, 11))
+                .color(theme::color(ui, Tone::Warn))
                 .strong();
             ui.label(badge);
         } else {
@@ -105,7 +106,7 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
     };
 
     ui.horizontal(|ui| {
-        if ui.button(RichText::new("▶ Forward (with changes)").color(Color32::from_rgb(34, 197, 94)).strong()).clicked() {
+        if ui.button(RichText::new("▶ Forward (with changes)").color(theme::color(ui, Tone::Success)).strong()).clicked() {
             let headers = state.edited_headers();
             let body_bytes = state.edit.body.as_bytes().to_vec();
             cmds.push(AppCommand::ForwardIntercept {
@@ -127,7 +128,7 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
             });
         }
 
-        if ui.button(RichText::new("⏹ Drop Flow").color(Color32::from_rgb(239, 68, 68)).strong()).clicked() {
+        if ui.button(RichText::new("⏹ Drop Flow").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
             cmds.push(AppCommand::DropIntercept {
                 flow_id: active_id.clone(),
             });

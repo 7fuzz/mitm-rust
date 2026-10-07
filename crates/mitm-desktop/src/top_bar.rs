@@ -1,4 +1,5 @@
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
+use crate::theme::{self, Tone};
 use egui_dock::DockState;
 use crate::command::{AppCommand, Commands};
 use crate::dock::Tab;
@@ -11,7 +12,7 @@ pub fn show(ui: &mut egui::Ui, state: &AppState, dock: &DockState<Tab>, cmds: &m
         let paused = state.intercept.pending.len();
         if paused > 0 {
             let badge = RichText::new(format!("⚠️ {} Paused Flow(s)", paused))
-                .color(Color32::from_rgb(245, 158, 11))
+                .color(theme::color(ui, Tone::Warn))
                 .strong();
             ui.label(badge);
             ui.separator();
@@ -28,9 +29,9 @@ pub fn show(ui: &mut egui::Ui, state: &AppState, dock: &DockState<Tab>, cmds: &m
 fn proxy_controls(ui: &mut egui::Ui, state: &AppState, cmds: &mut Commands) {
     let proxy = &state.proxy;
     let (status, button) = if proxy.running {
-        (RichText::new("● Running").color(Color32::GREEN).strong(), "⏹ Stop Proxy")
+        (RichText::new("● Running").color(theme::color(ui, Tone::Success)).strong(), "⏹ Stop Proxy")
     } else {
-        (RichText::new("○ Stopped").color(Color32::GRAY), "▶ Start Proxy")
+        (RichText::new("○ Stopped").weak(), "▶ Start Proxy")
     };
     ui.label(status);
     if ui.button(button).clicked() {
