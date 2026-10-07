@@ -1,4 +1,4 @@
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 use mitm_core::repeater::{HeaderItem, RepeaterTab};
 use crate::command::{AppCommand, Commands};
 use crate::features::request_editor::body::{content_type_for, convert, REPEATER_BODY_TYPES};
@@ -41,7 +41,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
             changed = true;
         }
         let label = if executing { "Sending..." } else { "▶ Send" };
-        let button = egui::Button::new(RichText::new(label).strong().color(Color32::WHITE)).fill(Color32::from_rgb(37, 99, 235));
+        let button = egui::Button::new(RichText::new(label).strong()).fill(ui.visuals().selection.bg_fill);
         if ui.add_enabled(!executing, button).on_hover_text("Ctrl+Enter").clicked() {
             send = true;
         }
@@ -66,7 +66,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
             (EditorTab::Steps, format!("Pre/Post ({})", tab.pre_requests.len() + tab.post_requests.len())),
         ];
         for (value, label) in tabs {
-            ui.selectable_value(&mut state.editor_tab, value, label);
+            let response = ui.selectable_value(&mut state.editor_tab, value, label);
+            if value == EditorTab::Headers {
+                response.on_hover_text("A disabled Content-Type is detected from the body");
+            }
         }
 
         if state.editor_tab == EditorTab::Body {
@@ -98,7 +101,6 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
                     }
                 }
                 EditorTab::Headers => {
-                    ui.label(RichText::new("A disabled Content-Type is auto-detected from the body").weak().size(11.0));
                     let labels = KvLabels { key: "Header Name", value: "Header Value" };
                     let suggestions = standard_headers(content_type_for(&tab.body_type).unwrap_or("application/json"));
                     changed |= kv_table::show(ui, "repeater_headers", &mut tab.headers, labels, &suggestions);

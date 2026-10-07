@@ -1,10 +1,11 @@
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 use mitm_core::collections::{CollectionTreeItem, RequestItem};
 use crate::command::{AppCommand, Commands};
 use crate::features::request_editor::body::{convert, is_multipart, is_urlencoded, COLLECTION_BODY_TYPES};
 use crate::features::request_editor::kv_table::{self, KvLabels};
 use crate::features::request_editor::steps::{self, StepOption};
 use crate::features::request_editor::{body_editor, extract_rules};
+use crate::widgets::pills::ROSE;
 use super::{docs, CollectionsCmd, CollectionsState, DocsMode, EditorTab, PreviewMode};
 
 const METHODS: [&str; 6] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"];
@@ -32,7 +33,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
         changed |= url.changed();
         send |= url.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         let label = if executing { "Sending..." } else { "▶ Send" };
-        let button = egui::Button::new(RichText::new(label).strong().color(Color32::WHITE)).fill(Color32::from_rgb(37, 99, 235));
+        let button = egui::Button::new(RichText::new(label).strong()).fill(ui.visuals().selection.bg_fill);
         send |= ui.add_enabled(!executing, button).on_hover_text("Ctrl+Enter").clicked();
         let history_hint = if state.history_open { "Hide run history" } else { "Show run history" };
         if ui.selectable_label(state.history_open, "🕘").on_hover_text(history_hint).clicked() {
@@ -279,7 +280,7 @@ fn interpolation_tab(ui: &mut egui::Ui, state: &mut CollectionsState, id: &str, 
             });
         }
         Some(Err(error)) => {
-            ui.colored_label(Color32::from_rgb(248, 113, 113), error);
+            ui.colored_label(ROSE, error);
         }
         None => {
             ui.label(RichText::new("Resolving variables...").weak().italics());

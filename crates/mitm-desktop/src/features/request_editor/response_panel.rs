@@ -2,7 +2,7 @@ use eframe::egui::{self, RichText};
 use mitm_core::repeater::HeaderItem;
 use crate::format::{format_bytes, CopyFormat, Exchange};
 use crate::widgets::message_pane::{self, PaneData, PaneState};
-use crate::widgets::pills::render_status_pill;
+use crate::widgets::pills::status_text;
 
 pub struct ResponseData<'a> {
     pub cache_key: u64,
@@ -61,7 +61,7 @@ pub fn show(
         ui.set_min_height(24.0);
         match &response {
             Some(r) => {
-                render_status_pill(ui, r.status_code);
+                ui.label(status_text(r.status_code));
                 if !r.status_text.is_empty() {
                     ui.label(RichText::new(r.status_text).strong());
                 }
