@@ -3,6 +3,7 @@ pub mod fuzzer;
 pub mod inspector;
 pub mod intercept;
 pub mod repeater;
+pub mod request_editor;
 pub mod settings;
 pub mod traffic;
 pub mod websockets;
