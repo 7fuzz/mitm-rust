@@ -5,6 +5,7 @@ mod toolbar;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use mitm_core::state::{HistoryDetail, HistoryEntry, HistorySettings};
+use crate::features::inspector::InspectorState;
 use crate::widgets::tri_state::TriState;
 
 pub use columns::ColumnId;
@@ -285,11 +286,21 @@ fn matches_search(flow: &HistoryEntry, search: &str) -> bool {
 pub fn show(
     ui: &mut eframe::egui::Ui,
     state: &mut TrafficState,
+    inspector: &mut InspectorState,
     listeners: &[mitm_core::state::ListenerConfig],
     cmds: &mut crate::command::Commands,
 ) {
     let visible = state.filtered_indices();
     toolbar::show(ui, state, listeners, visible.len(), cmds);
     ui.separator();
-    table::show(ui, state, &visible, cmds);
+
+    if !inspector.open || state.selected_flow().is_none() {
+        table::show(ui, state, &visible, cmds);
+        return;
+    }
+    let mut fraction = inspector.table_fraction;
+    let [mut table_ui, mut inspector_ui] = crate::widgets::split::stacked(ui, "traffic_inspector_split", &mut fraction);
+    inspector.table_fraction = fraction;
+    table::show(&mut table_ui, state, &visible, cmds);
+    crate::features::inspector::show(&mut inspector_ui, inspector, state);
 }

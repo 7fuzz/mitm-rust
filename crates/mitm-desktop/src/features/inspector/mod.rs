@@ -6,6 +6,8 @@ use crate::widgets::message_pane::PaneState;
 pub use view::show;
 
 pub struct InspectorState {
+    pub open: bool,
+    pub table_fraction: f32,
     pub request: PaneState,
     pub response: PaneState,
     pub split: f32,
@@ -14,6 +16,8 @@ pub struct InspectorState {
 impl Default for InspectorState {
     fn default() -> Self {
         Self {
+            open: false,
+            table_fraction: 0.5,
             request: PaneState::default(),
             response: PaneState::default(),
             split: 0.5,

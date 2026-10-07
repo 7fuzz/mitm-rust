@@ -1,25 +1,19 @@
-use eframe::egui::{self, RichText};
+use eframe::egui;
 use mitm_core::state::HistoryEntry;
-use crate::features::traffic::{flow_status_badge, FlowFlags, TrafficState};
+use crate::features::traffic::{FlowFlags, TrafficState};
 use crate::format::{format_bytes, format_duration};
-use crate::widgets::pills::{badge, render_method_pill, render_source_pill, AMBER, ROSE, SKY};
+use crate::widgets::pills::{method_text, status_text, AMBER, ROSE, SKY};
 use crate::widgets::split;
 use crate::widgets::message_pane::{self as pane, PaneData};
 use super::{query_params, request_cookies, response_cookies, InspectorState};
 
 pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficState) {
-    let Some(flow) = traffic.selected_flow() else {
-        ui.vertical_centered(|ui| {
-            ui.add_space(40.0);
-            ui.label(RichText::new("No request selected").weak());
-        });
-        return;
-    };
+    let Some(flow) = traffic.selected_flow() else { return };
 
     let detail = traffic.selected_detail.as_ref().filter(|d| d.id == flow.id);
     let flags = FlowFlags::of(flow);
 
-    summary(ui, flow, &flags);
+    summary(ui, flow, &flags, &mut state.open);
     url_bar(ui, &flow.url);
     ui.separator();
 
@@ -51,40 +45,38 @@ pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficStat
     pane::show(&mut response_ui, "inspector_response", &mut state.response, &response);
 }
 
-fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags) {
-    ui.horizontal(|ui| {
-        render_method_pill(ui, &flow.method);
-        flow_status_badge(ui, flow.status_code, flags);
-        if !flow.listener_label.is_empty() && flow.listener_label != "Default" {
-            render_source_pill(ui, &flow.listener_label);
-        }
-
-        if flags.pending_intercept {
-            badge(ui, "PAUSED IN INTERCEPTOR", AMBER);
-        }
-        if flags.pending_response {
-            badge(ui, "WAITING FOR RESPONSE...", ROSE);
-        }
-        if flags.intercepted {
-            badge(ui, "INTERCEPTED", AMBER);
-        }
-        if flags.rewritten {
-            badge(ui, "REWRITTEN", SKY);
-        }
-        if flags.failed {
-            badge(ui, "FAILED (NO RESPONSE)", ROSE);
-        }
-
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let (size, duration) = if flags.is_pending() {
-                ("-".to_string(), "...".to_string())
-            } else {
-                (format_bytes(flow.response_size), format_duration(flow.duration_ms))
+fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, open: &mut bool) {
+    egui::Sides::new().shrink_left().truncate().show(
+        ui,
+        |ui| {
+            ui.label(method_text(&flow.method));
+            match (flags.pending_intercept, flags.pending_response) {
+                (true, _) => ui.colored_label(AMBER, "Paused in interceptor"),
+                (_, true) => ui.colored_label(ROSE, "Waiting for response…"),
+                _ => ui.label(status_text(flow.status_code)),
             };
-            ui.label(RichText::new(size).weak().size(11.0));
-            ui.label(RichText::new(duration).weak().size(11.0));
-        });
-    });
+            if flags.failed {
+                ui.colored_label(ROSE, "Failed");
+            }
+            if flags.intercepted {
+                ui.colored_label(AMBER, "Intercepted");
+            }
+            if flags.rewritten {
+                ui.colored_label(SKY, "Rewritten");
+            }
+            if !flow.listener_label.is_empty() && flow.listener_label != "Default" {
+                ui.weak(format!("via {}", flow.listener_label));
+            }
+        },
+        |ui| {
+            if ui.small_button("✖").on_hover_text("Hide inspector").clicked() {
+                *open = false;
+            }
+            if !flags.is_pending() {
+                ui.weak(format!("{} · {}", format_duration(flow.duration_ms), format_bytes(flow.response_size)));
+            }
+        },
+    );
 }
 
 fn url_bar(ui: &mut egui::Ui, url: &str) {

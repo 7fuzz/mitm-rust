@@ -8,7 +8,6 @@ use crate::state::AppState;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tab {
     Traffic,
-    Inspector,
     Repeater,
     Fuzzer,
     Intercept,
@@ -18,9 +17,8 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 8] = [
+    pub const ALL: [Tab; 7] = [
         Tab::Traffic,
-        Tab::Inspector,
         Tab::Repeater,
         Tab::Fuzzer,
         Tab::Intercept,
@@ -41,7 +39,6 @@ impl Tab {
     pub fn name(&self) -> &'static str {
         match self {
             Tab::Traffic => "Traffic",
-            Tab::Inspector => "Inspector",
             Tab::Repeater => "Repeater",
             Tab::Fuzzer => "Fuzzer",
             Tab::Intercept => "Intercept",
@@ -62,24 +59,18 @@ pub fn open_tab(dock: &mut DockState<Tab>, tab: Tab) {
         return;
     }
 
-    let traffic = dock.find_main_surface_tab(&Tab::Traffic).map(|(node, _)| node);
-
-    match (&tab, traffic) {
-        (Tab::Inspector, Some(traffic)) => {
-            dock.main_surface_mut().split_below(traffic, 0.5, vec![tab]);
-        }
-        (Tab::Inspector | Tab::Traffic, _) => dock.push_to_first_leaf(tab),
-        (_, traffic) => {
-            let tool_node = Tab::TOOLS.iter().find_map(|t| dock.find_main_surface_tab(t)).map(|(node, _)| node);
-            if let Some(leaf) = tool_node.and_then(|node| dock.main_surface_mut().leaf_mut(node).ok()) {
-                leaf.tabs.push(tab);
-                leaf.active = TabIndex(leaf.tabs.len() - 1);
-            } else if traffic.is_some() {
-                dock.main_surface_mut().split_right(NodeIndex::root(), 0.6, vec![tab]);
-            } else {
-                dock.push_to_first_leaf(tab);
-            }
-        }
+    if tab == Tab::Traffic {
+        dock.push_to_first_leaf(tab);
+        return;
+    }
+    let tool_node = Tab::TOOLS.iter().find_map(|t| dock.find_main_surface_tab(t)).map(|(node, _)| node);
+    if let Some(leaf) = tool_node.and_then(|node| dock.main_surface_mut().leaf_mut(node).ok()) {
+        leaf.tabs.push(tab);
+        leaf.active = TabIndex(leaf.tabs.len() - 1);
+    } else if dock.find_main_surface_tab(&Tab::Traffic).is_some() {
+        dock.main_surface_mut().split_right(NodeIndex::root(), 0.6, vec![tab]);
+    } else {
+        dock.push_to_first_leaf(tab);
     }
 }
 
@@ -114,8 +105,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
         let state = &mut *self.state;
         let cmds = &mut *self.cmds;
         match tab {
-            Tab::Traffic => features::traffic::show(ui, &mut state.traffic, &state.proxy.listeners, cmds),
-            Tab::Inspector => features::inspector::show(ui, &mut state.inspector, &state.traffic),
+            Tab::Traffic => features::traffic::show(ui, &mut state.traffic, &mut state.inspector, &state.proxy.listeners, cmds),
             Tab::Repeater => features::repeater::show(ui, &mut state.repeater, cmds),
             Tab::Fuzzer => features::fuzzer::show(ui, &mut state.fuzzer, cmds),
             Tab::Intercept => features::intercept::show(ui, &mut state.intercept, cmds),

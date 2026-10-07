@@ -81,7 +81,10 @@ impl MitmApp {
             AppCommand::ToggleProxy => self.toggle_proxy(),
             AppCommand::SaveListeners(listeners) => self.save_listeners(listeners),
 
-            AppCommand::SelectFlow(id) => self.state.traffic.select(id, db_path),
+            AppCommand::SelectFlow(id) => {
+                self.state.traffic.select(id, db_path);
+                self.state.inspector.open = true;
+            }
             AppCommand::ClearTraffic => {
                 let _ = self.core.clear_all_traffic();
                 self.state.traffic.clear();

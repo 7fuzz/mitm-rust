@@ -2,7 +2,6 @@ use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder, TableRow};
 use mitm_core::state::HistoryEntry;
 use crate::command::{AppCommand, Commands};
-use crate::dock::Tab;
 use crate::format::{format_bytes, format_duration, local_clock, CopyFormat};
 use crate::widgets::pills::{badge, render_method_pill, render_source_pill, tinted, AMBER, ROSE, SKY};
 use super::{flow_status_badge, ColumnId, FlowFlags, TrafficState};
@@ -91,7 +90,6 @@ fn flow_row(row: &mut TableRow, columns: &[ColumnId], flow: &HistoryEntry, selec
 
     if response.clicked() || response.double_clicked() {
         cmds.push(AppCommand::SelectFlow(flow.id));
-        cmds.push(AppCommand::OpenTab(Tab::Inspector));
     }
     response.context_menu(|ui| flow_menu(ui, flow, cmds));
 }
