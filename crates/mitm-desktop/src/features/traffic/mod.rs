@@ -232,15 +232,16 @@ impl TrafficState {
 }
 
 pub fn flow_status_badge(ui: &mut eframe::egui::Ui, code: u16, flags: &FlowFlags) {
-    use crate::widgets::pills::{badge, render_status_pill, AMBER, ROSE};
+    use crate::theme::Tone;
+    use crate::widgets::pills::{badge, render_status_pill};
     if flags.pending_intercept {
-        badge(ui, "PAUSED", AMBER);
+        badge(ui, "PAUSED", Tone::Warn);
     } else if flags.pending_response {
-        badge(ui, "WAITING", ROSE);
+        badge(ui, "WAITING", Tone::Danger);
     } else if code == 0 {
-        badge(ui, "FAIL", ROSE);
+        badge(ui, "FAIL", Tone::Danger);
     } else if flags.failed {
-        badge(ui, &format!("{} (ERR)", code), ROSE);
+        badge(ui, &format!("{} (ERR)", code), Tone::Danger);
     } else {
         render_status_pill(ui, code);
     }

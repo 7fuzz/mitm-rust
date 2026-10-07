@@ -1,85 +1,30 @@
-use eframe::egui::{self, Color32, CornerRadius, RichText};
+use eframe::egui::{self, CornerRadius, RichText, Visuals};
+use crate::theme::{method_tone, status_tone, Tone};
 
 pub fn render_method_pill(ui: &mut egui::Ui, method: &str) {
-    let (bg_color, text_color) = match method.to_uppercase().as_str() {
-        "GET" => (Color32::from_rgb(22, 101, 52), Color32::from_rgb(187, 247, 208)),
-        "POST" => (Color32::from_rgb(30, 64, 175), Color32::from_rgb(191, 219, 254)),
-        "PUT" => (Color32::from_rgb(133, 77, 14), Color32::from_rgb(254, 240, 138)),
-        "PATCH" => (Color32::from_rgb(107, 33, 168), Color32::from_rgb(233, 213, 255)),
-        "DELETE" => (Color32::from_rgb(153, 27, 27), Color32::from_rgb(254, 202, 202)),
-        "HEAD" | "OPTIONS" => (Color32::from_rgb(55, 65, 81), Color32::from_rgb(229, 231, 235)),
-        _ => (Color32::from_rgb(55, 65, 81), Color32::from_rgb(209, 213, 219)),
-    };
-
-    let text = RichText::new(format!(" {} ", method.to_uppercase()))
-        .color(text_color)
-        .size(11.0)
-        .strong();
-
-    egui::Frame::NONE
-        .fill(bg_color)
-        .corner_radius(CornerRadius::same(3))
-        .show(ui, |ui| {
-            ui.add(egui::Label::new(text).selectable(false));
-        });
+    pill(ui, |text| text.size(11.0).strong(), &method.to_uppercase(), method_tone(method));
 }
 
 pub fn render_status_pill(ui: &mut egui::Ui, status: u16) {
-    let (bg_color, text_color) = match status {
-        200..=299 => (Color32::from_rgb(20, 83, 45), Color32::from_rgb(187, 247, 208)),
-        300..=399 => (Color32::from_rgb(29, 78, 216), Color32::from_rgb(191, 219, 254)),
-        400..=499 => (Color32::from_rgb(146, 64, 14), Color32::from_rgb(254, 215, 170)),
-        500..=599 => (Color32::from_rgb(153, 27, 27), Color32::from_rgb(254, 202, 202)),
-        _ => (Color32::from_rgb(55, 65, 81), Color32::from_rgb(156, 163, 175)),
-    };
-
-    let text_str = if status == 0 {
-        "-".to_string()
-    } else {
-        status.to_string()
-    };
-
-    let text = RichText::new(format!(" {} ", text_str))
-        .color(text_color)
-        .size(11.0)
-        .strong();
-
-    egui::Frame::NONE
-        .fill(bg_color)
-        .corner_radius(CornerRadius::same(3))
-        .show(ui, |ui| {
-            ui.add(egui::Label::new(text).selectable(false));
-        });
+    let label = if status == 0 { "-".to_string() } else { status.to_string() };
+    pill(ui, |text| text.size(11.0).strong(), &label, status_tone(status));
 }
 
 pub fn render_source_pill(ui: &mut egui::Ui, source: &str) {
     let label = if source.is_empty() { "default" } else { source };
-    let text = RichText::new(format!(" {} ", label))
-        .color(Color32::from_rgb(199, 210, 254))
-        .size(10.0)
-        .monospace();
-
-    egui::Frame::NONE
-        .fill(Color32::from_rgb(49, 46, 129))
-        .corner_radius(CornerRadius::same(3))
-        .show(ui, |ui| {
-            ui.add(egui::Label::new(text).selectable(false));
-        });
+    pill(ui, |text| text.size(10.0).monospace(), label, Tone::Source);
 }
 
-pub const AMBER: Color32 = Color32::from_rgb(245, 158, 11);
-pub const ROSE: Color32 = Color32::from_rgb(244, 63, 94);
-pub const SKY: Color32 = Color32::from_rgb(14, 165, 233);
-
-pub fn tinted(color: Color32, alpha: u8) -> Color32 {
-    Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha)
+pub fn badge(ui: &mut egui::Ui, text: &str, tone: Tone) -> egui::Response {
+    pill(ui, |text| text.size(10.0).strong(), text, tone)
 }
 
-pub fn badge(ui: &mut egui::Ui, text: &str, color: Color32) -> egui::Response {
-    let text = RichText::new(format!(" {} ", text)).color(color).size(10.0).strong();
+fn pill(ui: &mut egui::Ui, style: impl FnOnce(RichText) -> RichText, label: &str, tone: Tone) -> egui::Response {
+    let visuals = ui.visuals().clone();
+    let text = style(RichText::new(format!(" {} ", label))).color(tone.color(&visuals));
     egui::Frame::NONE
-        .fill(tinted(color, 38))
-        .stroke(egui::Stroke::new(1.0, tinted(color, 90)))
+        .fill(tone.tint(&visuals, 38))
+        .stroke(egui::Stroke::new(1.0, tone.tint(&visuals, 90)))
         .corner_radius(CornerRadius::same(3))
         .show(ui, |ui| {
             ui.add(egui::Label::new(text).selectable(false));
@@ -87,26 +32,15 @@ pub fn badge(ui: &mut egui::Ui, text: &str, color: Color32) -> egui::Response {
         .response
 }
 
-pub fn method_text(method: &str) -> RichText {
-    let color = match method.to_uppercase().as_str() {
-        "GET" => Color32::from_rgb(74, 222, 128),
-        "POST" => Color32::from_rgb(96, 165, 250),
-        "PUT" => Color32::from_rgb(250, 204, 21),
-        "PATCH" => Color32::from_rgb(192, 132, 252),
-        "DELETE" => Color32::from_rgb(248, 113, 113),
-        _ => Color32::from_rgb(156, 163, 175),
-    };
-    RichText::new(method.to_uppercase()).monospace().strong().size(11.0).color(color)
+pub fn method_text(visuals: &Visuals, method: &str) -> RichText {
+    RichText::new(method.to_uppercase())
+        .monospace()
+        .strong()
+        .size(11.0)
+        .color(method_tone(method).color(visuals))
 }
 
-pub fn status_text(code: u16) -> RichText {
-    let color = match code {
-        200..=299 => Color32::from_rgb(74, 222, 128),
-        300..=399 => Color32::from_rgb(96, 165, 250),
-        400..=499 => Color32::from_rgb(251, 146, 60),
-        500..=599 => Color32::from_rgb(248, 113, 113),
-        _ => Color32::from_rgb(156, 163, 175),
-    };
+pub fn status_text(visuals: &Visuals, code: u16) -> RichText {
     let label = if code == 0 { "ERR".to_string() } else { code.to_string() };
-    RichText::new(label).monospace().strong().size(11.0).color(color)
+    RichText::new(label).monospace().strong().size(11.0).color(status_tone(code).color(visuals))
 }

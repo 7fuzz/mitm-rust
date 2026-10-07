@@ -2,7 +2,8 @@ use eframe::egui::{self, RichText};
 use crate::command::{AppCommand, Commands};
 use crate::features::request_editor::response_panel::{self, header_pairs, ResponseData};
 use crate::features::request_editor::run_list::{self, local_time, Run, RunAction};
-use crate::widgets::pills::{method_text, AMBER, ROSE};
+use crate::theme::{self, Tone};
+use crate::widgets::pills::method_text;
 use crate::widgets::split;
 use super::{editor, extract_modal, tree, CollectionsCmd, CollectionsState};
 
@@ -58,7 +59,7 @@ fn tab_strip(ui: &mut egui::Ui, state: &CollectionsState, cmds: &mut Commands) {
                     let active = state.active_id.as_deref() == Some(request.id.as_str());
                     let style = ui.style().clone();
                     let mut text = egui::text::LayoutJob::default();
-                    method_text(&request.method).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
+                    method_text(ui.visuals(), &request.method).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
                     RichText::new(format!(" {}", request.name)).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
 
                     let response = ui.add(egui::Button::selectable(active, text));
@@ -125,7 +126,7 @@ fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str) {
             if ui.small_button("Latest").on_hover_text("Show the latest run").clicked() {
                 show_latest = true;
             }
-            ui.label(RichText::new(format!("🕘 Run {} · {}", number, time)).color(AMBER).size(11.0));
+            ui.label(RichText::new(format!("🕘 Run {} · {}", number, time)).color(theme::color(ui, Tone::Warn)).size(11.0));
         }
     });
     if show_latest {
@@ -145,7 +146,7 @@ fn history_drawer(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &
                 state.prefs.history_open = false;
             }
             if !runs.is_empty() {
-                let label = if confirming { RichText::new("🗑 Clear all?").color(ROSE) } else { RichText::new("🗑") };
+                let label = if confirming { RichText::new("🗑 Clear all?").color(theme::color(ui, Tone::Danger)) } else { RichText::new("🗑") };
                 let button = ui.small_button(label).on_hover_text("Delete all recorded runs of this request");
                 if button.clicked() {
                     if confirming {

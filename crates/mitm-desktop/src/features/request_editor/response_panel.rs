@@ -61,7 +61,7 @@ pub fn show(
         ui.set_min_height(24.0);
         match &response {
             Some(r) => {
-                ui.label(status_text(r.status_code));
+                ui.label(status_text(ui.visuals(), r.status_code));
                 if !r.status_text.is_empty() {
                     ui.label(RichText::new(r.status_text).strong());
                 }

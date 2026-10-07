@@ -2,7 +2,7 @@ use base64::Engine;
 use eframe::egui::{self, RichText};
 use mitm_core::encoding::MultipartFieldSpec;
 use crate::format::format_bytes;
-use crate::widgets::pills::ROSE;
+use crate::theme::{self, Tone};
 use super::body::{is_multipart, is_urlencoded, read_multipart, read_urlencoded, store_multipart, store_urlencoded, text_field};
 use super::kv_table::{self, KvLabels};
 
@@ -93,7 +93,7 @@ fn multipart_table(ui: &mut egui::Ui, id_salt: &str, fields: &mut Vec<MultipartF
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button(RichText::new("🗑").color(ROSE)).clicked() {
+                    if ui.small_button(RichText::new("🗑").color(theme::color(ui, Tone::Danger))).clicked() {
                         remove = Some(index);
                     }
                 });
@@ -145,7 +145,7 @@ fn binary(ui: &mut egui::Ui, id_salt: &str, content: &mut String) -> bool {
         }
     });
     if let Some(message) = &error {
-        ui.colored_label(ROSE, message);
+        ui.colored_label(theme::color(ui, Tone::Danger), message);
     }
     ui.data_mut(|d| {
         d.insert_temp(path_id, path);

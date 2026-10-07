@@ -1,7 +1,8 @@
 use eframe::egui::{self, RichText};
 use mitm_core::repeater::RepeaterTab;
 use crate::command::{AppCommand, Commands};
-use crate::widgets::pills::{method_text, status_text, ROSE};
+use crate::theme::{self, Tone};
+use crate::widgets::pills::{method_text, status_text};
 use crate::widgets::search::search_field;
 use super::RepeaterState;
 
@@ -45,13 +46,13 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
 
 fn row(ui: &mut egui::Ui, tab: &RepeaterTab, active: bool) -> Option<AppCommand> {
     let mut left = egui::text::LayoutJob::default();
-    method_text(&tab.method).append_to(&mut left, ui.style(), egui::FontSelection::Default, egui::Align::Center);
+    method_text(ui.visuals(), &tab.method).append_to(&mut left, ui.style(), egui::FontSelection::Default, egui::Align::Center);
     RichText::new(format!("  {}", url_path(&tab.url)))
         .monospace()
         .append_to(&mut left, ui.style(), egui::FontSelection::Default, egui::Align::Center);
 
     let right = match tab.last_status_code {
-        Some(code) => status_text(code),
+        Some(code) => status_text(ui.visuals(), code),
         None => RichText::new("·").weak(),
     };
 
@@ -72,7 +73,7 @@ fn row(ui: &mut egui::Ui, tab: &RepeaterTab, active: bool) -> Option<AppCommand>
 
     let mut cmd = None;
     response.context_menu(|ui| {
-        if ui.button(RichText::new("Delete").color(ROSE)).clicked() {
+        if ui.button(RichText::new("Delete").color(theme::color(ui, Tone::Danger))).clicked() {
             cmd = Some(AppCommand::RepeaterDelete(tab.id.clone()));
             ui.close();
         }

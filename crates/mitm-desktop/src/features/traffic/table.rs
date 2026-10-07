@@ -3,7 +3,8 @@ use egui_extras::{Column, TableBuilder, TableRow};
 use mitm_core::state::HistoryEntry;
 use crate::command::{AppCommand, Commands};
 use crate::format::{format_bytes, format_duration, local_clock, CopyFormat};
-use crate::widgets::pills::{badge, render_method_pill, render_source_pill, tinted, AMBER, ROSE, SKY};
+use crate::theme::{self, Tone};
+use crate::widgets::pills::{badge, render_method_pill, render_source_pill};
 use super::{flow_status_badge, ColumnId, FlowFlags, TrafficState};
 
 const ROW_HEIGHT: f32 = 26.0;
@@ -14,6 +15,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
         .filter(|c| !state.hidden_columns.contains(c))
         .collect();
 
+    let visuals = ui.visuals().clone();
     egui::ScrollArea::horizontal()
         .id_salt("traffic_table_hscroll")
         .auto_shrink([false, false])
@@ -46,7 +48,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
                         let flow = &state.flows[visible[row.index()]];
                         let selected = state.selected_id == Some(flow.id);
                         row.set_selected(selected);
-                        flow_row(&mut row, &columns, flow, selected, cmds);
+                        flow_row(&mut row, &visuals, &columns, flow, selected, cmds);
                     });
                 });
         });
@@ -65,9 +67,16 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
     }
 }
 
-fn flow_row(row: &mut TableRow, columns: &[ColumnId], flow: &HistoryEntry, selected: bool, cmds: &mut Commands) {
+fn flow_row(
+    row: &mut TableRow,
+    visuals: &egui::Visuals,
+    columns: &[ColumnId],
+    flow: &HistoryEntry,
+    selected: bool,
+    cmds: &mut Commands,
+) {
     let flags = FlowFlags::of(flow);
-    let tint = if selected { None } else { row_tint(&flags) };
+    let tint = if selected { None } else { row_tint(visuals, &flags) };
     let mut text_cells: Vec<egui::Response> = Vec::new();
 
     for &col in columns {
@@ -94,20 +103,21 @@ fn flow_row(row: &mut TableRow, columns: &[ColumnId], flow: &HistoryEntry, selec
     response.context_menu(|ui| flow_menu(ui, flow, cmds));
 }
 
-fn row_tint(flags: &FlowFlags) -> Option<Color32> {
-    if flags.pending_intercept {
-        Some(tinted(AMBER, 38))
+fn row_tint(visuals: &egui::Visuals, flags: &FlowFlags) -> Option<Color32> {
+    let (tone, alpha) = if flags.pending_intercept {
+        (Tone::Warn, 38)
     } else if flags.pending_response {
-        Some(tinted(ROSE, 26))
+        (Tone::Danger, 26)
     } else if flags.failed {
-        Some(tinted(ROSE, 14))
+        (Tone::Danger, 14)
     } else if flags.intercepted {
-        Some(tinted(AMBER, 14))
+        (Tone::Warn, 14)
     } else if flags.rewritten {
-        Some(tinted(SKY, 14))
+        (Tone::Info, 14)
     } else {
-        None
-    }
+        return None;
+    };
+    Some(tone.tint(visuals, alpha))
 }
 
 fn aligned(ui: &mut egui::Ui, align: egui::Align, add: impl FnOnce(&mut egui::Ui)) {
@@ -126,10 +136,10 @@ fn cell(ui: &mut egui::Ui, col: ColumnId, flow: &HistoryEntry, flags: &FlowFlags
         ColumnId::Method => {
             render_method_pill(ui, &flow.method);
             if flags.intercepted || flags.pending_intercept {
-                badge(ui, "INT", AMBER);
+                badge(ui, "INT", Tone::Warn);
             }
             if flags.rewritten {
-                badge(ui, "RW", SKY);
+                badge(ui, "RW", Tone::Info);
             }
             None
         }
@@ -170,7 +180,7 @@ fn cell(ui: &mut egui::Ui, col: ColumnId, flow: &HistoryEntry, flags: &FlowFlags
 }
 
 fn pending_dots(ui: &mut egui::Ui, flags: &FlowFlags) -> egui::Response {
-    let color = if flags.pending_intercept { AMBER } else { ROSE };
+    let color = theme::color(ui, if flags.pending_intercept { Tone::Warn } else { Tone::Danger });
     ui.label(RichText::new("...").monospace().strong().color(color))
 }
 
@@ -224,7 +234,7 @@ fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, cmds: &mut Commands) {
         item(ui, "Copy URL, Body, and Response", AppCommand::CopyFlow(flow.id, CopyFormat::UrlBodyAndResponse));
     });
     ui.separator();
-    if ui.button(RichText::new("🗑 Delete Item").color(ROSE)).clicked() {
+    if ui.button(RichText::new("🗑 Delete Item").color(theme::color(ui, Tone::Danger))).clicked() {
         cmds.push(AppCommand::DeleteFlow(flow.id));
         ui.close();
     }

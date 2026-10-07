@@ -1,6 +1,6 @@
 use eframe::egui::{self, RichText};
 use mitm_core::repeater::ExtractRuleItem;
-use crate::widgets::pills::ROSE;
+use crate::theme::{self, Tone};
 use super::url_params::new_id;
 
 const MODES: [(&str, &str, &str); 6] = [
@@ -32,7 +32,7 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, rules: &mut Vec<ExtractRuleItem>) 
                     ui.label(RichText::new("← extract from").weak());
                     changed |= mode_combo(ui, rule);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button(RichText::new("🗑").color(ROSE)).on_hover_text("Delete rule").clicked() {
+                        if ui.small_button(RichText::new("🗑").color(theme::color(ui, Tone::Danger))).on_hover_text("Delete rule").clicked() {
                             remove = Some(index);
                         }
                     });

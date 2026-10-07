@@ -5,7 +5,7 @@ use crate::features::request_editor::body::{convert, is_multipart, is_urlencoded
 use crate::features::request_editor::kv_table::{self, KvLabels};
 use crate::features::request_editor::steps::{self, StepOption};
 use crate::features::request_editor::{body_editor, extract_rules};
-use crate::widgets::pills::ROSE;
+use crate::theme::{self, Tone};
 use super::{docs, CollectionsCmd, CollectionsState, DocsMode, EditorTab, PreviewMode};
 
 const METHODS: [&str; 6] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"];
@@ -280,7 +280,7 @@ fn interpolation_tab(ui: &mut egui::Ui, state: &mut CollectionsState, id: &str, 
             });
         }
         Some(Err(error)) => {
-            ui.colored_label(ROSE, error);
+            ui.colored_label(theme::color(ui, Tone::Danger), error);
         }
         None => {
             ui.label(RichText::new("Resolving variables...").weak().italics());

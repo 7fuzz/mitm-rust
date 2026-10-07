@@ -1,7 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::encoding::UrlEncodedParamSpec;
 use mitm_core::repeater::{HeaderItem, ParamItem};
-use crate::widgets::pills::ROSE;
+use crate::theme::{self, Tone};
 use super::url_params::new_id;
 
 pub trait KeyValueRow {
@@ -56,7 +56,7 @@ pub fn show<R: KeyValueRow>(
                 changed |= ui
                     .add(text_field(value, labels.value, dim).desired_width(value_width))
                     .changed();
-                if ui.small_button(RichText::new("🗑").color(ROSE)).on_hover_text("Delete row").clicked() {
+                if ui.small_button(RichText::new("🗑").color(theme::color(ui, Tone::Danger))).on_hover_text("Delete row").clicked() {
                     remove = Some(index);
                 }
             });

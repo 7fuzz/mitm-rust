@@ -81,7 +81,7 @@ pub fn show<R: Run>(ui: &mut egui::Ui, id_salt: &str, runs: &[R], selected: Opti
         for run in runs {
             let style = ui.style().clone();
             let mut text = egui::text::LayoutJob::default();
-            status_text(run.status_code()).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
+            status_text(ui.visuals(), run.status_code()).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
             RichText::new(format!("  {} {}", run.method(), url_path(run.url())))
                 .monospace()
                 .append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);

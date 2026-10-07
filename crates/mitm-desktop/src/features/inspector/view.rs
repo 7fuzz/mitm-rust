@@ -2,7 +2,8 @@ use eframe::egui;
 use mitm_core::state::HistoryEntry;
 use crate::features::traffic::{FlowFlags, TrafficState};
 use crate::format::{format_bytes, format_duration};
-use crate::widgets::pills::{method_text, status_text, AMBER, ROSE, SKY};
+use crate::theme::{self, Tone};
+use crate::widgets::pills::{method_text, status_text};
 use crate::widgets::split;
 use crate::widgets::message_pane::{self as pane, PaneData};
 use super::{query_params, request_cookies, response_cookies, InspectorState};
@@ -47,20 +48,20 @@ fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, open: &mut
     egui::Sides::new().shrink_left().truncate().show(
         ui,
         |ui| {
-            ui.label(method_text(&flow.method));
+            ui.label(method_text(ui.visuals(), &flow.method));
             match (flags.pending_intercept, flags.pending_response) {
-                (true, _) => ui.colored_label(AMBER, "Paused in interceptor"),
-                (_, true) => ui.colored_label(ROSE, "Waiting for response…"),
-                _ => ui.label(status_text(flow.status_code)),
+                (true, _) => ui.colored_label(theme::color(ui, Tone::Warn), "Paused in interceptor"),
+                (_, true) => ui.colored_label(theme::color(ui, Tone::Danger), "Waiting for response…"),
+                _ => ui.label(status_text(ui.visuals(), flow.status_code)),
             };
             if flags.failed {
-                ui.colored_label(ROSE, "Failed");
+                ui.colored_label(theme::color(ui, Tone::Danger), "Failed");
             }
             if flags.intercepted {
-                ui.colored_label(AMBER, "Intercepted");
+                ui.colored_label(theme::color(ui, Tone::Warn), "Intercepted");
             }
             if flags.rewritten {
-                ui.colored_label(SKY, "Rewritten");
+                ui.colored_label(theme::color(ui, Tone::Info), "Rewritten");
             }
             if !flow.listener_label.is_empty() && flow.listener_label != "Default" {
                 ui.weak(format!("via {}", flow.listener_label));

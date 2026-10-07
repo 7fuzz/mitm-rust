@@ -5,6 +5,7 @@ mod features;
 mod format;
 mod prefs;
 mod state;
+mod theme;
 mod top_bar;
 mod widgets;
 

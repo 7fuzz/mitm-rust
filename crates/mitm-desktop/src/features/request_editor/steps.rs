@@ -1,5 +1,5 @@
 use eframe::egui::{self, RichText};
-use crate::widgets::pills::ROSE;
+use crate::theme::{self, Tone};
 
 pub struct StepOption {
     pub id: String,
@@ -24,7 +24,7 @@ fn step_list(ui: &mut egui::Ui, title: &str, id_salt: &str, ids: &mut Vec<String
                 ui.label(RichText::new(format!("{}.", index + 1)).weak().monospace());
                 ui.add(egui::Label::new(RichText::new(label_of(id)).monospace()).truncate());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button(RichText::new("🗑").color(ROSE)).on_hover_text("Remove").clicked() {
+                    if ui.small_button(RichText::new("🗑").color(theme::color(ui, Tone::Danger))).on_hover_text("Remove").clicked() {
                         action = Some((index, 0));
                     }
                     if ui.add_enabled(index + 1 < ids.len(), egui::Button::new("⏷").small()).clicked() {

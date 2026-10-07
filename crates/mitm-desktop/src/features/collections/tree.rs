@@ -3,7 +3,8 @@ use std::collections::HashSet;
 use eframe::egui::{self, collapsing_header::CollapsingState, RichText, Sense};
 use mitm_core::collections::{CollectionTreeItem, RequestItem};
 use crate::command::{AppCommand, Commands};
-use crate::widgets::pills::{method_text, ROSE};
+use crate::theme::{self, Tone};
+use crate::widgets::pills::method_text;
 use crate::widgets::search::search_field;
 use super::{all_requests, CollectionsCmd, CollectionsState, TreeEdit};
 
@@ -210,7 +211,7 @@ impl TreeUi<'_> {
 
         let mut text = egui::text::LayoutJob::default();
         let style = ui.style().clone();
-        method_text(&request.method).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
+        method_text(ui.visuals(), &request.method).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
         RichText::new(format!("  {}", request.name)).append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
         if self.searching && !request.url.is_empty() {
             RichText::new(format!("  {}", request.url)).weak().append_to(&mut text, &style, egui::FontSelection::Default, egui::Align::Center);
@@ -247,7 +248,7 @@ impl TreeUi<'_> {
             ("Rename", TreeAction::StartEdit(TreeEdit::RenameFolder { id: id.clone() }, folder.name.clone())),
         ]);
         ui.separator();
-        if ui.button(RichText::new("Delete Folder").color(ROSE)).clicked() {
+        if ui.button(RichText::new("Delete Folder").color(theme::color(ui, Tone::Danger))).clicked() {
             self.actions.push(TreeAction::Cmd(CollectionsCmd::DeleteFolder(id)));
             ui.close();
         }
@@ -262,7 +263,7 @@ impl TreeUi<'_> {
             ("Rename", TreeAction::StartEdit(TreeEdit::RenameRequest { id: id.clone() }, request.name.clone())),
         ]);
         ui.separator();
-        if ui.button(RichText::new("Delete Request").color(ROSE)).clicked() {
+        if ui.button(RichText::new("Delete Request").color(theme::color(ui, Tone::Danger))).clicked() {
             self.actions.push(TreeAction::Cmd(CollectionsCmd::DeleteRequest(id)));
             ui.close();
         }
