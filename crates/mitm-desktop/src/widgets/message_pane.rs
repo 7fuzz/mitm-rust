@@ -1,6 +1,8 @@
-use eframe::egui::{self, RichText};
+use std::sync::Arc;
+use eframe::egui::{self, Galley, RichText};
 use crate::theme::{self, Tone};
 use crate::format::{body_bytes, display_body, hex_dump};
+use crate::widgets::code_view::{self, Lang};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaneTab {
@@ -17,10 +19,13 @@ pub enum BodyFormat {
     Hex,
 }
 
+// Galleys depend on theme colours and zoom, so both are part of the cache key.
+type RenderKey = (u64, usize, BodyFormat, bool, u32);
+
 pub struct PaneState {
     pub tab: PaneTab,
     pub format: BodyFormat,
-    rendered: Option<((u64, usize, BodyFormat), String)>,
+    rendered: Option<(RenderKey, Arc<Galley>)>,
 }
 
 impl Default for PaneState {
@@ -88,17 +93,28 @@ fn body(ui: &mut egui::Ui, pane: &mut PaneState, data: &PaneData) {
         empty(ui, "No body content");
         return;
     }
-    let key = (data.cache_key, data.body.len(), pane.format);
+    let key = (
+        data.cache_key,
+        data.body.len(),
+        pane.format,
+        ui.visuals().dark_mode,
+        ui.ctx().pixels_per_point().to_bits(),
+    );
     if pane.rendered.as_ref().is_none_or(|(cached, _)| *cached != key) {
-        let text = match pane.format {
-            BodyFormat::Pretty => display_body(data.body, data.content_type),
-            BodyFormat::Raw => data.body.to_string(),
-            BodyFormat::Hex => hex_dump(&body_bytes(data.body)),
+        let (text, lang) = match pane.format {
+            BodyFormat::Pretty => {
+                let text = display_body(data.body, data.content_type);
+                let lang = code_view::detect(data.content_type, &text);
+                (text, lang)
+            }
+            BodyFormat::Raw => (data.body.to_string(), Lang::Plain),
+            BodyFormat::Hex => (hex_dump(&body_bytes(data.body)), Lang::Plain),
         };
-        pane.rendered = Some((key, text));
+        let job = code_view::layout_job(ui.style(), &text, lang);
+        pane.rendered = Some((key, ui.ctx().fonts_mut(|f| f.layout_job(job))));
     }
-    if let Some((_, text)) = &pane.rendered {
-        ui.add(egui::Label::new(RichText::new(text.as_str()).monospace()).extend());
+    if let Some((_, galley)) = &pane.rendered {
+        ui.add(egui::Label::new(galley.clone()));
     }
 }
 
