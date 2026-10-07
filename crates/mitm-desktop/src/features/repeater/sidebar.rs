@@ -1,25 +1,24 @@
 use eframe::egui::{self, RichText};
 use mitm_core::repeater::RepeaterTab;
 use crate::command::{AppCommand, Commands};
-use crate::widgets::pills::{render_method_pill, render_status_pill, AMBER, ROSE};
+use crate::widgets::pills::{method_text, status_text, ROSE};
+use crate::widgets::search::search_field;
 use super::RepeaterState;
 
 pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("Requests ({})", state.tabs.len())).strong());
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("➕ New").on_hover_text("Create a new request").clicked() {
+    egui::Sides::new().show(
+        ui,
+        |ui| {
+            ui.strong("Requests");
+            ui.weak(state.tabs.len().to_string());
+        },
+        |ui| {
+            if ui.button("➕").on_hover_text("New request").clicked() {
                 cmds.push(AppCommand::RepeaterNew);
             }
-        });
-    });
-    ui.horizontal(|ui| {
-        let width = ui.available_width() - if state.search.is_empty() { 0.0 } else { 24.0 };
-        ui.add(egui::TextEdit::singleline(&mut state.search).hint_text("🔍 Filter requests...").desired_width(width));
-        if !state.search.is_empty() && ui.small_button("✖").clicked() {
-            state.search.clear();
-        }
-    });
+        },
+    );
+    search_field(ui, &mut state.search, "Filter");
     ui.separator();
 
     let term = state.search.trim().to_lowercase();
@@ -30,86 +29,61 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
         .collect();
 
     if visible.is_empty() {
-        ui.add_space(24.0);
-        ui.vertical_centered(|ui| {
-            let text = if term.is_empty() { "No requests created" } else { "No matching requests" };
-            ui.label(RichText::new(text).weak().italics());
-        });
+        ui.weak(if term.is_empty() { "No requests yet" } else { "No matches" });
         return;
     }
 
     egui::ScrollArea::vertical().id_salt("repeater_sidebar_list").auto_shrink([false, false]).show(ui, |ui| {
         for tab in visible {
             let active = state.active_id.as_deref() == Some(tab.id.as_str());
-            if let Some(cmd) = card(ui, tab, active) {
+            if let Some(cmd) = row(ui, tab, active) {
                 cmds.push(cmd);
             }
         }
     });
 }
 
-fn card(ui: &mut egui::Ui, tab: &RepeaterTab, active: bool) -> Option<AppCommand> {
-    let (host, path) = split_url(&tab.url);
-    let mut cmd = None;
+fn row(ui: &mut egui::Ui, tab: &RepeaterTab, active: bool) -> Option<AppCommand> {
+    let mut left = egui::text::LayoutJob::default();
+    method_text(&tab.method).append_to(&mut left, ui.style(), egui::FontSelection::Default, egui::Align::Center);
+    RichText::new(format!("  {}", url_path(&tab.url)))
+        .monospace()
+        .append_to(&mut left, ui.style(), egui::FontSelection::Default, egui::Align::Center);
 
-    let mut frame = egui::Frame::NONE.inner_margin(egui::Margin::symmetric(8, 6));
-    if active {
-        frame = frame
-            .fill(ui.visuals().selection.bg_fill.gamma_multiply(0.3))
-            .stroke(egui::Stroke::new(1.0, ui.visuals().selection.bg_fill));
-    }
+    let right = match tab.last_status_code {
+        Some(code) => status_text(code),
+        None => RichText::new("·").weak(),
+    };
+
     let response = ui
-        .push_id(&tab.id, |ui| {
-            frame.show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.horizontal(|ui| {
-                    render_method_pill(ui, &tab.method);
-                    let width = ui.available_width() - 24.0;
-                    ui.add_sized(
-                        [width, 18.0],
-                        egui::Label::new(RichText::new(host).strong().monospace()).truncate().selectable(false),
-                    );
-                    if ui.small_button(RichText::new("✖").color(ROSE)).on_hover_text("Delete request").clicked() {
-                        cmd = Some(AppCommand::RepeaterDelete(tab.id.clone()));
-                    }
-                });
-                ui.add(egui::Label::new(RichText::new(path).weak().monospace().size(11.0)).truncate().selectable(false));
-                ui.horizontal(|ui| {
-                    let hits = tab.execution_count;
-                    let noun = if hits == 1 { "hit" } else { "hits" };
-                    ui.label(RichText::new("⚡").color(AMBER).size(10.0));
-                    ui.label(RichText::new(format!("{} {}", hits, noun)).weak().size(10.0));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match tab.last_status_code {
-                        Some(code) => {
-                            if let Some(ms) = tab.last_duration_ms {
-                                ui.label(RichText::new(format!("{}ms", ms)).weak().size(10.0));
-                            }
-                            render_status_pill(ui, code);
-                        }
-                        None => {
-                            ui.label(RichText::new("Unsent").weak().italics().size(10.0));
-                        }
-                    });
-                });
-            })
-        })
-        .inner
-        .response
-        .interact(egui::Sense::click());
+        .add(
+            egui::Button::selectable(active, left)
+                .right_text(right)
+                .truncate()
+                .min_size(egui::vec2(ui.available_width(), 24.0)),
+        )
+        .on_hover_ui(|ui| {
+            ui.monospace(&tab.url);
+            match (tab.last_status_code, tab.last_duration_ms) {
+                (Some(code), Some(ms)) => ui.weak(format!("Last: {} in {}ms · sent {}×", code, ms, tab.execution_count)),
+                _ => ui.weak("Not sent yet"),
+            };
+        });
 
-    if cmd.is_none() && response.clicked() {
+    let mut cmd = None;
+    response.context_menu(|ui| {
+        if ui.button(RichText::new("Delete").color(ROSE)).clicked() {
+            cmd = Some(AppCommand::RepeaterDelete(tab.id.clone()));
+            ui.close();
+        }
+    });
+    if response.clicked() {
         cmd = Some(AppCommand::RepeaterSelect(tab.id.clone()));
     }
-    ui.separator();
     cmd
 }
 
-fn split_url(url: &str) -> (String, String) {
-    let url = url.trim();
-    if url.is_empty() {
-        return ("https://localhost".to_string(), "/".to_string());
-    }
-    let (scheme, rest) = url.split_once("://").unwrap_or(("https", url));
-    let (host, path) = rest.find(['/', '?']).map_or((rest, "/"), |i| (&rest[..i], &rest[i..]));
-    (format!("{}://{}", scheme, host), path.to_string())
+fn url_path(url: &str) -> &str {
+    let rest = url.trim().split_once("://").map_or(url.trim(), |(_, rest)| rest);
+    rest.find(['/', '?']).map_or(rest, |i| &rest[i..])
 }

@@ -11,8 +11,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
 
     egui::Panel::left("repeater_sidebar")
         .resizable(true)
-        .default_size(270.0)
-        .size_range(200.0..=480.0)
+        .default_size(230.0)
+        .size_range(150.0..=420.0)
         .show(ui, |ui| sidebar::show(ui, state, cmds));
 
     let Some(active_id) = state.active_id.clone() else {
