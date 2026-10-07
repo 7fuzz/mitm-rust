@@ -170,7 +170,49 @@ pub fn body_bytes(body: &str) -> Vec<u8> {
         .unwrap_or_else(|| body.as_bytes().to_vec())
 }
 
+pub fn looks_like_base64(text: &str) -> bool {
+    let text = strip_data_url(text.trim());
+    text.len() >= 4 && text.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'-' | b'_' | b'='))
+}
+
+pub fn decode_base64(text: &str) -> Option<Vec<u8>> {
+    use base64::Engine;
+    use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD};
+    let text = strip_data_url(text.trim());
+    [STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD]
+        .iter()
+        .find_map(|engine| engine.decode(text).ok())
+        .filter(|bytes| !bytes.is_empty())
+}
+
+fn strip_data_url(text: &str) -> &str {
+    text.strip_prefix("data:")
+        .and_then(|rest| rest.split_once(";base64,"))
+        .map_or(text, |(_, data)| data)
+}
+
 pub fn local_clock(rfc3339: Option<&str>) -> Option<(String, String)> {
     let at = chrono::DateTime::parse_from_rfc3339(rfc3339?).ok()?.with_timezone(&chrono::Local);
     Some((at.format("%H:%M:%S%.3f").to_string(), at.format("%Y-%m-%d %H:%M:%S%.3f").to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decodes_padded_unpadded_url_safe_and_data_urls() {
+        assert_eq!(decode_base64("aGk=").as_deref(), Some(&b"hi"[..]));
+        assert_eq!(decode_base64("aGk").as_deref(), Some(&b"hi"[..]));
+        assert_eq!(decode_base64("_-8").as_deref(), Some(&[0xff, 0xef][..]));
+        assert_eq!(decode_base64("data:text/plain;base64,aGk=").as_deref(), Some(&b"hi"[..]));
+        assert_eq!(decode_base64("not base64!"), None);
+    }
+
+    #[test]
+    fn base64_shape_check_rejects_prose() {
+        assert!(looks_like_base64("data:image/png;base64,iVBORw0KGgo="));
+        assert!(!looks_like_base64("hello world"));
+        assert!(!looks_like_base64("ab"));
+    }
 }

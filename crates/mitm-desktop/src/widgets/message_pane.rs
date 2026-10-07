@@ -134,6 +134,9 @@ fn body(ui: &mut egui::Ui, pane: &mut PaneState, data: &PaneData) {
 fn tree(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneData) {
     let key = (data.cache_key, data.body.len());
     if pane.tree.as_ref().is_none_or(|(cached, _)| *cached != key) {
+        if let Some((_, Some(old))) = &pane.tree {
+            old.forget_images(ui.ctx());
+        }
         let parsed = serde_json::from_str(data.body).ok().map(JsonTree::new);
         pane.tree = Some((key, parsed));
     }
