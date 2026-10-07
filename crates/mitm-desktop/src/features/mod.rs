@@ -1,4 +1,5 @@
 pub mod collections;
+pub mod database;
 pub mod fuzzer;
 pub mod inspector;
 pub mod intercept;

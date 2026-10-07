@@ -22,6 +22,7 @@ pub struct AppState {
     pub fuzzer: FuzzerState,
     pub collections: CollectionsState,
     pub websockets: WebSocketsState,
+    pub database: crate::features::database::DatabaseState,
 }
 
 impl AppState {

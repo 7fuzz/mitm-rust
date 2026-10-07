@@ -12,6 +12,7 @@ pub fn show(
     proxy: &mut ProxyState,
     cert: &mut CertificateState,
     data: &mut DataSectionState,
+    database: &mut crate::features::database::DatabaseState,
     form: &mut ListenerForm,
     traffic: &TrafficState,
     db_path: &Path,
@@ -29,9 +30,7 @@ pub fn show(
             SettingsSection::Certificate => certificate_section(ui, cert, cmds),
             SettingsSection::Appearance => appearance_section(ui),
             SettingsSection::Data => data_section(ui, data, cmds),
-            SettingsSection::Database => {
-                ui.heading("Database");
-            }
+            SettingsSection::Database => crate::features::database::show(ui, database, db_path),
         });
 }
 

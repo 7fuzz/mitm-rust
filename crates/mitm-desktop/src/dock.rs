@@ -116,6 +116,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                 &mut state.proxy,
                 &mut state.certificate,
                 &mut state.data,
+                &mut state.database,
                 &mut state.listener_form,
                 &state.traffic,
                 self.db_path,
