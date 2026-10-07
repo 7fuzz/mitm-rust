@@ -412,6 +412,7 @@ impl eframe::App for MitmApp {
     fn on_exit(&mut self) {
         self.state.repeater.flush(&self.core.db_path);
         self.state.collections.flush(&self.core.db_path);
+        self.state.environments.flush(&self.core.db_path);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -428,6 +429,7 @@ impl eframe::App for MitmApp {
             self.state.collections.finish_run(&id, result, &self.core.db_path);
         }
         self.state.collections.flush_if_idle(&self.core.db_path, now);
+        self.state.environments.flush_if_idle(&self.core.db_path, now);
         self.fuzzer_worker.poll(&mut self.state.fuzzer);
         for result in self.ca_jobs.drain().flatten() {
             self.state.certificate.status = Some(match result {

@@ -1,8 +1,12 @@
+use std::collections::HashSet;
 use std::path::Path;
 use eframe::egui::{self, RichText};
-use mitm_core::workspace::{Environment, Workspace};
+use egui_extras::{Column, TableBuilder};
+use mitm_core::workspace::{Environment, EnvironmentVariable, Workspace};
 use crate::command::{AppCommand, Commands};
 use crate::widgets::split;
+
+const SAVE_DELAY_SECS: f64 = 0.6;
 
 pub struct EnvironmentsState {
     pub workspaces: Vec<Workspace>,
@@ -16,6 +20,11 @@ pub struct EnvironmentsState {
     pub workspace_search: String,
     pub new_workspace_modal: bool,
     pub new_workspace_name: String,
+    pub variable_filter: String,
+    pub new_var_key: String,
+    pub new_var_value: String,
+    dirty: HashSet<String>,
+    last_edit: f64,
 }
 
 impl Default for EnvironmentsState {
@@ -32,6 +41,11 @@ impl Default for EnvironmentsState {
             workspace_search: String::new(),
             new_workspace_modal: false,
             new_workspace_name: String::new(),
+            variable_filter: String::new(),
+            new_var_key: String::new(),
+            new_var_value: String::new(),
+            dirty: HashSet::new(),
+            last_edit: 0.0,
         }
     }
 }
@@ -75,12 +89,33 @@ impl EnvironmentsState {
         let active_id = self.active_environment_id.as_ref()?;
         self.environments.iter().find(|e| &e.id == active_id)
     }
+
+    pub fn mark_dirty(&mut self, env_id: &str, now: f64) {
+        self.dirty.insert(env_id.to_string());
+        self.last_edit = now;
+    }
+
+    pub fn flush_if_idle(&mut self, db_path: &Path, now: f64) {
+        if !self.dirty.is_empty() && now - self.last_edit >= SAVE_DELAY_SECS {
+            self.flush(db_path);
+        }
+    }
+
+    pub fn flush(&mut self, db_path: &Path) {
+        let db_buf = db_path.to_path_buf();
+        for id in std::mem::take(&mut self.dirty) {
+            if let Some(env) = self.environments.iter().find(|e| e.id == id).cloned() {
+                let _ = mitm_core::workspace::save_workspace_environment_db(&db_buf, env);
+            }
+        }
+    }
 }
 
 pub fn show(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut Commands, _db_path: &Path) {
+    let now = ui.input(|i| i.time);
     let [mut list_ui, mut editor_ui] = split::side_by_side(ui, "environments_split", &mut state.split_fraction);
     environment_list(&mut list_ui, state, cmds);
-    environment_editor(&mut editor_ui, state, cmds);
+    environment_editor(&mut editor_ui, state, cmds, now);
 }
 
 fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut Commands) {
@@ -180,8 +215,8 @@ fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
     });
 }
 
-fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &mut Commands) {
-    let Some(selected_id) = &state.selected_environment_id else {
+fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &mut Commands, now: f64) {
+    let Some(selected_id) = state.selected_environment_id.clone() else {
         ui.vertical_centered(|ui| {
             ui.add_space(40.0);
             ui.weak("Select an environment from the list or add a new one");
@@ -189,7 +224,7 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &
         return;
     };
 
-    let Some(env) = state.environments.iter().find(|e| &e.id == selected_id) else {
+    let Some(env_idx) = state.environments.iter().position(|e| e.id == selected_id) else {
         ui.vertical_centered(|ui| {
             ui.add_space(40.0);
             ui.weak("Environment not found");
@@ -197,12 +232,135 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &
         return;
     };
 
+    let env = &mut state.environments[env_idx];
+
     ui.horizontal(|ui| {
         ui.heading(&env.name);
         if env.is_active {
             ui.label(RichText::new("● Active").color(ui.visuals().selection.bg_fill).strong());
         }
     });
+    ui.add_space(4.0);
+
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(&mut state.variable_filter)
+                .hint_text("Filter variables…")
+                .desired_width(ui.available_width() - 80.0),
+        );
+        if !state.variable_filter.is_empty() && ui.button("Clear").clicked() {
+            state.variable_filter.clear();
+        }
+    });
     ui.separator();
-    ui.label(format!("{} variables", env.variables.len()));
+
+    let filter = state.variable_filter.trim().to_lowercase();
+    let mut changed = false;
+    let mut delete_idx = None;
+
+    let total_vars = env.variables.len();
+    let matching_indices: Vec<usize> = (0..total_vars)
+        .filter(|&i| {
+            if filter.is_empty() {
+                true
+            } else {
+                let v = &env.variables[i];
+                v.key.to_lowercase().contains(&filter) || v.value.to_lowercase().contains(&filter)
+            }
+        })
+        .collect();
+
+    let show_new_row = filter.is_empty();
+    let row_count = matching_indices.len() + if show_new_row { 1 } else { 0 };
+
+    TableBuilder::new(ui)
+        .striped(true)
+        .resizable(true)
+        .auto_shrink([false, false])
+        .column(Column::exact(30.0))
+        .column(Column::initial(180.0).at_least(80.0).clip(true))
+        .column(Column::remainder().at_least(120.0).clip(true))
+        .column(Column::exact(28.0))
+        .header(22.0, |mut header| {
+            header.col(|ui| { ui.strong(""); });
+            header.col(|ui| { ui.strong("Key"); });
+            header.col(|ui| { ui.strong("Value"); });
+            header.col(|ui| { ui.strong(""); });
+        })
+        .body(|body| {
+            body.rows(26.0, row_count, |mut row| {
+                let row_idx = row.index();
+                if row_idx < matching_indices.len() {
+                    let var_idx = matching_indices[row_idx];
+                    let var = &mut env.variables[var_idx];
+
+                    row.col(|ui| {
+                        changed |= ui.checkbox(&mut var.enabled, "").changed();
+                    });
+                    row.col(|ui| {
+                        changed |= ui.add(
+                            egui::TextEdit::singleline(&mut var.key)
+                                .hint_text("Key")
+                                .desired_width(ui.available_width()),
+                        ).changed();
+                    });
+                    row.col(|ui| {
+                        changed |= ui.add(
+                            egui::TextEdit::singleline(&mut var.value)
+                                .hint_text("Value")
+                                .desired_width(ui.available_width()),
+                        ).changed();
+                    });
+                    row.col(|ui| {
+                        if ui.small_button("✖").on_hover_text("Delete variable").clicked() {
+                            delete_idx = Some(var_idx);
+                        }
+                    });
+                } else if show_new_row {
+                    row.col(|ui| {
+                        ui.add_enabled(false, egui::Checkbox::new(&mut true, ""));
+                    });
+                    let mut key_changed = false;
+                    let mut val_changed = false;
+                    row.col(|ui| {
+                        key_changed = ui.add(
+                            egui::TextEdit::singleline(&mut state.new_var_key)
+                                .hint_text("Add key")
+                                .desired_width(ui.available_width()),
+                        ).changed();
+                    });
+                    row.col(|ui| {
+                        val_changed = ui.add(
+                            egui::TextEdit::singleline(&mut state.new_var_value)
+                                .hint_text("Add value")
+                                .desired_width(ui.available_width()),
+                        ).changed();
+                    });
+                    row.col(|_| {});
+
+                    if key_changed || val_changed {
+                        let key = std::mem::take(&mut state.new_var_key);
+                        let value = std::mem::take(&mut state.new_var_value);
+                        env.variables.push(EnvironmentVariable {
+                            key,
+                            value,
+                            enabled: true,
+                            r#type: "default".to_string(),
+                            active_index: 0,
+                            variants: Vec::new(),
+                        });
+                        changed = true;
+                    }
+                }
+            });
+        });
+
+    if let Some(idx) = delete_idx {
+        env.variables.remove(idx);
+        changed = true;
+    }
+
+    if changed {
+        state.mark_dirty(&selected_id, now);
+    }
 }
