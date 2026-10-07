@@ -22,6 +22,9 @@ pub enum AppCommand {
     SetProxyMode(ProxyMode),
     SaveListeners(Vec<ListenerConfig>),
     SetListenerEnabled { id: u32, enabled: bool },
+    ExportCa(mitm_core::CaFormat),
+    CopyCaPem,
+    OpenCaFolder,
 
     SelectFlow(i64),
     ClearTraffic,

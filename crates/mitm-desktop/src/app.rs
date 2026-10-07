@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 use crossbeam_channel::Receiver;
 use eframe::egui;
@@ -18,6 +19,7 @@ use crate::format::{headers_to_text, Exchange};
 use crate::jobs::Jobs;
 use crate::state::AppState;
 use crate::palette::{self, PaletteState};
+use crate::theme::Tone;
 use crate::{prefs, shortcuts, top_bar};
 
 pub struct MitmApp {
@@ -30,6 +32,7 @@ pub struct MitmApp {
     core_events: Receiver<CoreEvent>,
     repeater_runs: Jobs<(String, Result<RepeaterExecutionResult, String>)>,
     collection_runs: Jobs<(String, Result<ExecutionResult, String>)>,
+    ca_jobs: Jobs<Option<Result<PathBuf, String>>>,
     fuzzer_worker: FuzzerWorker,
 }
 
@@ -43,6 +46,7 @@ impl MitmApp {
         }
         refresh_listener_state(&rt, &core, &mut state.proxy);
         state.proxy.reload_host_ips();
+        state.certificate.info = core.ca_info().ok();
 
         Self {
             dock: prefs::restore(storage, &mut state),
@@ -54,6 +58,7 @@ impl MitmApp {
             rt,
             repeater_runs: Jobs::default(),
             collection_runs: Jobs::default(),
+            ca_jobs: Jobs::default(),
             fuzzer_worker: FuzzerWorker::default(),
         }
     }
@@ -94,6 +99,28 @@ impl MitmApp {
             AppCommand::SetListenerEnabled { id, enabled } => {
                 let _ = self.rt.block_on(self.core.set_listener_enabled(id, enabled));
                 self.refresh_listeners();
+            }
+            AppCommand::ExportCa(format) => {
+                let core = Arc::clone(&self.core);
+                let (file_name, filter_name, ext) = match format {
+                    mitm_core::CaFormat::Pem => ("mitm-ca.crt", "PEM certificate", "crt"),
+                    mitm_core::CaFormat::Der => ("mitm-ca.cer", "DER certificate", "cer"),
+                };
+                self.ca_jobs.spawn(&self.rt, ctx, async move {
+                    let path = crate::files::pick_save(file_name, &[(filter_name, &[ext])]).await?;
+                    let res = core.export_ca(&path, format).map(|_| path);
+                    Some(res)
+                });
+            }
+            AppCommand::CopyCaPem => {
+                if let Ok(pem) = self.core.ca_pem() {
+                    ctx.copy_text(pem);
+                }
+            }
+            AppCommand::OpenCaFolder => {
+                if let Ok(info) = self.core.ca_info() {
+                    let _ = crate::files::open_external(&info.ca_dir);
+                }
             }
 
             AppCommand::SelectFlow(id) => {
@@ -296,6 +323,12 @@ impl eframe::App for MitmApp {
         }
         self.state.collections.flush_if_idle(&self.core.db_path, now);
         self.fuzzer_worker.poll(&mut self.state.fuzzer);
+        for result in self.ca_jobs.drain().flatten() {
+            self.state.certificate.status = Some(match result {
+                Ok(path) => (format!("Exported to {}", path.display()), Tone::Success),
+                Err(e) => (e, Tone::Danger),
+            });
+        }
 
         egui::Panel::top("top_panel").show(ui, |ui| {
             top_bar::show(ui, &self.state, &self.dock, &mut self.cmds);

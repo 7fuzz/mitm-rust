@@ -4,12 +4,13 @@ use crate::theme::{self, Tone};
 use crate::command::{AppCommand, Commands};
 use crate::features::traffic::TrafficState;
 use crate::widgets::split;
-use super::{ListenerForm, ProxyState, SettingsPrefs, SettingsSection};
+use super::{CertificateState, ListenerForm, ProxyState, SettingsPrefs, SettingsSection};
 
 pub fn show(
     ui: &mut egui::Ui,
     prefs: &mut SettingsPrefs,
     proxy: &mut ProxyState,
+    cert: &mut CertificateState,
     form: &mut ListenerForm,
     traffic: &TrafficState,
     db_path: &Path,
@@ -24,9 +25,7 @@ pub fn show(
         .auto_shrink([false, false])
         .show(&mut content, |ui| match prefs.section {
             SettingsSection::Proxy => proxy_section(ui, proxy, form, traffic, db_path, cmds),
-            SettingsSection::Certificate => {
-                ui.heading("Certificate");
-            }
+            SettingsSection::Certificate => certificate_section(ui, cert, cmds),
             SettingsSection::Appearance => {
                 ui.heading("Appearance");
             }
@@ -37,6 +36,98 @@ pub fn show(
                 ui.heading("Database");
             }
         });
+}
+
+fn certificate_section(
+    ui: &mut egui::Ui,
+    cert: &CertificateState,
+    cmds: &mut Commands,
+) {
+    ui.strong("Root Certificate Authority (CA)");
+    ui.label(RichText::new("Clients and browsers must trust this CA to inspect HTTPS traffic.").weak());
+    ui.add_space(8.0);
+
+    ui.horizontal(|ui| {
+        ui.menu_button("Save certificate… ▾", |ui| {
+            if ui.button("PEM format (.crt)…").clicked() {
+                cmds.push(AppCommand::ExportCa(mitm_core::CaFormat::Pem));
+                ui.close();
+            }
+            if ui.button("DER format (.cer)…").clicked() {
+                cmds.push(AppCommand::ExportCa(mitm_core::CaFormat::Der));
+                ui.close();
+            }
+        });
+
+        let flash_id = ui.id().with("ca_copy_flash");
+        if ui.button("Copy PEM").clicked() {
+            cmds.push(AppCommand::CopyCaPem);
+            crate::widgets::flash::set(ui, flash_id, "PEM copied");
+        }
+        if let Some(msg) = crate::widgets::flash::current(ui, flash_id) {
+            ui.label(RichText::new(msg).color(theme::color(ui, Tone::Success)).strong());
+        }
+
+        if ui.button("Open folder").clicked() {
+            cmds.push(AppCommand::OpenCaFolder);
+        }
+    });
+
+    if let Some((msg, tone)) = &cert.status {
+        ui.add_space(4.0);
+        ui.label(RichText::new(msg).color(theme::color(ui, *tone)));
+    }
+
+    ui.add_space(12.0);
+    ui.separator();
+    ui.add_space(8.0);
+
+    ui.strong("Certificate Details");
+    ui.add_space(4.0);
+
+    if let Some(info) = &cert.info {
+        egui::Grid::new("ca_details_grid")
+            .num_columns(2)
+            .spacing([16.0, 6.0])
+            .striped(true)
+            .show(ui, |ui| {
+                ui.strong("Common Name:");
+                ui.label(&info.common_name);
+                ui.end_row();
+
+                ui.strong("Organization:");
+                ui.label(&info.organization);
+                ui.end_row();
+
+                ui.strong("Valid From:");
+                ui.label(&info.not_before);
+                ui.end_row();
+
+                ui.strong("Valid Until:");
+                ui.label(&info.not_after);
+                ui.end_row();
+
+                ui.strong("SHA-256 Fingerprint:");
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(&info.fingerprint).monospace());
+                    if ui.small_button("📋").on_hover_text("Copy fingerprint").clicked() {
+                        ui.ctx().copy_text(info.fingerprint.clone());
+                    }
+                });
+                ui.end_row();
+
+                ui.strong("File Path:");
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(&info.cert_path).monospace());
+                    if ui.small_button("📋").on_hover_text("Copy path").clicked() {
+                        ui.ctx().copy_text(info.cert_path.clone());
+                    }
+                });
+                ui.end_row();
+            });
+    } else {
+        ui.label(RichText::new("Loading certificate info…").weak());
+    }
 }
 
 fn proxy_section(

@@ -4,13 +4,14 @@ use crate::features::fuzzer::FuzzerState;
 use crate::features::inspector::InspectorState;
 use crate::features::intercept::InterceptState;
 use crate::features::repeater::RepeaterState;
-use crate::features::settings::{ListenerForm, ProxyState, SettingsPrefs};
+use crate::features::settings::{CertificateState, ListenerForm, ProxyState, SettingsPrefs};
 use crate::features::traffic::TrafficState;
 use crate::features::websockets::WebSocketsState;
 
 #[derive(Default)]
 pub struct AppState {
     pub proxy: ProxyState,
+    pub certificate: CertificateState,
     pub listener_form: ListenerForm,
     pub settings: SettingsPrefs,
     pub traffic: TrafficState,

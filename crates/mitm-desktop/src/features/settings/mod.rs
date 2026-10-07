@@ -48,6 +48,20 @@ impl Default for SettingsPrefs {
     }
 }
 
+pub struct CertificateState {
+    pub info: Option<mitm_core::CaInfo>,
+    pub status: Option<(String, crate::theme::Tone)>,
+}
+
+impl Default for CertificateState {
+    fn default() -> Self {
+        Self {
+            info: None,
+            status: None,
+        }
+    }
+}
+
 pub struct ProxyState {
     pub mode: ProxyMode,
     pub running: bool,
