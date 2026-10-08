@@ -6,7 +6,7 @@ use crate::dock::{self, Tab};
 use crate::features::collections::CollectionsPrefs;
 use crate::features::cvss::CvssPrefs;
 use crate::features::encoding::EncodingPrefs;
-use crate::features::fuzzer::FuzzerPrefs;
+use crate::features::fuzzer::{FuzzerConfig, FuzzerPrefs};
 use crate::features::hashing::HashingPrefs;
 use crate::features::hmac_tool::HmacToolPrefs;
 use crate::features::json_diff::JsonDiffPrefs;
@@ -65,6 +65,10 @@ impl Section for FuzzerPrefs {
     const KEY: &'static str = "fuzzer";
 }
 
+impl Section for FuzzerConfig {
+    const KEY: &'static str = "fuzzer_config";
+}
+
 impl Section for WebSocketsPrefs {
     const KEY: &'static str = "websockets";
 }
@@ -110,6 +114,7 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     state.repeater.prefs = load(storage);
     state.collections.prefs = load(storage);
     state.fuzzer.prefs = load(storage);
+    state.fuzzer.restore(load(storage));
     state.websockets.prefs = load(storage);
     state.webhooks.prefs = load(storage);
     state.cvss.prefs = load(storage);
@@ -150,6 +155,7 @@ pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppStat
     save(storage, &state.repeater.prefs);
     save(storage, &state.collections.prefs);
     save(storage, &state.fuzzer.prefs);
+    save(storage, &state.fuzzer.snapshot());
     save(storage, &state.websockets.prefs);
     save(storage, &state.webhooks.prefs);
     save(storage, &state.cvss.prefs);

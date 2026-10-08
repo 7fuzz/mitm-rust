@@ -44,7 +44,7 @@ struct FuzzerCache {
     indices: Vec<usize>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum AttackType {
     #[default]
     Sniper,
@@ -78,13 +78,15 @@ impl AttackType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PayloadKind {
     List,
     Numbers,
 }
 
 /// The editing state for one variable's payloads; `to_set` turns it into a core `PayloadSet`.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PayloadConfig {
     pub kind: PayloadKind,
     pub list_text: String,
@@ -185,6 +187,49 @@ impl Default for FuzzerPrefs {
     }
 }
 
+/// The request and attack setup, saved across restarts. Runs live in the DB instead.
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
+pub struct FuzzerConfig {
+    pub attack_type: AttackType,
+    pub method: String,
+    pub url: String,
+    pub params: Vec<ParamItem>,
+    pub headers: Vec<HeaderItem>,
+    pub body_type: String,
+    pub body_content: String,
+    pub payloads: HashMap<String, PayloadConfig>,
+    pub match_rules: Vec<MatchRule>,
+    pub concurrency: usize,
+    pub delay_ms: u64,
+}
+
+impl Default for FuzzerConfig {
+    fn default() -> Self {
+        Self {
+            attack_type: AttackType::Sniper,
+            method: "GET".to_string(),
+            url: "https://httpbin.org/status/{{status}}".to_string(),
+            params: Vec::new(),
+            headers: vec![HeaderItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                key: "User-Agent".to_string(),
+                value: "MITM-Native/0.2".to_string(),
+                enabled: true,
+            }],
+            body_type: "none".to_string(),
+            body_content: String::new(),
+            payloads: HashMap::from([(
+                "status".to_string(),
+                PayloadConfig { list_text: "200\n301\n400\n404\n500".to_string(), ..PayloadConfig::default() },
+            )]),
+            match_rules: Vec::new(),
+            concurrency: 5,
+            delay_ms: 0,
+        }
+    }
+}
+
 pub struct FuzzerState {
     pub prefs: FuzzerPrefs,
     pub config_tab: ConfigTab,
@@ -228,29 +273,22 @@ pub struct FuzzerState {
 
 impl Default for FuzzerState {
     fn default() -> Self {
+        let config = FuzzerConfig::default();
         Self {
             prefs: FuzzerPrefs::default(),
             config_tab: ConfigTab::Request,
             request_tab: RequestTab::Params,
-            attack_type: AttackType::Sniper,
-            method: "GET".to_string(),
-            url: "https://httpbin.org/status/{{status}}".to_string(),
-            params: Vec::new(),
-            headers: vec![HeaderItem {
-                id: uuid::Uuid::new_v4().to_string(),
-                key: "User-Agent".to_string(),
-                value: "MITM-Native/0.2".to_string(),
-                enabled: true,
-            }],
-            body_type: "none".to_string(),
-            body_content: String::new(),
-            payloads: HashMap::from([(
-                "status".to_string(),
-                PayloadConfig { list_text: "200\n301\n400\n404\n500".to_string(), ..PayloadConfig::default() },
-            )]),
-            match_rules: Vec::new(),
-            concurrency: 5,
-            delay_ms: 0,
+            attack_type: config.attack_type,
+            method: config.method,
+            url: config.url,
+            params: config.params,
+            headers: config.headers,
+            body_type: config.body_type,
+            body_content: config.body_content,
+            payloads: config.payloads,
+            match_rules: config.match_rules,
+            concurrency: config.concurrency,
+            delay_ms: config.delay_ms,
             sort_column: None,
             sort_desc: false,
             status_filters: HashMap::new(),
@@ -280,6 +318,36 @@ impl Default for FuzzerState {
 }
 
 impl FuzzerState {
+    pub fn snapshot(&self) -> FuzzerConfig {
+        FuzzerConfig {
+            attack_type: self.attack_type,
+            method: self.method.clone(),
+            url: self.url.clone(),
+            params: self.params.clone(),
+            headers: self.headers.clone(),
+            body_type: self.body_type.clone(),
+            body_content: self.body_content.clone(),
+            payloads: self.payloads.clone(),
+            match_rules: self.match_rules.clone(),
+            concurrency: self.concurrency,
+            delay_ms: self.delay_ms,
+        }
+    }
+
+    pub fn restore(&mut self, config: FuzzerConfig) {
+        self.attack_type = config.attack_type;
+        self.method = config.method;
+        self.url = config.url;
+        self.params = config.params;
+        self.headers = config.headers;
+        self.body_type = config.body_type;
+        self.body_content = config.body_content;
+        self.payloads = config.payloads;
+        self.match_rules = config.match_rules;
+        self.concurrency = config.concurrency;
+        self.delay_ms = config.delay_ms;
+    }
+
     pub fn load_capture(&mut self, captured: CapturedRequest) {
         self.method = captured.method;
         self.url = captured.url;
@@ -695,6 +763,24 @@ pub fn most_frequent_size(rows: &[FuzzRow]) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn config_survives_a_save_and_restore() {
+        let mut state = FuzzerState::default();
+        state.url = "https://example.test/{{id}}".to_string();
+        state.payloads.insert("id".into(), PayloadConfig { kind: PayloadKind::Numbers, to: 99.0, ..PayloadConfig::default() });
+        state.attack_type = AttackType::ClusterBomb;
+        state.delay_ms = 250;
+        let saved = serde_json::to_string(&state.snapshot()).unwrap();
+
+        let mut restored = FuzzerState::default();
+        restored.restore(serde_json::from_str(&saved).unwrap());
+        assert_eq!(restored.url, state.url);
+        assert_eq!(restored.attack_type, AttackType::ClusterBomb);
+        assert_eq!(restored.delay_ms, 250);
+        assert_eq!(restored.payloads["id"].to, 99.0);
+        assert_eq!(restored.payloads["status"].list_text, state.payloads["status"].list_text);
+    }
 
     #[test]
     fn attack_types_estimate_requests() {
