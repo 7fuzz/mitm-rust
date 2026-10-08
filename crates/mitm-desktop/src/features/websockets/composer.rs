@@ -38,7 +38,7 @@ impl FrameMode {
                 let digits: Vec<char> = payload.chars().filter(|c| !c.is_whitespace()).collect();
                 if !digits.iter().all(char::is_ascii_hexdigit) {
                     Err("Not hex".to_string())
-                } else if digits.len() % 2 != 0 {
+                } else if !digits.len().is_multiple_of(2) {
                     Err("Odd number of hex digits".to_string())
                 } else {
                     Ok(())

@@ -179,7 +179,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
     type Tab = Tab;
 
     fn id(&mut self, tab: &mut Tab) -> egui::Id {
-        egui::Id::new(&*tab)
+        egui::Id::new(*tab)
     }
 
     fn title(&mut self, tab: &mut Tab) -> egui::WidgetText {

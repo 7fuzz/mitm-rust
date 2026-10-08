@@ -90,7 +90,7 @@ fn offset_holding_rows_in_place(state: &TrafficState, visible: &[usize], row_ste
         return None;
     }
     let added = visible.iter().take_while(|&&i| state.flows[i].id > top_id).count();
-    (added > 0).then(|| offset + added as f32 * row_step)
+    (added > 0).then_some(offset + added as f32 * row_step)
 }
 
 fn flow_row(

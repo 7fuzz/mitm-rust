@@ -6,6 +6,7 @@ use crate::features::traffic::TrafficState;
 use crate::widgets::split;
 use super::{CertificateState, DataSectionState, ListenerForm, ProxyState, SettingsPrefs, SettingsSection};
 
+#[allow(clippy::too_many_arguments)]
 pub fn show(
     ui: &mut egui::Ui,
     prefs: &mut SettingsPrefs,

@@ -51,36 +51,18 @@ impl Default for SettingsPrefs {
     }
 }
 
+#[derive(Default)]
 pub struct CertificateState {
     pub info: Option<mitm_core::CaInfo>,
     pub status: Option<(String, crate::theme::Tone)>,
 }
 
-impl Default for CertificateState {
-    fn default() -> Self {
-        Self {
-            info: None,
-            status: None,
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct DataSectionState {
     pub counts: Option<mitm_core::db::DataCategoryCounts>,
     pub status: Option<(String, crate::theme::Tone)>,
     pub factory_reset_open: bool,
     pub factory_reset_input: String,
-}
-
-impl Default for DataSectionState {
-    fn default() -> Self {
-        Self {
-            counts: None,
-            status: None,
-            factory_reset_open: false,
-            factory_reset_input: String::new(),
-        }
-    }
 }
 
 pub struct ProxyState {

@@ -56,7 +56,7 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
             }
         }
 
-        if fuzzer.run_id.is_some() {
+        if let Some(run_id) = fuzzer.run_id {
             if !fuzzer.is_saved {
                 ui.label(RichText::new("●").color(theme::color(ui, Tone::Warn)))
                     .on_hover_text("Unsaved");
@@ -72,7 +72,6 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
                     }
                     let enter = text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                     if enter || ui.button("Save").clicked() {
-                        let run_id = fuzzer.run_id.unwrap();
                         let name = if fuzzer.save_name_input.trim().is_empty() {
                             format!("Run #{}", run_id)
                         } else {
@@ -90,7 +89,7 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
                     fuzzer.save_name_input = fuzzer
                         .run_name
                         .clone()
-                        .unwrap_or_else(|| format!("Run #{}", fuzzer.run_id.unwrap()));
+                        .unwrap_or_else(|| format!("Run #{}", run_id));
                 }
             } else if let Some(ref name) = fuzzer.run_name {
                 ui.label(RichText::new(name).strong());

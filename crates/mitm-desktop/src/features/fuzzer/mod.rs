@@ -413,7 +413,7 @@ impl FuzzerState {
             .iter()
             .map(|name| self.payloads.get(name).map_or(0, |cfg| cfg.count()))
             .collect();
-        if counts.iter().any(|&c| c == 0) {
+        if counts.contains(&0) {
             return 0;
         }
         match self.attack_type {

@@ -24,6 +24,9 @@ pub enum BodyFormat {
     Hex,
 }
 
+/// A body's identity for caching: (hash, length).
+type BodyKey = (u64, usize);
+
 // Galleys depend on theme colours and zoom, so both are part of the cache key.
 type RenderKey = (u64, usize, BodyFormat, bool, u32);
 
@@ -31,14 +34,14 @@ pub struct PaneState {
     pub tab: PaneTab,
     pub format: BodyFormat,
     rendered: Option<(RenderKey, Arc<Galley>)>,
-    tree: Option<((u64, usize), Option<JsonTree>)>,
+    tree: Option<(BodyKey, Option<JsonTree>)>,
     image: Option<PaneImage>,
-    form: Option<((u64, usize), Option<Vec<FormField>>)>,
-    shown: Option<(u64, usize)>,
+    form: Option<(BodyKey, Option<Vec<FormField>>)>,
+    shown: Option<BodyKey>,
 }
 
 struct PaneImage {
-    key: (u64, usize),
+    key: BodyKey,
     uri: String,
     bytes: egui::load::Bytes,
 }
