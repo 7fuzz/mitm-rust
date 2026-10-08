@@ -4,3 +4,10 @@ members = [
     "crates/mitm-desktop",
 ]
 resolver = "2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+# "s" gives a ~22% smaller binary (29.5 vs 37.9 MB) at the cost of slower hot paths.
+opt-level = 3
