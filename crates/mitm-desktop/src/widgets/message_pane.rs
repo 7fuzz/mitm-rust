@@ -14,7 +14,7 @@ pub enum PaneTab {
     Cookies,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BodyFormat {
     Form,
     Preview,
@@ -34,6 +34,7 @@ pub struct PaneState {
     tree: Option<((u64, usize), Option<JsonTree>)>,
     image: Option<PaneImage>,
     form: Option<((u64, usize), Option<Vec<FormField>>)>,
+    shown: Option<(u64, usize)>,
 }
 
 struct PaneImage {
@@ -51,6 +52,7 @@ impl Default for PaneState {
             tree: None,
             image: None,
             form: None,
+            shown: None,
         }
     }
 }
@@ -90,6 +92,10 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
         pane.form = Some((body_key, parsed));
     }
     let is_form = pane.form.as_ref().is_some_and(|(_, fields)| fields.is_some());
+    if pane.shown != Some(body_key) {
+        pane.shown = Some(body_key);
+        pane.format = default_format(ui.ctx(), data.content_type, is_json, is_image, is_form);
+    }
     ui.horizontal(|ui| {
         if !data.title.is_empty() {
             ui.label(RichText::new(data.title).strong());
@@ -115,17 +121,18 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
                     }
                     ui.separator();
                 }
-                for (format, label) in [(BodyFormat::Hex, "Hex"), (BodyFormat::Raw, "Raw"), (BodyFormat::Pretty, "Pretty")] {
-                    ui.selectable_value(&mut pane.format, format, label);
-                }
-                if is_json {
-                    ui.selectable_value(&mut pane.format, BodyFormat::Tree, "Tree");
-                }
-                if is_image {
-                    ui.selectable_value(&mut pane.format, BodyFormat::Preview, "Preview");
-                }
-                if is_form {
-                    ui.selectable_value(&mut pane.format, BodyFormat::Form, "Form");
+                let choices = [
+                    (BodyFormat::Hex, "Hex", true),
+                    (BodyFormat::Raw, "Raw", true),
+                    (BodyFormat::Pretty, "Pretty", true),
+                    (BodyFormat::Tree, "Tree", is_json),
+                    (BodyFormat::Preview, "Preview", is_image),
+                    (BodyFormat::Form, "Form", is_form),
+                ];
+                for (format, label, available) in choices {
+                    if available && ui.selectable_value(&mut pane.format, format, label).clicked() {
+                        remember_format(ui.ctx(), data.content_type, format);
+                    }
                 }
             });
         }
@@ -154,6 +161,42 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
             PaneTab::Cookies => key_values(ui, id_salt, data.cookies.as_deref().unwrap_or_default()),
         });
     save
+}
+
+type FormatChoices = std::collections::HashMap<String, BodyFormat>;
+
+fn format_choices_id() -> egui::Id {
+    egui::Id::new("body_format_by_mime")
+}
+
+fn mime_of(content_type: &str) -> String {
+    content_type.split(';').next().unwrap_or_default().trim().to_lowercase()
+}
+
+fn remember_format(ctx: &egui::Context, content_type: &str, format: BodyFormat) {
+    ctx.data_mut(|d| d.get_persisted_mut_or_default::<FormatChoices>(format_choices_id()).insert(mime_of(content_type), format));
+}
+
+/// The last explicit choice for this content type when it still applies, else the richest view the body supports.
+fn default_format(ctx: &egui::Context, content_type: &str, is_json: bool, is_image: bool, is_form: bool) -> BodyFormat {
+    let available = |format: BodyFormat| match format {
+        BodyFormat::Tree => is_json,
+        BodyFormat::Preview => is_image,
+        BodyFormat::Form => is_form,
+        _ => true,
+    };
+    let saved = ctx.data_mut(|d| d.get_persisted::<FormatChoices>(format_choices_id()))
+        .and_then(|choices| choices.get(&mime_of(content_type)).copied())
+        .filter(|&format| available(format));
+    saved.unwrap_or(if is_image {
+        BodyFormat::Preview
+    } else if is_form {
+        BodyFormat::Form
+    } else if is_json {
+        BodyFormat::Tree
+    } else {
+        BodyFormat::Pretty
+    })
 }
 
 /// Bodies egui can't render (html, pdf, media) or that are worth keeping as files (images).
