@@ -1,7 +1,7 @@
 mod view;
 
 use serde::{Deserialize, Serialize};
-use mitm_core::fuzzer::{parse_variables, FuzzConfig, FuzzRow, FuzzStart, FuzzTemplate, FuzzVariable, PayloadSet};
+use mitm_core::fuzzer::{marker_re, parse_variables, FuzzConfig, FuzzRow, FuzzStart, FuzzTemplate, FuzzVariable, PayloadSet};
 use mitm_core::repeater::{HeaderItem, ParamItem};
 use crate::features::request_editor::captured::CapturedRequest;
 
@@ -96,6 +96,19 @@ impl FuzzerState {
         self.headers = captured.headers;
         self.body_type = captured.body_type;
         self.body_content = captured.body_content;
+    }
+
+    /// Strips every `{{name}}` back to `name`, reversing the Mark button across the request.
+    pub fn clear_marks(&mut self) {
+        let strip = |s: &str| marker_re().replace_all(s, "$1").into_owned();
+        self.url = strip(&self.url);
+        for p in &mut self.params {
+            p.value = strip(&p.value);
+        }
+        for h in &mut self.headers {
+            h.value = strip(&h.value);
+        }
+        self.body_content = strip(&self.body_content);
     }
 
     /// Every marker draws from the one wordlist in lockstep, so all markers get the same payload per request.

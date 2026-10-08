@@ -19,6 +19,8 @@ pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     let [mut top, mut bottom] = split::stacked(ui, "fuzzer_split", &mut fuzzer.prefs.split);
     config(&mut top, fuzzer);
     results(&mut bottom, fuzzer);
+    // Any request not taken by a focused field this frame is dropped so it never fires later.
+    template::clear_mark_request();
 }
 
 fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
@@ -83,6 +85,16 @@ fn config(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
 fn request_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
     ui.horizontal(|ui| {
         method_combo(ui, "fuzzer_method", &mut fuzzer.method);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.button("Clear marks").on_hover_text("Strip {{ }} placeholders").clicked() {
+                fuzzer.clear_marks();
+            }
+            if ui.button("Mark").on_hover_text("Wrap selection in {{ }}  (Ctrl+M)").clicked() {
+                template::request_mark();
+            }
+        });
+    });
+    ui.horizontal(|ui| {
         let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
         let url = template::show(ui, &mut fuzzer.url, |text| {
             egui::TextEdit::singleline(text)

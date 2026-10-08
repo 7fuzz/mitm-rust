@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ops::Range;
 use std::sync::Arc;
 use eframe::egui::text::{LayoutJob, TextFormat};
@@ -47,17 +47,57 @@ fn hover_value(name: &str) -> String {
     }
 }
 
+thread_local! {
+    static MARK_PENDING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Ask the focused template field to wrap its selection in `{{ }}` this frame.
+pub fn request_mark() {
+    MARK_PENDING.with(|c| c.set(true));
+}
+
+/// Drop an unconsumed mark request so it never fires on a later frame.
+pub fn clear_mark_request() {
+    MARK_PENDING.with(|c| c.set(false));
+}
+
 pub fn show<'t>(ui: &mut Ui, text: &'t mut String, edit: impl FnOnce(&'t mut String) -> TextEdit<'t>) -> Response {
     // The edit has no id salt, so it takes the next auto id; keys must be consumed before it reads them.
     let owner = ui.next_auto_id();
     let inserted = handle_picker_keys(ui, owner, text);
+    let marked = apply_mark(ui, owner, text);
     let output = edit(text).show(ui);
     let mut response = output.response.response.clone();
-    if inserted {
+    if inserted || marked {
         response.mark_changed();
     }
     update_picker(ui, &output);
     hover_tooltip(response, output.galley.text())
+}
+
+/// Wraps the focused field's selection in `{{ }}`, turning the selected text into a fuzz variable name.
+fn apply_mark(ui: &mut Ui, owner: Id, text: &mut String) -> bool {
+    if !ui.memory(|m| m.has_focus(owner)) {
+        return false;
+    }
+    let requested = MARK_PENDING.with(|c| c.get()) || ui.input(|i| i.modifiers.command && i.key_pressed(Key::M));
+    if !requested {
+        return false;
+    }
+    MARK_PENDING.with(|c| c.set(false));
+    let Some(mut state) = TextEditState::load(ui.ctx(), owner) else { return false };
+    let Some(range) = state.cursor.char_range() else { return false };
+    let sorted = range.as_sorted_char_range();
+    let (start, end) = (sorted.start.0, sorted.end.0);
+    if start == end {
+        return false;
+    }
+    let byte_at = |index: usize| text.char_indices().nth(index).map_or(text.len(), |(b, _)| b);
+    let wrapped = format!("{{{{{}}}}}", &text[byte_at(start)..byte_at(end)]);
+    text.replace_range(byte_at(start)..byte_at(end), &wrapped);
+    state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(end + 4))));
+    state.store(ui.ctx(), owner);
+    true
 }
 
 #[derive(Clone, Debug, PartialEq)]
