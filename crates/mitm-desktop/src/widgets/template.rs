@@ -49,6 +49,38 @@ fn hover_value(name: &str) -> String {
 
 thread_local! {
     static MARK_PENDING: Cell<bool> = const { Cell::new(false) };
+    static DECODE_REQUEST: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// Text a template field's **Decode in Encoding tool** asked to open; taken once per frame by the app.
+pub fn take_decode_request() -> Option<String> {
+    DECODE_REQUEST.with(|c| c.borrow_mut().take())
+}
+
+/// The field's current selection, or its whole text when nothing is selected.
+fn selected_or_all(ctx: &egui::Context, owner: Id, text: &str) -> String {
+    if let Some(range) = TextEditState::load(ctx, owner).and_then(|s| s.cursor.char_range()) {
+        let sorted = range.as_sorted_char_range();
+        let (start, end) = (sorted.start.0, sorted.end.0);
+        if start != end {
+            let byte_at = |index: usize| text.char_indices().nth(index).map_or(text.len(), |(b, _)| b);
+            return text[byte_at(start)..byte_at(end)].to_string();
+        }
+    }
+    text.to_string()
+}
+
+fn decode_menu(response: &Response, owner: Id, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    response.context_menu(|ui| {
+        if ui.button("Decode in Encoding tool").clicked() {
+            let chosen = selected_or_all(ui.ctx(), owner, text);
+            DECODE_REQUEST.with(|c| *c.borrow_mut() = Some(chosen));
+            ui.close();
+        }
+    });
 }
 
 /// Ask the focused template field to wrap its selection in `{{ }}` this frame.
@@ -72,7 +104,10 @@ pub fn show<'t>(ui: &mut Ui, text: &'t mut String, edit: impl FnOnce(&'t mut Str
         response.mark_changed();
     }
     update_picker(ui, &output);
-    hover_tooltip(response, output.galley.text())
+    let galley_text = output.galley.text();
+    let response = hover_tooltip(response, galley_text);
+    decode_menu(&response, owner, galley_text);
+    response
 }
 
 /// Wraps the focused field's selection in `{{ }}`, turning the selected text into a fuzz variable name.

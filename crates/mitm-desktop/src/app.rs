@@ -525,6 +525,10 @@ impl MitmApp {
                 Ok(()) => self.state.webhooks.deliveries_cleared(),
                 Err(e) => self.webhook_actions.reply(ctx).send(Err(e)),
             },
+            AppCommand::DecodeInEncodingTool(text) => {
+                self.state.encoding.load_for_decode(text);
+                dock::open_tab(&mut self.dock, Tab::Encoding);
+            }
             AppCommand::ReplayWebhook { id, url } => {
                 if let Some(delivery) = self.state.webhooks.deliveries.iter().find(|d| d.id == id).cloned() {
                     let core = Arc::clone(&self.core);
@@ -792,6 +796,9 @@ impl eframe::App for MitmApp {
             db_path: &self.core.db_path,
         };
         DockArea::new(&mut self.dock).show_inside(ui, &mut viewer);
+        if let Some(text) = crate::widgets::template::take_decode_request() {
+            self.cmds.push(AppCommand::DecodeInEncodingTool(text));
+        }
         palette::show(ui.ctx(), &mut self.palette, &self.state, &mut self.cmds);
         crate::features::repeater::show_curl_import(ui.ctx(), &mut self.state.repeater.curl_import, &mut self.cmds);
         crate::features::inspector::show_window(ui.ctx(), &mut self.state.inspector, &self.state.traffic, &mut self.cmds);

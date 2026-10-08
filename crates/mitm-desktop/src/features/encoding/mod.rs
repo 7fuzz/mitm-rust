@@ -111,6 +111,13 @@ pub struct EncodingState {
 }
 
 impl EncodingState {
+    /// Fills the input and switches to decode, used by "Decode in Encoding tool".
+    pub fn load_for_decode(&mut self, text: String) {
+        self.input = text;
+        self.prefs.decode = true;
+        self.cache = None;
+    }
+
     pub(crate) fn output(&mut self) -> &Computed {
         let key = self.key();
         if self.cache.as_ref().map(|(k, _)| *k) != Some(key) {

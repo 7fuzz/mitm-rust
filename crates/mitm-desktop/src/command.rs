@@ -94,6 +94,7 @@ pub enum AppCommand {
     CopyWebhookTestCurl(String),
     ClearWebhookDeliveries,
     ReplayWebhook { id: i64, url: String },
+    DecodeInEncodingTool(String),
 
     SelectWorkspace(String),
     SelectEnvironment(Option<String>),
