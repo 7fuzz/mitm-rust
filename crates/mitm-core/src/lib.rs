@@ -94,26 +94,6 @@ impl MitmCore {
         db::get_data_category_counts(&self.db_path)
     }
 
-    pub fn count_traffic(&self) -> Result<u64, String> {
-        db::count_table_rows(&self.db_path, "history")
-    }
-
-    pub fn count_webhook_deliveries(&self) -> Result<u64, String> {
-        db::count_table_rows(&self.db_path, "webhook_deliveries")
-    }
-
-    pub fn count_ws_messages(&self) -> Result<u64, String> {
-        db::count_table_rows(&self.db_path, "ws_messages")
-    }
-
-    pub fn count_fuzz_runs(&self) -> Result<u64, String> {
-        db::count_table_rows(&self.db_path, "fuzz_runs")
-    }
-
-    pub fn count_rewrite_history(&self) -> Result<u64, String> {
-        db::count_table_rows(&self.db_path, "rewrite_history")
-    }
-
     pub fn clear_data_category(&self, category: db::DataCategory) -> Result<(), String> {
         match category {
             db::DataCategory::Traffic => self.clear_all_traffic(),

@@ -318,14 +318,6 @@ impl DataCategoryCounts {
     }
 }
 
-pub fn count_table_rows(db_path: &PathBuf, table: &str) -> Result<u64, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    let count: u64 = conn
-        .query_row(&format!("SELECT COUNT(*) FROM {}", table), [], |row| row.get(0))
-        .map_err(|e| e.to_string())?;
-    Ok(count)
-}
-
 pub fn get_data_category_counts(db_path: &PathBuf) -> Result<DataCategoryCounts, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let traffic = conn.query_row("SELECT COUNT(*) FROM history", [], |r| r.get(0)).unwrap_or(0);
