@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::dock::{self, Tab};
 use crate::features::collections::CollectionsPrefs;
 use crate::features::inspector::InspectorPrefs;
+use crate::features::intercept::InterceptPrefs;
 use crate::features::repeater::RepeaterPrefs;
 use crate::features::settings::SettingsPrefs;
 use crate::features::traffic::TrafficPrefs;
@@ -34,6 +35,10 @@ impl Section for SettingsPrefs {
     const KEY: &'static str = "settings";
 }
 
+impl Section for InterceptPrefs {
+    const KEY: &'static str = "intercept";
+}
+
 impl Section for TrafficPrefs {
     const KEY: &'static str = "traffic";
 }
@@ -56,6 +61,7 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     state.collections.prefs = load(storage);
     state.settings = load(storage);
     state.traffic.prefs = load(storage);
+    state.intercept.prefs = load(storage);
     load::<DockLayout>(storage).0.unwrap_or_else(dock::initial_layout)
 }
 
@@ -65,6 +71,7 @@ pub fn carry_over(from: &mut AppState, to: &mut AppState) {
     to.collections.prefs = std::mem::take(&mut from.collections.prefs);
     to.settings = std::mem::take(&mut from.settings);
     to.traffic.prefs = std::mem::take(&mut from.traffic.prefs);
+    to.intercept.prefs = std::mem::take(&mut from.intercept.prefs);
 }
 
 pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppState) {
@@ -74,4 +81,5 @@ pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppStat
     save(storage, &state.collections.prefs);
     save(storage, &state.settings);
     save(storage, &state.traffic.prefs);
+    save(storage, &state.intercept.prefs);
 }

@@ -1,5 +1,6 @@
 mod view;
 
+use serde::{Deserialize, Serialize};
 use mitm_core::db::InterceptRule;
 use mitm_core::state::PendingFlowPayload;
 use crate::format::{headers_to_text, parse_header_lines};
@@ -34,7 +35,21 @@ pub struct FlowEdit {
     pub body: String,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InterceptPrefs {
+    pub work_fraction: f32,
+    pub queue_fraction: f32,
+}
+
+impl Default for InterceptPrefs {
+    fn default() -> Self {
+        Self { work_fraction: 0.62, queue_fraction: 0.3 }
+    }
+}
+
 pub struct InterceptState {
+    pub prefs: InterceptPrefs,
     pub enabled: bool,
     pub mode: String,
     pub pending: Vec<PendingFlowPayload>,
@@ -47,6 +62,7 @@ pub struct InterceptState {
 impl Default for InterceptState {
     fn default() -> Self {
         Self {
+            prefs: InterceptPrefs::default(),
             enabled: false,
             mode: "request".to_string(),
             pending: Vec::new(),

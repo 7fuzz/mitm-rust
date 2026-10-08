@@ -136,7 +136,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
 
     fn scroll_bars(&self, tab: &Tab) -> [bool; 2] {
         match tab {
-            Tab::Collections | Tab::Intercept => [false, true],
+            Tab::Collections => [false, true],
             _ => [false, false],
         }
     }

@@ -1,7 +1,8 @@
 use eframe::egui::{self, RichText};
 use crate::theme::{self, Tone};
 use crate::command::{AppCommand, Commands};
-use crate::widgets::pills::render_method_pill;
+use crate::widgets::pills::{badge, render_method_pill};
+use crate::widgets::split;
 use super::InterceptState;
 
 pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) {
@@ -64,41 +65,63 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) 
 
     ui.separator();
 
-    egui::ScrollArea::vertical().show(ui, |ui| {
-        if !state.pending.is_empty() {
+    let mut work_fraction = state.prefs.work_fraction;
+    let [mut work_ui, mut rules_ui] = split::side_by_side(ui, "intercept_rules_split", &mut work_fraction);
+    state.prefs.work_fraction = work_fraction;
+    if !state.pending.is_empty() {
+        let mut queue_fraction = state.prefs.queue_fraction;
+        let [mut queue_ui, mut editor_ui] = split::side_by_side(&mut work_ui, "intercept_queue_split", &mut queue_fraction);
+        state.prefs.queue_fraction = queue_fraction;
+        queue(&mut queue_ui, state);
+        egui::ScrollArea::vertical().id_salt("intercept_editor").show(&mut editor_ui, |ui| {
             render_paused_flows_editor(ui, state, cmds);
-            ui.add_space(16.0);
-            ui.separator();
-            ui.add_space(8.0);
-        }
-
+        });
+    }
+    egui::ScrollArea::vertical().id_salt("intercept_rules").show(&mut rules_ui, |ui| {
         render_rules_manager(ui, state, cmds);
     });
 }
 
-fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) {
-    ui.heading("Paused Flows");
-
-    let mut selected_id: Option<String> = None;
-    ui.horizontal_wrapped(|ui| {
-        let active_id = state.active_id.clone();
-        for p in &state.pending {
-            let is_sel = active_id.as_deref() == Some(&p.flow_id);
-            let label = format!("{} [{}] {}", p.method, p.phase, p.url);
-            let short_label = if label.len() > 40 { format!("{}...", &label[..37]) } else { label };
-
-            if ui.selectable_label(is_sel, short_label).clicked() {
-                selected_id = Some(p.flow_id.clone());
+fn queue(ui: &mut egui::Ui, state: &mut InterceptState) {
+    let mut selected = None;
+    egui::ScrollArea::vertical().id_salt("intercept_queue").auto_shrink([false, false]).show(ui, |ui| {
+        for flow in &state.pending {
+            let is_active = state.active_id.as_deref() == Some(&flow.flow_id);
+            let (host, path) = host_and_path(&flow.url);
+            let highlight = ui.painter().add(egui::Shape::Noop);
+            let response = ui
+                .horizontal(|ui| {
+                    render_method_pill(ui, &flow.method);
+                    let tone = if flow.phase == "response" { Tone::Info } else { Tone::Warn };
+                    badge(ui, &flow.phase.to_uppercase(), tone);
+                    ui.add(egui::Label::new(RichText::new(host).strong()).truncate());
+                    ui.add(egui::Label::new(RichText::new(path).weak()).truncate());
+                })
+                .response;
+            let row = ui.interact(response.rect, ui.id().with(&flow.flow_id), egui::Sense::click());
+            if is_active {
+                let fill = ui.visuals().selection.bg_fill.gamma_multiply(0.35);
+                ui.painter().set(highlight, egui::epaint::RectShape::filled(response.rect, 2.0, fill));
+            }
+            if row.clicked() {
+                selected = Some(flow.flow_id.clone());
             }
         }
     });
-
-    if let Some(id) = selected_id {
+    if let Some(id) = selected {
         state.select(&id);
     }
+}
 
-    ui.separator();
+fn host_and_path(url: &str) -> (&str, &str) {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    match rest.find('/') {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, "/"),
+    }
+}
 
+fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) {
     let active_id = match state.active_id.clone() {
         Some(id) => id,
         None => return,
