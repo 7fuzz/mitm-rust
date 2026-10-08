@@ -37,6 +37,7 @@ pub struct MitmApp {
     ca_jobs: Jobs<Option<Result<PathBuf, String>>>,
     import_files: Jobs<Option<Result<(String, String), String>>>,
     file_saves: Jobs<Option<Result<String, String>>>,
+    fuzz_search: Jobs<(i64, String, Vec<u32>)>,
 }
 
 impl MitmApp {
@@ -55,6 +56,7 @@ impl MitmApp {
             ca_jobs: Jobs::default(),
             import_files: Jobs::default(),
             file_saves: Jobs::default(),
+            fuzz_search: Jobs::default(),
         }
     }
 
@@ -609,6 +611,10 @@ impl eframe::App for MitmApp {
         self.state.environments.flush_if_idle(&self.core.db_path, now);
         self.save_rewrite_rules(now, false);
         self.state.traffic.sync_header_search(&self.core.db_path);
+        for (run_id, query, matches) in self.fuzz_search.drain() {
+            self.state.fuzzer.set_response_search_results(run_id, &query, matches);
+        }
+        self.state.fuzzer.sync_response_search(&self.rt, ui.ctx(), &self.core, &self.fuzz_search);
         for result in self.import_files.drain().flatten() {
             let import = &mut self.state.environments.import;
             match result {

@@ -24,6 +24,13 @@ pub enum FuzzSortColumn {
     Match(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FuzzSearchScope {
+    #[default]
+    Payload,
+    Response,
+}
+
 #[derive(Default)]
 struct FuzzerCache {
     results_len: usize,
@@ -31,6 +38,9 @@ struct FuzzerCache {
     sort_desc: bool,
     status_filters: HashMap<String, TriState>,
     hide_common_size: bool,
+    search_query: String,
+    search_scope: FuzzSearchScope,
+    response_matches_ver: usize,
     indices: Vec<usize>,
 }
 
@@ -202,6 +212,11 @@ pub struct FuzzerState {
     pub selected_idx: Option<u32>,
     pub selected_result: Option<mitm_core::fuzzer::FuzzResult>,
     pub response_pane: crate::widgets::message_pane::PaneState,
+    pub search_query: String,
+    pub search_scope: FuzzSearchScope,
+    pub response_matches: Option<std::collections::HashSet<u32>>,
+    pub pending_search_key: Option<(i64, String)>,
+    response_matches_ver: usize,
     pub error: Option<String>,
 }
 
@@ -242,6 +257,11 @@ impl Default for FuzzerState {
             selected_idx: None,
             selected_result: None,
             response_pane: crate::widgets::message_pane::PaneState::default(),
+            search_query: String::new(),
+            search_scope: FuzzSearchScope::Payload,
+            response_matches: None,
+            pending_search_key: None,
+            response_matches_ver: 0,
             error: None,
         }
     }
@@ -334,6 +354,9 @@ impl FuzzerState {
                 self.results = Vec::with_capacity(start.total);
                 self.selected_idx = None;
                 self.selected_result = None;
+                self.pending_search_key = None;
+                self.response_matches = None;
+                self.response_matches_ver += 1;
                 self.error = None;
             }
             Err(e) => self.error = Some(e),
@@ -372,12 +395,18 @@ impl FuzzerState {
     }
 
     pub fn has_active_filters(&self) -> bool {
-        self.hide_common_size || self.status_filters.values().any(|s| *s != TriState::Neutral)
+        self.hide_common_size
+            || !self.search_query.trim().is_empty()
+            || self.status_filters.values().any(|s| *s != TriState::Neutral)
     }
 
     pub fn reset_filters(&mut self) {
         self.hide_common_size = false;
         self.status_filters.clear();
+        self.search_query.clear();
+        self.response_matches = None;
+        self.pending_search_key = None;
+        self.response_matches_ver += 1;
     }
 
     pub fn visible_indices(&mut self) -> &[usize] {
@@ -386,6 +415,9 @@ impl FuzzerState {
             && self.cache.sort_desc == self.sort_desc
             && self.cache.status_filters == self.status_filters
             && self.cache.hide_common_size == self.hide_common_size
+            && self.cache.search_query == self.search_query
+            && self.cache.search_scope == self.search_scope
+            && self.cache.response_matches_ver == self.response_matches_ver
         {
             return &self.cache.indices;
         }
@@ -397,6 +429,9 @@ impl FuzzerState {
             sort_desc: self.sort_desc,
             status_filters: self.status_filters.clone(),
             hide_common_size: self.hide_common_size,
+            search_query: self.search_query.clone(),
+            search_scope: self.search_scope,
+            response_matches_ver: self.response_matches_ver,
             indices,
         };
         &self.cache.indices
@@ -409,6 +444,8 @@ impl FuzzerState {
         } else {
             None
         };
+        let query = self.search_query.trim().to_lowercase();
+        let has_search = !query.is_empty();
 
         let mut indices: Vec<usize> = (0..self.results.len())
             .filter(|&i| {
@@ -419,11 +456,31 @@ impl FuzzerState {
                     }
                 }
                 let group = status_group(r.status_code);
-                match self.status_filters.get(group).copied().unwrap_or(TriState::Neutral) {
+                let status_matches = match self.status_filters.get(group).copied().unwrap_or(TriState::Neutral) {
                     TriState::Exclude => false,
                     TriState::Include => true,
                     TriState::Neutral => !has_includes,
+                };
+                if !status_matches {
+                    return false;
                 }
+                if has_search {
+                    match self.search_scope {
+                        FuzzSearchScope::Payload => {
+                            if !r.payloads.iter().any(|p| p.to_lowercase().contains(&query)) {
+                                return false;
+                            }
+                        }
+                        FuzzSearchScope::Response => {
+                            if let Some(ref matches) = self.response_matches {
+                                if !matches.contains(&r.idx) {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
+                true
             })
             .collect();
 
@@ -471,6 +528,51 @@ impl FuzzerState {
         self.selected_result = mitm_core::fuzzer::get_result_db(db_path, run_id, idx).ok().flatten();
     }
 
+    pub fn sync_response_search(
+        &mut self,
+        rt: &tokio::runtime::Runtime,
+        ctx: &eframe::egui::Context,
+        core: &std::sync::Arc<mitm_core::MitmCore>,
+        jobs: &crate::jobs::Jobs<(i64, String, Vec<u32>)>,
+    ) {
+        let query = self.search_query.trim();
+        if self.search_scope != FuzzSearchScope::Response || query.is_empty() {
+            if self.response_matches.is_some() || self.pending_search_key.is_some() {
+                self.response_matches = None;
+                self.pending_search_key = None;
+                self.response_matches_ver += 1;
+            }
+            return;
+        }
+        let Some(run_id) = self.run_id else {
+            if self.response_matches.is_some() || self.pending_search_key.is_some() {
+                self.response_matches = None;
+                self.pending_search_key = None;
+                self.response_matches_ver += 1;
+            }
+            return;
+        };
+        let key = (run_id, query.to_string());
+        if self.pending_search_key.as_ref() == Some(&key) {
+            return;
+        }
+        self.pending_search_key = Some(key.clone());
+        let core = std::sync::Arc::clone(core);
+        let q = query.to_string();
+        jobs.spawn(rt, ctx, async move {
+            let matches = core.search_fuzz_responses(run_id, &q).unwrap_or_default();
+            (run_id, q, matches)
+        });
+    }
+
+    pub fn set_response_search_results(&mut self, run_id: i64, query: &str, matches: Vec<u32>) {
+        let current_q = self.search_query.trim();
+        if self.run_id == Some(run_id) && self.search_scope == FuzzSearchScope::Response && current_q == query {
+            self.response_matches = Some(matches.into_iter().collect());
+            self.response_matches_ver += 1;
+        }
+    }
+
     pub fn clear(&mut self) {
         self.status = RunStatus::Idle;
         self.run_id = None;
@@ -478,6 +580,9 @@ impl FuzzerState {
         self.results = Vec::new();
         self.selected_idx = None;
         self.selected_result = None;
+        self.pending_search_key = None;
+        self.response_matches = None;
+        self.response_matches_ver += 1;
         self.cache = FuzzerCache::default();
     }
 }
@@ -680,5 +785,56 @@ mod tests {
         state.clear();
         assert_eq!(state.selected_idx, None);
         assert!(state.selected_result.is_none());
+    }
+
+    #[test]
+    fn search_payload_and_response() {
+        let mut state = FuzzerState::default();
+        state.run_id = Some(42);
+        state.results = vec![
+            FuzzRow {
+                idx: 0,
+                payloads: vec!["apple".to_string()],
+                status_code: 200,
+                response_size: 100,
+                duration_ms: 10,
+                error: None,
+                matches: vec![],
+            },
+            FuzzRow {
+                idx: 1,
+                payloads: vec!["banana".to_string()],
+                status_code: 200,
+                response_size: 100,
+                duration_ms: 10,
+                error: None,
+                matches: vec![],
+            },
+            FuzzRow {
+                idx: 2,
+                payloads: vec!["cherry".to_string()],
+                status_code: 200,
+                response_size: 100,
+                duration_ms: 10,
+                error: None,
+                matches: vec![],
+            },
+        ];
+
+        state.search_scope = FuzzSearchScope::Payload;
+        state.search_query = "nan".to_string();
+        assert_eq!(state.visible_indices(), &[1]);
+
+        state.search_query.clear();
+        assert_eq!(state.visible_indices(), &[0, 1, 2]);
+
+        state.search_scope = FuzzSearchScope::Response;
+        state.search_query = "secret".to_string();
+        state.set_response_search_results(42, "secret", vec![0, 2]);
+        assert_eq!(state.visible_indices(), &[0, 2]);
+
+        state.reset_filters();
+        assert_eq!(state.visible_indices(), &[0, 1, 2]);
+        assert_eq!(state.search_query, "");
     }
 }

@@ -12,7 +12,7 @@ use crate::theme::{self, Tone};
 use crate::widgets::pills::render_status_pill;
 use crate::widgets::tri_state::tri_state_button;
 use crate::widgets::{split, template};
-use super::{AttackType, ConfigTab, FuzzSortColumn, FuzzerState, MatchRule, PayloadConfig, PayloadKind, RequestTab, RunStatus};
+use super::{AttackType, ConfigTab, FuzzSearchScope, FuzzSortColumn, FuzzerState, MatchRule, PayloadConfig, PayloadKind, RequestTab, RunStatus};
 
 pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     toolbar(ui, fuzzer, cmds);
@@ -367,6 +367,14 @@ fn results_toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
             .clicked()
         {
             fuzzer.hide_common_size = !fuzzer.hide_common_size;
+        }
+        ui.separator();
+
+        ui.add(egui::TextEdit::singleline(&mut fuzzer.search_query).hint_text("Search…").desired_width(110.0));
+        ui.selectable_value(&mut fuzzer.search_scope, FuzzSearchScope::Payload, "Payload");
+        ui.selectable_value(&mut fuzzer.search_scope, FuzzSearchScope::Response, "Response");
+        if !fuzzer.search_query.is_empty() && ui.small_button("✕").on_hover_text("Clear search").clicked() {
+            fuzzer.search_query.clear();
         }
 
         if fuzzer.has_active_filters() && ui.small_button("Reset").on_hover_text("Reset filters").clicked() {
