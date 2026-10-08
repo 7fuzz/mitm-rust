@@ -195,5 +195,7 @@ mod tests {
         assert!(items.iter().any(|i| i.label.contains("Backend WS")));
         assert!(items.iter().any(|i| i.label.contains("Staging")));
         assert!(items.iter().any(|i| i.label.contains("No environment")));
+        assert!(items.iter().any(|i| i.label == "Import workspace…"));
+        assert!(items.iter().any(|i| i.label == "Export workspace…"));
     }
 }

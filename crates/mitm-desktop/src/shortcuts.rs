@@ -7,6 +7,8 @@ use crate::dock::Tab;
 pub enum Action {
     OpenPalette,
     QuickVariables,
+    ImportWorkspace,
+    ExportWorkspace,
     OpenTab(Tab),
     FocusTabAt(usize),
     NextTab,
@@ -22,6 +24,8 @@ impl Action {
         match self {
             Action::OpenPalette => "Command palette".to_string(),
             Action::QuickVariables => "Quick variables".to_string(),
+            Action::ImportWorkspace => "Import workspace…".to_string(),
+            Action::ExportWorkspace => "Export workspace…".to_string(),
             Action::OpenTab(tab) => format!("Open {}", tab.name()),
             Action::FocusTabAt(index) => format!("Tab {}", index + 1),
             Action::NextTab => "Next tab".to_string(),
@@ -37,6 +41,8 @@ impl Action {
         match self {
             Action::OpenPalette => AppCommand::OpenPalette,
             Action::QuickVariables => AppCommand::ToggleQuickVariables,
+            Action::ImportWorkspace => AppCommand::OpenImport,
+            Action::ExportWorkspace => AppCommand::ExportWorkspace,
             Action::OpenTab(tab) => AppCommand::OpenTab(tab),
             Action::FocusTabAt(index) => AppCommand::FocusTabAt(index),
             Action::NextTab => AppCommand::CycleTab { forward: true },
@@ -76,6 +82,7 @@ pub fn palette_actions() -> Vec<Action> {
     actions.extend([Action::NextTab, Action::PreviousTab, Action::ToggleProxy]);
     actions.extend(ProxyMode::ALL.map(Action::SetProxyMode));
     actions.extend([Action::ToggleInterceptor, Action::ClearTraffic, Action::QuickVariables]);
+    actions.extend([Action::ImportWorkspace, Action::ExportWorkspace]);
     actions
 }
 
