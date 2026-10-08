@@ -9,7 +9,7 @@ use mitm_core::repeater::{
     self as core_repeater, HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab,
 };
 use mitm_core::state::{HistoryDetail, HistoryEntry};
-use crate::features::request_editor::body::structured_from_capture;
+use crate::features::request_editor::captured::{header_items, CapturedRequest};
 use crate::features::request_editor::run_list::Run;
 use crate::features::request_editor::url_params::{new_id, parse_query};
 use crate::widgets::message_pane::PaneState;
@@ -159,25 +159,19 @@ impl RepeaterState {
     }
 
     pub fn create_from_flow(&mut self, flow: &HistoryEntry, detail: Option<&HistoryDetail>, db_path: &PathBuf) {
-        let request_headers = detail.map_or(&flow.request_headers, |d| &d.request_headers);
-        let request_body = detail.map_or(&flow.request_body, |d| &d.request_body);
         let response_headers = detail.map_or(&flow.response_headers, |d| &d.response_headers);
         let response_body = detail.map_or(&flow.response_body, |d| &d.response_body);
-
-        let content_type = request_headers
-            .iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
-            .map_or("", |(_, v)| v.as_str());
-        let (body_type, body_content) = structured_from_capture(content_type, request_body);
-        let headers = header_items(request_headers);
+        let captured = CapturedRequest::from_flow(flow, detail);
+        let headers = captured.headers.clone();
+        let body_content = captured.body_content.clone();
 
         let mut tab = blank_tab(db_path);
-        tab.method = flow.method.clone();
-        tab.url = flow.url.clone();
-        tab.params = parse_query(&flow.url, &[]);
-        tab.headers = headers.clone();
-        tab.body_type = body_type;
-        tab.body_content = Some(body_content.clone());
+        tab.method = captured.method;
+        tab.url = captured.url;
+        tab.params = captured.params;
+        tab.headers = captured.headers;
+        tab.body_type = captured.body_type;
+        tab.body_content = Some(captured.body_content);
         let id = self.create(tab, db_path);
 
         let run = RepeaterHistoryItem {
@@ -274,13 +268,6 @@ impl RepeaterState {
         self.responses.insert(tab_id.to_string(), ShownResponse::from_run(&run));
         self.mark_dirty(tab_id, now);
     }
-}
-
-fn header_items(headers: &[(String, String)]) -> Vec<HeaderItem> {
-    headers
-        .iter()
-        .map(|(key, value)| HeaderItem { id: new_id(), key: key.clone(), value: value.clone(), enabled: true })
-        .collect()
 }
 
 fn header(key: &str, value: &str, enabled: bool) -> HeaderItem {
