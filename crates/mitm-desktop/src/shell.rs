@@ -23,6 +23,7 @@ impl Shell {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         let rt = Arc::new(Runtime::new().expect("Failed to initialize Tokio runtime"));
+        close_on_signal(&rt, &cc.egui_ctx);
         // Nothing that binds ports starts until this launch owns the instance lock.
         let screen = match instance::try_claim(conflict::handlers(&cc.egui_ctx)) {
             Claim::Conflict(other) => Screen::Conflict(Conflict::new(other)),
@@ -30,6 +31,40 @@ impl Shell {
         };
         Self { rt, screen }
     }
+}
+
+/// Ctrl+C or SIGTERM closes the window the normal way, so eframe saves prefs and `on_exit` flushes
+/// pending edits. Taking over SIGINT disables the default kill, so a second Ctrl+C forces the exit.
+fn close_on_signal(rt: &Runtime, ctx: &egui::Context) {
+    let ctx = ctx.clone();
+    rt.spawn(async move {
+        shutdown_signal().await;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        ctx.request_repaint();
+        let _ = tokio::signal::ctrl_c().await;
+        std::process::exit(130);
+    });
+}
+
+#[cfg(unix)]
+async fn shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+    match signal(SignalKind::terminate()) {
+        Ok(mut term) => {
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {}
+                _ = term.recv() => {}
+            }
+        }
+        Err(_) => {
+            let _ = tokio::signal::ctrl_c().await;
+        }
+    }
+}
+
+#[cfg(not(unix))]
+async fn shutdown_signal() {
+    let _ = tokio::signal::ctrl_c().await;
 }
 
 impl eframe::App for Shell {
