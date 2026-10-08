@@ -3,6 +3,7 @@ use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use crate::theme::{self, Tone};
 use crate::widgets::split;
+use mitm_core::db::browser::DbColumn;
 use super::{DatabaseState, DatabaseTab};
 
 pub fn show(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
@@ -36,25 +37,22 @@ fn tables_view(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
     left.add_space(4.0);
 
     let filter = state.table_filter.trim().to_lowercase();
-    let tables: Vec<_> = state
-        .tables
-        .iter()
-        .filter(|t| filter.is_empty() || t.name.to_lowercase().contains(&filter))
-        .cloned()
-        .collect();
-
+    let mut clicked = None;
     egui::ScrollArea::vertical()
         .id_salt("db_tables_list")
         .auto_shrink([false, false])
         .show(&mut left, |ui| {
-            for table in tables {
+            for table in state.tables.iter().filter(|t| filter.is_empty() || t.name.to_lowercase().contains(&filter)) {
                 let selected = state.selected_table.as_deref() == Some(&table.name);
                 let label = format!("{} ({})", table.name, table.row_count);
                 if ui.selectable_label(selected, label).clicked() {
-                    state.select_table(db_path, table.name);
+                    clicked = Some(table.name.clone());
                 }
             }
         });
+    if let Some(name) = clicked {
+        state.select_table(db_path, name);
+    }
 
     if let Some(error) = &state.error {
         right.label(RichText::new(error).color(theme::color(&right, Tone::Danger)));
@@ -128,25 +126,56 @@ fn table_content(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
     }
 }
 
+enum GridClick {
+    Sort(String),
+    Row(usize),
+}
+
 fn render_grid(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
     let Some(current_rows) = &state.current_rows else {
-        ui.label(RichText::new("No rows loaded").weak().italics());
         return;
     };
-
-    let columns = current_rows.columns.clone();
-    let rows = current_rows.rows.clone();
-
-    if rows.is_empty() {
-        ui.vertical_centered(|ui| {
-            ui.add_space(20.0);
-            ui.label(RichText::new("Table is empty or no rows match filter").weak().italics());
-        });
+    if current_rows.rows.is_empty() {
+        empty_note(ui, "No rows");
         return;
     }
+    let sort = state.sort_column.as_deref().map(|c| (c, state.sort_desc));
+    let click = grid(
+        ui,
+        "db_table_hscroll",
+        &current_rows.columns,
+        &current_rows.rows,
+        &state.table_columns,
+        Some(sort),
+        state.selected_row_index,
+    );
+    match click {
+        Some(GridClick::Sort(column)) => state.toggle_sort(db_path, &column),
+        Some(GridClick::Row(index)) => state.select_row(db_path, index),
+        None => {}
+    }
+}
 
+fn empty_note(ui: &mut egui::Ui, text: &str) {
+    ui.vertical_centered(|ui| {
+        ui.add_space(20.0);
+        ui.label(RichText::new(text).weak().italics());
+    });
+}
+
+/// `sort` is `None` for a grid without sortable headers, `Some(None)` for sortable but unsorted.
+fn grid(
+    ui: &mut egui::Ui,
+    id_salt: &str,
+    columns: &[String],
+    rows: &[Vec<serde_json::Value>],
+    column_info: &[DbColumn],
+    sort: Option<Option<(&str, bool)>>,
+    selected: Option<usize>,
+) -> Option<GridClick> {
+    let mut click = None;
     egui::ScrollArea::horizontal()
-        .id_salt("db_table_hscroll")
+        .id_salt(id_salt)
         .auto_shrink([false, false])
         .show(ui, |ui| {
             let mut builder = TableBuilder::new(ui)
@@ -154,28 +183,28 @@ fn render_grid(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
                 .resizable(true)
                 .sense(egui::Sense::click())
                 .auto_shrink([false, false]);
-
-            for _ in 0..columns.len() {
+            for _ in columns {
                 builder = builder.column(Column::initial(130.0).at_least(60.0).clip(true));
             }
-
             builder
                 .header(24.0, |mut header| {
-                    for col_name in &columns {
-                        let col_info = state.table_columns.iter().find(|c| &c.name == col_name).cloned();
-                        let is_sorted = state.sort_column.as_deref() == Some(col_name);
-                        let sort_arrow = if is_sorted {
-                            if state.sort_desc { " ▼" } else { " ▲" }
-                        } else {
-                            ""
-                        };
-                        let label = format!("{}{}", col_name, sort_arrow);
+                    for name in columns {
                         header.col(|ui| {
-                            let resp = ui.selectable_label(is_sorted, RichText::new(label).strong().size(11.0));
+                            let Some(sort) = sort else {
+                                ui.strong(name);
+                                return;
+                            };
+                            let direction = sort.filter(|(col, _)| col == name).map(|(_, desc)| desc);
+                            let arrow = match direction {
+                                Some(true) => " ▼",
+                                Some(false) => " ▲",
+                                None => "",
+                            };
+                            let resp = ui.selectable_label(direction.is_some(), RichText::new(format!("{name}{arrow}")).strong().size(11.0));
                             if resp.clicked() {
-                                state.toggle_sort(db_path, col_name);
+                                click = Some(GridClick::Sort(name.clone()));
                             }
-                            if let Some(info) = &col_info {
+                            if let Some(info) = column_info.iter().find(|c| &c.name == name) {
                                 resp.on_hover_text(format!(
                                     "Type: {}\nPrimary Key: {}\nNot Null: {}",
                                     if info.decl_type.is_empty() { "ANY" } else { &info.decl_type },
@@ -188,55 +217,51 @@ fn render_grid(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
                 })
                 .body(|body| {
                     body.rows(22.0, rows.len(), |mut row| {
-                        let idx = row.index();
-                        let selected = state.selected_row_index == Some(idx);
-                        row.set_selected(selected);
-                        for cell in &rows[idx] {
-                            row.col(|ui| match cell {
-                                serde_json::Value::Null => {
-                                    ui.label(RichText::new("NULL").weak().italics());
-                                }
-                                serde_json::Value::String(s) => {
-                                    ui.add(egui::Label::new(s).truncate());
-                                }
-                                other => {
-                                    ui.add(egui::Label::new(other.to_string()).truncate());
-                                }
-                            });
+                        let index = row.index();
+                        row.set_selected(selected == Some(index));
+                        for cell in &rows[index] {
+                            row.col(|ui| cell_label(ui, cell));
                         }
                         if row.response().clicked() {
-                            state.select_row(db_path, idx);
+                            click = Some(GridClick::Row(index));
                         }
                     });
                 });
         });
+    click
+}
+
+fn cell_label(ui: &mut egui::Ui, cell: &serde_json::Value) {
+    match cell {
+        serde_json::Value::Null => {
+            ui.label(RichText::new("NULL").weak().italics());
+        }
+        serde_json::Value::String(s) => {
+            ui.add(egui::Label::new(s).truncate());
+        }
+        other => {
+            ui.add(egui::Label::new(other.to_string()).truncate());
+        }
+    }
 }
 
 fn render_detail(ui: &mut egui::Ui, state: &mut DatabaseState) {
+    let columns = state.current_rows.as_ref().map_or(&[][..], |r| &r.columns[..]);
+    let values = state.detail_row_values.as_deref().unwrap_or_default();
+    let mut close = false;
     ui.horizontal(|ui| {
         ui.strong("Row Details");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("✕").clicked() {
-                state.selected_row_index = None;
-                state.detail_row_values = None;
-            }
+            close = ui.small_button("✕").clicked();
             if ui.button("Copy row as JSON").clicked() {
-                if let (Some(current), Some(values)) = (&state.current_rows, &state.detail_row_values) {
-                    let mut obj = serde_json::Map::new();
-                    for (c, v) in current.columns.iter().zip(values.iter()) {
-                        obj.insert(c.clone(), v.clone());
-                    }
-                    if let Ok(json) = serde_json::to_string_pretty(&serde_json::Value::Object(obj)) {
-                        ui.ctx().copy_text(json);
-                    }
+                let obj: serde_json::Map<_, _> = columns.iter().cloned().zip(values.iter().cloned()).collect();
+                if let Ok(json) = serde_json::to_string_pretty(&serde_json::Value::Object(obj)) {
+                    ui.ctx().copy_text(json);
                 }
             }
         });
     });
     ui.separator();
-
-    let columns = state.current_rows.as_ref().map(|r| r.columns.clone()).unwrap_or_default();
-    let values = state.detail_row_values.clone().unwrap_or_default();
 
     egui::ScrollArea::vertical()
         .id_salt("db_row_detail_scroll")
@@ -265,16 +290,19 @@ fn render_detail(ui: &mut egui::Ui, state: &mut DatabaseState) {
                         ui.label(RichText::new("NULL").weak().italics());
                     }
                     serde_json::Value::String(s) => {
-                        let mut copy = s.clone();
-                        ui.add(egui::TextEdit::multiline(&mut copy).desired_rows(1).desired_width(f32::INFINITY));
+                        ui.add(egui::TextEdit::multiline(&mut s.as_str()).desired_rows(1).desired_width(f32::INFINITY));
                     }
                     other => {
-                        let mut copy = other.to_string();
-                        ui.add(egui::TextEdit::multiline(&mut copy).desired_rows(1).desired_width(f32::INFINITY));
+                        ui.add(egui::TextEdit::multiline(&mut other.to_string().as_str()).desired_rows(1).desired_width(f32::INFINITY));
                     }
                 }
             }
         });
+
+    if close {
+        state.selected_row_index = None;
+        state.detail_row_values = None;
+    }
 }
 
 fn query_view(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
@@ -320,57 +348,10 @@ fn query_view(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
             );
         });
         ui.add_space(4.0);
-        render_query_grid(ui, result);
+        if result.rows.is_empty() {
+            empty_note(ui, "No rows");
+        } else {
+            grid(ui, "db_query_table_hscroll", &result.columns, &result.rows, &[], None, None);
+        }
     }
-}
-
-fn render_query_grid(ui: &mut egui::Ui, result: &mitm_core::db::browser::DbQueryResult) {
-    if result.rows.is_empty() {
-        ui.vertical_centered(|ui| {
-            ui.add_space(20.0);
-            ui.label(RichText::new("Query returned 0 rows").weak().italics());
-        });
-        return;
-    }
-
-    egui::ScrollArea::horizontal()
-        .id_salt("db_query_table_hscroll")
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            let mut builder = TableBuilder::new(ui)
-                .striped(true)
-                .resizable(true)
-                .auto_shrink([false, false]);
-
-            for _ in 0..result.columns.len() {
-                builder = builder.column(Column::initial(130.0).at_least(60.0).clip(true));
-            }
-
-            builder
-                .header(24.0, |mut header| {
-                    for col_name in &result.columns {
-                        header.col(|ui| {
-                            ui.strong(col_name);
-                        });
-                    }
-                })
-                .body(|body| {
-                    body.rows(22.0, result.rows.len(), |mut row| {
-                        let idx = row.index();
-                        for cell in &result.rows[idx] {
-                            row.col(|ui| match cell {
-                                serde_json::Value::Null => {
-                                    ui.label(RichText::new("NULL").weak().italics());
-                                }
-                                serde_json::Value::String(s) => {
-                                    ui.add(egui::Label::new(s).truncate());
-                                }
-                                other => {
-                                    ui.add(egui::Label::new(other.to_string()).truncate());
-                                }
-                            });
-                        }
-                    });
-                });
-        });
 }
