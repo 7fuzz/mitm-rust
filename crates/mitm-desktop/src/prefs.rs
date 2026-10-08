@@ -4,6 +4,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use crate::dock::{self, Tab};
 use crate::features::collections::CollectionsPrefs;
+use crate::features::encoding::EncodingPrefs;
 use crate::features::fuzzer::FuzzerPrefs;
 use crate::features::inspector::InspectorPrefs;
 use crate::features::intercept::InterceptPrefs;
@@ -67,6 +68,10 @@ impl Section for WebhooksPrefs {
     const KEY: &'static str = "webhooks";
 }
 
+impl Section for EncodingPrefs {
+    const KEY: &'static str = "encoding";
+}
+
 fn load<T: Section>(storage: Option<&dyn Storage>) -> T {
     storage.and_then(|s| eframe::get_value(s, T::KEY)).unwrap_or_default()
 }
@@ -82,6 +87,7 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     state.fuzzer.prefs = load(storage);
     state.websockets.prefs = load(storage);
     state.webhooks.prefs = load(storage);
+    state.encoding.prefs = load(storage);
     state.settings = load(storage);
     state.traffic.prefs = load(storage);
     state.intercept.prefs = load(storage);
@@ -96,6 +102,7 @@ pub fn carry_over(from: &mut AppState, to: &mut AppState) {
     to.fuzzer.prefs = std::mem::take(&mut from.fuzzer.prefs);
     to.websockets.prefs = std::mem::take(&mut from.websockets.prefs);
     to.webhooks.prefs = std::mem::take(&mut from.webhooks.prefs);
+    to.encoding.prefs = std::mem::take(&mut from.encoding.prefs);
     to.settings = std::mem::take(&mut from.settings);
     to.traffic.prefs = std::mem::take(&mut from.traffic.prefs);
     to.intercept.prefs = std::mem::take(&mut from.intercept.prefs);
@@ -110,6 +117,7 @@ pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppStat
     save(storage, &state.fuzzer.prefs);
     save(storage, &state.websockets.prefs);
     save(storage, &state.webhooks.prefs);
+    save(storage, &state.encoding.prefs);
     save(storage, &state.settings);
     save(storage, &state.traffic.prefs);
     save(storage, &state.intercept.prefs);

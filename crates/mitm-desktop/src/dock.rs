@@ -18,10 +18,11 @@ pub enum Tab {
     Webhooks,
     Environments,
     Settings,
+    Encoding,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 10] = [
+    pub const ALL: [Tab; 11] = [
         Tab::Traffic,
         Tab::Repeater,
         Tab::Fuzzer,
@@ -32,6 +33,7 @@ impl Tab {
         Tab::Webhooks,
         Tab::Environments,
         Tab::Settings,
+        Tab::Encoding,
     ];
 
     pub fn name(&self) -> &'static str {
@@ -46,6 +48,7 @@ impl Tab {
             Tab::Webhooks => "Webhooks",
             Tab::Environments => "Environments",
             Tab::Settings => "Settings",
+            Tab::Encoding => "Encoding tool",
         }
     }
 }
@@ -171,6 +174,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Tab::Collections => features::collections::show(ui, &mut state.collections, cmds),
             Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
             Tab::Webhooks => features::webhooks::show(ui, &mut state.webhooks, cmds),
+            Tab::Encoding => features::encoding::show(ui, &mut state.encoding),
             Tab::Environments => features::environments::show(ui, &mut state.environments, cmds),
             Tab::Settings => features::settings::show(
                 ui,

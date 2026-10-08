@@ -1,5 +1,6 @@
 pub mod collections;
 pub mod database;
+pub mod encoding;
 pub mod environments;
 pub mod fuzzer;
 pub mod inspector;
