@@ -16,7 +16,6 @@ use mitm_core::repeater::RepeaterExecutionResult;
 use crate::features::collections::CollectionsCmd;
 use crate::features::request_editor::captured::CapturedRequest;
 use crate::features::environments::{self, QuickVarScope};
-use crate::features::fuzzer::FuzzerWorker;
 use crate::features::settings::ProxyState;
 use crate::format::{headers_to_text, Exchange};
 use crate::jobs::Jobs;
@@ -38,7 +37,6 @@ pub struct MitmApp {
     ca_jobs: Jobs<Option<Result<PathBuf, String>>>,
     import_files: Jobs<Option<Result<(String, String), String>>>,
     file_saves: Jobs<Option<Result<String, String>>>,
-    fuzzer_worker: FuzzerWorker,
 }
 
 impl MitmApp {
@@ -57,7 +55,6 @@ impl MitmApp {
             ca_jobs: Jobs::default(),
             import_files: Jobs::default(),
             file_saves: Jobs::default(),
-            fuzzer_worker: FuzzerWorker::default(),
         }
     }
 
@@ -65,6 +62,11 @@ impl MitmApp {
         let db_path = &self.core.db_path;
         let traffic = &mut self.state.traffic;
         match event {
+            CoreEvent::FuzzResult { run_id, row } => self.state.fuzzer.push_row(run_id, row),
+            CoreEvent::FuzzFinished { run_id, completed, stopped, .. } => {
+                let core = &self.core;
+                self.state.fuzzer.finished(run_id, completed, stopped, || core.fuzz_rows(run_id).unwrap_or_default());
+            }
             CoreEvent::TrafficCaptured(ev) => {
                 let id = ev.entry.id;
                 traffic.upsert(ev.entry);
@@ -293,9 +295,11 @@ impl MitmApp {
                     });
                 }
             }
-            AppCommand::StartFuzzer { template, payloads, concurrency } => {
-                self.fuzzer_worker.start(&self.rt, ctx, template, payloads, concurrency);
+            AppCommand::StartFuzzer(config) => {
+                let start = self.rt.block_on(self.core.start_fuzz(config));
+                self.state.fuzzer.started(start);
             }
+            AppCommand::StopFuzzer => self.core.stop_fuzz(),
 
             AppCommand::ForwardIntercept { flow_id, url, method, headers, body } => {
                 let _ = self.core.forward_intercepted_flow(&flow_id, url, method, headers, body);
@@ -594,7 +598,6 @@ impl eframe::App for MitmApp {
         self.state.environments.flush_if_idle(&self.core.db_path, now);
         self.save_rewrite_rules(now, false);
         self.state.traffic.sync_header_search(&self.core.db_path);
-        self.fuzzer_worker.poll(&mut self.state.fuzzer);
         for result in self.import_files.drain().flatten() {
             let import = &mut self.state.environments.import;
             match result {

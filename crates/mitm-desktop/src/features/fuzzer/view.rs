@@ -1,12 +1,11 @@
 use eframe::egui::{self, RichText};
 use crate::theme::{self, Tone};
 use egui_extras::{Column, TableBuilder};
-use mitm_core::fuzzer::FuzzTemplate;
 use crate::command::{AppCommand, Commands};
-use crate::format::{format_bytes, format_duration, parse_header_items};
+use crate::format::{format_bytes, format_duration};
 use crate::widgets::pills::{render_method_pill, render_status_pill};
 use crate::widgets::template;
-use super::FuzzerState;
+use super::{FuzzerState, RunStatus};
 
 pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
 
@@ -33,52 +32,32 @@ pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
                 .desired_width(width)
         });
 
-        if fuzzer.is_running {
+        if fuzzer.status == RunStatus::Running {
             if ui.button(RichText::new("⏹ Stop").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
-                fuzzer.is_running = false;
+                cmds.push(AppCommand::StopFuzzer);
             }
             ui.spinner();
-            ui.label(format!("{}/{}", fuzzer.progress_completed, fuzzer.progress_total));
         } else {
             let start_btn = RichText::new("▶ Start Fuzzing")
                 .color(theme::color(ui, Tone::Success))
                 .strong();
             if ui.button(start_btn).clicked() {
-                let payloads: Vec<String> = fuzzer
-                    .wordlist_input
-                    .lines()
-                    .map(|l| l.trim().to_string())
-                    .filter(|l| !l.is_empty())
-                    .collect();
-
-                if !payloads.is_empty() {
-                    fuzzer.is_running = true;
-                    fuzzer.progress_completed = 0;
-                    fuzzer.progress_total = payloads.len();
-                    fuzzer.results.clear();
-
-                    let template = FuzzTemplate {
-                        method: fuzzer.method.clone(),
-                        url: fuzzer.url.clone(),
-                        headers: parse_header_items(&fuzzer.headers),
-                        params: Vec::new(),
-                        body_type: "raw".to_string(),
-                        body: if fuzzer.body.is_empty() { None } else { Some(fuzzer.body.clone()) },
-                    };
-
-                    cmds.push(AppCommand::StartFuzzer {
-                        template,
-                        payloads,
-                        concurrency: fuzzer.concurrency,
-                    });
-                }
+                cmds.push(AppCommand::StartFuzzer(fuzzer.config()));
             }
         }
+        if fuzzer.status != RunStatus::Idle {
+            ui.label(format!("{}/{}", fuzzer.results.len(), fuzzer.total));
+        }
+        if fuzzer.status == RunStatus::Stopped {
+            ui.label(RichText::new("Stopped").color(theme::color(ui, Tone::Warn)));
+        }
+        if let Some(error) = &fuzzer.error {
+            ui.label(RichText::new(error).color(theme::color(ui, Tone::Danger)));
+        }
 
-        if !fuzzer.results.is_empty() && ui.button("🗑 Clear").clicked() {
-            fuzzer.results.clear();
-            fuzzer.progress_completed = 0;
-            fuzzer.progress_total = 0;
+        let finished = matches!(fuzzer.status, RunStatus::Stopped | RunStatus::Done);
+        if finished && ui.button("🗑 Clear").clicked() {
+            fuzzer.clear();
         }
     });
 
@@ -157,11 +136,11 @@ pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
                         let r = &fuzzer.results[idx];
 
                         row.col(|ui| {
-                            ui.label(r.index.to_string());
+                            ui.label((r.idx + 1).to_string());
                         });
 
                         row.col(|ui| {
-                            ui.label(RichText::new(&r.payload).strong());
+                            ui.label(RichText::new(r.payloads.join(", ")).strong());
                         });
 
                         let (_, status_cell) = row.col(|ui| {
@@ -172,7 +151,7 @@ pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
                         }
 
                         row.col(|ui| {
-                            ui.label(format_bytes(r.size));
+                            ui.label(format_bytes(r.response_size));
                         });
 
                         row.col(|ui| {

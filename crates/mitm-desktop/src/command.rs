@@ -1,6 +1,6 @@
 use mitm_core::curl::ParsedCurl;
 use mitm_core::db::InterceptRule;
-use mitm_core::fuzzer::FuzzTemplate;
+use mitm_core::fuzzer::FuzzConfig;
 use mitm_core::state::{HistorySettings, ListenerConfig, ProxyMode};
 use crate::dock::Tab;
 use crate::features::collections::{CollectionsCmd, SaveTarget};
@@ -54,7 +54,8 @@ pub enum AppCommand {
     RepeaterSelect(String),
     RepeaterDelete(String),
     RepeaterSend(String),
-    StartFuzzer { template: FuzzTemplate, payloads: Vec<String>, concurrency: usize },
+    StartFuzzer(FuzzConfig),
+    StopFuzzer,
 
     ForwardIntercept {
         flow_id: String,
