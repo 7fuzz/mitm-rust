@@ -1,3 +1,5 @@
+mod quick;
+
 use std::collections::HashSet;
 use std::path::Path;
 use eframe::egui::{self, RichText};
@@ -7,6 +9,8 @@ use crate::command::{AppCommand, Commands};
 use crate::widgets::split;
 
 const SAVE_DELAY_SECS: f64 = 0.6;
+
+pub use quick::show as show_quick_vars;
 
 pub struct VariantModal {
     pub var_idx: usize,
@@ -35,6 +39,7 @@ pub struct EnvironmentsState {
     pub editing_description: bool,
     pub description_text: String,
     pub confirm_delete_workspace: bool,
+    pub quick: quick::QuickVars,
     dirty: HashSet<String>,
     last_edit: f64,
 }
@@ -62,6 +67,7 @@ impl Default for EnvironmentsState {
             editing_description: false,
             description_text: String::new(),
             confirm_delete_workspace: false,
+            quick: quick::QuickVars::default(),
             dirty: HashSet::new(),
             last_edit: 0.0,
         }

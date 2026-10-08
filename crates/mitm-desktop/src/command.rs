@@ -16,6 +16,7 @@ pub struct RequestDraft {
 #[derive(Clone)]
 pub enum AppCommand {
     OpenPalette,
+    ToggleQuickVariables,
     OpenTab(Tab),
     FocusTabAt(usize),
     CycleTab { forward: bool },

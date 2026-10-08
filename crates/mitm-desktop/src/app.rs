@@ -82,6 +82,13 @@ impl MitmApp {
         }
         match cmd {
             AppCommand::OpenPalette => self.palette.open(),
+            AppCommand::ToggleQuickVariables => {
+                if self.state.environments.active_environment().is_some() {
+                    self.state.environments.quick.toggle();
+                } else {
+                    dock::open_tab(&mut self.dock, Tab::Environments);
+                }
+            }
             AppCommand::OpenTab(tab) => dock::open_tab(&mut self.dock, tab),
             AppCommand::FocusTabAt(index) => dock::focus_tab_at(&mut self.dock, index),
             AppCommand::CycleTab { forward } => dock::cycle_tab(&mut self.dock, forward),
@@ -465,6 +472,8 @@ impl eframe::App for MitmApp {
         };
         DockArea::new(&mut self.dock).show_inside(ui, &mut viewer);
         palette::show(ui.ctx(), &mut self.palette, &self.state, &mut self.cmds);
+        let now = ui.input(|i| i.time);
+        crate::features::environments::show_quick_vars(ui.ctx(), &mut self.state.environments, now);
 
         let cmds = self.cmds.take();
         if !cmds.is_empty() {

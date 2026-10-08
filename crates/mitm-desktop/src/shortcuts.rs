@@ -6,6 +6,7 @@ use crate::dock::Tab;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     OpenPalette,
+    QuickVariables,
     OpenTab(Tab),
     FocusTabAt(usize),
     NextTab,
@@ -20,6 +21,7 @@ impl Action {
     pub fn label(self) -> String {
         match self {
             Action::OpenPalette => "Command palette".to_string(),
+            Action::QuickVariables => "Quick variables".to_string(),
             Action::OpenTab(tab) => format!("Open {}", tab.name()),
             Action::FocusTabAt(index) => format!("Tab {}", index + 1),
             Action::NextTab => "Next tab".to_string(),
@@ -34,6 +36,7 @@ impl Action {
     pub fn command(self) -> AppCommand {
         match self {
             Action::OpenPalette => AppCommand::OpenPalette,
+            Action::QuickVariables => AppCommand::ToggleQuickVariables,
             Action::OpenTab(tab) => AppCommand::OpenTab(tab),
             Action::FocusTabAt(index) => AppCommand::FocusTabAt(index),
             Action::NextTab => AppCommand::CycleTab { forward: true },
@@ -48,6 +51,7 @@ impl Action {
 
 pub const SHORTCUTS: &[(KeyboardShortcut, Action)] = &[
     (KeyboardShortcut::new(Modifiers::COMMAND, Key::K), Action::OpenPalette),
+    (KeyboardShortcut::new(Modifiers::COMMAND, Key::E), Action::QuickVariables),
     (KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma), Action::OpenTab(Tab::Settings)),
     // Shift variants first: consume_shortcut also matches a shortcut when extra shift is held.
     (KeyboardShortcut::new(Modifiers::CTRL.plus(Modifiers::SHIFT), Key::Tab), Action::PreviousTab),
@@ -71,7 +75,7 @@ pub fn palette_actions() -> Vec<Action> {
     let mut actions: Vec<Action> = Tab::ALL.into_iter().map(Action::OpenTab).collect();
     actions.extend([Action::NextTab, Action::PreviousTab, Action::ToggleProxy]);
     actions.extend(ProxyMode::ALL.map(Action::SetProxyMode));
-    actions.extend([Action::ToggleInterceptor, Action::ClearTraffic]);
+    actions.extend([Action::ToggleInterceptor, Action::ClearTraffic, Action::QuickVariables]);
     actions
 }
 
