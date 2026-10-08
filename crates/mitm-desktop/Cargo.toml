@@ -9,7 +9,7 @@ mitm-core = { path = "../mitm-core" }
 eframe = { version = "0.36.2", features = ["persistence"] }
 egui = "0.36.2"
 egui_dock = { version = "0.21.1", features = ["serde"] }
-egui_extras = { version = "0.36.2", features = ["default", "image"] }
+egui_extras = { version = "0.36.2", features = ["default", "image", "svg"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 
 tokio = { version = "1", features = ["full"] }

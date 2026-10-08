@@ -15,6 +15,7 @@ pub enum PaneTab {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BodyFormat {
+    Preview,
     Pretty,
     Tree,
     Raw,
@@ -29,6 +30,13 @@ pub struct PaneState {
     pub format: BodyFormat,
     rendered: Option<(RenderKey, Arc<Galley>)>,
     tree: Option<((u64, usize), Option<JsonTree>)>,
+    image: Option<PaneImage>,
+}
+
+struct PaneImage {
+    key: (u64, usize),
+    uri: String,
+    bytes: egui::load::Bytes,
 }
 
 impl Default for PaneState {
@@ -38,6 +46,7 @@ impl Default for PaneState {
             format: BodyFormat::Pretty,
             rendered: None,
             tree: None,
+            image: None,
         }
     }
 }
@@ -54,6 +63,11 @@ pub struct PaneData<'a> {
 
 pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneData) {
     let is_json = !data.body.is_empty() && code_view::detect(data.content_type, data.body) == Lang::Json;
+    let is_image = !data.body.is_empty() && data.content_type.trim().to_lowercase().starts_with("image/");
+    let body_key = (data.cache_key, data.body.len());
+    if pane.image.as_ref().is_some_and(|image| image.key != body_key) {
+        forget_image(ui.ctx(), pane);
+    }
     ui.horizontal(|ui| {
         if !data.title.is_empty() {
             ui.label(RichText::new(data.title).strong());
@@ -76,6 +90,9 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
                 if is_json {
                     ui.selectable_value(&mut pane.format, BodyFormat::Tree, "Tree");
                 }
+                if is_image {
+                    ui.selectable_value(&mut pane.format, BodyFormat::Preview, "Preview");
+                }
             });
         }
     });
@@ -83,6 +100,10 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
 
     if pane.tab == PaneTab::Body && pane.format == BodyFormat::Tree && is_json {
         tree(ui, id_salt, pane, data);
+        return;
+    }
+    if pane.tab == PaneTab::Body && pane.format == BodyFormat::Preview && is_image {
+        image_preview(ui, id_salt, pane, data);
         return;
     }
 
@@ -115,7 +136,7 @@ fn body(ui: &mut egui::Ui, pane: &mut PaneState, data: &PaneData) {
     );
     if pane.rendered.as_ref().is_none_or(|(cached, _)| *cached != key) {
         let (text, lang) = match pane.format {
-            BodyFormat::Pretty | BodyFormat::Tree => {
+            BodyFormat::Pretty | BodyFormat::Tree | BodyFormat::Preview => {
                 let text = display_body(data.body, data.content_type);
                 let lang = code_view::detect(data.content_type, &text);
                 (text, lang)
@@ -128,6 +149,31 @@ fn body(ui: &mut egui::Ui, pane: &mut PaneState, data: &PaneData) {
     }
     if let Some((_, galley)) = &pane.rendered {
         ui.add(egui::Label::new(galley.clone()));
+    }
+}
+
+fn image_preview(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneData) {
+    let key = (data.cache_key, data.body.len());
+    let image = pane.image.get_or_insert_with(|| {
+        // The extension lets the loader pick svg; raster formats are sniffed from the bytes.
+        let subtype = data.content_type.split(';').next().unwrap_or_default().trim().rsplit('/').next().unwrap_or("bin");
+        let ext = subtype.split('+').next().unwrap_or(subtype);
+        PaneImage {
+            key,
+            uri: format!("bytes://{id_salt}-{}-{}.{ext}", key.0, key.1),
+            bytes: Arc::<[u8]>::from(body_bytes(data.body)).into(),
+        }
+    });
+    let source = egui::ImageSource::Bytes { uri: image.uri.clone().into(), bytes: image.bytes.clone() };
+    egui::ScrollArea::both().id_salt((id_salt, "preview")).auto_shrink([false, false]).show(ui, |ui| {
+        ui.add(egui::Image::new(source).max_size(ui.available_size()).shrink_to_fit());
+    });
+}
+
+// Drops the decoded texture as well as the bytes, so browsing images doesn't grow memory.
+fn forget_image(ctx: &egui::Context, pane: &mut PaneState) {
+    if let Some(image) = pane.image.take() {
+        ctx.forget_image(&image.uri);
     }
 }
 
