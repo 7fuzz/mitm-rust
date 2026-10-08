@@ -13,6 +13,7 @@ use mitm_core::collections::{self as core_collections, Collection, CollectionTre
 use mitm_core::repeater::ExtractRuleItem;
 use crate::features::request_editor::body::{is_multipart, is_urlencoded};
 use crate::features::request_editor::captured::CapturedRequest;
+use crate::features::request_editor::run_list::RunDetails;
 use crate::widgets::message_pane::PaneState;
 
 pub use view::show;
@@ -119,6 +120,7 @@ pub struct CollectionsState {
     pub runs: HashMap<String, Vec<RequestHistoryItem>>,
     pub selected_run: HashMap<String, i64>,
     pub response_pane: PaneState,
+    pub run_details: RunDetails,
     pub extract_modal: Option<ExtractModal>,
     dirty: HashSet<String>,
     last_edit: f64,
@@ -146,6 +148,7 @@ impl Default for CollectionsState {
             runs: HashMap::new(),
             selected_run: HashMap::new(),
             response_pane: PaneState::default(),
+            run_details: RunDetails::default(),
             extract_modal: None,
             dirty: HashSet::new(),
             last_edit: 0.0,

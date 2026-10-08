@@ -12,6 +12,7 @@ use mitm_core::state::{HistoryDetail, HistoryEntry};
 use crate::features::request_editor::captured::{header_items, CapturedRequest};
 use crate::features::request_editor::run_list::Run;
 use crate::features::request_editor::url_params::{new_id, parse_query};
+use crate::features::request_editor::run_list::RunDetails;
 use crate::widgets::message_pane::PaneState;
 
 pub use view::show;
@@ -84,6 +85,7 @@ pub struct RepeaterState {
     pub search: String,
     pub editor_tab: EditorTab,
     pub response_pane: PaneState,
+    pub run_details: RunDetails,
     pub responses: HashMap<String, ShownResponse>,
     pub executing: HashSet<String>,
     pub history: HashMap<String, Vec<RepeaterHistoryItem>>,
@@ -100,6 +102,7 @@ impl Default for RepeaterState {
             search: String::new(),
             editor_tab: EditorTab::Body,
             response_pane: PaneState::default(),
+            run_details: RunDetails::default(),
             responses: HashMap::new(),
             executing: HashSet::new(),
             history: HashMap::new(),

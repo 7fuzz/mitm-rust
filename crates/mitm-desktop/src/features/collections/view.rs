@@ -157,7 +157,7 @@ fn history_drawer(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &
     ui.separator();
 
     let selected = state.selected_run.get(request_id).copied().or_else(|| runs.first().map(|r| r.id));
-    if let Some(RunAction::Select(run_id)) = run_list::show(ui, "collections_runs", runs, selected, false) {
+    if let Some(RunAction::Select(run_id)) = run_list::show(ui, "collections_runs", runs, selected, false, &mut state.run_details) {
         let newest = runs.first().is_some_and(|r| r.id == run_id);
         if newest {
             state.selected_run.remove(request_id);
