@@ -1,3 +1,4 @@
+mod import;
 mod quick;
 
 use std::collections::HashSet;
@@ -11,6 +12,7 @@ use crate::widgets::split;
 
 const SAVE_DELAY_SECS: f64 = 0.6;
 
+pub use import::{file_label, is_json_file, show as show_import};
 pub use quick::{show as show_quick_vars, Scope as QuickVarScope};
 
 pub struct VariantModal {
@@ -43,6 +45,7 @@ pub struct EnvironmentsState {
     pub description_text: String,
     pub confirm_delete_workspace: bool,
     pub quick: quick::QuickVars,
+    pub import: import::ImportState,
     dirty: HashSet<String>,
     last_edit: f64,
 }
@@ -72,6 +75,7 @@ impl Default for EnvironmentsState {
             description_text: String::new(),
             confirm_delete_workspace: false,
             quick: quick::QuickVars::default(),
+            import: import::ImportState::default(),
             dirty: HashSet::new(),
             last_edit: 0.0,
         }

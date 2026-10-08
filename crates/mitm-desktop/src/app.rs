@@ -13,7 +13,7 @@ use crate::dock::{self, Tab, TabViewer};
 use mitm_core::collections::execute::ExecutionResult;
 use mitm_core::repeater::RepeaterExecutionResult;
 use crate::features::collections::CollectionsCmd;
-use crate::features::environments::QuickVarScope;
+use crate::features::environments::{self, QuickVarScope};
 use crate::features::fuzzer::FuzzerWorker;
 use crate::features::settings::ProxyState;
 use crate::format::{headers_to_text, Exchange};
@@ -34,6 +34,7 @@ pub struct MitmApp {
     repeater_runs: Jobs<(String, Result<RepeaterExecutionResult, String>)>,
     collection_runs: Jobs<(String, Result<ExecutionResult, String>)>,
     ca_jobs: Jobs<Option<Result<PathBuf, String>>>,
+    import_files: Jobs<Option<Result<(String, String), String>>>,
     fuzzer_worker: FuzzerWorker,
 }
 
@@ -51,6 +52,7 @@ impl MitmApp {
             repeater_runs: Jobs::default(),
             collection_runs: Jobs::default(),
             ca_jobs: Jobs::default(),
+            import_files: Jobs::default(),
             fuzzer_worker: FuzzerWorker::default(),
         }
     }
@@ -337,6 +339,29 @@ impl MitmApp {
                     }
                 }
             }
+            AppCommand::OpenImport => self.state.environments.import.open_with(None, String::new()),
+            AppCommand::PickImportFile => {
+                self.import_files.spawn(&self.rt, ctx, async {
+                    let path = crate::files::pick_open(&[("JSON", &["json"])]).await?;
+                    let name = path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+                    Some(std::fs::read_to_string(&path).map(|json| (name, json)).map_err(|e| e.to_string()))
+                });
+            }
+            AppCommand::ImportWorkspace { json, target, name } => {
+                match mitm_core::workspace::import::import_workspace_json_db(db_path, &json, target.as_deref(), name.as_deref()) {
+                    Ok(_) if target.is_some() => {
+                        self.state.environments.import = Default::default();
+                        self.state.environments.refresh(db_path);
+                        self.state.collections.reload_tree(db_path);
+                    }
+                    Ok(summary) => {
+                        self.state.environments.import = Default::default();
+                        self.state.environments.load(db_path);
+                        self.run_command(ctx, AppCommand::SelectWorkspace(summary.workspace_id));
+                    }
+                    Err(e) => self.state.environments.import.error = Some(e),
+                }
+            }
             AppCommand::CreateEnvironment { workspace_id, name } => {
                 let now = chrono::Utc::now().timestamp_millis();
                 let new_env = mitm_core::workspace::Environment {
@@ -462,6 +487,16 @@ impl eframe::App for MitmApp {
         self.state.collections.flush_if_idle(&self.core.db_path, now);
         self.state.environments.flush_if_idle(&self.core.db_path, now);
         self.fuzzer_worker.poll(&mut self.state.fuzzer);
+        for result in self.import_files.drain().flatten() {
+            let import = &mut self.state.environments.import;
+            match result {
+                Ok((name, json)) => import.open_with(Some(environments::file_label(&name, json.len())), json),
+                Err(e) => import.error = Some(e),
+            }
+        }
+        if let Some((name, json)) = dropped_json(ui.ctx()) {
+            self.state.environments.import.open_with(Some(environments::file_label(&name, json.len())), json);
+        }
         for result in self.ca_jobs.drain().flatten() {
             self.state.certificate.status = Some(match result {
                 Ok(path) => (format!("Exported to {}", path.display()), Tone::Success),
@@ -481,7 +516,15 @@ impl eframe::App for MitmApp {
         DockArea::new(&mut self.dock).show_inside(ui, &mut viewer);
         palette::show(ui.ctx(), &mut self.palette, &self.state, &mut self.cmds);
         let now = ui.input(|i| i.time);
-        crate::features::environments::show_quick_vars(ui.ctx(), &mut self.state.environments, now);
+        environments::show_quick_vars(ui.ctx(), &mut self.state.environments, now);
+        let workspace = self.state.environments.active_workspace().map(|w| (w.id.clone(), w.name.clone())).unwrap_or_default();
+        environments::show_import(
+            ui.ctx(),
+            &mut self.state.environments.import,
+            (&workspace.0, &workspace.1),
+            &self.core.db_path,
+            &mut self.cmds,
+        );
 
         let cmds = self.cmds.take();
         if !cmds.is_empty() {
@@ -492,6 +535,16 @@ impl eframe::App for MitmApp {
             ctx.request_repaint();
         }
     }
+}
+
+fn dropped_json(ctx: &egui::Context) -> Option<(String, String)> {
+    let file = ctx.input(|i| i.raw.dropped_files.first().cloned())?;
+    let name = file.path().file_name()?.to_string_lossy().into_owned();
+    if !environments::is_json_file(&name) {
+        return None;
+    }
+    let bytes = file.bytes().ok()?;
+    Some((name, String::from_utf8_lossy(&bytes).into_owned()))
 }
 
 fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {

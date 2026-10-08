@@ -75,6 +75,10 @@ pub enum AppCommand {
     RenameEnvironment { id: String, name: String },
     DuplicateEnvironment(String),
     DeleteEnvironment(String),
+
+    OpenImport,
+    PickImportFile,
+    ImportWorkspace { json: String, target: Option<String>, name: Option<String> },
 }
 
 impl AppCommand {
@@ -89,6 +93,7 @@ impl AppCommand {
                 | AppCommand::RenameEnvironment { .. }
                 | AppCommand::DuplicateEnvironment(_)
                 | AppCommand::DeleteEnvironment(_)
+                | AppCommand::ImportWorkspace { .. }
         )
     }
 }

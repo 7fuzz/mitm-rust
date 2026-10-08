@@ -63,6 +63,10 @@ fn workspace_and_env_combos(ui: &mut egui::Ui, state: &mut AppState, cmds: &mut 
                 ws_state.new_workspace_name.clear();
                 ui.close();
             }
+            if ui.button("⇩ Import…").clicked() {
+                cmds.push(AppCommand::OpenImport);
+                ui.close();
+            }
             if ui.button("⚙ Manage").clicked() {
                 cmds.push(AppCommand::OpenTab(Tab::Environments));
                 ui.close();
