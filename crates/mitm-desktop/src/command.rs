@@ -97,6 +97,7 @@ pub enum AppCommand {
     DecodeInEncodingTool(String),
     GenerateBcrypt { password: String, cost: u32 },
     VerifyBcrypt { password: String, hash: String },
+    RecomputeHmac { secret: String, payload: String },
 
     SelectWorkspace(String),
     SelectEnvironment(Option<String>),

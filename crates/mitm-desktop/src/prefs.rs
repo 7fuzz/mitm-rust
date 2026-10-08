@@ -7,6 +7,7 @@ use crate::features::collections::CollectionsPrefs;
 use crate::features::encoding::EncodingPrefs;
 use crate::features::fuzzer::FuzzerPrefs;
 use crate::features::hashing::HashingPrefs;
+use crate::features::hmac_tool::HmacToolPrefs;
 use crate::features::inspector::InspectorPrefs;
 use crate::features::intercept::InterceptPrefs;
 use crate::features::repeater::RepeaterPrefs;
@@ -77,6 +78,10 @@ impl Section for HashingPrefs {
     const KEY: &'static str = "hashing";
 }
 
+impl Section for HmacToolPrefs {
+    const KEY: &'static str = "hmac_tool";
+}
+
 fn load<T: Section>(storage: Option<&dyn Storage>) -> T {
     storage.and_then(|s| eframe::get_value(s, T::KEY)).unwrap_or_default()
 }
@@ -94,6 +99,7 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     state.webhooks.prefs = load(storage);
     state.encoding.prefs = load(storage);
     state.hashing.prefs = load(storage);
+    state.hmac_tool.prefs = load(storage);
     state.settings = load(storage);
     state.traffic.prefs = load(storage);
     state.intercept.prefs = load(storage);
@@ -110,6 +116,7 @@ pub fn carry_over(from: &mut AppState, to: &mut AppState) {
     to.webhooks.prefs = std::mem::take(&mut from.webhooks.prefs);
     to.encoding.prefs = std::mem::take(&mut from.encoding.prefs);
     to.hashing.prefs = std::mem::take(&mut from.hashing.prefs);
+    to.hmac_tool.prefs = std::mem::take(&mut from.hmac_tool.prefs);
     to.settings = std::mem::take(&mut from.settings);
     to.traffic.prefs = std::mem::take(&mut from.traffic.prefs);
     to.intercept.prefs = std::mem::take(&mut from.intercept.prefs);
@@ -126,6 +133,7 @@ pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppStat
     save(storage, &state.webhooks.prefs);
     save(storage, &state.encoding.prefs);
     save(storage, &state.hashing.prefs);
+    save(storage, &state.hmac_tool.prefs);
     save(storage, &state.settings);
     save(storage, &state.traffic.prefs);
     save(storage, &state.intercept.prefs);

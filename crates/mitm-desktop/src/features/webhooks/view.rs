@@ -217,7 +217,7 @@ fn deliveries_table(ui: &mut egui::Ui, state: &mut WebhooksState) {
 }
 
 fn delivery_detail(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
-    let WebhooksState { deliveries, selected_delivery, detail_pane, replay_result, prefs, .. } = state;
+    let WebhooksState { deliveries, endpoints, selected_delivery, detail_pane, replay_result, prefs, .. } = state;
     let Some(id) = *selected_delivery else {
         ui.weak("Select a delivery");
         return;
@@ -236,6 +236,15 @@ fn delivery_detail(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comm
         }
     });
     signature_view(ui, delivery);
+
+    if ui.button("Recompute with…").on_hover_text("Open the HMAC signature tool prefilled").clicked() {
+        let secret = endpoints
+            .iter()
+            .find(|e| e.id == delivery.endpoint_id)
+            .map(|e| e.secret_key.clone())
+            .unwrap_or_default();
+        cmds.push(AppCommand::RecomputeHmac { secret, payload: delivery.payload.clone() });
+    }
 
     ui.horizontal(|ui| {
         let url = prefs.replay_urls.entry(delivery.endpoint_id.clone()).or_default();

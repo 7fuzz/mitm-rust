@@ -531,6 +531,10 @@ impl MitmApp {
                 self.state.encoding.load_for_decode(text);
                 dock::open_tab(&mut self.dock, Tab::Encoding);
             }
+            AppCommand::RecomputeHmac { secret, payload } => {
+                self.state.hmac_tool.prefill(secret, payload);
+                dock::open_tab(&mut self.dock, Tab::HmacTool);
+            }
             AppCommand::GenerateBcrypt { password, cost } => {
                 use crate::features::hashing::BcryptOutcome;
                 self.bcrypt_jobs.spawn(&self.rt, ctx, async move {
