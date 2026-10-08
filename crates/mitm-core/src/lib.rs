@@ -364,6 +364,22 @@ impl MitmCore {
         }
     }
 
+    /// Forwards every paused flow unmodified and returns how many were released.
+    pub fn forward_all_intercepted(&self) -> usize {
+        self.pending_flow_ids()
+            .iter()
+            .filter(|id| self.forward_intercepted_flow(id, None, None, None, None).is_ok())
+            .count()
+    }
+
+    pub fn drop_all_intercepted(&self) -> usize {
+        self.pending_flow_ids().iter().filter(|id| self.drop_intercepted_flow(id).is_ok()).count()
+    }
+
+    fn pending_flow_ids(&self) -> Vec<String> {
+        self.state.pending_flows.iter().map(|entry| entry.key().clone()).collect()
+    }
+
     pub async fn get_intercept_rules(&self) -> Vec<db::InterceptRule> {
         self.state.rules.read().await.clone()
     }
@@ -468,5 +484,53 @@ impl MitmCore {
     pub fn variable_value(&self, name: &str) -> Option<String> {
         let active_env = self.get_active_environment().ok().flatten();
         workspace::variable_value_in_env(active_env.as_ref(), name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::oneshot;
+
+    fn test_core() -> (MitmCore, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("mitm-core-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("test.db");
+        db::init_database(&db_path, None).unwrap();
+        let (history_tx, _) = mpsc::channel(1);
+        let (rewrite_tx, _) = mpsc::channel(1);
+        let state = Arc::new(AppState::new(db_path.clone(), history_tx, rewrite_tx));
+        (MitmCore { state, event_bus: EventBus::default(), db_path }, dir)
+    }
+
+    fn pause(core: &MitmCore, id: &str) -> oneshot::Receiver<state::InterceptAction> {
+        let (tx, rx) = oneshot::channel();
+        core.state.pending_flows.insert(
+            id.to_string(),
+            state::PendingFlow {
+                flow_id: id.to_string(),
+                phase: state::InterceptPhase::Request,
+                method: "GET".to_string(),
+                url: "http://a".to_string(),
+                headers: vec![],
+                body: vec![],
+                tx,
+            },
+        );
+        rx
+    }
+
+    #[test]
+    fn forward_all_and_drop_all_release_every_paused_flow() {
+        let (core, dir) = test_core();
+        let mut forwarded = [pause(&core, "a"), pause(&core, "b")];
+        assert_eq!(core.forward_all_intercepted(), 2);
+        assert!(forwarded.iter_mut().all(|rx| matches!(rx.try_recv(), Ok(state::InterceptAction::Forward { modified_url: None, .. }))));
+
+        let mut dropped = pause(&core, "c");
+        assert_eq!(core.drop_all_intercepted(), 1);
+        assert!(matches!(dropped.try_recv(), Ok(state::InterceptAction::Drop)));
+        assert!(core.state.pending_flows.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
