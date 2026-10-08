@@ -93,6 +93,8 @@ pub struct TrafficState {
     pub prefs: TrafficPrefs,
     pub history_limit: HistorySettings,
     pub limit_draft: HistorySettings,
+    // Bumped to make egui forget its stored column widths and start again from `prefs.widths`.
+    width_epoch: u32,
     // Top visible flow id and vertical offset from the last frame.
     scroll_anchor: Option<(i64, f32)>,
 }
@@ -107,6 +109,7 @@ impl Default for TrafficState {
             prefs: TrafficPrefs::default(),
             history_limit: HistorySettings::default(),
             limit_draft: HistorySettings::default(),
+            width_epoch: 0,
             scroll_anchor: None,
         }
     }

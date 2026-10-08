@@ -14,6 +14,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
     let columns = state.prefs.columns.visible();
 
     let visuals = ui.visuals().clone();
+    let ctx = ui.ctx().clone();
     let held_offset = offset_holding_rows_in_place(state, visible, ROW_HEIGHT + ui.spacing().item_spacing.y);
     egui::ScrollArea::horizontal()
         .id_salt("traffic_table_hscroll")
@@ -21,7 +22,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
         .show(ui, |ui| {
             let mut builder = TableBuilder::new(ui)
                 // egui keeps resized widths per column index, so key them by the visible column set.
-                .id_salt(("traffic_table", &columns))
+                .id_salt(("traffic_table", &columns, state.width_epoch))
                 .striped(true)
                 .resizable(true)
                 .sense(egui::Sense::click())
@@ -40,6 +41,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
                     for &col in &columns {
                         let (rect, _) = header.col(|ui| header_cell(ui, col, &mut state.prefs.columns));
                         remember_width(&mut state.prefs.widths, col, rect.width());
+                        if edge_double_clicked(&ctx, rect) {
+                            state.prefs.widths.remove(&col);
+                            state.width_epoch += 1;
+                        }
                     }
                     header.response().context_menu(|ui| column_menu(ui, &mut state.prefs.columns, None));
                 })
@@ -201,6 +206,14 @@ fn clock_cell(ui: &mut egui::Ui, at: Option<&str>) -> egui::Response {
         Some((short, full)) => ui.label(RichText::new(short).color(weak).size(11.0)).on_hover_text(full),
         None => ui.label(RichText::new("-").color(weak)),
     }
+}
+
+// The resize handle owns the edge, so read the double-click from raw input.
+fn edge_double_clicked(ctx: &egui::Context, cell: egui::Rect) -> bool {
+    ctx.input(|i| {
+        i.pointer.button_double_clicked(egui::PointerButton::Primary)
+            && i.pointer.interact_pos().is_some_and(|p| (p.x - cell.right()).abs() <= 4.0 && cell.y_range().contains(p.y))
+    })
 }
 
 fn remember_width(widths: &mut HashMap<ColumnId, f32>, col: ColumnId, width: f32) {
