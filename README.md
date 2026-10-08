@@ -61,6 +61,18 @@ Every module is a dock tab. Tabs can be split, moved or floated, and the layout 
 
 Keyboard shortcuts are listed in [shortcut.md](shortcut.md) and under **Settings ▸ Shortcuts**.
 
+## Differences from the Tauri app (0.2.1)
+
+These differences are intentional:
+
+- **No webview.** Images preview inline. HTML, audio, video and PDF bodies show as source and open in an external app or save to a file.
+- **Shortcuts use modifiers.** The `Ctrl + /` prefix keys and single-letter keys are gone, because they fire while typing. Tabs switch with `Alt + 1…9` and `Ctrl + Tab`, quick variables open on `Ctrl + E`, and Intercept uses `Ctrl + Enter` / `Ctrl + Backspace`. Shortcuts aren't customizable.
+- **Docked tabs instead of pages and drawers.** Utilities are separate tabs, and rule editors sit in splits instead of modals.
+- **One status flash instead of toast stacks.**
+- **Repeater keeps its own environment**, separate from the workspace environments.
+- **Bcrypt always uses a random salt.**
+- **Unsaved fuzz runs are discarded on restart.** The fuzzer's setup is kept.
+
 ## Workspace layout
 
 ```text
