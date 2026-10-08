@@ -80,6 +80,7 @@ pub enum AppCommand {
     Collections(CollectionsCmd),
     SelectWsConnection(i64),
     ConnectWs { url: String, headers: Vec<(String, String)> },
+    SendWsFrame { connection_id: i64, msg_type: String, payload: String, to_server: bool },
 
     SelectWorkspace(String),
     SelectEnvironment(Option<String>),

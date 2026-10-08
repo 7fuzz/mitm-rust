@@ -39,6 +39,7 @@ pub struct MitmApp {
     file_saves: Jobs<Option<Result<String, String>>>,
     fuzz_search: Jobs<(i64, String, Vec<u32>)>,
     ws_connects: Jobs<Result<mitm_core::state::WebSocketConn, String>>,
+    ws_actions: Jobs<Result<(), String>>,
 }
 
 impl MitmApp {
@@ -59,6 +60,7 @@ impl MitmApp {
             file_saves: Jobs::default(),
             fuzz_search: Jobs::default(),
             ws_connects: Jobs::default(),
+            ws_actions: Jobs::default(),
         }
     }
 
@@ -461,6 +463,12 @@ impl MitmApp {
                 let headers = (!headers.is_empty()).then_some(headers);
                 self.ws_connects.spawn(&self.rt, ctx, async move { core.connect_ws_client(url, headers).await });
             }
+            AppCommand::SendWsFrame { connection_id, msg_type, payload, to_server } => {
+                let core = Arc::clone(&self.core);
+                self.ws_actions.spawn(&self.rt, ctx, async move {
+                    core.send_ws_frame(connection_id, msg_type, payload, to_server).await
+                });
+            }
             AppCommand::SelectWorkspace(id) => {
                 let _ = mitm_core::workspace::set_active_workspace_db(db_path, &id);
                 self.state.environments.active_workspace_id = id.clone();
@@ -675,6 +683,9 @@ impl eframe::App for MitmApp {
                 Ok(conn) => self.state.websockets.connected(conn, &self.core.db_path),
                 Err(e) => top_bar::flash(ui, Err(e)),
             }
+        }
+        for error in self.ws_actions.drain().filter_map(Result::err) {
+            top_bar::flash(ui, Err(error));
         }
         for result in self.ca_jobs.drain().flatten() {
             self.state.certificate.status = Some(match result {

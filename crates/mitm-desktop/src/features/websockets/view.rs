@@ -87,11 +87,22 @@ fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comm
 }
 
 fn frames_and_detail(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
-    if state.selected_id.is_none() {
+    let Some(selected) = state.selected_id else {
         ui.weak("Select a session to view its frames");
         return;
-    }
+    };
+    let live = state.connections.iter().find(|c| c.connection_id == selected && is_open(&c.status)).cloned();
 
+    let Some(conn) = live else {
+        frames_with_detail(ui, state, cmds);
+        return;
+    };
+    let [mut top, mut bottom] = split::stacked(ui, "ws_composer_split", &mut state.prefs.composer_split);
+    frames_with_detail(&mut top, state, cmds);
+    super::composer::show(&mut bottom, &mut state.composer, &mut state.prefs.templates, &conn, cmds);
+}
+
+fn frames_with_detail(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
     let [mut top, mut bottom] = split::stacked(ui, "ws_detail_split", &mut state.prefs.detail_split);
     frames_table(&mut top, state);
     frame_detail(&mut bottom, state, cmds);
@@ -242,9 +253,12 @@ fn clock(ms: i64) -> String {
         .unwrap_or_default()
 }
 
+fn is_open(status: &str) -> bool {
+    status.eq_ignore_ascii_case("connected") || status.eq_ignore_ascii_case("open")
+}
+
 fn status_badge(ui: &mut egui::Ui, status: &str) {
-    let open = status.eq_ignore_ascii_case("connected") || status.eq_ignore_ascii_case("open");
-    badge(ui, &status.to_uppercase(), if open { Tone::Success } else { Tone::Neutral });
+    badge(ui, &status.to_uppercase(), if is_open(status) { Tone::Success } else { Tone::Neutral });
 }
 
 fn direction_badge(ui: &mut egui::Ui, direction: &str) {

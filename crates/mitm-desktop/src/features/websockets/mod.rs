@@ -1,3 +1,4 @@
+mod composer;
 mod connect;
 mod view;
 
@@ -12,11 +13,13 @@ pub use view::show;
 pub struct WebSocketsPrefs {
     pub list_split: f32,
     pub detail_split: f32,
+    pub composer_split: f32,
+    pub templates: Vec<composer::FrameTemplate>,
 }
 
 impl Default for WebSocketsPrefs {
     fn default() -> Self {
-        Self { list_split: 0.4, detail_split: 0.6 }
+        Self { list_split: 0.4, detail_split: 0.6, composer_split: 0.75, templates: Vec::new() }
     }
 }
 
@@ -31,6 +34,7 @@ pub struct WebSocketsState {
     pub source_filter: String,
     pub frame_search: String,
     pub connect: connect::WsConnect,
+    pub composer: composer::Composer,
 }
 
 impl Default for WebSocketsState {
@@ -46,6 +50,7 @@ impl Default for WebSocketsState {
             source_filter: "ALL".to_string(),
             frame_search: String::new(),
             connect: Default::default(),
+            composer: Default::default(),
         }
     }
 }
