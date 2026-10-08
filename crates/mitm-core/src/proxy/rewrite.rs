@@ -64,6 +64,55 @@ pub fn redirect_target(rule: &RewriteRule, url: &str) -> String {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct RewritePreview {
+    pub output: String,
+    /// Byte ranges in the sample that the rule's pattern matches.
+    pub matches: Vec<std::ops::Range<usize>>,
+}
+
+/// What a rule does to a sample of its target part (a URL, a body, or `Name: value` header lines), without traffic.
+pub fn preview_rewrite(rule: &RewriteRule, sample: &str) -> Result<RewritePreview, String> {
+    let regex = if rule.is_regex && !rule.match_pattern.is_empty() {
+        Some(Regex::new(&rule.match_pattern).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+    let matches = match &regex {
+        Some(re) => re.find_iter(sample).map(|m| m.range()).collect(),
+        None if !rule.is_regex && !rule.match_pattern.is_empty() => {
+            sample.match_indices(&rule.match_pattern).map(|(i, m)| i..i + m.len()).collect()
+        }
+        None => Vec::new(),
+    };
+    let output = match (rule.action_type.as_str(), rule.target_part.as_str()) {
+        ("partial_request" | "partial_response", "header") => {
+            let mut headers: Vec<(String, String)> = sample
+                .lines()
+                .filter_map(|line| line.split_once(':').map(|(k, v)| (k.trim().to_string(), v.trim().to_string())))
+                .collect();
+            if let Some(name) = rule.target_header.as_deref().filter(|n| !n.is_empty()) {
+                set_header(&mut headers, name, &rule.replacement_value);
+            }
+            headers.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join("\n")
+        }
+        ("partial_request", "query") => {
+            let mut url = url::Url::parse(sample).map_err(|e| e.to_string())?;
+            if !rule.match_pattern.is_empty() {
+                url.query_pairs_mut().append_pair(&rule.match_pattern, &rule.replacement_value);
+            }
+            url.to_string()
+        }
+        ("partial_request" | "partial_response", _) => replace_in(rule, sample),
+        ("full_request", "method") => rule.replacement_value.to_uppercase(),
+        ("full_request", _) => rule.replacement_value.clone(),
+        ("redirect", _) => redirect_target(rule, sample),
+        ("full_response", _) => rule.mock_body.clone().unwrap_or_default(),
+        _ => sample.to_string(),
+    };
+    Ok(RewritePreview { output, matches })
+}
+
 pub fn matches_rule(
     rule: &RewriteRule,
     method: &str,
@@ -471,4 +520,54 @@ pub async fn apply_response_rewrite_pipeline(
     }
 
     any_changed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rule(action: &str, target: &str, pattern: &str, replacement: &str, is_regex: bool) -> RewriteRule {
+        RewriteRule {
+            id: "r".to_string(),
+            name: "r".to_string(),
+            enabled: true,
+            action_type: action.to_string(),
+            match_field: "all".to_string(),
+            match_operator: "contains".to_string(),
+            match_value: String::new(),
+            target_part: target.to_string(),
+            target_header: None,
+            match_pattern: pattern.to_string(),
+            replacement_value: replacement.to_string(),
+            is_regex,
+            mock_status_code: None,
+            mock_headers_json: None,
+            mock_body: None,
+            order_index: 0,
+            created_at_ms: 0,
+        }
+    }
+
+    #[test]
+    fn preview_replaces_and_reports_matched_spans() {
+        let preview = preview_rewrite(&rule("partial_response", "body", r"\d+", "N", true), "a1 b22").unwrap();
+        assert_eq!(preview.output, "aN bN");
+        assert_eq!(preview.matches, vec![1..2, 4..6]);
+
+        let literal = preview_rewrite(&rule("partial_request", "url", "prod", "dev", false), "https://prod.x/prod").unwrap();
+        assert_eq!(literal.output, "https://dev.x/dev");
+        assert_eq!(literal.matches.len(), 2);
+    }
+
+    #[test]
+    fn preview_reports_bad_regex_and_handles_headers_and_redirects() {
+        assert!(preview_rewrite(&rule("partial_request", "body", "(", "", true), "x").is_err());
+
+        let mut header = rule("partial_request", "header", "", "abc", false);
+        header.target_header = Some("X-Token".to_string());
+        assert_eq!(preview_rewrite(&header, "Host: a").unwrap().output, "Host: a\nX-Token: abc");
+
+        let redirect = rule("redirect", "url", "", "https://elsewhere", false);
+        assert_eq!(preview_rewrite(&redirect, "https://here").unwrap().output, "https://elsewhere");
+    }
 }

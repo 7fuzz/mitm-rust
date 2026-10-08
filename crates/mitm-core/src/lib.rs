@@ -364,6 +364,45 @@ impl MitmCore {
         }
     }
 
+    pub async fn rewrite_rules(&self) -> Vec<state::RewriteRule> {
+        self.state.rewrite_rules.read().await.clone()
+    }
+
+    /// Saves rules in the given order, which also covers reordering.
+    pub async fn save_rewrite_rules(&self, mut rules: Vec<state::RewriteRule>) -> Result<(), String> {
+        for (index, rule) in rules.iter_mut().enumerate() {
+            rule.order_index = index as i32;
+        }
+        db::save_rewrite_rules(&self.db_path, &rules)?;
+        *self.state.rewrite_rules.write().await = rules;
+        Ok(())
+    }
+
+    pub fn rewrite_enabled(&self) -> bool {
+        self.state.is_rewrite_enabled()
+    }
+
+    pub fn set_rewrite_enabled(&self, enabled: bool) -> Result<(), String> {
+        db::set_preference(&self.db_path, "rewrite_enabled", if enabled { "true" } else { "false" })?;
+        self.state.set_rewrite_enabled(enabled);
+        Ok(())
+    }
+
+    pub async fn rewrite_source_scope(&self) -> state::SourceScope {
+        self.state.rewrite_source_scope.read().await.clone()
+    }
+
+    pub async fn set_rewrite_source_scope(&self, scope: state::SourceScope) -> Result<(), String> {
+        let json = serde_json::to_string(&scope).map_err(|e| e.to_string())?;
+        db::set_preference(&self.db_path, "rewrite_source_scope", &json)?;
+        *self.state.rewrite_source_scope.write().await = scope;
+        Ok(())
+    }
+
+    pub fn rewrite_history(&self, limit: u32) -> Result<Vec<RewriteHistoryEntry>, String> {
+        db::get_rewrite_history_logs(&self.db_path, limit)
+    }
+
     /// The interceptor settings as they were loaded at startup or last set.
     pub async fn intercept_config(&self) -> (bool, String, state::SourceScope) {
         let cfg = self.state.proxy_config.read().await;
@@ -552,6 +591,42 @@ mod tests {
         assert!(enabled);
         assert_eq!(mode, "both");
         assert!(!scope.all && scope.ids == vec![2]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rewrite_settings_and_rule_order_persist() {
+        let (core, dir) = test_core();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rule = |id: &str| state::RewriteRule {
+            id: id.to_string(),
+            name: id.to_string(),
+            enabled: true,
+            action_type: "partial_request".to_string(),
+            match_field: "all".to_string(),
+            match_operator: "contains".to_string(),
+            match_value: String::new(),
+            target_part: "body".to_string(),
+            target_header: None,
+            match_pattern: String::new(),
+            replacement_value: String::new(),
+            is_regex: false,
+            mock_status_code: None,
+            mock_headers_json: None,
+            mock_body: None,
+            order_index: 9,
+            created_at_ms: 0,
+        };
+        rt.block_on(async {
+            core.save_rewrite_rules(vec![rule("b"), rule("a")]).await.unwrap();
+            core.set_rewrite_source_scope(state::SourceScope { all: false, ids: vec![1] }).await.unwrap();
+        });
+        core.set_rewrite_enabled(false).unwrap();
+
+        let loaded = db::load_rewrite_rules(&core.db_path).unwrap();
+        assert_eq!(loaded.iter().map(|r| (r.id.as_str(), r.order_index)).collect::<Vec<_>>(), [("b", 0), ("a", 1)]);
+        assert_eq!(db::get_preference(&core.db_path, "rewrite_enabled").as_deref(), Some("false"));
+        assert!(!rt.block_on(core.rewrite_source_scope()).all);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
