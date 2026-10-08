@@ -2,6 +2,7 @@ use eframe::egui::{self, RichText};
 use mitm_core::repeater::HeaderItem;
 use crate::format::{format_bytes, CopyFormat, Exchange};
 use crate::widgets::flash;
+use crate::widgets::copy_custom;
 use crate::widgets::message_pane::{self, PaneData, PaneState, SaveBody};
 use crate::widgets::pills::status_text;
 
@@ -162,6 +163,9 @@ fn copy_menu(
             if ui.add_enabled(exchange.is_some(), egui::Button::new(label)).clicked() {
                 copied = exchange.map(|e| (label, e.copy_text(format)));
             }
+        }
+        if let (Some(exchange), Some(options)) = (exchange, copy_custom::submenu(ui)) {
+            copied = Some(("Copy Custom", exchange.custom_text(&options)));
         }
     });
 
