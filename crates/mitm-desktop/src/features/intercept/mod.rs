@@ -42,11 +42,12 @@ pub struct InterceptPrefs {
     pub work_fraction: f32,
     pub queue_fraction: f32,
     pub raise_window: bool,
+    pub rules_open: bool,
 }
 
 impl Default for InterceptPrefs {
     fn default() -> Self {
-        Self { work_fraction: 0.62, queue_fraction: 0.3, raise_window: true }
+        Self { work_fraction: 0.62, queue_fraction: 0.3, raise_window: true, rules_open: true }
     }
 }
 

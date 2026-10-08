@@ -48,6 +48,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[Listener
             });
         }
 
+        let rules_label = format!("Rules ({}) {}", state.rules.len(), if state.prefs.rules_open { "⏵" } else { "⏴" });
+        ui.toggle_value(&mut state.prefs.rules_open, rules_label).on_hover_text("Show or hide the rules panel");
         ui.toggle_value(&mut state.prefs.raise_window, "🔔").on_hover_text("Bring the window forward when a flow pauses");
         ui.separator();
         if source_scope::chips(ui, &mut state.source_scope, listeners) {
@@ -72,21 +74,29 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[Listener
 
     ui.separator();
 
+    if !state.prefs.rules_open {
+        paused_area(ui, state, cmds);
+        return;
+    }
     let mut work_fraction = state.prefs.work_fraction;
     let [mut work_ui, mut rules_ui] = split::side_by_side(ui, "intercept_rules_split", &mut work_fraction);
     state.prefs.work_fraction = work_fraction;
+    paused_area(&mut work_ui, state, cmds);
+    egui::ScrollArea::vertical().id_salt("intercept_rules").show(&mut rules_ui, |ui| {
+        render_rules_manager(ui, state, cmds);
+    });
+}
+
+fn paused_area(work_ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) {
     if !state.pending.is_empty() {
         let mut queue_fraction = state.prefs.queue_fraction;
-        let [mut queue_ui, mut editor_ui] = split::side_by_side(&mut work_ui, "intercept_queue_split", &mut queue_fraction);
+        let [mut queue_ui, mut editor_ui] = split::side_by_side(work_ui, "intercept_queue_split", &mut queue_fraction);
         state.prefs.queue_fraction = queue_fraction;
         queue(&mut queue_ui, state);
         egui::ScrollArea::vertical().id_salt("intercept_editor").show(&mut editor_ui, |ui| {
             render_paused_flows_editor(ui, state, cmds);
         });
     }
-    egui::ScrollArea::vertical().id_salt("intercept_rules").show(&mut rules_ui, |ui| {
-        render_rules_manager(ui, state, cmds);
-    });
 }
 
 fn queue(ui: &mut egui::Ui, state: &mut InterceptState) {
