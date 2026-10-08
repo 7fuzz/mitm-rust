@@ -2,9 +2,17 @@ use eframe::egui::{self, Align2, Key, Modifiers, RichText};
 use mitm_core::workspace::EnvironmentVariable;
 use super::EnvironmentsState;
 
+#[derive(Default, Clone, Copy, PartialEq)]
+pub enum Scope {
+    #[default]
+    Workspace,
+    Repeater,
+}
+
 #[derive(Default)]
 pub struct QuickVars {
     pub open: bool,
+    scope: Scope,
     query: String,
     selected: usize,
     editing: Option<usize>,
@@ -12,8 +20,8 @@ pub struct QuickVars {
 }
 
 impl QuickVars {
-    pub fn toggle(&mut self) {
-        *self = Self { open: !self.open, ..Self::default() };
+    pub fn toggle(&mut self, scope: Scope) {
+        *self = Self { open: !self.open, scope, ..Self::default() };
     }
 }
 
@@ -32,13 +40,21 @@ pub fn show(ctx: &egui::Context, state: &mut EnvironmentsState, now: f64) {
     if !state.quick.open {
         return;
     }
-    let Some(env_idx) = state.environments.iter().position(|e| Some(&e.id) == state.active_environment_id.as_ref()) else {
-        state.quick.open = false;
+    let EnvironmentsState { quick, environments, active_environment_id, repeater_env, .. } = state;
+    let env = match quick.scope {
+        Scope::Workspace => environments.iter_mut().find(|e| Some(&e.id) == active_environment_id.as_ref()),
+        Scope::Repeater => repeater_env.as_mut(),
+    };
+    let Some(env) = env else {
+        quick.open = false;
         return;
     };
-    let env_id = state.environments[env_idx].id.clone();
-    let quick = &mut state.quick;
-    let variables = &mut state.environments[env_idx].variables;
+    let env_id = env.id.clone();
+    let variables = &mut env.variables;
+    let hint = match quick.scope {
+        Scope::Workspace => "Search variables",
+        Scope::Repeater => "Search repeater variables",
+    };
     let mut changed = false;
 
     let id = egui::Id::new("quick_variables");
@@ -81,7 +97,7 @@ pub fn show(ctx: &egui::Context, state: &mut EnvironmentsState, now: f64) {
 
         let search = ui.add(
             egui::TextEdit::singleline(&mut quick.query)
-                .hint_text("Search variables")
+                .hint_text(hint)
                 .desired_width(f32::INFINITY),
         );
         if quick.editing.is_none() {

@@ -11,7 +11,7 @@ use crate::widgets::split;
 
 const SAVE_DELAY_SECS: f64 = 0.6;
 
-pub use quick::show as show_quick_vars;
+pub use quick::{show as show_quick_vars, Scope as QuickVarScope};
 
 pub struct VariantModal {
     pub var_idx: usize,

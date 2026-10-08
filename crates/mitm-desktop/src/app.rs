@@ -13,6 +13,7 @@ use crate::dock::{self, Tab, TabViewer};
 use mitm_core::collections::execute::ExecutionResult;
 use mitm_core::repeater::RepeaterExecutionResult;
 use crate::features::collections::CollectionsCmd;
+use crate::features::environments::QuickVarScope;
 use crate::features::fuzzer::FuzzerWorker;
 use crate::features::settings::ProxyState;
 use crate::format::{headers_to_text, Exchange};
@@ -83,10 +84,15 @@ impl MitmApp {
         match cmd {
             AppCommand::OpenPalette => self.palette.open(),
             AppCommand::ToggleQuickVariables => {
-                if self.state.environments.active_environment().is_some() {
-                    self.state.environments.quick.toggle();
-                } else {
+                let scope = match self.dock.find_active_focused() {
+                    Some((_, Tab::Repeater)) => QuickVarScope::Repeater,
+                    _ => QuickVarScope::Workspace,
+                };
+                let environments = &mut self.state.environments;
+                if scope == QuickVarScope::Workspace && environments.active_environment().is_none() {
                     dock::open_tab(&mut self.dock, Tab::Environments);
+                } else {
+                    environments.quick.toggle(scope);
                 }
             }
             AppCommand::OpenTab(tab) => dock::open_tab(&mut self.dock, tab),
