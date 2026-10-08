@@ -1,58 +1,47 @@
-# MITM Real - Keyboard Shortcuts
+# Keyboard Shortcuts
 
-MITM Real uses a combination of instant hotkeys and prefixed sequences for navigation.
+`Ctrl` is `Cmd` on macOS. The same list is in the app under **Settings ▸ Shortcuts**, generated from `crates/mitm-desktop/src/shortcuts.rs`.
 
-## ⌨️ Prefix Key
-The default prefix key is **`Ctrl + /`**. Many navigation shortcuts require pressing this first.
+Anything without a shortcut is in the command palette (`Ctrl + K`): every tab and utility, proxy modes, import and export.
 
----
-
-## 🚀 Global & Navigation
-
-These shortcuts work from anywhere in the application.
+## Global
 
 | Shortcut | Action |
 | :--- | :--- |
-| `Ctrl + /` then `h` | Go to **History** |
-| `Ctrl + /` then `i` | Go to **Intercept** |
-| `Ctrl + /` then `r` | Go to **Repeater** |
-| `Ctrl + /` then `w` | Go to **Workspace** |
-| `Ctrl + /` then `u` | Go to **Utilities** |
-| `Ctrl + /` then `o` | Go to **Options** |
-| `[` | Cycle to **Previous Tab** |
-| `]` | Cycle to **Next Tab** |
-| `s` | **Focus Search** (in History, Intercept, or Repeater) |
+| `Ctrl + K` | Command palette |
+| `Ctrl + E` | Quick variables for the active environment (Repeater's own when Repeater has focus) |
+| `Ctrl + ,` | Open Settings |
+| `Ctrl + Tab` | Next tab |
+| `Ctrl + Shift + Tab` | Previous tab |
+| `Alt + 1` … `Alt + 9` | Focus tab by position |
+| `Ctrl + +` / `Ctrl + -` / `Ctrl + 0` | Zoom in, zoom out, reset zoom |
 
----
+## Intercept
 
-## 🛠️ Quick Switchers (Modals)
+These only fire while the Intercept tab has focus.
 
 | Shortcut | Action |
 | :--- | :--- |
-| `Ctrl + /` then `v` | Open **Variable Switcher** |
-| `Ctrl + /` then `e` | Open **Environment Switcher** |
-| `v` | **Instant** Variable Switcher |
-| `e` | **Instant** Environment Switcher |
+| `Ctrl + Enter` | Forward with changes |
+| `Ctrl + Shift + Enter` | Forward unmodified |
+| `Ctrl + Backspace` | Drop (ignored while typing in a field) |
 
----
+## Request fields
 
-## 🚦 Traffic & Intercept (View Specific)
-
-| Shortcut | Action |
-| :--- | :--- |
-| `Ctrl + d` | **Clear History** (History View) |
-| `Ctrl + f` | **Forward** Intercepted Flow (Intercept View) |
-| `Ctrl + d` | **Drop** Intercepted Flow (Intercept View) |
-
----
-
-## 🔁 Repeater (View Specific)
+In URL, header, parameter and body fields of Repeater, Collections, Fuzzer and Intercept:
 
 | Shortcut | Action |
 | :--- | :--- |
-| `Ctrl + Enter` | **Execute Request** |
+| `{{` | Variable picker |
+| `↑` / `↓`, `Enter` or `Tab`, `Esc` | Move, insert, dismiss in the picker |
+| `Ctrl + M` | Wrap the selection in `{{ }}` (mark a fuzz variable) |
 
----
+Right-click a field for **Decode in Encoding tool**.
 
-## 📝 Configuration
-Shortcuts can be customized in the **Options** view. Default settings are stored in your profile preferences.
+## Command palette
+
+| Shortcut | Action |
+| :--- | :--- |
+| `↑` / `↓` | Move |
+| `Enter` | Run |
+| `Esc` | Close |
