@@ -7,14 +7,6 @@ use crate::features::collections::{CollectionsCmd, SaveTarget};
 use crate::format::{CopyFormat, CopyOptions};
 use crate::widgets::message_pane::SaveBody;
 
-#[derive(Debug, Clone, Default)]
-pub struct RequestDraft {
-    pub method: String,
-    pub url: String,
-    pub headers: String,
-    pub body: String,
-}
-
 #[derive(Clone)]
 pub enum AppCommand {
     OpenPalette,

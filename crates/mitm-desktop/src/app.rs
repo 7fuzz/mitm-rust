@@ -9,7 +9,7 @@ use mitm_core::state::{ListenerConfig, ProxyMode};
 use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
 use tokio::sync::broadcast::error::RecvError;
-use crate::command::{AppCommand, Commands, RequestDraft};
+use crate::command::{AppCommand, Commands};
 use crate::dock::{self, Tab, TabViewer};
 use mitm_core::collections::execute::ExecutionResult;
 use mitm_core::repeater::RepeaterExecutionResult;
@@ -17,7 +17,7 @@ use crate::features::collections::CollectionsCmd;
 use crate::features::request_editor::captured::CapturedRequest;
 use crate::features::environments::{self, QuickVarScope};
 use crate::features::settings::ProxyState;
-use crate::format::{headers_to_text, Exchange};
+use crate::format::Exchange;
 use crate::jobs::Jobs;
 use crate::state::AppState;
 use crate::palette::{self, PaletteState};
@@ -269,8 +269,10 @@ impl MitmApp {
                 }
             }
             AppCommand::SendFlowToFuzzer(id) => {
-                if let Some(draft) = self.flow_draft(id) {
-                    self.state.fuzzer.load_draft(draft);
+                if let Some(flow) = self.state.traffic.flow(id).cloned() {
+                    let detail = mitm_core::db::get_history_detail(db_path, id).ok().flatten();
+                    let captured = CapturedRequest::from_flow(&flow, detail.as_ref());
+                    self.state.fuzzer.load_capture(captured);
                     dock::open_tab(&mut self.dock, Tab::Fuzzer);
                 }
             }
@@ -501,21 +503,6 @@ impl MitmApp {
                 }
             }
         }
-    }
-
-    fn flow_draft(&self, id: i64) -> Option<RequestDraft> {
-        let flow = self.state.traffic.flow(id)?;
-        let detail = mitm_core::db::get_history_detail(&self.core.db_path, id).ok().flatten();
-        let (headers, body) = match &detail {
-            Some(d) => (&d.request_headers, &d.request_body),
-            None => (&flow.request_headers, &flow.request_body),
-        };
-        Some(RequestDraft {
-            method: flow.method.clone(),
-            url: flow.url.clone(),
-            headers: headers_to_text(headers),
-            body: body.clone(),
-        })
     }
 
     fn set_proxy_mode(&mut self, mode: ProxyMode) {

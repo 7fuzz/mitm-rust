@@ -26,28 +26,6 @@ pub fn headers_to_text(headers: &[(String, String)]) -> String {
         .join("\n")
 }
 
-pub fn parse_header_lines(text: &str) -> Vec<(String, String)> {
-    text.lines()
-        .filter_map(|line| {
-            let (key, value) = line.split_once(':')?;
-            let key = key.trim();
-            (!key.is_empty()).then(|| (key.to_string(), value.trim().to_string()))
-        })
-        .collect()
-}
-
-pub fn parse_header_items(text: &str) -> Vec<mitm_core::repeater::HeaderItem> {
-    parse_header_lines(text)
-        .into_iter()
-        .map(|(key, value)| mitm_core::repeater::HeaderItem {
-            id: uuid::Uuid::new_v4().to_string(),
-            key,
-            value,
-            enabled: true,
-        })
-        .collect()
-}
-
 pub fn pretty_json(body: &str) -> Option<String> {
     serde_json::from_str::<serde_json::Value>(body)
         .ok()

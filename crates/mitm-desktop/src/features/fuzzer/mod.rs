@@ -2,8 +2,8 @@ mod view;
 
 use serde::{Deserialize, Serialize};
 use mitm_core::fuzzer::{parse_variables, FuzzConfig, FuzzRow, FuzzStart, FuzzTemplate, FuzzVariable, PayloadSet};
-use crate::command::RequestDraft;
-use crate::format::parse_header_items;
+use mitm_core::repeater::{HeaderItem, ParamItem};
+use crate::features::request_editor::captured::CapturedRequest;
 
 pub use view::show;
 
@@ -22,6 +22,13 @@ pub enum ConfigTab {
     Options,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RequestTab {
+    Params,
+    Headers,
+    Body,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FuzzerPrefs {
@@ -37,10 +44,13 @@ impl Default for FuzzerPrefs {
 pub struct FuzzerState {
     pub prefs: FuzzerPrefs,
     pub config_tab: ConfigTab,
+    pub request_tab: RequestTab,
     pub method: String,
     pub url: String,
-    pub headers: String,
-    pub body: String,
+    pub params: Vec<ParamItem>,
+    pub headers: Vec<HeaderItem>,
+    pub body_type: String,
+    pub body_content: String,
     pub wordlist_input: String,
     pub concurrency: usize,
     pub status: RunStatus,
@@ -55,10 +65,18 @@ impl Default for FuzzerState {
         Self {
             prefs: FuzzerPrefs::default(),
             config_tab: ConfigTab::Request,
+            request_tab: RequestTab::Params,
             method: "GET".to_string(),
             url: "https://httpbin.org/status/{{status}}".to_string(),
-            headers: "User-Agent: MITM-Native/0.2".to_string(),
-            body: String::new(),
+            params: Vec::new(),
+            headers: vec![HeaderItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                key: "User-Agent".to_string(),
+                value: "MITM-Native/0.2".to_string(),
+                enabled: true,
+            }],
+            body_type: "none".to_string(),
+            body_content: String::new(),
             wordlist_input: "200\n301\n400\n404\n500".to_string(),
             concurrency: 5,
             status: RunStatus::Idle,
@@ -71,11 +89,13 @@ impl Default for FuzzerState {
 }
 
 impl FuzzerState {
-    pub fn load_draft(&mut self, draft: RequestDraft) {
-        self.method = draft.method;
-        self.url = draft.url;
-        self.headers = draft.headers;
-        self.body = draft.body;
+    pub fn load_capture(&mut self, captured: CapturedRequest) {
+        self.method = captured.method;
+        self.url = captured.url;
+        self.params = captured.params;
+        self.headers = captured.headers;
+        self.body_type = captured.body_type;
+        self.body_content = captured.body_content;
     }
 
     /// Every marker draws from the one wordlist in lockstep, so all markers get the same payload per request.
@@ -83,10 +103,10 @@ impl FuzzerState {
         let template = FuzzTemplate {
             method: self.method.clone(),
             url: self.url.clone(),
-            headers: parse_header_items(&self.headers),
-            params: Vec::new(),
-            body_type: "raw".to_string(),
-            body: (!self.body.is_empty()).then(|| self.body.clone()),
+            headers: self.headers.clone(),
+            params: self.params.clone(),
+            body_type: self.body_type.clone(),
+            body: (self.body_type != "none" && !self.body_content.is_empty()).then(|| self.body_content.clone()),
         };
         let list: Vec<String> =
             self.wordlist_input.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect();

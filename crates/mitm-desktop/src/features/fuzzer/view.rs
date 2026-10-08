@@ -1,12 +1,17 @@
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
+use mitm_core::repeater::HeaderItem;
 use crate::command::{AppCommand, Commands};
+use crate::features::request_editor::body::{content_type_for, convert, REPEATER_BODY_TYPES};
+use crate::features::request_editor::body_editor;
+use crate::features::request_editor::kv_table::{self, standard_headers, KvLabels};
 use crate::features::request_editor::method::method_combo;
+use crate::features::request_editor::url_params::{build_url, new_id, parse_query};
 use crate::format::{format_bytes, format_duration};
 use crate::theme::{self, Tone};
 use crate::widgets::pills::render_status_pill;
 use crate::widgets::{split, template};
-use super::{ConfigTab, FuzzerState, RunStatus};
+use super::{ConfigTab, FuzzerState, RequestTab, RunStatus};
 
 pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     toolbar(ui, fuzzer, cmds);
@@ -54,15 +59,17 @@ fn config(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
         }
     });
     ui.separator();
-    egui::ScrollArea::vertical().id_salt("fuzzer_config").auto_shrink([false, false]).show(ui, |ui| match fuzzer.config_tab {
+    match fuzzer.config_tab {
         ConfigTab::Request => request_tab(ui, fuzzer),
         ConfigTab::Payloads => {
-            ui.add(
-                egui::TextEdit::multiline(&mut fuzzer.wordlist_input)
-                    .font(egui::TextStyle::Monospace)
-                    .desired_rows(10)
-                    .desired_width(f32::INFINITY),
-            );
+            egui::ScrollArea::vertical().id_salt("fuzzer_payloads").auto_shrink([false, false]).show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(&mut fuzzer.wordlist_input)
+                        .font(egui::TextStyle::Monospace)
+                        .desired_rows(10)
+                        .desired_width(f32::INFINITY),
+                );
+            });
         }
         ConfigTab::Options => {
             ui.horizontal(|ui| {
@@ -70,41 +77,99 @@ fn config(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
                 ui.add(egui::DragValue::new(&mut fuzzer.concurrency).range(1..=50));
             });
         }
-    });
+    }
 }
 
 fn request_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
     ui.horizontal(|ui| {
         method_combo(ui, "fuzzer_method", &mut fuzzer.method);
         let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
-        template::show(ui, &mut fuzzer.url, |text| {
+        let url = template::show(ui, &mut fuzzer.url, |text| {
             egui::TextEdit::singleline(text)
                 .hint_text("https://target.com/api/{{id}}")
                 .layouter(&mut layouter)
                 .font(egui::TextStyle::Monospace)
                 .desired_width(f32::INFINITY)
         });
+        if url.changed() {
+            fuzzer.params = parse_query(&fuzzer.url, &fuzzer.params);
+        }
     });
-    ui.add_space(6.0);
-    ui.strong("Headers");
-    let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
-    template::show(ui, &mut fuzzer.headers, |text| {
-        egui::TextEdit::multiline(text)
-            .layouter(&mut layouter)
-            .font(egui::TextStyle::Monospace)
-            .desired_rows(4)
-            .desired_width(f32::INFINITY)
+    ui.separator();
+
+    ui.horizontal(|ui| {
+        let params = fuzzer.params.iter().filter(|p| p.enabled && !p.key.trim().is_empty()).count();
+        let headers = fuzzer.headers.iter().filter(|h| h.enabled && !h.key.trim().is_empty()).count();
+        ui.selectable_value(&mut fuzzer.request_tab, RequestTab::Params, format!("Params ({})", params));
+        ui.selectable_value(&mut fuzzer.request_tab, RequestTab::Headers, format!("Headers ({})", headers));
+        ui.selectable_value(&mut fuzzer.request_tab, RequestTab::Body, "Body");
+
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if fuzzer.request_tab == RequestTab::Body {
+                body_type_combo(ui, fuzzer);
+            }
+        });
     });
-    ui.add_space(6.0);
-    ui.strong("Body");
-    let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
-    template::show(ui, &mut fuzzer.body, |text| {
-        egui::TextEdit::multiline(text)
-            .layouter(&mut layouter)
-            .font(egui::TextStyle::Monospace)
-            .desired_rows(6)
-            .desired_width(f32::INFINITY)
+    ui.separator();
+
+    match fuzzer.request_tab {
+        RequestTab::Body => {
+            body_editor::show(ui, "fuzzer_body", &fuzzer.body_type, &mut fuzzer.body_content);
+        }
+        other => {
+            egui::ScrollArea::vertical().id_salt("fuzzer_editor").auto_shrink([false, false]).show(ui, |ui| match other {
+                RequestTab::Params => {
+                    let labels = KvLabels { key: "Parameter Key", value: "Parameter Value" };
+                    if kv_table::show(ui, "fuzzer_params", &mut fuzzer.params, labels, &[]) {
+                        fuzzer.url = build_url(&fuzzer.url, &fuzzer.params);
+                    }
+                }
+                RequestTab::Headers => {
+                    let labels = KvLabels { key: "Header Name", value: "Header Value" };
+                    let suggestions = standard_headers(content_type_for(&fuzzer.body_type).unwrap_or("application/json"));
+                    kv_table::show(ui, "fuzzer_headers", &mut fuzzer.headers, labels, &suggestions);
+                }
+                RequestTab::Body => {}
+            });
+        }
+    }
+}
+
+fn body_type_combo(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
+    let current = REPEATER_BODY_TYPES
+        .iter()
+        .find(|(id, _)| *id == fuzzer.body_type)
+        .map_or("Raw", |(_, label)| *label);
+    let mut picked = None;
+    egui::ComboBox::from_id_salt("fuzzer_body_type").selected_text(current).show_ui(ui, |ui| {
+        for (id, label) in REPEATER_BODY_TYPES {
+            if ui.selectable_label(fuzzer.body_type == id, label).clicked() && fuzzer.body_type != id {
+                picked = Some(id);
+            }
+        }
     });
+    let Some(next) = picked else { return };
+    set_content_type_header(&mut fuzzer.headers, content_type_for(next));
+    fuzzer.body_content = convert(&fuzzer.body_type, next, &fuzzer.body_content);
+    fuzzer.body_type = next.to_string();
+}
+
+fn set_content_type_header(headers: &mut Vec<HeaderItem>, content_type: Option<&str>) {
+    let existing = headers.iter_mut().find(|h| h.key.trim().eq_ignore_ascii_case("content-type"));
+    match (existing, content_type) {
+        (Some(h), None) => h.enabled = false,
+        (Some(h), Some(ct)) => {
+            h.value = ct.to_string();
+            h.enabled = true;
+        }
+        (None, Some(ct)) => headers.push(HeaderItem {
+            id: new_id(),
+            key: "Content-Type".to_string(),
+            value: ct.to_string(),
+            enabled: true,
+        }),
+        (None, None) => {}
+    }
 }
 
 fn results(ui: &mut egui::Ui, fuzzer: &FuzzerState) {
