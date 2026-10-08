@@ -105,6 +105,12 @@ impl EnvironmentsState {
         }
     }
 
+    /// Picks up variables a request run extracted into the database.
+    pub fn refresh(&mut self, db_path: &Path) {
+        self.flush(db_path);
+        self.reload_environments(db_path);
+    }
+
     pub fn active_workspace(&self) -> Option<&Workspace> {
         self.workspaces.iter().find(|w| w.id == self.active_workspace_id)
     }

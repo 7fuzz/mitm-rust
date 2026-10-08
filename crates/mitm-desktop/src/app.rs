@@ -450,6 +450,7 @@ impl eframe::App for MitmApp {
         self.state.repeater.flush_if_idle(&self.core.db_path, now);
         for (id, result) in self.collection_runs.drain() {
             self.state.collections.finish_run(&id, result, &self.core.db_path);
+            self.state.environments.refresh(&self.core.db_path);
         }
         self.state.collections.flush_if_idle(&self.core.db_path, now);
         self.state.environments.flush_if_idle(&self.core.db_path, now);
