@@ -173,30 +173,11 @@ pub struct TabViewer<'a> {
     pub state: &'a mut AppState,
     pub cmds: &'a mut Commands,
     pub db_path: &'a Path,
+    pub focus_search: Option<Tab>,
 }
 
-impl egui_dock::TabViewer for TabViewer<'_> {
-    type Tab = Tab;
-
-    fn id(&mut self, tab: &mut Tab) -> egui::Id {
-        egui::Id::new(*tab)
-    }
-
-    fn title(&mut self, tab: &mut Tab) -> egui::WidgetText {
-        let count = match tab {
-            Tab::Traffic => Some(self.state.traffic.flows.len()),
-            Tab::Repeater => Some(self.state.repeater.tabs.len()),
-            Tab::WebSockets => Some(self.state.websockets.connections.len()),
-            Tab::Intercept => Some(self.state.intercept.pending.len()).filter(|&n| n > 0),
-            _ => None,
-        };
-        match count {
-            Some(n) => format!("{} ({})", tab.name(), n).into(),
-            None => tab.name().into(),
-        }
-    }
-
-    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Tab) {
+impl TabViewer<'_> {
+    fn draw(&mut self, ui: &mut egui::Ui, tab: &mut Tab) {
         let state = &mut *self.state;
         let cmds = &mut *self.cmds;
         match tab {
@@ -232,6 +213,34 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                 cmds,
             ),
         }
+    }
+}
+
+impl egui_dock::TabViewer for TabViewer<'_> {
+    type Tab = Tab;
+
+    fn id(&mut self, tab: &mut Tab) -> egui::Id {
+        egui::Id::new(*tab)
+    }
+
+    fn title(&mut self, tab: &mut Tab) -> egui::WidgetText {
+        let count = match tab {
+            Tab::Traffic => Some(self.state.traffic.flows.len()),
+            Tab::Repeater => Some(self.state.repeater.tabs.len()),
+            Tab::WebSockets => Some(self.state.websockets.connections.len()),
+            Tab::Intercept => Some(self.state.intercept.pending.len()).filter(|&n| n > 0),
+            _ => None,
+        };
+        match count {
+            Some(n) => format!("{} ({})", tab.name(), n).into(),
+            None => tab.name().into(),
+        }
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Tab) {
+        crate::widgets::search::arm(ui.ctx(), self.focus_search == Some(*tab));
+        self.draw(ui, tab);
+        crate::widgets::search::arm(ui.ctx(), false);
     }
 
     fn scroll_bars(&self, tab: &Tab) -> [bool; 2] {

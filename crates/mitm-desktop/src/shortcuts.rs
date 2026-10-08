@@ -21,6 +21,7 @@ pub enum Action {
     SetProxyMode(ProxyMode),
     ToggleInterceptor,
     ClearTraffic,
+    FocusSearch,
 }
 
 impl Action {
@@ -43,6 +44,7 @@ impl Action {
             Action::SetProxyMode(mode) => format!("Proxy: {}", crate::top_bar::mode_label(mode).to_lowercase()),
             Action::ToggleInterceptor => "Toggle interceptor".to_string(),
             Action::ClearTraffic => "Clear traffic".to_string(),
+            Action::FocusSearch => "Focus search".to_string(),
         }
     }
 
@@ -64,6 +66,7 @@ impl Action {
             Action::SetProxyMode(mode) => AppCommand::SetProxyMode(mode),
             Action::ToggleInterceptor => AppCommand::ToggleInterceptor,
             Action::ClearTraffic => AppCommand::ClearTraffic,
+            Action::FocusSearch => AppCommand::FocusSearch,
         }
     }
 }
@@ -75,6 +78,7 @@ pub const SHORTCUTS: &[(KeyboardShortcut, Action)] = &[
     (KeyboardShortcut::new(Modifiers::COMMAND, Key::Enter), Action::InterceptForward),
     (KeyboardShortcut::new(Modifiers::COMMAND, Key::Backspace), Action::InterceptDrop),
     (KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma), Action::OpenTab(Tab::Settings)),
+    (KeyboardShortcut::new(Modifiers::COMMAND, Key::F), Action::FocusSearch),
     // Shift variants first: consume_shortcut also matches a shortcut when extra shift is held.
     (KeyboardShortcut::new(Modifiers::CTRL.plus(Modifiers::SHIFT), Key::Tab), Action::PreviousTab),
     (KeyboardShortcut::new(Modifiers::CTRL, Key::Tab), Action::NextTab),
@@ -115,7 +119,7 @@ pub fn palette_actions() -> Vec<Action> {
     let mut actions: Vec<Action> = Tab::ALL.into_iter().map(Action::OpenTab).collect();
     actions.extend([Action::NextTab, Action::PreviousTab, Action::ToggleProxy]);
     actions.extend(ProxyMode::ALL.map(Action::SetProxyMode));
-    actions.extend([Action::ToggleInterceptor, Action::ClearTraffic, Action::QuickVariables]);
+    actions.extend([Action::ToggleInterceptor, Action::ClearTraffic, Action::QuickVariables, Action::FocusSearch]);
     actions.extend([Action::ImportWorkspace, Action::ExportWorkspace, Action::ImportCurl]);
     actions.extend([Action::InterceptForward, Action::InterceptForwardUnmodified, Action::InterceptDrop]);
     actions

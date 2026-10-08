@@ -77,6 +77,7 @@ fn table_content(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
                 .hint_text("Search across columns…")
                 .desired_width(180.0),
         );
+        crate::widgets::search::claim_focus(&search_edit);
         if search_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             state.page = 0;
             state.load_current_page(db_path);

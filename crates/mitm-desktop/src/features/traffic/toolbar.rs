@@ -36,11 +36,12 @@ pub fn show(
 }
 
 fn search_box(ui: &mut egui::Ui, query: &mut String) {
-    ui.add(
+    let edit = ui.add(
         egui::TextEdit::singleline(query)
             .hint_text("🔍 Search host, path, status...")
             .desired_width(280.0),
     );
+    crate::widgets::search::claim_focus(&edit);
     if !query.is_empty() && ui.small_button("✖").clicked() {
         query.clear();
     }

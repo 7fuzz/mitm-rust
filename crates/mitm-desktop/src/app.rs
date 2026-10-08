@@ -29,6 +29,7 @@ pub struct MitmApp {
     state: AppState,
     cmds: Commands,
     palette: PaletteState,
+    focus_search: Option<Tab>,
     core: Arc<MitmCore>,
     rt: Arc<Runtime>,
     core_events: Receiver<CoreEvent>,
@@ -53,6 +54,7 @@ impl MitmApp {
             state,
             cmds: Commands::default(),
             palette: PaletteState::default(),
+            focus_search: None,
             core_events: forward_core_events(&rt, &core, ctx),
             core,
             rt,
@@ -112,6 +114,7 @@ impl MitmApp {
         }
         match cmd {
             AppCommand::OpenPalette => self.palette.open(),
+            AppCommand::FocusSearch => self.focus_search = self.dock.find_active_focused().map(|(_, tab)| *tab),
             AppCommand::ToggleQuickVariables => {
                 let scope = match self.dock.find_active_focused() {
                     Some((_, Tab::Repeater)) => QuickVarScope::Repeater,
@@ -821,6 +824,7 @@ impl eframe::App for MitmApp {
             state: &mut self.state,
             cmds: &mut self.cmds,
             db_path: &self.core.db_path,
+            focus_search: self.focus_search.take(),
         };
         DockArea::new(&mut self.dock).show_inside(ui, &mut viewer);
         if let Some(text) = crate::widgets::template::take_decode_request() {

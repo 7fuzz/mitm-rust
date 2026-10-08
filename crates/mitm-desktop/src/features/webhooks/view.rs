@@ -148,7 +148,7 @@ fn deliveries(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands)
             if !state.search.is_empty() && ui.small_button("✕").on_hover_text("Clear search").clicked() {
                 state.search.clear();
             }
-            ui.add(egui::TextEdit::singleline(&mut state.search).hint_text("Search").desired_width(140.0));
+            crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut state.search).hint_text("Search").desired_width(140.0)));
         });
     });
     ui.add_space(2.0);

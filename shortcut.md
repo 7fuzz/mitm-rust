@@ -11,6 +11,7 @@ Anything without a shortcut is in the command palette (`Ctrl + K`): every tab an
 | `Ctrl + K` | Command palette |
 | `Ctrl + E` | Quick variables for the active environment (Repeater's own when Repeater has focus) |
 | `Ctrl + ,` | Open Settings |
+| `Ctrl + F` | Focus the search or filter field of the focused tab |
 | `Ctrl + Tab` | Next tab |
 | `Ctrl + Shift + Tab` | Previous tab |
 | `Alt + 1` … `Alt + 9` | Focus tab by position |

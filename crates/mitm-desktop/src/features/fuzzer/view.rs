@@ -457,7 +457,7 @@ fn results_toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
         }
         ui.separator();
 
-        ui.add(egui::TextEdit::singleline(&mut fuzzer.search_query).hint_text("Search…").desired_width(110.0));
+        crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut fuzzer.search_query).hint_text("Search…").desired_width(110.0)));
         ui.selectable_value(&mut fuzzer.search_scope, FuzzSearchScope::Payload, "Payload");
         ui.selectable_value(&mut fuzzer.search_scope, FuzzSearchScope::Response, "Response");
         if !fuzzer.search_query.is_empty() && ui.small_button("✕").on_hover_text("Clear search").clicked() {

@@ -65,7 +65,7 @@ fn toolbar(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerCon
         ui.selectable_value(&mut state.prefs.view, RewriteView::Rules, "Rules");
         ui.selectable_value(&mut state.prefs.view, RewriteView::Log, "Log");
         if state.prefs.view == RewriteView::Rules {
-            ui.add(egui::TextEdit::singleline(&mut state.search).hint_text("🔍 Search rules").desired_width(180.0));
+            crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut state.search).hint_text("🔍 Search rules").desired_width(180.0)));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("➕").on_hover_text("Add rule").clicked() {
                     state.add_rule(now);

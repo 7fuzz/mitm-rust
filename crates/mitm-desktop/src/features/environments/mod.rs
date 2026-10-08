@@ -403,11 +403,12 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, now: f64
     ui.add_space(4.0);
 
     ui.horizontal(|ui| {
-        ui.add(
+        let edit = ui.add(
             egui::TextEdit::singleline(&mut state.variable_filter)
                 .hint_text("Filter variables…")
                 .desired_width(ui.available_width() - 80.0),
         );
+        crate::widgets::search::claim_focus(&edit);
         if !state.variable_filter.is_empty() && ui.button("Clear").clicked() {
             state.variable_filter.clear();
         }

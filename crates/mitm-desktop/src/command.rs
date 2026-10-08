@@ -31,6 +31,7 @@ pub enum AppCommand {
     SaveFlowToCollection { flow_id: i64, target: SaveTarget },
     LoadOlderFlows,
     ClearTraffic,
+    FocusSearch,
     DeleteFlow(i64),
     CopyFlow(i64, CopyFormat),
     CopyFlowCustom(i64, CopyOptions),
