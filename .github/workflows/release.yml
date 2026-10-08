@@ -48,15 +48,23 @@ jobs:
       - name: build release binary
         run: cargo build --release --target ${{ matrix.target }} -p mitm-desktop
 
-      - name: package binary
+      # The release profile already strips symbols, so the binary is copied as is.
+      - name: package binary and checksum
         shell: bash
         run: |
-          cd target/${{ matrix.target }}/release
-          cp ${{ matrix.binary_name }} ../../../${{ matrix.asset_name }}
+          cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} ${{ matrix.asset_name }}
+          if command -v sha256sum >/dev/null; then
+            sha256sum ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
+          else
+            shasum -a 256 ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
+          fi
+          cat ${{ matrix.asset_name }}.sha256
 
-      - name: upload release asset
+      - name: upload release assets
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ${{ matrix.asset_name }}
+          files: |
+            ${{ matrix.asset_name }}
+            ${{ matrix.asset_name }}.sha256
           draft: true
