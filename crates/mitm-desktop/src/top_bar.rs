@@ -7,8 +7,16 @@ use crate::dock::Tab;
 use crate::state::AppState;
 use crate::widgets::flash;
 
-pub const EXPORT_OK: &str = "workspace_export_ok";
-pub const EXPORT_ERR: &str = "workspace_export_err";
+const FLASH_OK: &str = "top_bar_flash_ok";
+const FLASH_ERR: &str = "top_bar_flash_err";
+
+/// A short-lived message next to the workspace combos, for results of background saves.
+pub fn flash(ui: &egui::Ui, result: Result<String, String>) {
+    match result {
+        Ok(message) => flash::set(ui, egui::Id::new(FLASH_OK), message),
+        Err(error) => flash::set(ui, egui::Id::new(FLASH_ERR), error),
+    }
+}
 
 pub fn show(ui: &mut egui::Ui, state: &mut AppState, dock: &DockState<Tab>, cmds: &mut Commands) {
     ui.horizontal(|ui| {
@@ -24,7 +32,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, dock: &DockState<Tab>, cmds
         }
 
         workspace_and_env_combos(ui, state, cmds);
-        for (id, tone) in [(EXPORT_OK, Tone::Success), (EXPORT_ERR, Tone::Danger)] {
+        for (id, tone) in [(FLASH_OK, Tone::Success), (FLASH_ERR, Tone::Danger)] {
             if let Some(message) = flash::current(ui, egui::Id::new(id)) {
                 ui.label(RichText::new(message).color(theme::color(ui, tone)));
             }

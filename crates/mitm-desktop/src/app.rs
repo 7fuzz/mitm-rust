@@ -22,7 +22,6 @@ use crate::jobs::Jobs;
 use crate::state::AppState;
 use crate::palette::{self, PaletteState};
 use crate::theme::Tone;
-use crate::widgets::flash;
 use crate::{prefs, shortcuts, top_bar};
 
 pub struct MitmApp {
@@ -37,7 +36,7 @@ pub struct MitmApp {
     collection_runs: Jobs<(String, Result<ExecutionResult, String>)>,
     ca_jobs: Jobs<Option<Result<PathBuf, String>>>,
     import_files: Jobs<Option<Result<(String, String), String>>>,
-    exports: Jobs<Option<Result<PathBuf, String>>>,
+    file_saves: Jobs<Option<Result<String, String>>>,
     fuzzer_worker: FuzzerWorker,
 }
 
@@ -56,7 +55,7 @@ impl MitmApp {
             collection_runs: Jobs::default(),
             ca_jobs: Jobs::default(),
             import_files: Jobs::default(),
-            exports: Jobs::default(),
+            file_saves: Jobs::default(),
             fuzzer_worker: FuzzerWorker::default(),
         }
     }
@@ -369,10 +368,10 @@ impl MitmApp {
             AppCommand::ExportWorkspace => {
                 let Some(workspace) = self.state.environments.active_workspace().cloned() else { return };
                 let db_path = db_path.clone();
-                self.exports.spawn(&self.rt, ctx, async move {
+                self.file_saves.spawn(&self.rt, ctx, async move {
                     let path = crate::files::pick_save(&format!("{}.json", workspace.name), &[("JSON", &["json"])]).await?;
                     let result = mitm_core::workspace::export::export_workspace_file_db(&db_path, &workspace.id, &path.to_string_lossy());
-                    Some(result.map(|_| path))
+                    Some(result.map(|_| format!("Exported {}", crate::files::file_name(&path))))
                 });
             }
             AppCommand::ImportWorkspace { json, target, name } => {
@@ -526,14 +525,8 @@ impl eframe::App for MitmApp {
         if let Some((name, json)) = dropped_json(ui.ctx()) {
             self.state.environments.import.open_with(Some(environments::file_label(&name, json.len())), json);
         }
-        for result in self.exports.drain().flatten() {
-            match result {
-                Ok(path) => {
-                    let name = path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-                    flash::set(ui, egui::Id::new(top_bar::EXPORT_OK), format!("Exported {name}"));
-                }
-                Err(e) => flash::set(ui, egui::Id::new(top_bar::EXPORT_ERR), e),
-            }
+        for result in self.file_saves.drain().flatten() {
+            top_bar::flash(ui, result);
         }
         for result in self.ca_jobs.drain().flatten() {
             self.state.certificate.status = Some(match result {
