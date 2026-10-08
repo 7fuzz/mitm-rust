@@ -8,6 +8,7 @@ use mitm_core::events::CoreEvent;
 use mitm_core::state::{ListenerConfig, ProxyMode};
 use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
+use tokio::sync::broadcast::error::RecvError;
 use crate::command::{AppCommand, Commands, RequestDraft};
 use crate::dock::{self, Tab, TabViewer};
 use mitm_core::collections::execute::ExecutionResult;
@@ -699,9 +700,15 @@ fn forward_core_events(rt: &Runtime, core: &MitmCore, ctx: &egui::Context) -> Re
     let mut core_rx = core.event_bus.subscribe();
     let ctx = ctx.clone();
     rt.spawn(async move {
-        while let Ok(event) = core_rx.recv().await {
-            let _ = tx.send(event);
-            ctx.request_repaint();
+        loop {
+            match core_rx.recv().await {
+                Ok(event) => {
+                    let _ = tx.send(event);
+                    ctx.request_repaint();
+                }
+                Err(RecvError::Lagged(_)) => continue,
+                Err(RecvError::Closed) => break,
+            }
         }
     });
     rx
