@@ -9,6 +9,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut HashingState, cmds: &mut Commands) {
         ui.selectable_value(&mut state.prefs.mode, Mode::Digest, "Digest");
         ui.selectable_value(&mut state.prefs.mode, Mode::Hmac, "HMAC");
         ui.selectable_value(&mut state.prefs.mode, Mode::Bcrypt, "Bcrypt");
+        if state.prefs.mode != Mode::Bcrypt {
+            ui.separator();
+            ui.checkbox(&mut state.prefs.upper, "Upper");
+        }
     });
     ui.separator();
 
@@ -28,10 +32,11 @@ fn digest(ui: &mut egui::Ui, state: &mut HashingState) {
     input_box(ui, "Input", &mut state.input);
     ui.add_space(6.0);
     let bytes = state.input.as_bytes();
-    hash_row(ui, "MD5", &hashing::md5_hex(bytes));
-    hash_row(ui, "SHA-1", &hashing::sha1_hex(bytes));
-    hash_row(ui, "SHA-256", &hashing::sha256_hex(bytes));
-    hash_row(ui, "SHA-512", &hashing::sha512_hex(bytes));
+    let upper = state.prefs.upper;
+    hash_row(ui, "MD5", hashing::md5_hex(bytes), upper);
+    hash_row(ui, "SHA-1", hashing::sha1_hex(bytes), upper);
+    hash_row(ui, "SHA-256", hashing::sha256_hex(bytes), upper);
+    hash_row(ui, "SHA-512", hashing::sha512_hex(bytes), upper);
 }
 
 fn hmac(ui: &mut egui::Ui, state: &mut HashingState) {
@@ -43,16 +48,20 @@ fn hmac(ui: &mut egui::Ui, state: &mut HashingState) {
     ui.add_space(6.0);
     let key = state.hmac_key.as_bytes();
     let bytes = state.input.as_bytes();
-    hash_row(ui, "SHA-1", &hashing::hmac_hex(HmacAlgo::Sha1, key, bytes));
-    hash_row(ui, "SHA-256", &hashing::hmac_hex(HmacAlgo::Sha256, key, bytes));
-    hash_row(ui, "SHA-512", &hashing::hmac_hex(HmacAlgo::Sha512, key, bytes));
+    let upper = state.prefs.upper;
+    hash_row(ui, "SHA-1", hashing::hmac_hex(HmacAlgo::Sha1, key, bytes), upper);
+    hash_row(ui, "SHA-256", hashing::hmac_hex(HmacAlgo::Sha256, key, bytes), upper);
+    hash_row(ui, "SHA-512", hashing::hmac_hex(HmacAlgo::Sha512, key, bytes), upper);
 }
 
-fn hash_row(ui: &mut egui::Ui, label: &str, value: &str) {
+fn hash_row(ui: &mut egui::Ui, label: &str, mut value: String, upper: bool) {
+    if upper {
+        value.make_ascii_uppercase();
+    }
     ui.horizontal(|ui| {
         ui.add_sized([70.0, ui.spacing().interact_size.y], egui::Label::new(RichText::new(label).strong()));
         if ui.small_button("📋").on_hover_text("Copy").clicked() {
-            ui.ctx().copy_text(value.to_string());
+            ui.ctx().copy_text(value.clone());
         }
         ui.add(egui::Label::new(RichText::new(value).monospace()).truncate());
     });

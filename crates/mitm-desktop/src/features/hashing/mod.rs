@@ -22,11 +22,12 @@ pub enum BcryptOutcome {
 pub struct HashingPrefs {
     pub mode: Mode,
     pub bcrypt_cost: u32,
+    pub upper: bool,
 }
 
 impl Default for HashingPrefs {
     fn default() -> Self {
-        Self { mode: Mode::Digest, bcrypt_cost: 12 }
+        Self { mode: Mode::Digest, bcrypt_cost: 12, upper: false }
     }
 }
 
