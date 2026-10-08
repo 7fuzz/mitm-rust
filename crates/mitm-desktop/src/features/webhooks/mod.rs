@@ -1,7 +1,9 @@
 mod view;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use mitm_core::state::{WebhookDelivery, WebhookDeliveryCapturedEvent, WebhookEndpoint};
+use mitm_core::webhook::WebhookReplayResult;
 use serde::{Deserialize, Serialize};
 
 pub use view::show;
@@ -14,11 +16,12 @@ const MAX_DELIVERIES: usize = 1000;
 pub struct WebhooksPrefs {
     pub list_split: f32,
     pub detail_split: f32,
+    pub replay_urls: HashMap<String, String>,
 }
 
 impl Default for WebhooksPrefs {
     fn default() -> Self {
-        Self { list_split: 0.3, detail_split: 0.55 }
+        Self { list_split: 0.3, detail_split: 0.55, replay_urls: HashMap::new() }
     }
 }
 
@@ -47,6 +50,7 @@ pub struct WebhooksState {
     pub draft: Option<EndpointDraft>,
     pub selected_delivery: Option<i64>,
     pub detail_pane: crate::widgets::message_pane::PaneState,
+    pub replay_result: Option<(i64, Result<WebhookReplayResult, String>)>,
 }
 
 impl Default for WebhooksState {
@@ -62,6 +66,7 @@ impl Default for WebhooksState {
             draft: None,
             selected_delivery: None,
             detail_pane: Default::default(),
+            replay_result: None,
         }
     }
 }
@@ -88,6 +93,11 @@ impl WebhooksState {
     pub fn deliveries_cleared(&mut self) {
         self.deliveries.clear();
         self.selected_delivery = None;
+        self.replay_result = None;
+    }
+
+    pub fn replay_done(&mut self, id: i64, result: Result<WebhookReplayResult, String>) {
+        self.replay_result = Some((id, result));
     }
 
     pub fn base_url(&self) -> String {

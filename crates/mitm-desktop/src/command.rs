@@ -93,6 +93,7 @@ pub enum AppCommand {
     DeleteWebhookEndpoint(String),
     CopyWebhookTestCurl(String),
     ClearWebhookDeliveries,
+    ReplayWebhook { id: i64, url: String },
 
     SelectWorkspace(String),
     SelectEnvironment(Option<String>),

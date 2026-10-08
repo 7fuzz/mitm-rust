@@ -217,11 +217,12 @@ fn deliveries_table(ui: &mut egui::Ui, state: &mut WebhooksState) {
 }
 
 fn delivery_detail(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
-    let Some(id) = state.selected_delivery else {
+    let WebhooksState { deliveries, selected_delivery, detail_pane, replay_result, prefs, .. } = state;
+    let Some(id) = *selected_delivery else {
         ui.weak("Select a delivery");
         return;
     };
-    let Some(delivery) = state.deliveries.iter().find(|d| d.id == id) else {
+    let Some(delivery) = deliveries.iter().find(|d| d.id == id) else {
         ui.weak("Select a delivery");
         return;
     };
@@ -235,6 +236,26 @@ fn delivery_detail(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comm
         }
     });
     signature_view(ui, delivery);
+
+    ui.horizontal(|ui| {
+        let url = prefs.replay_urls.entry(delivery.endpoint_id.clone()).or_default();
+        ui.add(egui::TextEdit::singleline(url).hint_text("Replay to URL").desired_width(240.0));
+        let can_replay = url.trim_start().starts_with("http");
+        if ui.add_enabled(can_replay, egui::Button::new("Replay")).clicked() {
+            cmds.push(AppCommand::ReplayWebhook { id, url: url.trim().to_string() });
+        }
+        if let Some((_, result)) = replay_result.as_ref().filter(|(rid, _)| *rid == id) {
+            match result {
+                Ok(res) => {
+                    let tone = if res.success { Tone::Success } else { Tone::Danger };
+                    ui.label(RichText::new(format!("{} · {} ms", res.status_code, res.duration_ms)).color(theme::color(ui, tone)));
+                }
+                Err(e) => {
+                    ui.label(RichText::new(e).color(theme::color(ui, Tone::Danger)));
+                }
+            }
+        }
+    });
     ui.separator();
 
     let data = PaneData {
@@ -247,7 +268,7 @@ fn delivery_detail(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comm
         cookies: None,
         form_parser: None,
     };
-    if let Some(save) = message_pane::show(ui, "wh_delivery_pane", &mut state.detail_pane, &data) {
+    if let Some(save) = message_pane::show(ui, "wh_delivery_pane", detail_pane, &data) {
         cmds.push(AppCommand::SaveBody(save));
     }
 }

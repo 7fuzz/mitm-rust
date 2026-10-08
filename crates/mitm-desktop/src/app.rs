@@ -41,6 +41,7 @@ pub struct MitmApp {
     ws_connects: Jobs<Result<mitm_core::state::WebSocketConn, String>>,
     ws_actions: Jobs<Result<(), String>>,
     webhook_actions: Jobs<Result<(), String>>,
+    webhook_replays: Jobs<(i64, Result<mitm_core::webhook::WebhookReplayResult, String>)>,
 }
 
 impl MitmApp {
@@ -63,6 +64,7 @@ impl MitmApp {
             ws_connects: Jobs::default(),
             ws_actions: Jobs::default(),
             webhook_actions: Jobs::default(),
+            webhook_replays: Jobs::default(),
         }
     }
 
@@ -523,6 +525,14 @@ impl MitmApp {
                 Ok(()) => self.state.webhooks.deliveries_cleared(),
                 Err(e) => self.webhook_actions.reply(ctx).send(Err(e)),
             },
+            AppCommand::ReplayWebhook { id, url } => {
+                if let Some(delivery) = self.state.webhooks.deliveries.iter().find(|d| d.id == id).cloned() {
+                    let core = Arc::clone(&self.core);
+                    self.webhook_replays.spawn(&self.rt, ctx, async move {
+                        (id, core.replay_webhook(delivery, &url).await)
+                    });
+                }
+            }
             AppCommand::CopyWebhookTestCurl(id) => {
                 if let Some(endpoint) = self.state.webhooks.endpoints.iter().find(|e| e.id == id) {
                     let body = r#"{"event":"test","message":"hello"}"#;
@@ -758,6 +768,9 @@ impl eframe::App for MitmApp {
         }
         for error in self.webhook_actions.drain().filter_map(Result::err) {
             top_bar::flash(ui, Err(error));
+        }
+        for (id, result) in self.webhook_replays.drain() {
+            self.state.webhooks.replay_done(id, result);
         }
         for result in self.ca_jobs.drain().flatten() {
             self.state.certificate.status = Some(match result {
