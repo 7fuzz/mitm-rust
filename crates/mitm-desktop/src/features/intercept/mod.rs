@@ -86,6 +86,12 @@ impl InterceptState {
         }
     }
 
+    pub fn clear_pending(&mut self) {
+        self.pending.clear();
+        self.active_id = None;
+        self.edit = FlowEdit { method: self.edit.method.clone(), ..FlowEdit::default() };
+    }
+
     pub fn select(&mut self, flow_id: &str) {
         if let Some(p) = self.pending.iter().find(|p| p.flow_id == flow_id) {
             self.active_id = Some(flow_id.to_string());

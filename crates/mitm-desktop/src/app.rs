@@ -292,6 +292,14 @@ impl MitmApp {
                 let _ = self.core.drop_intercepted_flow(&flow_id);
                 self.state.intercept.remove_pending(&flow_id);
             }
+            AppCommand::ForwardAllIntercepts => {
+                self.core.forward_all_intercepted();
+                self.state.intercept.clear_pending();
+            }
+            AppCommand::DropAllIntercepts => {
+                self.core.drop_all_intercepted();
+                self.state.intercept.clear_pending();
+            }
             AppCommand::ConfigureInterceptor { enabled, mode } => {
                 let core = Arc::clone(&self.core);
                 self.rt.spawn(async move {

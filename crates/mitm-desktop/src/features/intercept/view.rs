@@ -53,8 +53,12 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) 
                 .color(theme::color(ui, Tone::Warn))
                 .strong();
             ui.label(badge);
-        } else {
-            ui.label(RichText::new("No paused flows").weak());
+            if ui.button("▶ Forward all").clicked() {
+                cmds.push(AppCommand::ForwardAllIntercepts);
+            }
+            if ui.button(RichText::new("⏹ Drop all").color(theme::color(ui, Tone::Danger))).clicked() {
+                cmds.push(AppCommand::DropAllIntercepts);
+            }
         }
     });
 

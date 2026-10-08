@@ -61,6 +61,8 @@ pub enum AppCommand {
         body: Option<Vec<u8>>,
     },
     DropIntercept { flow_id: String },
+    ForwardAllIntercepts,
+    DropAllIntercepts,
     ConfigureInterceptor { enabled: bool, mode: String },
     ToggleInterceptor,
     SaveInterceptRules(Vec<InterceptRule>),
