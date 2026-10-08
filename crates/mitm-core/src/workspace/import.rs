@@ -44,9 +44,6 @@ fn detect_and_assign_body(
 
     // Auto-detection when mode is unspecified or "none" but payload exists
     if !payload.is_empty() {
-        if payload.contains("__form_data") {
-            return ("form-data".to_string(), None, b_raw.clone(), b_raw, None);
-        }
         if serde_json::from_str::<serde_json::Value>(payload).is_ok() {
             return ("json".to_string(), b_raw.clone(), b_raw, None, None);
         }
@@ -139,58 +136,6 @@ struct PostmanCollection {
     variable: Option<Vec<PostmanVariable>>,
 }
 
-/// A request's `pre_requests` / `post_requests`, still as names.
-struct StepNames {
-    request_id: String,
-    collection_id: String,
-    pre: Vec<String>,
-    post: Vec<String>,
-}
-
-/// Imported requests, kept so step names can be resolved once every request has an id.
-#[derive(Default)]
-struct ImportedRequests {
-    /// (request id, collection id, name)
-    all: Vec<(String, String, String)>,
-    steps: Vec<StepNames>,
-}
-
-impl ImportedRequests {
-    /// Resolves a step name to an imported request, preferring one in the same folder.
-    fn resolve(&self, step: &StepNames, step_name: &str) -> Option<String> {
-        let candidates = || {
-            self.all
-                .iter()
-                .filter(|(id, _, name)| *id != step.request_id && name == step_name)
-        };
-        candidates()
-            .find(|(_, col, _)| *col == step.collection_id)
-            .or_else(|| candidates().next())
-            .map(|(id, _, _)| id.clone())
-    }
-
-    fn link(&self, conn: &Connection) -> Result<(), String> {
-        for step in &self.steps {
-            let ids = |names: &[String]| -> Vec<String> {
-                names.iter().filter_map(|n| self.resolve(step, n)).collect()
-            };
-            crate::request_steps::save_steps(conn, &step.request_id, &ids(&step.pre), &ids(&step.post))
-                .map_err(|e| e.to_string())?;
-        }
-        Ok(())
-    }
-}
-
-/// Accepts a list of names or a single name.
-fn step_names(value: Option<&serde_json::Value>) -> Vec<String> {
-    let names = match value {
-        Some(serde_json::Value::Array(items)) => items.iter().filter_map(|v| v.as_str()).map(str::to_string).collect(),
-        Some(serde_json::Value::String(name)) => vec![name.clone()],
-        _ => vec![],
-    };
-    names.into_iter().filter(|n| !n.trim().is_empty()).collect()
-}
-
 fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -202,7 +147,6 @@ fn now_ms() -> i64 {
 #[serde(rename_all = "camelCase")]
 pub enum ImportFormat {
     Workspace,
-    Native,
     Postman,
     Unknown,
 }
@@ -211,7 +155,6 @@ impl ImportFormat {
     pub fn label(self) -> &'static str {
         match self {
             ImportFormat::Workspace => "Workspace file",
-            ImportFormat::Native => "Native workspace",
             ImportFormat::Postman => "Postman v2.1",
             ImportFormat::Unknown => "Unknown format",
         }
@@ -228,9 +171,6 @@ pub struct ImportPreview {
 pub fn detect_import_format(parsed: &serde_json::Value) -> ImportFormat {
     if parsed.get("format").and_then(|f| f.as_str()) == Some(file::FORMAT) {
         return ImportFormat::Workspace;
-    }
-    if parsed.get("test_cases").is_some() || parsed.get("all_environments").is_some() {
-        return ImportFormat::Native;
     }
     let schema = parsed.get("info").and_then(|i| i.get("schema")).and_then(|s| s.as_str()).unwrap_or("");
     if schema.contains("postman") || parsed.get("item").is_some_and(|i| i.is_array()) {
@@ -268,222 +208,76 @@ fn import_into(
     target_workspace_id: Option<&str>,
     custom_workspace_name: Option<&str>,
 ) -> Result<ImportSummary, String> {
-    let parsed: serde_json::Value = serde_json::from_str(json_content).map_err(|e| format!("Invalid JSON format: {}", e))?;
-    if detect_import_format(&parsed) == ImportFormat::Workspace {
-        return import_workspace_file(conn, WorkspaceFile::parse(json_content)?, target_workspace_id, custom_workspace_name);
+    let parsed: serde_json::Value = serde_json::from_str(json_content).map_err(|e| format!("Invalid JSON: {}", e))?;
+    match detect_import_format(&parsed) {
+        ImportFormat::Workspace => {
+            import_workspace_file(conn, WorkspaceFile::parse(json_content)?, target_workspace_id, custom_workspace_name)
+        }
+        ImportFormat::Postman => {
+            let collection: PostmanCollection =
+                serde_json::from_str(json_content).map_err(|e| format!("Invalid Postman collection: {}", e))?;
+            import_postman(conn, collection, target_workspace_id, custom_workspace_name)
+        }
+        ImportFormat::Unknown => Err(format!(
+            "Unrecognized file. Import reads workspace files (\"format\": \"{}\") and Postman v2.1 collections.",
+            file::FORMAT
+        )),
+    }
+}
+
+fn import_postman(
+    conn: &Connection,
+    collection: PostmanCollection,
+    target_workspace_id: Option<&str>,
+    custom_workspace_name: Option<&str>,
+) -> Result<ImportSummary, String> {
+    let ts = now_ms();
+    let name = custom_workspace_name
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .map(str::to_string)
+        .or_else(|| collection.info.as_ref().map(|i| i.name.clone()))
+        .unwrap_or_else(|| "Imported Workspace".to_string());
+    let description = collection.info.as_ref().and_then(|i| i.description.clone());
+    let (workspace_id, workspace_name, created) = open_workspace(conn, target_workspace_id, name, description, ts)?;
+
+    let variables: Vec<super::EnvironmentVariable> = collection
+        .variable
+        .unwrap_or_default()
+        .into_iter()
+        .map(|v| {
+            file::VariableEntry {
+                key: v.key,
+                value: v.value.unwrap_or_default(),
+                enabled: !v.disabled,
+                secret: false,
+                variants: Vec::new(),
+                active_variant: None,
+            }
+            .to_variable()
+        })
+        .collect();
+    let mut env_count = 0;
+    if !variables.is_empty() {
+        let env_id = Uuid::new_v4().to_string();
+        let vars_json = serde_json::to_string(&variables).map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO environments (id, workspace_id, name, is_active, variables_json, created_at_ms, updated_at_ms)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            params![env_id, workspace_id, format!("{} variables", workspace_name), created, vars_json, ts, ts],
+        )
+        .map_err(|e| e.to_string())?;
+        if created {
+            conn.execute("UPDATE workspaces SET active_environment_id = ? WHERE id = ?", params![env_id, workspace_id])
+                .map_err(|e| e.to_string())?;
+        }
+        env_count = 1;
     }
 
-    // Self-healing schema check for legacy databases missing workspace_id columns
-    let _ = conn.execute("ALTER TABLE environments ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''", []);
-    let _ = conn.execute("ALTER TABLE environments ADD COLUMN variables_json TEXT NOT NULL DEFAULT '[]'", []);
-    let _ = conn.execute("ALTER TABLE collections ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''", []);
-
-    let ts = now_ms();
-
-    // 1. Parse JSON content
-    let parsed: serde_json::Value = serde_json::from_str(json_content).map_err(|e| format!("Invalid JSON format: {}", e))?;
-
-    let (workspace_id, workspace_name) = match target_workspace_id {
-        Some(target_id) => {
-            // Import into existing workspace
-            let name: String = conn.query_row(
-                "SELECT name FROM workspaces WHERE id = ?",
-                params![target_id],
-                |row| row.get(0),
-            ).map_err(|_| format!("Target workspace with ID '{}' does not exist", target_id))?;
-
-            (target_id.to_string(), name)
-        }
-        None => {
-            // Create a new workspace
-            let ws_id = Uuid::new_v4().to_string();
-
-            let parsed_name = parsed.get("info")
-                .and_then(|i| i.get("name"))
-                .and_then(|n| n.as_str())
-                .or_else(|| parsed.get("name").and_then(|n| n.as_str()));
-
-            let ws_name = match custom_workspace_name {
-                Some(c_name) if !c_name.trim().is_empty() => c_name.trim().to_string(),
-                _ => parsed_name.unwrap_or("Imported Workspace").to_string(),
-            };
-
-            let ws_desc = parsed.get("info")
-                .and_then(|i| i.get("description"))
-                .and_then(|d| d.as_str())
-                .or_else(|| parsed.get("description").and_then(|d| d.as_str()))
-                .map(|s| s.to_string());
-
-            // Insert Workspace
-            conn.execute(
-                "INSERT INTO workspaces (id, name, description, active_environment_id, created_at_ms, updated_at_ms)
-                 VALUES (?, ?, ?, NULL, ?, ?)",
-                params![ws_id, ws_name, ws_desc, ts, ts],
-            ).map_err(|e| e.to_string())?;
-
-            (ws_id, ws_name)
-        }
-    };
-
-    let mut env_count = 0;
     let mut col_count = 0;
     let mut req_count = 0;
-
-    // 2. Import Environment Variables
-    // Check for native project format: all_environments & all_variables
-    if let Some(all_envs) = parsed.get("all_environments").and_then(|e| e.as_array()) {
-        let all_vars = parsed.get("all_variables").and_then(|v| v.as_array());
-
-        for env_obj in all_envs {
-            let env_spec_id = env_obj.get("id").and_then(|i| i.as_str()).unwrap_or("");
-            let env_spec_name = env_obj.get("name").and_then(|n| n.as_str()).unwrap_or("Imported Environment");
-
-            let mut env_vars = Vec::new();
-            if let Some(vars_array) = all_vars {
-                for v_item in vars_array {
-                    let v_env_id = v_item.get("environmentId").and_then(|e| e.as_str()).unwrap_or("");
-                    if v_env_id == env_spec_id || env_spec_id.is_empty() {
-                        if let Some(key) = v_item.get("name").and_then(|k| k.as_str()) {
-                            let active_index = v_item.get("activeIndex").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
-                            let mut variants = Vec::new();
-
-                            if let Some(vals_array) = v_item.get("values").and_then(|v| v.as_array()) {
-                                for val_obj in vals_array {
-                                    let var_name = val_obj.get("name").and_then(|n| n.as_str()).unwrap_or("Default").to_string();
-                                    let var_val = val_obj.get("value")
-                                        .map(|v| if v.is_string() { v.as_str().unwrap_or("").to_string() } else { v.to_string() })
-                                        .unwrap_or_default();
-                                    variants.push(serde_json::json!({
-                                        "name": var_name,
-                                        "value": var_val
-                                    }));
-                                }
-                            }
-
-                            let primary_val = if !variants.is_empty() {
-                                let sel_idx = if active_index < variants.len() { active_index } else { 0 };
-                                variants[sel_idx].get("value").and_then(|v| v.as_str()).unwrap_or("").to_string()
-                            } else {
-                                v_item.get("value")
-                                    .map(|v| if v.is_string() { v.as_str().unwrap_or("").to_string() } else { v.to_string() })
-                                    .unwrap_or_default()
-                            };
-
-                            // Ensure (auto) variant exists as variant 0
-                            let has_auto = variants.iter().any(|v| v.get("name").and_then(|n| n.as_str()) == Some("(auto)"));
-                            if !has_auto {
-                                variants.insert(0, serde_json::json!({
-                                    "name": "(auto)",
-                                    "value": primary_val
-                                }));
-                            }
-
-                            env_vars.push(serde_json::json!({
-                                "key": key,
-                                "value": primary_val,
-                                "enabled": true,
-                                "type": "default",
-                                "activeIndex": active_index,
-                                "variants": variants
-                            }));
-                        }
-                    }
-                }
-            }
-
-            let env_id = Uuid::new_v4().to_string();
-            let vars_json = serde_json::to_string(&env_vars).unwrap_or_else(|_| "[]".to_string());
-            conn.execute(
-                "INSERT INTO environments (id, workspace_id, name, is_active, variables_json, created_at_ms, updated_at_ms)
-                 VALUES (?, ?, ?, 1, ?, ?, ?)",
-                params![env_id, workspace_id, env_spec_name, vars_json, ts, ts],
-            ).map_err(|e| e.to_string())?;
-
-            let _ = conn.execute(
-                "UPDATE workspaces SET active_environment_id = ? WHERE id = ?",
-                params![env_id, workspace_id],
-            );
-            env_count += 1;
-        }
-    } else {
-        // Fallback Postman variable array
-        let mut env_vars = Vec::new();
-        if let Some(vars) = parsed.get("variable").and_then(|v| v.as_array()) {
-            for v in vars {
-                if let Some(key) = v.get("key").and_then(|k| k.as_str()) {
-                    let val = v.get("value").and_then(|val| val.as_str()).unwrap_or("");
-                    let disabled = v.get("disabled").and_then(|d| d.as_bool()).unwrap_or(false);
-                    env_vars.push(serde_json::json!({
-                        "key": key,
-                        "value": val,
-                        "enabled": !disabled,
-                        "type": "default",
-                        "activeIndex": 0,
-                        "variants": [
-                            {
-                                "name": "(auto)",
-                                "value": val
-                            }
-                        ]
-                    }));
-                }
-            }
-        }
-
-        if !env_vars.is_empty() {
-            let env_id = Uuid::new_v4().to_string();
-            let vars_json = serde_json::to_string(&env_vars).unwrap_or_else(|_| "[]".to_string());
-            let env_name = format!("Imported Env ({})", workspace_name);
-            conn.execute(
-                "INSERT INTO environments (id, workspace_id, name, is_active, variables_json, created_at_ms, updated_at_ms)
-                 VALUES (?, ?, ?, 1, ?, ?, ?)",
-                params![env_id, workspace_id, env_name, vars_json, ts, ts],
-            ).map_err(|e| e.to_string())?;
-
-            let _ = conn.execute(
-                "UPDATE workspaces SET active_environment_id = ? WHERE id = ?",
-                params![env_id, workspace_id],
-            );
-            env_count = 1;
-        }
-    }
-
-    // 3. Import Items (Folders & Requests)
-    // Check for native project test_cases
-    if let Some(test_cases) = parsed.get("test_cases").and_then(|t| t.as_array()) {
-        let root_base_url = parsed.get("url").and_then(|u| u.as_str());
-        let mut imported = ImportedRequests::default();
-        for (idx, tc) in test_cases.iter().enumerate() {
-            process_custom_folder(
-                conn,
-                &workspace_id,
-                None,
-                tc,
-                idx as i32,
-                ts,
-                &mut col_count,
-                &mut req_count,
-                root_base_url,
-                &mut imported,
-            )?;
-        }
-        imported.link(conn)?;
-    } else if let Ok(collection) = serde_json::from_str::<PostmanCollection>(json_content) {
-        // Fallback Postman v2.1 collection format
-        if let Some(items) = collection.item {
-            for (idx, item) in items.into_iter().enumerate() {
-                process_postman_item(
-                    conn,
-                    &workspace_id,
-                    None,
-                    item,
-                    idx as i32,
-                    ts,
-                    &mut col_count,
-                    &mut req_count,
-                )?;
-            }
-        }
+    for (idx, item) in collection.item.unwrap_or_default().into_iter().enumerate() {
+        process_postman_item(conn, &workspace_id, None, item, idx as i32, ts, &mut col_count, &mut req_count)?;
     }
 
     Ok(ImportSummary {
@@ -825,261 +619,6 @@ fn process_postman_item(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-fn process_custom_folder(
-    conn: &Connection,
-    workspace_id: &str,
-    parent_id: Option<String>,
-    folder_val: &serde_json::Value,
-    order_idx: i32,
-    ts: i64,
-    col_count: &mut usize,
-    req_count: &mut usize,
-    parent_base_url: Option<&str>,
-    imported: &mut ImportedRequests,
-) -> Result<(), String> {
-    let name = folder_val.get("name").and_then(|n| n.as_str()).unwrap_or("Untitled Group");
-    let desc = folder_val.get("description").and_then(|d| d.as_str()).map(|s| s.to_string());
-
-    // A folder may declare its own base "url" (e.g. "{{gateway_url}}"); requests inside
-    // it use relative "endpoint" paths that need to be joined with this base. Fall back
-    // to the parent folder's base url when this folder doesn't declare its own.
-    let folder_base_url = folder_val.get("url").and_then(|u| u.as_str()).or(parent_base_url);
-
-    let col_id = Uuid::new_v4().to_string();
-    conn.execute(
-        "INSERT INTO collections (id, workspace_id, parent_id, name, description, order_index, created_at_ms, updated_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        params![col_id, workspace_id, parent_id, name, desc, order_idx, ts, ts],
-    ).map_err(|e| e.to_string())?;
-    *col_count += 1;
-
-    // Process target array (requests) inside folder
-    if let Some(targets) = folder_val.get("target").and_then(|t| t.as_array()) {
-        for (idx, target) in targets.iter().enumerate() {
-            process_custom_target(conn, &col_id, target, idx as i32, ts, req_count, folder_base_url, imported)?;
-        }
-    }
-
-    // Process nested sub-folders
-    if let Some(sub_folders) = folder_val.get("folders").and_then(|f| f.as_array()) {
-        for (idx, sub_f) in sub_folders.iter().enumerate() {
-            process_custom_folder(
-                conn,
-                workspace_id,
-                Some(col_id.clone()),
-                sub_f,
-                idx as i32,
-                ts,
-                col_count,
-                req_count,
-                folder_base_url,
-                imported,
-            )?;
-        }
-    }
-
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-fn process_custom_target(
-    conn: &Connection,
-    col_id: &str,
-    target_val: &serde_json::Value,
-    order_idx: i32,
-    ts: i64,
-    req_count: &mut usize,
-    base_url: Option<&str>,
-    imported: &mut ImportedRequests,
-) -> Result<(), String> {
-    let req_id = Uuid::new_v4().to_string();
-    let name = target_val.get("name").and_then(|n| n.as_str()).unwrap_or("Untitled Request");
-    let method = target_val.get("method").and_then(|m| m.as_str()).unwrap_or("GET").to_uppercase();
-
-    // "endpoint" is normally a path relative to the enclosing folder's base "url"
-    // (e.g. folder url "{{gateway_url}}" + endpoint "/documents"). Some endpoints
-    // already embed their own absolute/templated host (e.g. "{{sso_url}}/users/...")
-    // and override the folder base entirely - detect that and don't double-prefix.
-    let raw_url = match target_val.get("endpoint").and_then(|u| u.as_str()) {
-        Some(ep) if ep.starts_with("http") || ep.starts_with("{{") => ep.to_string(),
-        Some(ep) => match base_url {
-            Some(base) => format!("{}{}", base, ep),
-            None => ep.to_string(),
-        },
-        None => target_val.get("url")
-            .and_then(|u| u.as_str())
-            .unwrap_or("https://httpbin.org/get")
-            .to_string(),
-    };
-
-    let desc = target_val.get("description").and_then(|d| d.as_str()).map(|s| s.to_string());
-
-    // Parse headers (supports Object {"K":"V"} or Array [{"key":"K","value":"V"}])
-    let mut headers = Vec::new();
-    if let Some(h_obj) = target_val.get("header").and_then(|h| h.as_object()) {
-        for (k, v) in h_obj {
-            if let Some(val_str) = v.as_str() {
-                headers.push(serde_json::json!({
-                    "id": Uuid::new_v4().to_string(),
-                    "key": k,
-                    "value": val_str,
-                    "enabled": true
-                }));
-            }
-        }
-    } else if let Some(h_arr) = target_val.get("header").and_then(|h| h.as_array()) {
-        for h in h_arr {
-            if let Some(k) = h.get("key").and_then(|k| k.as_str()) {
-                let v = h.get("value").and_then(|v| v.as_str()).unwrap_or("");
-                let disabled = h.get("disabled").and_then(|d| d.as_bool()).unwrap_or(false);
-                headers.push(serde_json::json!({
-                    "id": Uuid::new_v4().to_string(),
-                    "key": k,
-                    "value": v,
-                    "enabled": !disabled
-                }));
-            }
-        }
-    }
-    let headers_json = serde_json::to_string(&headers).unwrap_or_else(|_| "[]".to_string());
-
-    // Body handling
-    let body_mode = target_val.get("body_mode").or_else(|| target_val.get("body_type")).and_then(|m| m.as_str());
-    let raw_payload_str = target_val.get("body")
-        .and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) })
-        .or_else(|| target_val.get("body_json").and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) }));
-
-    let (body_type, mut b_json, b_raw, mut b_form, mut b_url) = detect_and_assign_body(body_mode, raw_payload_str.as_deref());
-
-    if b_json.is_none() {
-        if let Some(bj) = target_val.get("body_json").and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) }) {
-            b_json = Some(bj);
-        }
-    }
-    if b_url.is_none() {
-        if let Some(bu) = target_val.get("body_urlencoded").and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) }) {
-            b_url = Some(bu);
-        }
-    }
-    if b_form.is_none() {
-        if let Some(bm) = target_val.get("body_multipart").or_else(|| target_val.get("body_form_data")).and_then(|b| if b.is_string() { b.as_str().map(|s| s.to_string()) } else { Some(b.to_string()) }) {
-            b_form = Some(bm);
-        }
-    }
-
-    // Parameters handling (supports url_params JSON string, params array, or params object)
-    let params_json = if let Some(up) = target_val.get("url_params").and_then(|p| p.as_str()) {
-        if serde_json::from_str::<Vec<serde_json::Value>>(up).is_ok() {
-            up.to_string()
-        } else {
-            "[]".to_string()
-        }
-    } else if let Some(p_arr) = target_val.get("params").and_then(|p| p.as_array()) {
-        serde_json::to_string(p_arr).unwrap_or_else(|_| "[]".to_string())
-    } else if let Some(p_obj) = target_val.get("params").and_then(|p| p.as_object()) {
-        let p_arr: Vec<serde_json::Value> = p_obj.iter().map(|(k, v)| {
-            serde_json::json!({
-                "id": Uuid::new_v4().to_string(),
-                "key": k,
-                "value": if v.is_string() { v.as_str().unwrap_or("").to_string() } else { v.to_string() },
-                "enabled": true
-            })
-        }).collect();
-        serde_json::to_string(&p_arr).unwrap_or_else(|_| "[]".to_string())
-    } else {
-        "[]".to_string()
-    };
-
-    // Extraction rules handling (supports dict {"var": "expr"} or array of objects [{"type":"...","targetVariable":"...","expression":"..."}])
-    let mut extract_rules = Vec::new();
-    let extract_field = target_val.get("extract")
-        .or_else(|| target_val.get("extract_rules"))
-        .or_else(|| target_val.get("extraction"))
-        .or_else(|| target_val.get("extractions"));
-
-    if let Some(ext_obj) = extract_field.and_then(|e| e.as_object()) {
-        for (target_var, expr_val) in ext_obj {
-            let expr_str = if expr_val.is_string() {
-                expr_val.as_str().unwrap_or("").to_string()
-            } else {
-                expr_val.to_string()
-            };
-
-            extract_rules.push(serde_json::json!({
-                "id": Uuid::new_v4().to_string(),
-                "type": "json",
-                "targetVariable": target_var,
-                "expression": expr_str,
-                "enabled": true
-            }));
-        }
-    } else if let Some(ext_arr) = extract_field.and_then(|e| e.as_array()) {
-        for rule in ext_arr {
-            let target_var = rule.get("targetVariable")
-                .or_else(|| rule.get("target_variable"))
-                .or_else(|| rule.get("variableName"))
-                .or_else(|| rule.get("varName"))
-                .or_else(|| rule.get("var"))
-                .or_else(|| rule.get("key"))
-                .and_then(|v| v.as_str());
-
-            if let Some(tv) = target_var {
-                let rule_type = rule.get("type").or_else(|| rule.get("source")).and_then(|t| t.as_str()).unwrap_or("json");
-                let expr = rule.get("expression")
-                    .or_else(|| rule.get("expr"))
-                    .or_else(|| rule.get("path"))
-                    .map(|e| if e.is_string() { e.as_str().unwrap_or("").to_string() } else { e.to_string() })
-                    .unwrap_or_default();
-                let enabled = rule.get("enabled").and_then(|b| b.as_bool()).unwrap_or(true);
-
-                extract_rules.push(serde_json::json!({
-                    "id": Uuid::new_v4().to_string(),
-                    "type": rule_type,
-                    "targetVariable": tv,
-                    "expression": expr,
-                    "enabled": enabled
-                }));
-            }
-        }
-    }
-    let extract_rules_json = serde_json::to_string(&extract_rules).unwrap_or_else(|_| "[]".to_string());
-
-    conn.execute(
-        "INSERT INTO requests (id, collection_id, name, method, url, headers_json, params_json, body_type, body_json, body_raw, body_form_data, body_urlencoded, extract_rules_json, description, order_index, created_at_ms, updated_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        params![
-            req_id,
-            col_id,
-            name,
-            method,
-            raw_url,
-            headers_json,
-            params_json,
-            body_type,
-            b_json,
-            b_raw,
-            b_form,
-            b_url,
-            extract_rules_json,
-            desc,
-            order_idx,
-            ts,
-            ts
-        ],
-    ).map_err(|e| e.to_string())?;
-
-    imported.all.push((req_id.clone(), col_id.to_string(), name.to_string()));
-    let pre = step_names(target_val.get("pre_requests"));
-    let post = step_names(target_val.get("post_requests"));
-    if !pre.is_empty() || !post.is_empty() {
-        imported.steps.push(StepNames { request_id: req_id, collection_id: col_id.to_string(), pre, post });
-    }
-
-    *req_count += 1;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1197,10 +736,14 @@ mod tests {
     }
 
     #[test]
-    fn detects_native_and_unknown_formats() {
-        let native: serde_json::Value = serde_json::from_str(r#"{"test_cases": []}"#).unwrap();
-        assert_eq!(detect_import_format(&native), ImportFormat::Native);
-        let other: serde_json::Value = serde_json::from_str(r#"{"hello": 1}"#).unwrap();
-        assert_eq!(detect_import_format(&other), ImportFormat::Unknown);
+    fn detects_workspace_files_and_rejects_the_old_format() {
+        let detect = |json: &str| detect_import_format(&serde_json::from_str(json).unwrap());
+        assert_eq!(detect(r#"{"format": "mitm-workspace", "version": 1}"#), ImportFormat::Workspace);
+        assert_eq!(detect(r#"{"test_cases": [], "all_environments": []}"#), ImportFormat::Unknown);
+
+        let (db, dir) = temp_db();
+        let err = import_workspace_json_db(&db, r#"{"name": "Old", "test_cases": []}"#, None, None).unwrap_err();
+        assert!(err.contains("Unrecognized file"), "{err}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
