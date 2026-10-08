@@ -11,7 +11,6 @@ use mitm_core::collections::execute::ExecutionResult;
 use mitm_core::collections::preview::{preview_request_db, RequestPreview};
 use mitm_core::collections::{self as core_collections, Collection, CollectionTreeItem, RequestHistoryItem, RequestItem};
 use mitm_core::repeater::ExtractRuleItem;
-use mitm_core::workspace::Workspace;
 use crate::widgets::message_pane::PaneState;
 
 pub use view::show;
@@ -94,7 +93,6 @@ impl Default for CollectionsPrefs {
 
 pub struct CollectionsState {
     pub prefs: CollectionsPrefs,
-    pub workspaces: Vec<Workspace>,
     pub active_workspace_id: String,
     pub trees: Vec<CollectionTreeItem>,
     pub search: String,
@@ -122,7 +120,6 @@ impl Default for CollectionsState {
     fn default() -> Self {
         Self {
             prefs: CollectionsPrefs::default(),
-            workspaces: Vec::new(),
             active_workspace_id: String::new(),
             trees: Vec::new(),
             search: String::new(),
@@ -149,19 +146,8 @@ impl Default for CollectionsState {
 }
 
 impl CollectionsState {
-    pub fn load(&mut self, db_path: &PathBuf) {
-        self.workspaces = mitm_core::workspace::get_workspaces_db(db_path).unwrap_or_default();
-        if self.workspaces.is_empty() {
-            let created = mitm_core::workspace::create_workspace_db(
-                db_path,
-                "Default Workspace".to_string(),
-                Some("Main development workspace".to_string()),
-            );
-            self.workspaces.extend(created);
-        }
-        if !self.workspaces.iter().any(|w| w.id == self.active_workspace_id) {
-            self.active_workspace_id = self.workspaces.first().map(|w| w.id.clone()).unwrap_or_default();
-        }
+    pub fn load(&mut self, db_path: &PathBuf, workspace_id: String) {
+        self.active_workspace_id = workspace_id;
         self.reload_tree(db_path);
     }
 

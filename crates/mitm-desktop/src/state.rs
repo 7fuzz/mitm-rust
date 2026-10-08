@@ -35,8 +35,7 @@ impl AppState {
             state.intercept.rules = rules;
         }
         state.environments.load(db_path);
-        state.collections.active_workspace_id = state.environments.active_workspace_id.clone();
-        state.collections.load(db_path);
+        state.collections.load(db_path, state.environments.active_workspace_id.clone());
         state.websockets.load_connections(db_path);
         state.data.counts = mitm_core::db::get_data_category_counts(db_path).ok();
         state

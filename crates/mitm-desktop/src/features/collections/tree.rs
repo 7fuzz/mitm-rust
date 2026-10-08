@@ -39,7 +39,7 @@ struct TreeUi<'a> {
 }
 
 pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands) {
-    header(ui, state, cmds);
+    header(ui, state);
     ui.separator();
 
     let searching = !state.search.trim().is_empty();
@@ -79,7 +79,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
     }
 }
 
-fn header(ui: &mut egui::Ui, state: &mut CollectionsState, _cmds: &mut Commands) {
+fn header(ui: &mut egui::Ui, state: &mut CollectionsState) {
     egui::Sides::new().show(
         ui,
         |ui| {
