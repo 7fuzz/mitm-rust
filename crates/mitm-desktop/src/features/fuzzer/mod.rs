@@ -1,11 +1,86 @@
 mod view;
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
-use mitm_core::fuzzer::{marker_re, parse_variables, FuzzConfig, FuzzRow, FuzzStart, FuzzTemplate, FuzzVariable, PayloadSet};
+use mitm_core::fuzzer::{
+    marker_re, parse_variables, FuzzConfig, FuzzRow, FuzzStart, FuzzTemplate, FuzzVariable, PayloadSet, MAX_REQUESTS,
+};
 use mitm_core::repeater::{HeaderItem, ParamItem};
 use crate::features::request_editor::captured::CapturedRequest;
 
 pub use view::show;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PayloadKind {
+    List,
+    Numbers,
+}
+
+/// The editing state for one variable's payloads; `to_set` turns it into a core `PayloadSet`.
+pub struct PayloadConfig {
+    pub kind: PayloadKind,
+    pub list_text: String,
+    pub from: f64,
+    pub to: f64,
+    pub step: f64,
+    pub pad: u32,
+    pub prefix: String,
+    pub suffix: String,
+    pub url_encode: bool,
+}
+
+impl Default for PayloadConfig {
+    fn default() -> Self {
+        Self {
+            kind: PayloadKind::List,
+            list_text: String::new(),
+            from: 0.0,
+            to: 10.0,
+            step: 1.0,
+            pad: 0,
+            prefix: String::new(),
+            suffix: String::new(),
+            url_encode: false,
+        }
+    }
+}
+
+impl PayloadConfig {
+    fn to_set(&self) -> PayloadSet {
+        PayloadSet {
+            kind: match self.kind {
+                PayloadKind::List => "list",
+                PayloadKind::Numbers => "numbers",
+            }
+            .to_string(),
+            list: self.list_text.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect(),
+            from: self.from,
+            to: self.to,
+            step: self.step,
+            pad: self.pad,
+            url_encode: self.url_encode,
+            prefix: self.prefix.clone(),
+            suffix: self.suffix.clone(),
+        }
+    }
+
+    /// The payload count without expanding the whole list, so a huge number range stays cheap.
+    pub fn count(&self) -> usize {
+        match self.kind {
+            PayloadKind::List => self.list_text.lines().filter(|l| !l.trim().is_empty()).count(),
+            PayloadKind::Numbers => {
+                let step = if self.step == 0.0 { 1.0 } else { self.step };
+                let span = self.to - self.from;
+                if span != 0.0 && (span > 0.0) != (step > 0.0) {
+                    0
+                } else {
+                    (((span / step).floor() as i64) + 1).clamp(0, MAX_REQUESTS as i64) as usize
+                }
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunStatus {
@@ -51,7 +126,7 @@ pub struct FuzzerState {
     pub headers: Vec<HeaderItem>,
     pub body_type: String,
     pub body_content: String,
-    pub wordlist_input: String,
+    pub payloads: HashMap<String, PayloadConfig>,
     pub concurrency: usize,
     pub status: RunStatus,
     pub run_id: Option<i64>,
@@ -77,7 +152,10 @@ impl Default for FuzzerState {
             }],
             body_type: "none".to_string(),
             body_content: String::new(),
-            wordlist_input: "200\n301\n400\n404\n500".to_string(),
+            payloads: HashMap::from([(
+                "status".to_string(),
+                PayloadConfig { list_text: "200\n301\n400\n404\n500".to_string(), ..PayloadConfig::default() },
+            )]),
             concurrency: 5,
             status: RunStatus::Idle,
             run_id: None,
@@ -111,33 +189,28 @@ impl FuzzerState {
         self.body_content = strip(&self.body_content);
     }
 
-    /// Every marker draws from the one wordlist in lockstep, so all markers get the same payload per request.
-    pub fn config(&self) -> FuzzConfig {
-        let template = FuzzTemplate {
+    pub fn template(&self) -> FuzzTemplate {
+        FuzzTemplate {
             method: self.method.clone(),
             url: self.url.clone(),
             headers: self.headers.clone(),
             params: self.params.clone(),
             body_type: self.body_type.clone(),
             body: (self.body_type != "none" && !self.body_content.is_empty()).then(|| self.body_content.clone()),
-        };
-        let list: Vec<String> =
-            self.wordlist_input.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect();
+        }
+    }
+
+    pub fn variable_names(&self) -> Vec<String> {
+        parse_variables(&self.template())
+    }
+
+    pub fn config(&self) -> FuzzConfig {
+        let template = self.template();
         let variables = parse_variables(&template)
             .into_iter()
-            .map(|name| FuzzVariable {
-                name,
-                set: PayloadSet {
-                    kind: "list".to_string(),
-                    list: list.clone(),
-                    from: 0.0,
-                    to: 0.0,
-                    step: 1.0,
-                    pad: 0,
-                    url_encode: false,
-                    prefix: String::new(),
-                    suffix: String::new(),
-                },
+            .map(|name| {
+                let set = self.payloads.get(&name).map_or_else(|| PayloadConfig::default().to_set(), PayloadConfig::to_set);
+                FuzzVariable { name, set }
             })
             .collect();
         FuzzConfig {

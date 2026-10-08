@@ -11,7 +11,7 @@ use crate::format::{format_bytes, format_duration};
 use crate::theme::{self, Tone};
 use crate::widgets::pills::render_status_pill;
 use crate::widgets::{split, template};
-use super::{ConfigTab, FuzzerState, RequestTab, RunStatus};
+use super::{ConfigTab, FuzzerState, PayloadConfig, PayloadKind, RequestTab, RunStatus};
 
 pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     toolbar(ui, fuzzer, cmds);
@@ -63,16 +63,7 @@ fn config(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
     ui.separator();
     match fuzzer.config_tab {
         ConfigTab::Request => request_tab(ui, fuzzer),
-        ConfigTab::Payloads => {
-            egui::ScrollArea::vertical().id_salt("fuzzer_payloads").auto_shrink([false, false]).show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::multiline(&mut fuzzer.wordlist_input)
-                        .font(egui::TextStyle::Monospace)
-                        .desired_rows(10)
-                        .desired_width(f32::INFINITY),
-                );
-            });
-        }
+        ConfigTab::Payloads => payloads_tab(ui, fuzzer),
         ConfigTab::Options => {
             ui.horizontal(|ui| {
                 ui.label("Concurrency");
@@ -182,6 +173,63 @@ fn set_content_type_header(headers: &mut Vec<HeaderItem>, content_type: Option<&
         }),
         (None, None) => {}
     }
+}
+
+fn payloads_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
+    let names = fuzzer.variable_names();
+    if names.is_empty() {
+        ui.weak("No variables");
+        return;
+    }
+    egui::ScrollArea::vertical().id_salt("fuzzer_payloads").auto_shrink([false, false]).show(ui, |ui| {
+        for name in &names {
+            let cfg = fuzzer.payloads.entry(name.clone()).or_default();
+            ui.push_id(name, |ui| payload_set(ui, name, cfg));
+            ui.add_space(4.0);
+        }
+    });
+}
+
+fn payload_set(ui: &mut egui::Ui, name: &str, cfg: &mut PayloadConfig) {
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.strong(RichText::new(format!("{{{{{name}}}}}")).monospace());
+            ui.selectable_value(&mut cfg.kind, PayloadKind::List, "List");
+            ui.selectable_value(&mut cfg.kind, PayloadKind::Numbers, "Numbers");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.weak(format!("{} payloads", cfg.count()));
+            });
+        });
+        match cfg.kind {
+            PayloadKind::List => {
+                ui.add(
+                    egui::TextEdit::multiline(&mut cfg.list_text)
+                        .font(egui::TextStyle::Monospace)
+                        .desired_rows(5)
+                        .desired_width(f32::INFINITY),
+                );
+            }
+            PayloadKind::Numbers => {
+                ui.horizontal(|ui| {
+                    ui.label("From");
+                    ui.add(egui::DragValue::new(&mut cfg.from));
+                    ui.label("To");
+                    ui.add(egui::DragValue::new(&mut cfg.to));
+                    ui.label("Step");
+                    ui.add(egui::DragValue::new(&mut cfg.step));
+                    ui.label("Pad").on_hover_text("Zero-pad to this width");
+                    ui.add(egui::DragValue::new(&mut cfg.pad).range(0..=12));
+                });
+            }
+        }
+        ui.horizontal(|ui| {
+            ui.label("Prefix");
+            ui.add(egui::TextEdit::singleline(&mut cfg.prefix).desired_width(100.0));
+            ui.label("Suffix");
+            ui.add(egui::TextEdit::singleline(&mut cfg.suffix).desired_width(100.0));
+            ui.checkbox(&mut cfg.url_encode, "URL-encode");
+        });
+    });
 }
 
 fn results(ui: &mut egui::Ui, fuzzer: &FuzzerState) {
