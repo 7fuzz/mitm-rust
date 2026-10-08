@@ -235,7 +235,7 @@ fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
         let resp = ui.add(
             egui::TextEdit::singleline(&mut state.description_text)
                 .hint_text("Add a description…")
-                .desired_width(ui.available_width() - 80.0),
+                .desired_width((ui.available_width() - 80.0).max(80.0)),
         );
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             state.editing_description = false;
@@ -406,7 +406,7 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, now: f64
         let edit = ui.add(
             egui::TextEdit::singleline(&mut state.variable_filter)
                 .hint_text("Filter variables…")
-                .desired_width(ui.available_width() - 80.0),
+                .desired_width((ui.available_width() - 80.0).max(80.0)),
         );
         crate::widgets::search::claim_focus(&edit);
         if !state.variable_filter.is_empty() && ui.button("Clear").clicked() {

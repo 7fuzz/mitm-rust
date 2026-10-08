@@ -184,7 +184,7 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
             ui.end_row();
 
             ui.strong("URL:");
-            let mut url_layouter = crate::widgets::template::layouter(egui::TextStyle::Monospace, None);
+            let mut url_layouter = crate::widgets::template::singleline_layouter(egui::TextStyle::Monospace, None);
             crate::widgets::template::show(ui, &mut state.edit.url, |text| {
                 egui::TextEdit::singleline(text)
                     .font(egui::TextStyle::Monospace)

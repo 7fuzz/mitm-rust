@@ -268,7 +268,7 @@ fn request_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
         });
     });
     ui.horizontal(|ui| {
-        let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
+        let mut layouter = template::singleline_layouter(egui::TextStyle::Monospace, None);
         let url = template::show(ui, &mut fuzzer.url, |text| {
             egui::TextEdit::singleline(text)
                 .hint_text("https://target.com/api/{{id}}")

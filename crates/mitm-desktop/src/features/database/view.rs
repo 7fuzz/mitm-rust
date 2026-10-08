@@ -29,7 +29,7 @@ fn tables_view(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
     let [mut left, mut right] = split::side_by_side(ui, "db_tables_split", &mut state.tables_fraction);
 
     left.horizontal(|ui| {
-        ui.add(egui::TextEdit::singleline(&mut state.table_filter).hint_text("Filter tables…").desired_width(ui.available_width() - 28.0));
+        ui.add(egui::TextEdit::singleline(&mut state.table_filter).hint_text("Filter tables…").desired_width((ui.available_width() - 28.0).max(60.0)));
         if ui.small_button("⟳").on_hover_text("Refresh table list").clicked() {
             state.load_tables(db_path);
         }

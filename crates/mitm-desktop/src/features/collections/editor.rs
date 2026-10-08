@@ -22,11 +22,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
     let mut changed = false;
     let mut send = false;
 
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.set_min_height(28.0);
         changed |= method_combo(ui, "collection_method", &mut request.method);
-        let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
-        let width = ui.available_width() - 130.0;
+        let mut layouter = template::singleline_layouter(egui::TextStyle::Monospace, None);
+        let width = (ui.available_width() - 130.0).max(160.0);
         let url = template::show(ui, &mut request.url, |text| {
             egui::TextEdit::singleline(text)
                 .hint_text("https://api.example.com/v1/resource or {{BASE_URL}}/endpoint")

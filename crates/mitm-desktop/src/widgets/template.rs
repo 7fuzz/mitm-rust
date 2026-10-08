@@ -341,6 +341,11 @@ pub fn layouter(style: TextStyle, color: Option<Color32>) -> impl FnMut(&Ui, &dy
     }
 }
 
+/// For single-line edits: they scroll sideways, so wrapping to a narrow field would stack the text into a column.
+pub fn singleline_layouter(style: TextStyle, color: Option<Color32>) -> impl FnMut(&Ui, &dyn TextBuffer, f32) -> Arc<Galley> {
+    move |ui, buf, _wrap_width| ui.fonts_mut(|f| f.layout_job(layout_job(ui, buf.as_str(), &style, color)))
+}
+
 fn layout_job(ui: &Ui, text: &str, style: &TextStyle, color: Option<Color32>) -> LayoutJob {
     let visuals = ui.visuals();
     let font = style.resolve(ui.style());

@@ -85,12 +85,12 @@ fn expression_fields(ui: &mut egui::Ui, rule: &mut ExtractRuleItem) -> bool {
         match rule.r#type.as_str() {
             "after_string" | "before_string" => {
                 let hint = if rule.r#type == "after_string" { "Text after (e.g. token=)" } else { "Text before (e.g. &expires=)" };
-                changed |= ui.add(field(&mut first, hint, ui.available_width() - 150.0)).changed();
+                changed |= ui.add(field(&mut first, hint, (ui.available_width() - 150.0).max(80.0))).changed();
                 ui.label(RichText::new("Max chars").weak());
                 changed |= ui.add(field(&mut second, "256", 60.0)).changed();
             }
             "between_string" => {
-                let half = (ui.available_width() - 40.0) / 2.0;
+                let half = ((ui.available_width() - 40.0) / 2.0).max(80.0);
                 changed |= ui.add(field(&mut first, "Start delimiter", half)).changed();
                 ui.label(RichText::new("and").weak());
                 changed |= ui.add(field(&mut second, "End delimiter", half)).changed();

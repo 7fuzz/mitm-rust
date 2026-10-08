@@ -154,7 +154,7 @@ fn join_cookies(cookies: &[(String, String)]) -> String {
 
 fn text_field(ui: &mut egui::Ui, text: &mut String, hint: &str, dim: bool, width: f32) -> egui::Response {
     let color = dim.then(|| ui.visuals().weak_text_color());
-    let mut layouter = template::layouter(egui::TextStyle::Monospace, color);
+    let mut layouter = template::singleline_layouter(egui::TextStyle::Monospace, color);
     template::show(ui, text, |text| {
         egui::TextEdit::singleline(text).hint_text(hint).desired_width(width).font(egui::TextStyle::Monospace).layouter(&mut layouter)
     })

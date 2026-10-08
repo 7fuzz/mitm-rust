@@ -12,6 +12,8 @@ use crate::format::pretty_json;
 use crate::widgets::template;
 use super::{EditorTab, RepeaterState};
 
+const MIN_URL_WIDTH: f32 = 160.0;
+
 pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, now: f64) {
     let Some(index) = state.active_id.as_ref().and_then(|id| state.tabs.iter().position(|t| &t.id == id)) else {
         return;
@@ -27,11 +29,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
     let mut changed = false;
     let mut send = false;
 
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.set_min_height(28.0);
         changed |= method_combo(ui, "method", &mut tab.method);
-        let width = ui.available_width() - 150.0;
-        let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
+        let width = (ui.available_width() - 150.0).max(MIN_URL_WIDTH);
+        let mut layouter = template::singleline_layouter(egui::TextStyle::Monospace, None);
         let url = template::show(ui, &mut tab.url, |text| {
             egui::TextEdit::singleline(text)
                 .hint_text("https://api.example.com/v1/resource or {{BASE_URL}}/path")
@@ -64,7 +66,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
     }
     ui.separator();
 
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         let params = tab.params.iter().filter(|p| p.enabled && !p.key.trim().is_empty()).count();
         let headers = tab.headers.iter().filter(|h| h.enabled && !h.key.trim().is_empty()).count();
         let tabs = [

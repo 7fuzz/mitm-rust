@@ -90,7 +90,7 @@ fn multipart_table(ui: &mut egui::Ui, id_salt: &str, fields: &mut Vec<MultipartF
                     changed |= field.r#type != before;
                     let hint = if field.r#type == "file_path" { "/path/to/file" } else { "Value" };
                     let width = (ui.available_width() - 28.0).max(80.0);
-                    let mut layouter = template::layouter(egui::TextStyle::Body, None);
+                    let mut layouter = template::singleline_layouter(egui::TextStyle::Body, None);
                     changed |= template::show(ui, &mut field.value, |text| {
                         egui::TextEdit::singleline(text).hint_text(hint).desired_width(width).layouter(&mut layouter)
                     })
