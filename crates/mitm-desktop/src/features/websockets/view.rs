@@ -15,12 +15,31 @@ pub fn show(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands)
 
 fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
     ui.heading(format!("Sessions ({})", state.connections.len()));
-    ui.add_space(4.0);
 
     if state.connections.is_empty() {
+        ui.add_space(4.0);
         ui.weak("No WebSocket connections captured");
         return;
     }
+
+    let sources = super::sources(&state.connections);
+    if sources.len() > 1 {
+        ui.horizontal_wrapped(|ui| {
+            ui.selectable_value(&mut state.source_filter, "ALL".to_string(), "All sources");
+            for source in &sources {
+                ui.selectable_value(&mut state.source_filter, source.clone(), source);
+            }
+        });
+    }
+    ui.add_space(4.0);
+
+    let rows: Vec<usize> = state
+        .connections
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| state.source_filter == "ALL" || super::source_label(c) == state.source_filter)
+        .map(|(i, _)| i)
+        .collect();
 
     let row_height = egui::TextStyle::Body.resolve(ui.style()).size + 6.0;
     let mut new_selection = None;
@@ -40,8 +59,8 @@ fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comm
             header.col(|ui| { ui.strong("Msgs"); });
         })
         .body(|body| {
-            body.rows(row_height, state.connections.len(), |mut row| {
-                let conn = &state.connections[row.index()];
+            body.rows(row_height, rows.len(), |mut row| {
+                let conn = &state.connections[rows[row.index()]];
                 let is_selected = state.selected_id == Some(conn.connection_id);
                 row.set_selected(is_selected);
                 row.col(|ui| { ui.label(conn.connection_id.to_string()); });
@@ -75,14 +94,21 @@ fn frames_table(ui: &mut egui::Ui, state: &mut WebSocketsState) {
         ui.selectable_value(&mut state.direction_filter, "ALL".to_string(), "All");
         ui.selectable_value(&mut state.direction_filter, "IN".to_string(), "▼ Server");
         ui.selectable_value(&mut state.direction_filter, "OUT".to_string(), "▲ Client");
+        ui.separator();
+        ui.add(egui::TextEdit::singleline(&mut state.frame_search).hint_text("Search frames").desired_width(140.0));
+        if !state.frame_search.is_empty() && ui.small_button("✕").on_hover_text("Clear search").clicked() {
+            state.frame_search.clear();
+        }
     });
     ui.add_space(2.0);
 
+    let query = state.frame_search.to_lowercase();
     let rows: Vec<usize> = state
         .messages
         .iter()
         .enumerate()
         .filter(|(_, m)| direction_matches(&state.direction_filter, &m.direction))
+        .filter(|(_, m)| query.is_empty() || m.payload.to_lowercase().contains(&query))
         .map(|(i, _)| i)
         .collect();
 

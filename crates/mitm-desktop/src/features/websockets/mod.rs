@@ -27,6 +27,8 @@ pub struct WebSocketsState {
     pub selected_msg: Option<i64>,
     pub detail_pane: crate::widgets::message_pane::PaneState,
     pub direction_filter: String,
+    pub source_filter: String,
+    pub frame_search: String,
 }
 
 impl Default for WebSocketsState {
@@ -39,8 +41,34 @@ impl Default for WebSocketsState {
             selected_msg: None,
             detail_pane: Default::default(),
             direction_filter: "ALL".to_string(),
+            source_filter: "ALL".to_string(),
+            frame_search: String::new(),
         }
     }
+}
+
+/// The source chip label for a connection: a client session, an unlabeled
+/// proxy, or the listener it came through.
+pub fn source_label(conn: &WebSocketConn) -> String {
+    if conn.is_client_session {
+        "Client".to_string()
+    } else if conn.listener_label.is_empty() {
+        "Proxy".to_string()
+    } else {
+        conn.listener_label.clone()
+    }
+}
+
+/// Distinct source labels in first-seen order.
+pub fn sources(conns: &[WebSocketConn]) -> Vec<String> {
+    let mut seen = Vec::new();
+    for conn in conns {
+        let label = source_label(conn);
+        if !seen.contains(&label) {
+            seen.push(label);
+        }
+    }
+    seen
 }
 
 impl WebSocketsState {
@@ -139,6 +167,24 @@ mod tests {
         state.apply_frame(message(2, "other session"));
         assert_eq!(state.messages.len(), 1, "frame for another session is not appended");
         assert_eq!(state.connections[1].message_count, 1);
+    }
+
+    #[test]
+    fn source_labels_are_distinct_in_order() {
+        let mk = |client: bool, label: &str| WebSocketConn {
+            connection_id: 0,
+            url: String::new(),
+            status: String::new(),
+            handshake_time: 0,
+            closed_at: None,
+            protocol: None,
+            client_addr: None,
+            is_client_session: client,
+            message_count: 0,
+            listener_label: label.to_string(),
+        };
+        let conns = vec![mk(false, "HTTP 8080"), mk(true, ""), mk(false, "HTTP 8080"), mk(false, "")];
+        assert_eq!(sources(&conns), vec!["HTTP 8080", "Client", "Proxy"]);
     }
 
     impl WebSocketsState {
