@@ -150,7 +150,9 @@ fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
                     .hint_text("Workspace name"),
             );
             resp.request_focus();
-            if resp.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                state.renaming_workspace = false;
+            } else if resp.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 let trimmed = state.rename_workspace_name.trim().to_string();
                 if !trimmed.is_empty() && trimmed != ws.name {
                     cmds.push(AppCommand::RenameWorkspace {
@@ -158,9 +160,6 @@ fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
                         name: trimmed,
                     });
                 }
-                state.renaming_workspace = false;
-            }
-            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                 state.renaming_workspace = false;
             }
         } else {
@@ -196,7 +195,9 @@ fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
                 .desired_width(ui.available_width() - 80.0),
         );
         resp.request_focus();
-        if resp.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            state.editing_description = false;
+        } else if resp.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             let trimmed = state.description_text.trim();
             let new_desc = if trimmed.is_empty() { None } else { Some(trimmed.to_string()) };
             if new_desc != ws.description {
@@ -205,9 +206,6 @@ fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
                     description: new_desc,
                 });
             }
-            state.editing_description = false;
-        }
-        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             state.editing_description = false;
         }
     } else {
@@ -280,16 +278,15 @@ fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
                         .hint_text("Environment name"),
                 );
                 resp.request_focus();
-                if resp.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    rename_cancel = true;
+                } else if resp.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                     let text = state.rename_text.trim().to_string();
                     if !text.is_empty() {
                         rename_commit = Some((env.id.clone(), text));
                     } else {
                         rename_cancel = true;
                     }
-                }
-                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                    rename_cancel = true;
                 }
             } else {
                 let bullet = if is_active { "● " } else { "○ " };
