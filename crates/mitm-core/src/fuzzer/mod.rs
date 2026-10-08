@@ -400,6 +400,9 @@ pub fn evaluate_matches(rules: &[MatchRule], body: &str) -> Vec<String> {
     rules
         .iter()
         .map(|rule| {
+            if rule.pattern.is_empty() {
+                return if rule.kind == "regex" { String::new() } else { "0".to_string() };
+            }
             if rule.kind == "regex" {
                 match regex::Regex::new(&rule.pattern) {
                     Ok(re) => re
@@ -695,5 +698,18 @@ mod tests {
     fn errors_on_empty_list() {
         let t = tmpl("/{{a}}", "");
         assert!(generate_combos(&cfg(t, "sniper", vec![list("a", &[])])).is_err());
+    }
+
+    #[test]
+    fn evaluate_matches_handles_empty_pattern_and_kinds() {
+        let rules = vec![
+            MatchRule { name: "c".into(), kind: "contains".into(), pattern: "foo".into() },
+            MatchRule { name: "empty_c".into(), kind: "contains".into(), pattern: "".into() },
+            MatchRule { name: "r".into(), kind: "regex".into(), pattern: r"id=(\d+)".into() },
+            MatchRule { name: "empty_r".into(), kind: "regex".into(), pattern: "".into() },
+            MatchRule { name: "bad_r".into(), kind: "regex".into(), pattern: r"(\d+".into() },
+        ];
+        let res = evaluate_matches(&rules, "foo foo bar id=42");
+        assert_eq!(res, vec!["2", "0", "42", "", "bad regex"]);
     }
 }
