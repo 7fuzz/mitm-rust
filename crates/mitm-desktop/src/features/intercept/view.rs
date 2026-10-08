@@ -48,6 +48,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[Listener
             });
         }
 
+        ui.toggle_value(&mut state.prefs.raise_window, "🔔").on_hover_text("Bring the window forward when a flow pauses");
         ui.separator();
         if source_scope::chips(ui, &mut state.source_scope, listeners) {
             cmds.push(AppCommand::SetInterceptScope(state.source_scope.clone()));

@@ -41,11 +41,12 @@ pub struct FlowEdit {
 pub struct InterceptPrefs {
     pub work_fraction: f32,
     pub queue_fraction: f32,
+    pub raise_window: bool,
 }
 
 impl Default for InterceptPrefs {
     fn default() -> Self {
-        Self { work_fraction: 0.62, queue_fraction: 0.3 }
+        Self { work_fraction: 0.62, queue_fraction: 0.3, raise_window: true }
     }
 }
 

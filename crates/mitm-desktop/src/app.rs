@@ -60,7 +60,7 @@ impl MitmApp {
         }
     }
 
-    fn apply_core_event(&mut self, event: CoreEvent) {
+    fn apply_core_event(&mut self, ctx: &egui::Context, event: CoreEvent) {
         let db_path = &self.core.db_path;
         let traffic = &mut self.state.traffic;
         match event {
@@ -74,7 +74,14 @@ impl MitmApp {
                 traffic.refresh_detail_if_selected(id, db_path);
             }
             CoreEvent::TrafficCleared => traffic.clear(),
-            CoreEvent::InterceptPrompt(payload) => self.state.intercept.add_pending(payload),
+            CoreEvent::InterceptPrompt(payload) => {
+                self.state.intercept.add_pending(payload);
+                if self.state.intercept.prefs.raise_window {
+                    dock::open_tab(&mut self.dock, Tab::Intercept);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::RequestUserAttention(egui::UserAttentionType::Critical));
+                }
+            }
             CoreEvent::InterceptResolved { flow_id } => self.state.intercept.remove_pending(&flow_id),
             _ => {}
         }
@@ -519,7 +526,7 @@ impl eframe::App for MitmApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         crate::widgets::template::set_active_env(self.state.environments.active_environment());
         while let Ok(event) = self.core_events.try_recv() {
-            self.apply_core_event(event);
+            self.apply_core_event(ui.ctx(), event);
         }
         shortcuts::consume(ui.ctx(), &mut self.cmds);
         let now = ui.input(|i| i.time);
