@@ -15,7 +15,7 @@ pub fn show(
     cmds: &mut Commands,
 ) {
     ui.horizontal(|ui| {
-        search_box(ui, &mut state.search_query);
+        search_box(ui, &mut state.prefs.search_query);
         filters_toggle(ui, state);
         request_count(ui, state, visible_count);
 
@@ -28,7 +28,7 @@ pub fn show(
         });
     });
 
-    if state.filters_open {
+    if state.prefs.filters_open {
         filter_row(ui, state, listeners);
     }
 }
@@ -46,18 +46,18 @@ fn search_box(ui: &mut egui::Ui, query: &mut String) {
 
 fn filters_toggle(ui: &mut egui::Ui, state: &mut TrafficState) {
     let active = state.active_filter_count();
-    let arrow = if state.filters_open { "⏶" } else { "⏷" };
+    let arrow = if state.prefs.filters_open { "⏶" } else { "⏷" };
     let label = match active {
         0 => format!("Filters {}", arrow),
         n => format!("Filters ({}) {}", n, arrow),
     };
-    if ui.add(egui::Button::new(label).selected(state.filters_open || active > 0)).clicked() {
-        state.filters_open = !state.filters_open;
+    if ui.add(egui::Button::new(label).selected(state.prefs.filters_open || active > 0)).clicked() {
+        state.prefs.filters_open = !state.prefs.filters_open;
     }
 }
 
 fn request_count(ui: &mut egui::Ui, state: &TrafficState, visible_count: usize) {
-    let filtering = state.active_filter_count() > 0 || !state.search_query.trim().is_empty();
+    let filtering = state.active_filter_count() > 0 || !state.prefs.search_query.trim().is_empty();
     let noun = match (filtering, visible_count) {
         (true, _) => "matching",
         (false, 1) => "request",
@@ -111,25 +111,25 @@ fn filter_row(ui: &mut egui::Ui, state: &mut TrafficState, listeners: &[Listener
     ui.horizontal_wrapped(|ui| {
         group_label(ui, "METHOD");
         for m in METHODS {
-            tri_state_button(ui, m, state.method_filters.entry(m.to_string()).or_default());
+            tri_state_button(ui, m, state.prefs.method_filters.entry(m.to_string()).or_default());
         }
 
         ui.separator();
         group_label(ui, "STATUS");
         for st in STATUS_GROUPS {
-            tri_state_button(ui, st, state.status_filters.entry(st.to_string()).or_default());
+            tri_state_button(ui, st, state.prefs.status_filters.entry(st.to_string()).or_default());
         }
 
         ui.separator();
         group_label(ui, "FLAGS");
         for (key, label) in FLAGS {
-            tri_state_button(ui, label, state.flag_filters.entry(key.to_string()).or_default());
+            tri_state_button(ui, label, state.prefs.flag_filters.entry(key.to_string()).or_default());
         }
 
         if listeners.len() > 1 {
             ui.separator();
             group_label(ui, "SOURCE");
-            source_combo(ui, &mut state.source_filter, listeners);
+            source_combo(ui, &mut state.prefs.source_filter, listeners);
         }
 
         if state.active_filter_count() > 0 && ui.link("Reset filters").clicked() {

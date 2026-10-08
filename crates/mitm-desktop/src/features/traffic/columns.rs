@@ -1,6 +1,7 @@
 use eframe::egui::Align;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ColumnId {
     Id,
     Method,
@@ -77,7 +78,8 @@ impl ColumnId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ColumnLayout {
     pub order: Vec<ColumnId>,
     pub hidden: Vec<ColumnId>,

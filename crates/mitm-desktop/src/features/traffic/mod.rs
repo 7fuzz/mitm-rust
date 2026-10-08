@@ -4,6 +4,7 @@ mod toolbar;
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
 use mitm_core::state::{HistoryDetail, HistoryEntry, HistorySettings};
 use crate::features::inspector::InspectorState;
 use crate::widgets::tri_state::TriState;
@@ -56,18 +57,40 @@ impl FlowFlags {
     }
 }
 
-pub struct TrafficState {
-    pub flows: VecDeque<HistoryEntry>,
-    pub max_flows: usize,
-    pub selected_id: Option<i64>,
-    pub selected_detail: Option<HistoryDetail>,
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TrafficPrefs {
+    pub columns: ColumnLayout,
+    pub widths: HashMap<ColumnId, f32>,
     pub search_query: String,
     pub filters_open: bool,
     pub source_filter: Option<String>,
     pub method_filters: HashMap<String, TriState>,
     pub status_filters: HashMap<String, TriState>,
     pub flag_filters: HashMap<String, TriState>,
-    pub columns: ColumnLayout,
+}
+
+impl Default for TrafficPrefs {
+    fn default() -> Self {
+        Self {
+            columns: ColumnLayout::default(),
+            widths: HashMap::new(),
+            search_query: String::new(),
+            filters_open: false,
+            source_filter: None,
+            method_filters: neutral_filters(METHODS),
+            status_filters: neutral_filters(STATUS_GROUPS),
+            flag_filters: neutral_filters(FLAGS.map(|(key, _)| key)),
+        }
+    }
+}
+
+pub struct TrafficState {
+    pub flows: VecDeque<HistoryEntry>,
+    pub max_flows: usize,
+    pub selected_id: Option<i64>,
+    pub selected_detail: Option<HistoryDetail>,
+    pub prefs: TrafficPrefs,
     pub history_limit: HistorySettings,
     pub limit_draft: HistorySettings,
     // Top visible flow id and vertical offset from the last frame.
@@ -81,13 +104,7 @@ impl Default for TrafficState {
             max_flows: 10_000,
             selected_id: None,
             selected_detail: None,
-            search_query: String::new(),
-            filters_open: false,
-            source_filter: None,
-            method_filters: neutral_filters(METHODS),
-            status_filters: neutral_filters(STATUS_GROUPS),
-            flag_filters: neutral_filters(FLAGS.map(|(key, _)| key)),
-            columns: ColumnLayout::default(),
+            prefs: TrafficPrefs::default(),
             history_limit: HistorySettings::default(),
             limit_draft: HistorySettings::default(),
             scroll_anchor: None,
@@ -179,28 +196,28 @@ impl TrafficState {
 
     pub fn active_filter_count(&self) -> usize {
         let count = |filters: &HashMap<String, TriState>| filters.values().filter(|&&v| v != TriState::Neutral).count();
-        count(&self.method_filters)
-            + count(&self.status_filters)
-            + count(&self.flag_filters)
-            + usize::from(self.source_filter.is_some())
+        count(&self.prefs.method_filters)
+            + count(&self.prefs.status_filters)
+            + count(&self.prefs.flag_filters)
+            + usize::from(self.prefs.source_filter.is_some())
     }
 
     pub fn reset_filters(&mut self) {
-        self.source_filter = None;
-        for filters in [&mut self.method_filters, &mut self.status_filters, &mut self.flag_filters] {
+        self.prefs.source_filter = None;
+        for filters in [&mut self.prefs.method_filters, &mut self.prefs.status_filters, &mut self.prefs.flag_filters] {
             filters.values_mut().for_each(|v| *v = TriState::Neutral);
         }
     }
 
     pub fn filtered_indices(&self) -> Vec<usize> {
-        let search = self.search_query.trim().to_lowercase();
+        let search = self.prefs.search_query.trim().to_lowercase();
         self.flows
             .iter()
             .enumerate()
             .filter(|(_, flow)| {
                 self.matches_source(flow)
-                    && passes_tri_state(&self.method_filters, Some(&flow.method.to_uppercase()))
-                    && passes_tri_state(&self.status_filters, status_group(flow.status_code))
+                    && passes_tri_state(&self.prefs.method_filters, Some(&flow.method.to_uppercase()))
+                    && passes_tri_state(&self.prefs.status_filters, status_group(flow.status_code))
                     && self.passes_flags(FlowFlags::of(flow))
                     && matches_search(flow, &search)
             })
@@ -209,7 +226,7 @@ impl TrafficState {
     }
 
     fn matches_source(&self, flow: &HistoryEntry) -> bool {
-        let Some(filter) = &self.source_filter else {
+        let Some(filter) = &self.prefs.source_filter else {
             return true;
         };
         let label = if flow.listener_label.is_empty() { "Default" } else { &flow.listener_label };
@@ -217,7 +234,7 @@ impl TrafficState {
     }
 
     fn passes_flags(&self, flags: FlowFlags) -> bool {
-        let state_of = |flag: &str| self.flag_filters.get(flag).copied().unwrap_or_default();
+        let state_of = |flag: &str| self.prefs.flag_filters.get(flag).copied().unwrap_or_default();
         let mut has_include = false;
         let mut matches_include = false;
         for (flag, _) in FLAGS {

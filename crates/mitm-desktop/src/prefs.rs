@@ -7,6 +7,7 @@ use crate::features::collections::CollectionsPrefs;
 use crate::features::inspector::InspectorPrefs;
 use crate::features::repeater::RepeaterPrefs;
 use crate::features::settings::SettingsPrefs;
+use crate::features::traffic::TrafficPrefs;
 use crate::state::AppState;
 
 // Separate keys, so a section that stops parsing resets alone instead of wiping the rest.
@@ -33,6 +34,10 @@ impl Section for SettingsPrefs {
     const KEY: &'static str = "settings";
 }
 
+impl Section for TrafficPrefs {
+    const KEY: &'static str = "traffic";
+}
+
 impl Section for CollectionsPrefs {
     const KEY: &'static str = "collections";
 }
@@ -50,6 +55,7 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     state.repeater.prefs = load(storage);
     state.collections.prefs = load(storage);
     state.settings = load(storage);
+    state.traffic.prefs = load(storage);
     load::<DockLayout>(storage).0.unwrap_or_else(dock::initial_layout)
 }
 
@@ -58,6 +64,7 @@ pub fn carry_over(from: &mut AppState, to: &mut AppState) {
     to.repeater.prefs = std::mem::take(&mut from.repeater.prefs);
     to.collections.prefs = std::mem::take(&mut from.collections.prefs);
     to.settings = std::mem::take(&mut from.settings);
+    to.traffic.prefs = std::mem::take(&mut from.traffic.prefs);
 }
 
 pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppState) {
@@ -66,4 +73,5 @@ pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppStat
     save(storage, &state.repeater.prefs);
     save(storage, &state.collections.prefs);
     save(storage, &state.settings);
+    save(storage, &state.traffic.prefs);
 }

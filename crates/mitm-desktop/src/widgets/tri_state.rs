@@ -1,7 +1,7 @@
 use eframe::egui::{self, CornerRadius, RichText};
 use crate::theme::Tone;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum TriState {
     #[default]
     Neutral,

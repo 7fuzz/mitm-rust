@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder, TableRow};
 use mitm_core::state::HistoryEntry;
@@ -10,7 +11,7 @@ use super::{flow_status_badge, ColumnId, ColumnLayout, FlowFlags, TrafficState};
 const ROW_HEIGHT: f32 = 26.0;
 
 pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds: &mut Commands) {
-    let columns = state.columns.visible();
+    let columns = state.prefs.columns.visible();
 
     let visuals = ui.visuals().clone();
     let held_offset = offset_holding_rows_in_place(state, visible, ROW_HEIGHT + ui.spacing().item_spacing.y);
@@ -27,7 +28,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
                 .auto_shrink([false, false])
                 .cell_layout(egui::Layout::left_to_right(egui::Align::Center));
             for col in &columns {
-                builder = builder.column(Column::initial(col.default_width()).at_least(40.0).clip(true));
+                let width = state.prefs.widths.get(col).copied().unwrap_or_else(|| col.default_width());
+                builder = builder.column(Column::initial(width).at_least(40.0).clip(true));
             }
             if let Some(offset) = held_offset {
                 builder = builder.vertical_scroll_offset(offset);
@@ -36,9 +38,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
             let output = builder
                 .header(24.0, |mut header| {
                     for &col in &columns {
-                        header.col(|ui| header_cell(ui, col, &mut state.columns));
+                        let (rect, _) = header.col(|ui| header_cell(ui, col, &mut state.prefs.columns));
+                        remember_width(&mut state.prefs.widths, col, rect.width());
                     }
-                    header.response().context_menu(|ui| column_menu(ui, &mut state.columns, None));
+                    header.response().context_menu(|ui| column_menu(ui, &mut state.prefs.columns, None));
                 })
                 .body(|body| {
                     body.rows(ROW_HEIGHT, visible.len(), |mut row| {
@@ -197,6 +200,12 @@ fn clock_cell(ui: &mut egui::Ui, at: Option<&str>) -> egui::Response {
     match local_clock(at) {
         Some((short, full)) => ui.label(RichText::new(short).color(weak).size(11.0)).on_hover_text(full),
         None => ui.label(RichText::new("-").color(weak)),
+    }
+}
+
+fn remember_width(widths: &mut HashMap<ColumnId, f32>, col: ColumnId, width: f32) {
+    if widths.get(&col).is_none_or(|w| (w - width).abs() > 0.5) {
+        widths.insert(col, width);
     }
 }
 
