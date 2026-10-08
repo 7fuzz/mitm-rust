@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::state::{PendingFlowPayload, TrafficCapturedEvent};
+use crate::state::{PendingFlowPayload, TrafficCapturedEvent, WebhookDeliveryCapturedEvent};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,6 +43,8 @@ pub enum CoreEvent {
         session_id: String,
         frame: serde_json::Value,
     },
+
+    WebhookDelivery(WebhookDeliveryCapturedEvent),
 
     DbMigrationProgress(MigrationProgressPayload),
 }

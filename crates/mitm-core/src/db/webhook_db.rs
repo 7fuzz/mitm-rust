@@ -154,3 +154,65 @@ pub fn clear_webhook_deliveries(db_path: &PathBuf) -> Result<(), String> {
     conn.execute("DELETE FROM webhook_deliveries", []).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn endpoint(id: &str, path: &str) -> WebhookEndpoint {
+        WebhookEndpoint {
+            id: id.to_string(),
+            name: format!("ep {}", id),
+            path: path.to_string(),
+            secret_key: "shh".to_string(),
+            created_at: 0,
+            hit_count: 0,
+        }
+    }
+
+    fn delivery(endpoint_id: &str, path: &str) -> WebhookDelivery {
+        WebhookDelivery {
+            id: 0,
+            endpoint_id: endpoint_id.to_string(),
+            endpoint_path: path.to_string(),
+            timestamp: 0,
+            headers: vec![("content-type".to_string(), "application/json".to_string())],
+            payload: "{}".to_string(),
+            signature_status: "none".to_string(),
+            computed_hmac: None,
+            provided_hmac: None,
+        }
+    }
+
+    #[test]
+    fn endpoints_and_deliveries_lifecycle() {
+        let dir = std::env::temp_dir().join(format!("mitm-wh-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("test.db");
+        crate::db::init_database(&db_path, None).unwrap();
+
+        save_webhook_endpoint(&db_path, &endpoint("a", "/a")).unwrap();
+        save_webhook_endpoint(&db_path, &endpoint("b", "/b")).unwrap();
+        assert_eq!(load_webhook_endpoints(&db_path).unwrap().len(), 2);
+        assert_eq!(get_webhook_endpoint_by_path(&db_path, "/a").unwrap().unwrap().id, "a");
+        assert!(get_webhook_endpoint_by_path(&db_path, "/missing").unwrap().is_none());
+
+        assert_eq!(increment_webhook_endpoint_hits(&db_path, "a").unwrap(), 1);
+        assert_eq!(increment_webhook_endpoint_hits(&db_path, "a").unwrap(), 2);
+
+        save_webhook_delivery(&db_path, &delivery("a", "/a")).unwrap();
+        save_webhook_delivery(&db_path, &delivery("a", "/a")).unwrap();
+        save_webhook_delivery(&db_path, &delivery("b", "/b")).unwrap();
+        assert_eq!(load_webhook_deliveries(&db_path, None).unwrap().len(), 3);
+
+        // Deleting an endpoint removes its deliveries but leaves the others.
+        delete_webhook_endpoint(&db_path, "a").unwrap();
+        assert_eq!(load_webhook_endpoints(&db_path).unwrap().len(), 1);
+        let left = load_webhook_deliveries(&db_path, None).unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].endpoint_id, "b");
+
+        clear_webhook_deliveries(&db_path).unwrap();
+        assert!(load_webhook_deliveries(&db_path, None).unwrap().is_empty());
+    }
+}

@@ -7,9 +7,9 @@ use hyper::{body::Incoming, Request, Response, StatusCode};
 use http_body_util::{BodyExt, Full};
 use bytes::Bytes;
 use hyper_util::rt::TokioIo;
-use crate::events::EventBus;
+use crate::events::{CoreEvent, EventBus};
 
-use crate::state::{AppState, WebhookDelivery};
+use crate::state::{AppState, WebhookDelivery, WebhookDeliveryCapturedEvent};
 use crate::webhook::hmac::verify_signature;
 
 /// Binds the port up front so the caller can report a busy or forbidden port.
@@ -125,12 +125,17 @@ async fn handle_webhook_request(
         Err(e) => eprintln!("[Webhook] Failed to save delivery: {}", e),
     }
 
-    if is_matched {
-        let _ = crate::db::webhook_db::increment_webhook_endpoint_hits(&state.db_path, &endpoint_id);
-    }
+    let endpoint_hit_count = if is_matched {
+        crate::db::webhook_db::increment_webhook_endpoint_hits(&state.db_path, &endpoint_id).unwrap_or(0)
+    } else {
+        0
+    };
 
-    if let Some(_bus) = event_bus {
-        // Can emit WebhookDeliveryCapturedEvent if subscribed
+    if let Some(bus) = event_bus {
+        bus.emit(CoreEvent::WebhookDelivery(WebhookDeliveryCapturedEvent {
+            delivery: delivery.clone(),
+            endpoint_hit_count,
+        }));
     }
 
     let response_body = serde_json::json!({
