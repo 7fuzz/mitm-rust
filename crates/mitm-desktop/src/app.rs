@@ -38,16 +38,7 @@ pub struct MitmApp {
 
 impl MitmApp {
     pub fn new(ctx: &egui::Context, storage: Option<&dyn eframe::Storage>, rt: Arc<Runtime>, core: Arc<MitmCore>) -> Self {
-        let mut state = AppState::load(&core.db_path);
-        state.traffic.set_history_limit(rt.block_on(core.get_history_settings()));
-        state.proxy.mode = rt.block_on(core.proxy_mode());
-        if state.proxy.mode.is_enabled() {
-            state.proxy.set_started(rt.block_on(core.start_all_listeners()));
-        }
-        refresh_listener_state(&rt, &core, &mut state.proxy);
-        state.proxy.reload_host_ips();
-        state.certificate.info = core.ca_info().ok();
-
+        let mut state = startup_state(&rt, &core);
         Self {
             dock: prefs::restore(storage, &mut state),
             state,
@@ -165,16 +156,9 @@ impl MitmApp {
                             self.core = Arc::new(new_core);
                             self.core_events = forward_core_events(&self.rt, &self.core, ctx);
                         }
-                        self.state = AppState::load(&self.core.db_path);
-                        self.state.traffic.set_history_limit(self.rt.block_on(self.core.get_history_settings()));
-                        self.state.proxy.mode = self.rt.block_on(self.core.proxy_mode());
-                        if self.state.proxy.mode.is_enabled() {
-                            self.state.proxy.set_started(self.rt.block_on(self.core.start_all_listeners()));
-                        }
-                        refresh_listener_state(&self.rt, &self.core, &mut self.state.proxy);
-                        self.state.proxy.reload_host_ips();
-                        self.state.certificate.info = self.core.ca_info().ok();
-                        self.state.data.counts = self.core.data_counts().ok();
+                        let mut state = startup_state(&self.rt, &self.core);
+                        prefs::carry_over(&mut self.state, &mut state);
+                        self.state = state;
                         self.state.data.status = Some(("Factory reset complete".to_string(), Tone::Success));
                     }
                     Err(e) => {
@@ -491,6 +475,19 @@ impl eframe::App for MitmApp {
             ctx.request_repaint();
         }
     }
+}
+
+fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {
+    let mut state = AppState::load(&core.db_path);
+    state.traffic.set_history_limit(rt.block_on(core.get_history_settings()));
+    state.proxy.mode = rt.block_on(core.proxy_mode());
+    if state.proxy.mode.is_enabled() {
+        state.proxy.set_started(rt.block_on(core.start_all_listeners()));
+    }
+    refresh_listener_state(rt, core, &mut state.proxy);
+    state.proxy.reload_host_ips();
+    state.certificate.info = core.ca_info().ok();
+    state
 }
 
 fn refresh_listener_state(rt: &Runtime, core: &MitmCore, proxy: &mut ProxyState) {

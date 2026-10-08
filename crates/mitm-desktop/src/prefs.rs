@@ -53,6 +53,13 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     load::<DockLayout>(storage).0.unwrap_or_else(dock::initial_layout)
 }
 
+pub fn carry_over(from: &mut AppState, to: &mut AppState) {
+    to.inspector.prefs = std::mem::take(&mut from.inspector.prefs);
+    to.repeater.prefs = std::mem::take(&mut from.repeater.prefs);
+    to.collections.prefs = std::mem::take(&mut from.collections.prefs);
+    to.settings = std::mem::take(&mut from.settings);
+}
+
 pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppState) {
     save(storage, &DockLayout(Some(dock.clone())));
     save(storage, &state.inspector.prefs);
