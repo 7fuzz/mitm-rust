@@ -115,7 +115,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
                 template::set_active_env(state.environments.active_environment());
             }
             Tab::Fuzzer => features::fuzzer::show(ui, &mut state.fuzzer, cmds),
-            Tab::Intercept => features::intercept::show(ui, &mut state.intercept, cmds),
+            Tab::Intercept => features::intercept::show(ui, &mut state.intercept, &state.proxy.listeners, cmds),
             Tab::Collections => features::collections::show(ui, &mut state.collections, cmds),
             Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
             Tab::Environments => features::environments::show(ui, &mut state.environments, cmds),

@@ -2,11 +2,12 @@ use eframe::egui::{self, RichText};
 use crate::theme::{self, Tone};
 use crate::command::{AppCommand, Commands};
 use crate::widgets::pills::{badge, render_method_pill};
-use crate::widgets::split;
+use crate::widgets::{source_scope, split};
+use mitm_core::state::ListenerConfig;
 use crate::features::request_editor::kv_table::{self, KvLabels};
 use super::InterceptState;
 
-pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) {
+pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[ListenerConfig], cmds: &mut Commands) {
     ui.horizontal(|ui| {
         ui.heading("Interception & Breakpoints");
         ui.separator();
@@ -47,6 +48,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) 
             });
         }
 
+        ui.separator();
+        if source_scope::chips(ui, &mut state.source_scope, listeners) {
+            cmds.push(AppCommand::SetInterceptScope(state.source_scope.clone()));
+        }
         ui.separator();
 
         let count = state.pending.len();

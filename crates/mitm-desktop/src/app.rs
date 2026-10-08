@@ -306,6 +306,12 @@ impl MitmApp {
                     let _ = core.toggle_interceptor(enabled, mode).await;
                 });
             }
+            AppCommand::SetInterceptScope(scope) => {
+                let core = Arc::clone(&self.core);
+                self.rt.spawn(async move {
+                    let _ = core.set_intercept_source_scope(scope).await;
+                });
+            }
             AppCommand::ToggleInterceptor => {
                 let intercept = &mut self.state.intercept;
                 intercept.enabled = !intercept.enabled;

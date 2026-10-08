@@ -10,3 +10,4 @@ pub mod split;
 pub mod template;
 pub mod message_pane;
 pub mod search;
+pub mod source_scope;

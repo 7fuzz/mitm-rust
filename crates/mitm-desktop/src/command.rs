@@ -64,6 +64,7 @@ pub enum AppCommand {
     ForwardAllIntercepts,
     DropAllIntercepts,
     ConfigureInterceptor { enabled: bool, mode: String },
+    SetInterceptScope(mitm_core::state::SourceScope),
     ToggleInterceptor,
     SaveInterceptRules(Vec<InterceptRule>),
 
