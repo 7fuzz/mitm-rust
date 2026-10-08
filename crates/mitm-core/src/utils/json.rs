@@ -60,6 +60,17 @@ pub fn escape(input: &str) -> String {
     serde_json::to_string(input).unwrap_or_default()
 }
 
+/// Reverses `escape`. The surrounding quotes are optional, so a pasted fragment like `a\"b` works too.
+pub fn unescape(input: &str) -> Result<String, String> {
+    let trimmed = input.trim();
+    let literal = if trimmed.len() >= 2 && trimmed.starts_with('"') && trimmed.ends_with('"') {
+        trimmed.to_string()
+    } else {
+        format!("\"{trimmed}\"")
+    };
+    serde_json::from_str(&literal).map_err(|e| e.to_string())
+}
+
 /// Sorted, pretty JSON, so two documents that differ only in key order or whitespace diff as equal.
 pub fn canonicalize(input: &str) -> Result<String, String> {
     to_pretty(&sorted(parse(input)?), Indent::Two)
@@ -79,9 +90,12 @@ mod tests {
     }
 
     #[test]
-    fn minify_and_escape() {
+    fn minify_escape_and_unescape() {
         assert_eq!(minify("{  \"a\" : [1, 2] }").unwrap(), r#"{"a":[1,2]}"#);
         assert_eq!(escape("a\"b\nc"), r#""a\"b\nc""#);
+        assert_eq!(unescape(r#""a\"b\nc""#).unwrap(), "a\"b\nc");
+        assert_eq!(unescape(r#"a\"b\u00e9"#).unwrap(), "a\"bé");
+        assert!(unescape(r#"bad \x"#).is_err());
         assert!(minify("{bad}").is_err());
     }
 
