@@ -127,38 +127,38 @@ fn data_section(ui: &mut egui::Ui, data: &mut DataSectionState, cmds: &mut Comma
     }
 
     if data.factory_reset_open {
-        let mut open = data.factory_reset_open;
-        egui::Window::new("Factory Reset")
-            .collapsible(false)
-            .resizable(false)
-            .open(&mut open)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-            .show(ui.ctx(), |ui| {
-                ui.set_width(320.0);
-                ui.heading("Reset All Application Data");
-                ui.add_space(8.0);
-                ui.label(
-                    "This action wipes the database and root CA certificate. All traffic, rules, collections, and settings will be permanently lost."
-                );
-                ui.add_space(8.0);
-                ui.label(RichText::new("Type RESET below to proceed:").strong());
-                ui.add_space(4.0);
-                ui.add(egui::TextEdit::singleline(&mut data.factory_reset_input).desired_width(f32::INFINITY));
-                ui.add_space(12.0);
-                ui.horizontal(|ui| {
-                    let can_reset = data.factory_reset_input.trim() == "RESET";
-                    if ui.add_enabled(can_reset, egui::Button::new(RichText::new("Factory Reset").color(theme::color(ui, Tone::Danger)))).clicked() {
-                        cmds.push(AppCommand::FactoryReset);
-                        data.factory_reset_open = false;
-                        data.factory_reset_input.clear();
-                    }
-                    if ui.button("Cancel").clicked() {
-                        data.factory_reset_open = false;
-                        data.factory_reset_input.clear();
-                    }
-                });
-            });
-        data.factory_reset_open = open;
+        factory_reset_modal(ui.ctx(), data, cmds);
+    }
+}
+
+fn factory_reset_modal(ctx: &egui::Context, data: &mut DataSectionState, cmds: &mut Commands) {
+    let mut close = false;
+    let modal = egui::Modal::new(egui::Id::new("factory_reset_modal")).show(ctx, |ui| {
+        ui.set_width(320.0);
+        ui.heading("Reset All Application Data");
+        ui.add_space(8.0);
+        ui.label(
+            "This action wipes the database and root CA certificate. All traffic, rules, collections, and settings will be permanently lost."
+        );
+        ui.add_space(8.0);
+        ui.label(RichText::new("Type RESET below to proceed:").strong());
+        ui.add_space(4.0);
+        ui.add(egui::TextEdit::singleline(&mut data.factory_reset_input).desired_width(f32::INFINITY));
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            let can_reset = data.factory_reset_input.trim() == "RESET";
+            if ui.add_enabled(can_reset, egui::Button::new(RichText::new("Factory Reset").color(theme::color(ui, Tone::Danger)))).clicked() {
+                cmds.push(AppCommand::FactoryReset);
+                close = true;
+            }
+            if ui.button("Cancel").clicked() {
+                close = true;
+            }
+        });
+    });
+    if close || modal.should_close() {
+        data.factory_reset_open = false;
+        data.factory_reset_input.clear();
     }
 }
 
