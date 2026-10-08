@@ -195,14 +195,71 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ImportFormat {
+    Native,
+    Postman,
+    Unknown,
+}
+
+impl ImportFormat {
+    pub fn label(self) -> &'static str {
+        match self {
+            ImportFormat::Native => "Native workspace",
+            ImportFormat::Postman => "Postman v2.1",
+            ImportFormat::Unknown => "Unknown format",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportPreview {
+    pub format: ImportFormat,
+    pub summary: ImportSummary,
+}
+
+pub fn detect_import_format(parsed: &serde_json::Value) -> ImportFormat {
+    if parsed.get("test_cases").is_some() || parsed.get("all_environments").is_some() {
+        return ImportFormat::Native;
+    }
+    let schema = parsed.get("info").and_then(|i| i.get("schema")).and_then(|s| s.as_str()).unwrap_or("");
+    if schema.contains("postman") || parsed.get("item").is_some_and(|i| i.is_array()) {
+        return ImportFormat::Postman;
+    }
+    ImportFormat::Unknown
+}
+
 pub fn import_workspace_json_db(
     db_path: &PathBuf,
     json_content: &str,
     target_workspace_id: Option<&str>,
     custom_workspace_name: Option<&str>,
 ) -> Result<ImportSummary, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let summary = import_into(&tx, json_content, target_workspace_id, custom_workspace_name)?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(summary)
+}
 
+/// Runs the real import as a new workspace and rolls it back, so the counts match what an import would do.
+pub fn preview_workspace_import_db(db_path: &PathBuf, json_content: &str) -> Result<ImportPreview, String> {
+    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let summary = import_into(&tx, json_content, None, None)?;
+    tx.rollback().map_err(|e| e.to_string())?;
+    let parsed: serde_json::Value = serde_json::from_str(json_content).map_err(|e| e.to_string())?;
+    Ok(ImportPreview { format: detect_import_format(&parsed), summary })
+}
+
+fn import_into(
+    conn: &Connection,
+    json_content: &str,
+    target_workspace_id: Option<&str>,
+    custom_workspace_name: Option<&str>,
+) -> Result<ImportSummary, String> {
     // Self-healing schema check for legacy databases missing workspace_id columns
     let _ = conn.execute("ALTER TABLE environments ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE environments ADD COLUMN variables_json TEXT NOT NULL DEFAULT '[]'", []);
@@ -780,4 +837,59 @@ fn process_custom_target(
 
     *req_count += 1;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const POSTMAN: &str = r#"{
+        "info": {"name": "Sample API", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+        "variable": [{"key": "host", "value": "api.example.com"}],
+        "item": [
+            {"name": "Users", "item": [
+                {"name": "List users", "request": {"method": "GET", "url": "{{host}}/users"}},
+                {"name": "Create user", "request": {"method": "POST", "url": "{{host}}/users"}}
+            ]}
+        ]
+    }"#;
+
+    fn temp_db() -> (PathBuf, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("mitm-import-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("test.db");
+        crate::db::init_database(&db, None).unwrap();
+        (db, dir)
+    }
+
+    fn workspace_count(db: &PathBuf) -> i64 {
+        Connection::open(db).unwrap().query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn preview_matches_import_and_writes_nothing() {
+        let (db, dir) = temp_db();
+        let before = workspace_count(&db);
+
+        let preview = preview_workspace_import_db(&db, POSTMAN).unwrap();
+        assert_eq!(preview.format, ImportFormat::Postman);
+        assert_eq!(preview.summary.workspace_name, "Sample API");
+        assert_eq!(workspace_count(&db), before);
+
+        let summary = import_workspace_json_db(&db, POSTMAN, None, None).unwrap();
+        assert_eq!(summary.environments_imported, preview.summary.environments_imported);
+        assert_eq!(summary.collections_imported, preview.summary.collections_imported);
+        assert_eq!(summary.requests_imported, preview.summary.requests_imported);
+        assert_eq!(summary.requests_imported, 2);
+        assert_eq!(workspace_count(&db), before + 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detects_native_and_unknown_formats() {
+        let native: serde_json::Value = serde_json::from_str(r#"{"test_cases": []}"#).unwrap();
+        assert_eq!(detect_import_format(&native), ImportFormat::Native);
+        let other: serde_json::Value = serde_json::from_str(r#"{"hello": 1}"#).unwrap();
+        assert_eq!(detect_import_format(&other), ImportFormat::Unknown);
+    }
 }
