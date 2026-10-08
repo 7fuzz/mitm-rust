@@ -7,16 +7,6 @@ use crate::widgets::pills::badge;
 use super::WebSocketsState;
 
 pub fn show(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
-    ui.horizontal(|ui| {
-        ui.heading("WebSocket Sessions");
-        ui.separator();
-        if ui.button("🔄 Refresh Sessions").clicked() {
-            cmds.push(AppCommand::ReloadWsConnections);
-        }
-    });
-
-    ui.separator();
-
     ui.columns(2, |columns| {
         columns[0].vertical(|ui| {
             ui.heading(format!("Sessions ({})", state.connections.len()));
@@ -96,15 +86,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands)
                 }
             };
 
-            ui.horizontal(|ui| {
-                ui.heading(format!("Session #{} Messages ({})", conn_id, state.messages.len()));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("🔄 Refresh Messages").clicked() {
-                        cmds.push(AppCommand::SelectWsConnection(conn_id));
-                    }
-                });
-            });
-
+            ui.heading(format!("Session #{} Messages ({})", conn_id, state.messages.len()));
             ui.separator();
 
             ui.horizontal(|ui| {

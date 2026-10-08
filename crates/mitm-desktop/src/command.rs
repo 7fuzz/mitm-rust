@@ -78,7 +78,6 @@ pub enum AppCommand {
     SaveInterceptRules(Vec<InterceptRule>),
 
     Collections(CollectionsCmd),
-    ReloadWsConnections,
     SelectWsConnection(i64),
 
     SelectWorkspace(String),

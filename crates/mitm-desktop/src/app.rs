@@ -88,6 +88,7 @@ impl MitmApp {
                 }
             }
             CoreEvent::InterceptResolved { flow_id } => self.state.intercept.remove_pending(&flow_id),
+            CoreEvent::WsFrameReceived { frame, .. } => self.state.websockets.apply_frame(frame),
             _ => {}
         }
     }
@@ -452,7 +453,6 @@ impl MitmApp {
                 }
             }
             AppCommand::Collections(cmd) => self.state.collections.apply(cmd, db_path),
-            AppCommand::ReloadWsConnections => self.state.websockets.load_connections(db_path),
             AppCommand::SelectWsConnection(id) => self.state.websockets.select(id, db_path),
             AppCommand::SelectWorkspace(id) => {
                 let _ = mitm_core::workspace::set_active_workspace_db(db_path, &id);
