@@ -1,0 +1,145 @@
+{
+  "format": "mitm-workspace",
+  "version": 1,
+  "workspace": {
+    "name": "Online Store",
+    "description": "Storefront API: catalog, cart and checkout."
+  },
+  "environments": [
+    {
+      "name": "Local",
+      "active": true,
+      "variables": [
+        { "key": "baseUrl", "value": "http://localhost:3000" },
+        {
+          "key": "customerEmail",
+          "value": "shopper@example.com",
+          "variants": [
+            { "name": "new customer", "value": "new.shopper@example.com" },
+            { "name": "returning", "value": "returning.shopper@example.com" }
+          ],
+          "activeVariant": "returning"
+        },
+        { "key": "customerPassword", "value": "local-only-password", "secret": true },
+        { "key": "accessToken" }
+      ]
+    },
+    {
+      "name": "Staging",
+      "variables": [
+        { "key": "baseUrl", "value": "https://staging.store.example" },
+        { "key": "customerEmail", "value": "qa@example.com" },
+        { "key": "customerPassword", "secret": true },
+        { "key": "accessToken" }
+      ]
+    }
+  ],
+  "collections": [
+    {
+      "name": "Auth",
+      "requests": [
+        {
+          "ref": "log-in",
+          "name": "Log in",
+          "method": "POST",
+          "url": "{{baseUrl}}/auth/login",
+          "headers": [{ "name": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+          "body": {
+            "type": "urlencoded",
+            "fields": [
+              { "name": "email", "value": "{{customerEmail}}" },
+              { "name": "password", "value": "{{customerPassword}}" },
+              { "name": "remember", "value": "true", "enabled": false }
+            ]
+          },
+          "extract": [{ "variable": "accessToken", "from": "json", "expression": "data.token" }]
+        },
+        {
+          "ref": "log-out",
+          "name": "Log out",
+          "method": "POST",
+          "url": "{{baseUrl}}/auth/logout",
+          "headers": [{ "name": "Authorization", "value": "Bearer {{accessToken}}" }]
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "description": "Read-only product endpoints. No login needed.",
+      "requests": [
+        {
+          "name": "List products",
+          "url": "{{baseUrl}}/products",
+          "params": [
+            { "name": "category", "value": "shoes" },
+            { "name": "page", "value": "1" },
+            { "name": "sort", "value": "price", "enabled": false }
+          ]
+        },
+        {
+          "name": "Get product",
+          "url": "{{baseUrl}}/products/42"
+        }
+      ],
+      "collections": [
+        {
+          "name": "Admin",
+          "requests": [
+            {
+              "name": "Upload product image",
+              "method": "POST",
+              "url": "{{baseUrl}}/admin/products/42/images",
+              "headers": [{ "name": "Authorization", "value": "Bearer {{accessToken}}" }],
+              "body": {
+                "type": "form",
+                "fields": [
+                  { "name": "alt", "value": "Red running shoe" },
+                  { "name": "image", "type": "file", "value": "/path/to/shoe.png" }
+                ]
+              },
+              "before": ["log-in"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Checkout",
+      "requests": [
+        {
+          "ref": "add-to-cart",
+          "name": "Add to cart",
+          "method": "POST",
+          "url": "{{baseUrl}}/cart/items",
+          "headers": [
+            { "name": "Authorization", "value": "Bearer {{accessToken}}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ],
+          "body": { "type": "json", "content": "{\n  \"productId\": 42,\n  \"quantity\": 2\n}" },
+          "before": ["log-in"]
+        },
+        {
+          "name": "Place order",
+          "method": "POST",
+          "url": "{{baseUrl}}/orders",
+          "description": "Logs in, adds an item, places the order, then logs out.",
+          "headers": [
+            { "name": "Authorization", "value": "Bearer {{accessToken}}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ],
+          "body": { "type": "json", "content": "{\n  \"paymentMethod\": \"test-card\"\n}" },
+          "extract": [{ "variable": "orderId", "from": "header", "expression": "X-Order-Id" }],
+          "before": ["log-in", "add-to-cart"],
+          "after": ["log-out"]
+        },
+        {
+          "name": "Order note",
+          "method": "PUT",
+          "url": "{{baseUrl}}/orders/{{orderId}}/note",
+          "headers": [{ "name": "Content-Type", "value": "text/plain" }],
+          "body": { "type": "raw", "content": "Please leave at the front desk." }
+        }
+      ]
+    }
+  ]
+}
