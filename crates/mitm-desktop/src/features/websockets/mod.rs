@@ -25,6 +25,7 @@ pub struct WebSocketsState {
     pub selected_id: Option<i64>,
     pub messages: Vec<WebSocketMessage>,
     pub selected_msg: Option<i64>,
+    pub detail_pane: crate::widgets::message_pane::PaneState,
     pub direction_filter: String,
 }
 
@@ -36,6 +37,7 @@ impl Default for WebSocketsState {
             selected_id: None,
             messages: Vec::new(),
             selected_msg: None,
+            detail_pane: Default::default(),
             direction_filter: "ALL".to_string(),
         }
     }

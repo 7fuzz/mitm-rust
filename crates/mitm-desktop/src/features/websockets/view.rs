@@ -10,7 +10,7 @@ use super::WebSocketsState;
 pub fn show(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
     let [mut left, mut right] = split::side_by_side(ui, "ws_list_split", &mut state.prefs.list_split);
     sessions_list(&mut left, state, cmds);
-    frames_and_detail(&mut right, state);
+    frames_and_detail(&mut right, state, cmds);
 }
 
 fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
@@ -59,7 +59,7 @@ fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comm
     }
 }
 
-fn frames_and_detail(ui: &mut egui::Ui, state: &mut WebSocketsState) {
+fn frames_and_detail(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
     if state.selected_id.is_none() {
         ui.weak("Select a session to view its frames");
         return;
@@ -67,7 +67,7 @@ fn frames_and_detail(ui: &mut egui::Ui, state: &mut WebSocketsState) {
 
     let [mut top, mut bottom] = split::stacked(ui, "ws_detail_split", &mut state.prefs.detail_split);
     frames_table(&mut top, state);
-    frame_detail(&mut bottom, state);
+    frame_detail(&mut bottom, state, cmds);
 }
 
 fn frames_table(ui: &mut egui::Ui, state: &mut WebSocketsState) {
@@ -133,15 +133,49 @@ fn frames_table(ui: &mut egui::Ui, state: &mut WebSocketsState) {
     }
 }
 
-fn frame_detail(ui: &mut egui::Ui, state: &WebSocketsState) {
-    let msg = state.selected_msg.and_then(|id| state.messages.iter().find(|m| m.id == id));
-    let Some(msg) = msg else {
+fn frame_detail(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
+    let Some(id) = state.selected_msg else {
         ui.weak("Select a frame");
         return;
     };
-    egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
-        ui.add(egui::Label::new(RichText::new(&msg.payload).monospace()).wrap());
+    let Some(msg) = state.messages.iter().find(|m| m.id == id) else {
+        ui.weak("Select a frame");
+        return;
+    };
+
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(format!("#{}", msg.id)).strong());
+        direction_badge(ui, &msg.direction);
+        ui.weak(clock(msg.timestamp));
+        ui.weak(format_bytes(msg.length as u64));
+        ui.weak(msg.msg_type.to_uppercase());
+        if msg.is_injected {
+            badge(ui, "INJECTED", Tone::Warn);
+        }
     });
+    ui.separator();
+
+    let data = crate::widgets::message_pane::PaneData {
+        cache_key: msg.id as u64,
+        title: "",
+        headers: &[],
+        body: &msg.payload,
+        content_type: content_type(&msg.msg_type),
+        params: None,
+        cookies: None,
+        form_parser: None,
+    };
+    if let Some(save) = crate::widgets::message_pane::show(ui, "ws_frame_pane", &mut state.detail_pane, &data) {
+        cmds.push(AppCommand::SaveBody(save));
+    }
+}
+
+fn content_type(msg_type: &str) -> &'static str {
+    match msg_type {
+        "json" => "application/json",
+        "binary" => "application/octet-stream",
+        _ => "text/plain",
+    }
 }
 
 fn direction_matches(filter: &str, direction: &str) -> bool {
