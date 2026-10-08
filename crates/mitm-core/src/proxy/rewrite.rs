@@ -21,6 +21,49 @@ fn parse_path_from_url(url_str: &str) -> String {
     }
 }
 
+/// The text with the rule's pattern replaced. An invalid regex leaves it unchanged.
+pub fn replace_in(rule: &RewriteRule, text: &str) -> String {
+    if rule.is_regex {
+        match Regex::new(&rule.match_pattern) {
+            Ok(re) => re.replace_all(text, &rule.replacement_value).into_owned(),
+            Err(_) => text.to_string(),
+        }
+    } else if rule.match_pattern.is_empty() {
+        text.to_string()
+    } else {
+        text.replace(&rule.match_pattern, &rule.replacement_value)
+    }
+}
+
+/// Sets a header, adding it when missing; an empty value removes it. Returns whether anything changed.
+pub fn set_header(headers: &mut Vec<(String, String)>, name: &str, value: &str) -> bool {
+    if value.is_empty() {
+        let before = headers.len();
+        headers.retain(|(k, _)| !k.eq_ignore_ascii_case(name));
+        return headers.len() != before;
+    }
+    match headers.iter_mut().find(|(k, _)| k.eq_ignore_ascii_case(name)) {
+        Some((_, v)) => *v = value.to_string(),
+        None => headers.push((name.to_string(), value.to_string())),
+    }
+    true
+}
+
+pub fn redirect_target(rule: &RewriteRule, url: &str) -> String {
+    if rule.is_regex {
+        match Regex::new(&rule.match_pattern) {
+            Ok(re) => re.replace_all(url, &rule.replacement_value).to_string(),
+            Err(_) => rule.replacement_value.clone(),
+        }
+    } else if !rule.match_pattern.is_empty() && url.contains(&rule.match_pattern) {
+        url.replace(&rule.match_pattern, &rule.replacement_value)
+    } else if !rule.replacement_value.is_empty() {
+        rule.replacement_value.clone()
+    } else {
+        url.to_string()
+    }
+}
+
 pub fn matches_rule(
     rule: &RewriteRule,
     method: &str,
@@ -126,16 +169,9 @@ pub async fn apply_request_rewrite_pipeline(
             "partial_request" => {
                 match rule.target_part.as_str() {
                     "url" => {
-                        if rule.is_regex {
-                            if let Ok(re) = Regex::new(&rule.match_pattern) {
-                                let new_url = re.replace_all(url, &rule.replacement_value).to_string();
-                                if new_url != *url {
-                                    *url = new_url;
-                                    changed = true;
-                                }
-                            }
-                        } else if !rule.match_pattern.is_empty() && url.contains(&rule.match_pattern) {
-                            *url = url.replace(&rule.match_pattern, &rule.replacement_value);
+                        let new_url = replace_in(rule, url);
+                        if new_url != *url {
+                            *url = new_url;
                             changed = true;
                         }
 
@@ -165,44 +201,12 @@ pub async fn apply_request_rewrite_pipeline(
                     }
                     "header" => {
                         if let Some(ref hdr_name) = rule.target_header {
-                            if rule.replacement_value.is_empty() {
-                                // Remove header
-                                let prev_len = headers.len();
-                                headers.retain(|(k, _)| !k.eq_ignore_ascii_case(hdr_name));
-                                if headers.len() != prev_len {
-                                    changed = true;
-                                }
-                            } else {
-                                // Modify / Insert header
-                                let mut found = false;
-                                for (k, v) in headers.iter_mut() {
-                                    if k.eq_ignore_ascii_case(hdr_name) {
-                                        *v = rule.replacement_value.clone();
-                                        found = true;
-                                        changed = true;
-                                        break;
-                                    }
-                                }
-                                if !found {
-                                    headers.push((hdr_name.clone(), rule.replacement_value.clone()));
-                                    changed = true;
-                                }
-                            }
+                            changed = set_header(headers, hdr_name, &rule.replacement_value);
                         }
                     }
                     "body" => {
                         let current_body_str = String::from_utf8_lossy(body).to_string();
-                        let new_body_str = if rule.is_regex {
-                            if let Ok(re) = Regex::new(&rule.match_pattern) {
-                                re.replace_all(&current_body_str, &rule.replacement_value).to_string()
-                            } else {
-                                current_body_str.clone()
-                            }
-                        } else if !rule.match_pattern.is_empty() {
-                            current_body_str.replace(&rule.match_pattern, &rule.replacement_value)
-                        } else {
-                            current_body_str.clone()
-                        };
+                        let new_body_str = replace_in(rule, &current_body_str);
 
                         if new_body_str != current_body_str {
                             *body = new_body_str.into_bytes();
@@ -245,19 +249,7 @@ pub async fn apply_request_rewrite_pipeline(
                 }
             }
             "redirect" => {
-                let redirect_url = if rule.is_regex {
-                    if let Ok(re) = Regex::new(&rule.match_pattern) {
-                        re.replace_all(url, &rule.replacement_value).to_string()
-                    } else {
-                        rule.replacement_value.clone()
-                    }
-                } else if !rule.match_pattern.is_empty() && url.contains(&rule.match_pattern) {
-                    url.replace(&rule.match_pattern, &rule.replacement_value)
-                } else if !rule.replacement_value.is_empty() {
-                    rule.replacement_value.clone()
-                } else {
-                    url.clone()
-                };
+                let redirect_url = redirect_target(rule, url);
 
                 let status = rule.mock_status_code.unwrap_or(307);
                 let mut redirect_headers: Vec<(String, String)> = vec![
@@ -420,42 +412,12 @@ pub async fn apply_response_rewrite_pipeline(
                 match rule.target_part.as_str() {
                     "header" => {
                         if let Some(ref hdr_name) = rule.target_header {
-                            if rule.replacement_value.is_empty() {
-                                let prev_len = headers.len();
-                                headers.retain(|(k, _)| !k.eq_ignore_ascii_case(hdr_name));
-                                if headers.len() != prev_len {
-                                    changed = true;
-                                }
-                            } else {
-                                let mut found = false;
-                                for (k, v) in headers.iter_mut() {
-                                    if k.eq_ignore_ascii_case(hdr_name) {
-                                        *v = rule.replacement_value.clone();
-                                        found = true;
-                                        changed = true;
-                                        break;
-                                    }
-                                }
-                                if !found {
-                                    headers.push((hdr_name.clone(), rule.replacement_value.clone()));
-                                    changed = true;
-                                }
-                            }
+                            changed = set_header(headers, hdr_name, &rule.replacement_value);
                         }
                     }
                     "body" => {
                         let current_body_str = String::from_utf8_lossy(body).to_string();
-                        let new_body_str = if rule.is_regex {
-                            if let Ok(re) = Regex::new(&rule.match_pattern) {
-                                re.replace_all(&current_body_str, &rule.replacement_value).to_string()
-                            } else {
-                                current_body_str.clone()
-                            }
-                        } else if !rule.match_pattern.is_empty() {
-                            current_body_str.replace(&rule.match_pattern, &rule.replacement_value)
-                        } else {
-                            current_body_str.clone()
-                        };
+                        let new_body_str = replace_in(rule, &current_body_str);
 
                         if new_body_str != current_body_str {
                             *body = new_body_str.into_bytes();
