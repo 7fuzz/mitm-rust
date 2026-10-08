@@ -67,6 +67,8 @@ pub enum AppCommand {
     DropAllIntercepts,
     ConfigureInterceptor { enabled: bool, mode: String },
     SetInterceptScope(mitm_core::state::SourceScope),
+    SetRewriteEnabled(bool),
+    SetRewriteScope(mitm_core::state::SourceScope),
     ToggleInterceptor,
     SaveInterceptRules(Vec<InterceptRule>),
 

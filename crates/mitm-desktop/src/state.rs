@@ -18,6 +18,7 @@ pub struct AppState {
     pub traffic: TrafficState,
     pub inspector: InspectorState,
     pub intercept: InterceptState,
+    pub rewrite: crate::features::rewrite::RewriteState,
     pub repeater: RepeaterState,
     pub fuzzer: FuzzerState,
     pub collections: CollectionsState,

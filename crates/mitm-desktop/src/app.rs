@@ -332,6 +332,12 @@ impl MitmApp {
                     let _ = core.toggle_interceptor(enabled, mode).await;
                 });
             }
+            AppCommand::SetRewriteEnabled(enabled) => {
+                let _ = self.core.set_rewrite_enabled(enabled);
+            }
+            AppCommand::SetRewriteScope(scope) => {
+                let _ = self.rt.block_on(self.core.set_rewrite_source_scope(scope));
+            }
             AppCommand::SetInterceptScope(scope) => {
                 let core = Arc::clone(&self.core);
                 self.rt.spawn(async move {
@@ -526,6 +532,12 @@ impl MitmApp {
         self.refresh_listeners();
     }
 
+    fn save_rewrite_rules(&mut self, now: f64, force: bool) {
+        if let Some(rules) = self.state.rewrite.take_save(now, force) {
+            let _ = self.rt.block_on(self.core.save_rewrite_rules(rules));
+        }
+    }
+
     fn refresh_listeners(&mut self) {
         refresh_listener_state(&self.rt, &self.core, &mut self.state.proxy);
     }
@@ -540,6 +552,7 @@ impl eframe::App for MitmApp {
         self.state.repeater.flush(&self.core.db_path);
         self.state.collections.flush(&self.core.db_path);
         self.state.environments.flush(&self.core.db_path);
+        self.save_rewrite_rules(0.0, true);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -561,6 +574,7 @@ impl eframe::App for MitmApp {
         }
         self.state.collections.flush_if_idle(&self.core.db_path, now);
         self.state.environments.flush_if_idle(&self.core.db_path, now);
+        self.save_rewrite_rules(now, false);
         self.state.traffic.sync_header_search(&self.core.db_path);
         self.fuzzer_worker.poll(&mut self.state.fuzzer);
         for result in self.import_files.drain().flatten() {
@@ -641,6 +655,9 @@ fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {
     state.intercept.enabled = enabled;
     state.intercept.mode = mode;
     state.intercept.source_scope = scope;
+    state.rewrite.rules = rt.block_on(core.rewrite_rules());
+    state.rewrite.enabled = core.rewrite_enabled();
+    state.rewrite.scope = rt.block_on(core.rewrite_source_scope());
     state
 }
 

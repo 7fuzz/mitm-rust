@@ -7,6 +7,7 @@ use crate::features::collections::CollectionsPrefs;
 use crate::features::inspector::InspectorPrefs;
 use crate::features::intercept::InterceptPrefs;
 use crate::features::repeater::RepeaterPrefs;
+use crate::features::rewrite::RewritePrefs;
 use crate::features::settings::SettingsPrefs;
 use crate::features::traffic::TrafficPrefs;
 use crate::state::AppState;
@@ -39,6 +40,10 @@ impl Section for InterceptPrefs {
     const KEY: &'static str = "intercept";
 }
 
+impl Section for RewritePrefs {
+    const KEY: &'static str = "rewrite";
+}
+
 impl Section for TrafficPrefs {
     const KEY: &'static str = "traffic";
 }
@@ -62,6 +67,7 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     state.settings = load(storage);
     state.traffic.prefs = load(storage);
     state.intercept.prefs = load(storage);
+    state.rewrite.prefs = load(storage);
     load::<DockLayout>(storage).0.unwrap_or_else(dock::initial_layout)
 }
 
@@ -72,6 +78,7 @@ pub fn carry_over(from: &mut AppState, to: &mut AppState) {
     to.settings = std::mem::take(&mut from.settings);
     to.traffic.prefs = std::mem::take(&mut from.traffic.prefs);
     to.intercept.prefs = std::mem::take(&mut from.intercept.prefs);
+    to.rewrite.prefs = std::mem::take(&mut from.rewrite.prefs);
 }
 
 pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppState) {
@@ -82,4 +89,5 @@ pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppStat
     save(storage, &state.settings);
     save(storage, &state.traffic.prefs);
     save(storage, &state.intercept.prefs);
+    save(storage, &state.rewrite.prefs);
 }

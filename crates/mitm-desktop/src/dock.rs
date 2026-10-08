@@ -12,6 +12,7 @@ pub enum Tab {
     Repeater,
     Fuzzer,
     Intercept,
+    Rewrite,
     Collections,
     WebSockets,
     Environments,
@@ -19,11 +20,12 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 8] = [
+    pub const ALL: [Tab; 9] = [
         Tab::Traffic,
         Tab::Repeater,
         Tab::Fuzzer,
         Tab::Intercept,
+        Tab::Rewrite,
         Tab::Collections,
         Tab::WebSockets,
         Tab::Environments,
@@ -36,6 +38,7 @@ impl Tab {
             Tab::Repeater => "Repeater",
             Tab::Fuzzer => "Fuzzer",
             Tab::Intercept => "Intercept",
+            Tab::Rewrite => "Rewrite",
             Tab::Collections => "Collections",
             Tab::WebSockets => "WebSockets",
             Tab::Environments => "Environments",
@@ -116,6 +119,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             }
             Tab::Fuzzer => features::fuzzer::show(ui, &mut state.fuzzer, cmds),
             Tab::Intercept => features::intercept::show(ui, &mut state.intercept, &state.proxy.listeners, cmds),
+            Tab::Rewrite => features::rewrite::show(ui, &mut state.rewrite, &state.proxy.listeners, cmds),
             Tab::Collections => features::collections::show(ui, &mut state.collections, cmds),
             Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
             Tab::Environments => features::environments::show(ui, &mut state.environments, cmds),
