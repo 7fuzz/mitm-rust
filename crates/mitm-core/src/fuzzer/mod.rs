@@ -150,7 +150,7 @@ pub struct FuzzStart {
     pub total: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FuzzRunMeta {
     pub id: i64,
@@ -158,6 +158,17 @@ pub struct FuzzRunMeta {
     pub attack_type: String,
     pub total: u32,
     pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoadedFuzzRun {
+    pub id: i64,
+    pub name: String,
+    pub attack_type: String,
+    pub total: u32,
+    pub config: FuzzConfig,
+    pub rows: Vec<FuzzRow>,
 }
 
 /// Replaces every `{{name}}` in `s` with its value from `values`; unknown names are left as-is.
@@ -579,12 +590,54 @@ pub fn search_responses_db(db_path: &PathBuf, run_id: i64, query: &str) -> Resul
     Ok(rows)
 }
 
-pub fn delete_run_db(db_path: &PathBuf, id: i64) -> Result<(), String> {
+pub fn save_run_db(db_path: &PathBuf, id: i64, name: &str) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM fuzz_results WHERE run_id = ?", params![id])
+    let updated = conn
+        .execute("UPDATE fuzz_runs SET name = ?, saved = 1 WHERE id = ?", params![name, id])
         .map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM fuzz_runs WHERE id = ?", params![id])
+    if updated == 0 {
+        return Err(format!("Run {} not found", id));
+    }
+    Ok(())
+}
+
+pub fn is_run_saved_db(db_path: &PathBuf, id: i64) -> Result<bool, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let saved: i64 = conn
+        .query_row("SELECT saved FROM fuzz_runs WHERE id = ?", params![id], |row| row.get(0))
         .map_err(|e| e.to_string())?;
+    Ok(saved == 1)
+}
+
+pub fn load_run_db(db_path: &PathBuf, id: i64) -> Result<LoadedFuzzRun, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let (name, attack_type, total, config_json): (String, String, i64, String) = conn
+        .query_row(
+            "SELECT name, attack_type, total, config_json FROM fuzz_runs WHERE id = ?",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .map_err(|e| format!("Run not found: {}", e))?;
+    let config: FuzzConfig = serde_json::from_str(&config_json).map_err(|e| e.to_string())?;
+    let rows = get_run_rows_db(db_path, id)?;
+    Ok(LoadedFuzzRun {
+        id,
+        name,
+        attack_type,
+        total: total as u32,
+        config,
+        rows,
+    })
+}
+
+pub fn delete_run_db(db_path: &PathBuf, id: i64) -> Result<(), String> {
+    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM fuzz_results WHERE run_id = ?", params![id])
+        .map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM fuzz_runs WHERE id = ?", params![id])
+        .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -711,5 +764,64 @@ mod tests {
         ];
         let res = evaluate_matches(&rules, "foo foo bar id=42");
         assert_eq!(res, vec!["2", "0", "42", "", "bad regex"]);
+    }
+
+    #[test]
+    fn run_persistence_lifecycle() {
+        let dir = std::env::temp_dir().join(format!("mitm-fuzz-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("test.db");
+        crate::db::init_database(&db_path, None).unwrap();
+
+        let config = cfg(tmpl("/{{a}}", ""), "sniper", vec![list("a", &["1", "2"])]);
+        let run_id = 12345;
+        begin_run_db(&db_path, run_id, &config, 2).unwrap();
+
+        assert!(!is_run_saved_db(&db_path, run_id).unwrap());
+        let runs = list_runs_db(&db_path).unwrap();
+        assert!(runs.is_empty());
+
+        let res = FuzzResult {
+            idx: 0,
+            payloads: vec!["1".into()],
+            method: "GET".into(),
+            url: "http://example.com/1".into(),
+            request_headers: vec![],
+            request_body: None,
+            status_code: 200,
+            response_headers: vec![],
+            response_body: Some("hello".into()),
+            response_size: 5,
+            duration_ms: 10,
+            error: None,
+            matches: vec![],
+        };
+        let mut conn = Connection::open(&db_path).unwrap();
+        insert_results(&mut conn, run_id, &[res]).unwrap();
+        drop(conn);
+
+        save_run_db(&db_path, run_id, "My Saved Run").unwrap();
+        assert!(is_run_saved_db(&db_path, run_id).unwrap());
+
+        let runs = list_runs_db(&db_path).unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].id, run_id);
+        assert_eq!(runs[0].name, "My Saved Run");
+        assert_eq!(runs[0].attack_type, "sniper");
+        assert_eq!(runs[0].total, 2);
+
+        let loaded = load_run_db(&db_path, run_id).unwrap();
+        assert_eq!(loaded.id, run_id);
+        assert_eq!(loaded.name, "My Saved Run");
+        assert_eq!(loaded.rows.len(), 1);
+        assert_eq!(loaded.rows[0].idx, 0);
+        assert_eq!(loaded.rows[0].status_code, 200);
+
+        delete_run_db(&db_path, run_id).unwrap();
+        assert!(list_runs_db(&db_path).unwrap().is_empty());
+        assert!(load_run_db(&db_path, run_id).is_err());
+        assert!(get_result_db(&db_path, run_id, 0).unwrap().is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

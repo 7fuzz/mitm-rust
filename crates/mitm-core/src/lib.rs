@@ -152,6 +152,26 @@ impl MitmCore {
         fuzzer::search_responses_db(&self.db_path, run_id, query)
     }
 
+    pub fn save_fuzz_run(&self, id: i64, name: &str) -> Result<(), String> {
+        fuzzer::save_run_db(&self.db_path, id, name)
+    }
+
+    pub fn is_fuzz_run_saved(&self, id: i64) -> Result<bool, String> {
+        fuzzer::is_run_saved_db(&self.db_path, id)
+    }
+
+    pub fn list_fuzz_runs(&self) -> Result<Vec<fuzzer::FuzzRunMeta>, String> {
+        fuzzer::list_runs_db(&self.db_path)
+    }
+
+    pub fn load_fuzz_run(&self, id: i64) -> Result<fuzzer::LoadedFuzzRun, String> {
+        fuzzer::load_run_db(&self.db_path, id)
+    }
+
+    pub fn delete_fuzz_run(&self, id: i64) -> Result<(), String> {
+        fuzzer::delete_run_db(&self.db_path, id)
+    }
+
     pub fn clear_rewrite_history(&self) -> Result<(), String> {
         db::clear_rewrite_history_logs(&self.db_path)
     }
