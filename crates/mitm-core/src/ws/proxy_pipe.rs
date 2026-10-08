@@ -197,7 +197,13 @@ pub async fn bridge_proxied_websocket<C, S>(
     let mut closed_conn = conn_info;
     closed_conn.status = "disconnected".to_string();
     closed_conn.closed_at = Some(close_time);
+    emit_conn(event_bus.as_ref(), &closed_conn);
+}
 
+pub(crate) fn emit_conn(bus: Option<&EventBus>, conn: &WebSocketConn) {
+    if let (Some(bus), Ok(frame)) = (bus, serde_json::to_value(conn)) {
+        bus.emit(crate::events::CoreEvent::WsFrameReceived { session_id: conn.connection_id.to_string(), frame });
+    }
 }
 
 fn extract_message_info(msg: &Message) -> (&'static str, String) {

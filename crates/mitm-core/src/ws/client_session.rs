@@ -153,6 +153,7 @@ pub async fn connect_client_session(
         let mut closed_conn = conn_info_task;
         closed_conn.status = "disconnected".to_string();
         closed_conn.closed_at = Some(close_time);
+        super::proxy_pipe::emit_conn(event_bus_clone.as_ref(), &closed_conn);
     });
 
 
