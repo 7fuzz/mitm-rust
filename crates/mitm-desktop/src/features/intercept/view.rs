@@ -158,19 +158,26 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
             ui.end_row();
 
             ui.strong("URL:");
-            ui.add(
+            let mut url_layouter = crate::widgets::template::layouter(egui::TextStyle::Monospace, None);
+            let url_resp = ui.add(
                 egui::TextEdit::singleline(&mut state.edit.url)
+                    .font(egui::TextStyle::Monospace)
+                    .layouter(&mut url_layouter)
                     .desired_width(f32::INFINITY),
             );
+            crate::widgets::template::hover_tooltip(url_resp, &state.edit.url);
             ui.end_row();
 
             ui.strong("Headers:");
-            ui.add(
+            let mut headers_layouter = crate::widgets::template::layouter(egui::TextStyle::Monospace, None);
+            let headers_resp = ui.add(
                 egui::TextEdit::multiline(&mut state.edit.headers)
                     .font(egui::TextStyle::Monospace)
+                    .layouter(&mut headers_layouter)
                     .desired_rows(6)
                     .desired_width(f32::INFINITY),
             );
+            crate::widgets::template::hover_tooltip(headers_resp, &state.edit.headers);
             ui.end_row();
 
             ui.strong("Body:");

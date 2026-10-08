@@ -25,12 +25,13 @@ pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
             });
 
         let mut layouter = template::layouter(egui::TextStyle::Body, None);
-        ui.add(
+        let url_resp = ui.add(
             egui::TextEdit::singleline(&mut fuzzer.url)
                 .hint_text("Target URL with placeholder e.g. https://target.com/api/{{id}}")
                 .layouter(&mut layouter)
                 .desired_width(ui.available_width() - 260.0),
         );
+        template::hover_tooltip(url_resp, &fuzzer.url);
 
         if fuzzer.is_running {
             if ui.button(RichText::new("⏹ Stop").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
@@ -106,24 +107,26 @@ pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
             ui.add_space(6.0);
             ui.strong("Headers Template:");
             let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
-            ui.add(
+            let headers_resp = ui.add(
                 egui::TextEdit::multiline(&mut fuzzer.headers)
                     .layouter(&mut layouter)
                     .font(egui::TextStyle::Monospace)
                     .desired_rows(4)
                     .desired_width(f32::INFINITY),
             );
+            template::hover_tooltip(headers_resp, &fuzzer.headers);
 
             ui.add_space(6.0);
             ui.strong("Body Template:");
             let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
-            ui.add(
+            let body_resp = ui.add(
                 egui::TextEdit::multiline(&mut fuzzer.body)
                     .layouter(&mut layouter)
                     .font(egui::TextStyle::Monospace)
                     .desired_rows(6)
                     .desired_width(f32::INFINITY),
             );
+            template::hover_tooltip(body_resp, &fuzzer.body);
         });
 
         columns[1].vertical(|ui| {

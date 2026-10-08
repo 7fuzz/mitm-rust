@@ -440,6 +440,7 @@ impl eframe::App for MitmApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        crate::widgets::template::set_active_env(self.state.environments.active_environment());
         while let Ok(event) = self.core_events.try_recv() {
             self.apply_core_event(event);
         }

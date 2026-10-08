@@ -1,10 +1,54 @@
+use std::cell::RefCell;
 use std::ops::Range;
 use std::sync::Arc;
 use eframe::egui::text::{LayoutJob, TextFormat};
 use eframe::egui::{Color32, Galley, TextBuffer, TextStyle, Ui};
+use mitm_core::workspace::Environment;
 use crate::theme::Tone;
 
 const MAX_HIGHLIGHT_BYTES: usize = 256 * 1024;
+
+thread_local! {
+    static ACTIVE_ENV: RefCell<Option<Environment>> = const { RefCell::new(None) };
+}
+
+pub fn set_active_env(env: Option<&Environment>) {
+    ACTIVE_ENV.with(|cell| {
+        *cell.borrow_mut() = env.cloned();
+    });
+}
+
+#[allow(dead_code)]
+pub fn get_active_env() -> Option<Environment> {
+    ACTIVE_ENV.with(|cell| cell.borrow().clone())
+}
+
+pub fn resolve_var(name: &str) -> Option<String> {
+    ACTIVE_ENV.with(|cell| {
+        let env_ref = cell.borrow();
+        mitm_core::workspace::variable_value_in_env(env_ref.as_ref(), name)
+    })
+}
+
+pub fn hover_tooltip(resp: egui::Response, text: &str) -> egui::Response {
+    if !resp.hovered() || !text.contains("{{") {
+        return resp;
+    }
+    let vars: Vec<String> = spans_with_names(text)
+        .into_iter()
+        .filter_map(|(_, opt)| opt)
+        .collect();
+    if vars.is_empty() {
+        return resp;
+    }
+
+    let mut lines = Vec::new();
+    for v in &vars {
+        let val = resolve_var(v).unwrap_or_else(|| "undefined".to_string());
+        lines.push(format!("{{{{{}}}}}: {}", v, val));
+    }
+    resp.on_hover_text(lines.join("\n"))
+}
 
 pub fn layouter(style: TextStyle, color: Option<Color32>) -> impl FnMut(&Ui, &dyn TextBuffer, f32) -> Arc<Galley> {
     move |ui, buf, wrap_width| {
@@ -21,24 +65,30 @@ fn layout_job(ui: &Ui, text: &str, style: &TextStyle, color: Option<Color32>) ->
         font.clone(),
         color.or(visuals.override_text_color).unwrap_or_else(|| visuals.widgets.inactive.text_color()),
     );
-    let variable = TextFormat {
-        font_id: font,
-        color: Tone::Accent.color(visuals),
-        background: Tone::Accent.tint(visuals, 30),
-        ..Default::default()
-    };
     let mut job = LayoutJob::default();
     if text.len() > MAX_HIGHLIGHT_BYTES {
         job.append(text, 0.0, plain);
         return job;
     }
-    for (range, is_variable) in spans(text) {
-        job.append(&text[range], 0.0, if is_variable { variable.clone() } else { plain.clone() });
+    for (range, var_name) in spans_with_names(text) {
+        if let Some(name) = var_name {
+            let is_known = resolve_var(&name).is_some();
+            let tone = if is_known { Tone::Info } else { Tone::Danger };
+            let variable = TextFormat {
+                font_id: font.clone(),
+                color: tone.color(visuals),
+                background: tone.tint(visuals, 30),
+                ..Default::default()
+            };
+            job.append(&text[range], 0.0, variable);
+        } else {
+            job.append(&text[range], 0.0, plain.clone());
+        }
     }
     job
 }
 
-fn spans(text: &str) -> Vec<(Range<usize>, bool)> {
+pub fn spans_with_names(text: &str) -> Vec<(Range<usize>, Option<String>)> {
     let mut spans = Vec::new();
     let mut plain_start = 0;
     let mut cursor = 0;
@@ -50,16 +100,25 @@ fn spans(text: &str) -> Vec<(Range<usize>, bool)> {
             continue;
         }
         if plain_start < open {
-            spans.push((plain_start..open, false));
+            spans.push((plain_start..open, None));
         }
-        spans.push((open..close + 2, true));
+        let trimmed_name = name.trim().to_string();
+        spans.push((open..close + 2, Some(trimmed_name)));
         plain_start = close + 2;
         cursor = plain_start;
     }
     if plain_start < text.len() || spans.is_empty() {
-        spans.push((plain_start..text.len(), false));
+        spans.push((plain_start..text.len(), None));
     }
     spans
+}
+
+#[cfg(test)]
+fn spans(text: &str) -> Vec<(Range<usize>, bool)> {
+    spans_with_names(text)
+        .into_iter()
+        .map(|(r, opt)| (r, opt.is_some()))
+        .collect()
 }
 
 #[cfg(test)]
@@ -83,5 +142,31 @@ mod tests {
         assert!(variables("{{}} and {{  }} and {{open").is_empty());
         assert_eq!(variables("{{{{x}}"), ["{{x}}"]);
         assert!(variables("{{a\nb}}").is_empty());
+    }
+
+    #[test]
+    fn test_known_and_unknown_variables() {
+        let env = Environment {
+            id: "e1".to_string(),
+            workspace_id: "w1".to_string(),
+            name: "Dev".to_string(),
+            is_active: true,
+            variables: vec![
+                mitm_core::workspace::EnvironmentVariable {
+                    key: "BASE_URL".to_string(),
+                    value: "https://example.com".to_string(),
+                    enabled: true,
+                    r#type: "default".to_string(),
+                    active_index: 0,
+                    variants: vec![],
+                },
+            ],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        };
+        set_active_env(Some(&env));
+        assert_eq!(resolve_var("BASE_URL").as_deref(), Some("https://example.com"));
+        assert_eq!(resolve_var("MISSING"), None);
+        assert!(resolve_var("$guid").is_some());
     }
 }

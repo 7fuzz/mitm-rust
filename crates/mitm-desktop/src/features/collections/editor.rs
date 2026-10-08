@@ -26,12 +26,15 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
         ui.set_min_height(28.0);
         changed |= method_combo(ui, &mut request.method);
         let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
-        let url = ui.add(
-            egui::TextEdit::singleline(&mut request.url)
-                .hint_text("https://api.example.com/v1/resource or {{BASE_URL}}/endpoint")
-                .layouter(&mut layouter)
-                .font(egui::TextStyle::Monospace)
-                .desired_width(ui.available_width() - 130.0),
+        let url = template::hover_tooltip(
+            ui.add(
+                egui::TextEdit::singleline(&mut request.url)
+                    .hint_text("https://api.example.com/v1/resource or {{BASE_URL}}/endpoint")
+                    .layouter(&mut layouter)
+                    .font(egui::TextStyle::Monospace)
+                    .desired_width(ui.available_width() - 130.0),
+            ),
+            &request.url,
         );
         changed |= url.changed();
         send |= url.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
