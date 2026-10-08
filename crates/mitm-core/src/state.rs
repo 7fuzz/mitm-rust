@@ -430,10 +430,9 @@ fn load_listener_configs(db_path: &PathBuf) -> Vec<ListenerConfig> {
         pending_ids.iter_mut().for_each(|i| *i += 1);
     }
 
-    let mut next_id = configs.iter().filter(|c| c.id != u32::MAX).map(|c| c.id).max().unwrap_or(0) + 1;
-    for idx in pending_ids {
-        configs[idx].id = next_id;
-        next_id += 1;
+    let first_free = configs.iter().filter(|c| c.id != u32::MAX).map(|c| c.id).max().unwrap_or(0) + 1;
+    for (id, idx) in (first_free..).zip(pending_ids) {
+        configs[idx].id = id;
     }
 
     configs.sort_by_key(|c| c.id);
@@ -460,6 +459,9 @@ fn load_source_scope(db_path: &PathBuf, key: &str) -> SourceScope {
         .unwrap_or_default()
 }
 
+type WsSender = tokio::sync::mpsc::UnboundedSender<tungstenite::Message>;
+type StopSignal = Arc<Mutex<Option<oneshot::Sender<()>>>>;
+
 #[derive(Clone)]
 pub struct AppState {
     pub db_path: PathBuf,
@@ -479,10 +481,11 @@ pub struct AppState {
     pub rewrite_source_scope: Arc<RwLock<SourceScope>>,
     pub webhook_running: Arc<AtomicBool>,
     pub webhook_port: Arc<RwLock<u16>>,
-    pub webhook_stop_signal: Arc<Mutex<Option<oneshot::Sender<()>>>>,
-    pub ws_stream_senders: Arc<DashMap<i64, (tokio::sync::mpsc::UnboundedSender<tungstenite::Message>, tokio::sync::mpsc::UnboundedSender<tungstenite::Message>)>>,
-    pub ws_client_senders: Arc<DashMap<i64, tokio::sync::mpsc::UnboundedSender<tungstenite::Message>>>,
-    pub ws_client_stops: Arc<DashMap<i64, Arc<Mutex<Option<oneshot::Sender<()>>>>>>,
+    pub webhook_stop_signal: StopSignal,
+    /// Per proxied connection: (to server, to client).
+    pub ws_stream_senders: Arc<DashMap<i64, (WsSender, WsSender)>>,
+    pub ws_client_senders: Arc<DashMap<i64, WsSender>>,
+    pub ws_client_stops: Arc<DashMap<i64, StopSignal>>,
     pub next_history_id: Arc<AtomicU64>,
     pub next_rewrite_history_id: Arc<AtomicU64>,
     pub next_fuzz_run_id: Arc<AtomicU64>,

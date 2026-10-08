@@ -142,7 +142,7 @@ pub fn verify_signature(
 
     // 4. Shopify Base64 HMAC SHA-256
     if let Some(provided) = get_header("x-shopify-hmac-sha256") {
-        let expected = base64::engine::general_purpose::STANDARD.encode(&compute_hmac_sha256(secret.as_bytes(), body));
+        let expected = base64::engine::general_purpose::STANDARD.encode(compute_hmac_sha256(secret.as_bytes(), body));
         let status = if provided == expected { "valid" } else { "invalid" };
         return (status.to_string(), Some(expected), Some(provided));
     }

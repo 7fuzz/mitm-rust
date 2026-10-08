@@ -30,13 +30,7 @@ pub fn load_ws_connections(db_path: &PathBuf) -> Result<Vec<WebSocketConn>, Stri
         })
         .map_err(|e| e.to_string())?;
 
-    let mut connections = Vec::new();
-    for r in rows {
-        if let Ok(c) = r {
-            connections.push(c);
-        }
-    }
-    Ok(connections)
+    Ok(rows.flatten().collect())
 }
 
 /// Inserts the connection and returns its new id
@@ -164,13 +158,7 @@ pub fn load_ws_messages(
         })
         .map_err(|e| e.to_string())?;
 
-    let mut messages = Vec::new();
-    for r in rows {
-        if let Ok(m) = r {
-            messages.push(m);
-        }
-    }
-    Ok(messages)
+    Ok(rows.flatten().collect())
 }
 
 pub fn clear_ws_messages(db_path: &PathBuf, connection_id: Option<i64>) -> Result<(), String> {
