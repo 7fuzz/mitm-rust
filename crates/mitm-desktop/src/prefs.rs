@@ -11,6 +11,7 @@ use crate::features::repeater::RepeaterPrefs;
 use crate::features::rewrite::RewritePrefs;
 use crate::features::settings::SettingsPrefs;
 use crate::features::traffic::TrafficPrefs;
+use crate::features::websockets::WebSocketsPrefs;
 use crate::state::AppState;
 
 // Separate keys, so a section that stops parsing resets alone instead of wiping the rest.
@@ -57,6 +58,10 @@ impl Section for FuzzerPrefs {
     const KEY: &'static str = "fuzzer";
 }
 
+impl Section for WebSocketsPrefs {
+    const KEY: &'static str = "websockets";
+}
+
 fn load<T: Section>(storage: Option<&dyn Storage>) -> T {
     storage.and_then(|s| eframe::get_value(s, T::KEY)).unwrap_or_default()
 }
@@ -70,6 +75,7 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     state.repeater.prefs = load(storage);
     state.collections.prefs = load(storage);
     state.fuzzer.prefs = load(storage);
+    state.websockets.prefs = load(storage);
     state.settings = load(storage);
     state.traffic.prefs = load(storage);
     state.intercept.prefs = load(storage);
@@ -82,6 +88,7 @@ pub fn carry_over(from: &mut AppState, to: &mut AppState) {
     to.repeater.prefs = std::mem::take(&mut from.repeater.prefs);
     to.collections.prefs = std::mem::take(&mut from.collections.prefs);
     to.fuzzer.prefs = std::mem::take(&mut from.fuzzer.prefs);
+    to.websockets.prefs = std::mem::take(&mut from.websockets.prefs);
     to.settings = std::mem::take(&mut from.settings);
     to.traffic.prefs = std::mem::take(&mut from.traffic.prefs);
     to.intercept.prefs = std::mem::take(&mut from.intercept.prefs);
@@ -94,6 +101,7 @@ pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppStat
     save(storage, &state.repeater.prefs);
     save(storage, &state.collections.prefs);
     save(storage, &state.fuzzer.prefs);
+    save(storage, &state.websockets.prefs);
     save(storage, &state.settings);
     save(storage, &state.traffic.prefs);
     save(storage, &state.intercept.prefs);

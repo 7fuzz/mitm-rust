@@ -2,22 +2,40 @@ mod view;
 
 use std::path::PathBuf;
 use mitm_core::state::{WebSocketConn, WebSocketMessage};
+use serde::{Deserialize, Serialize};
 
 pub use view::show;
 
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WebSocketsPrefs {
+    pub list_split: f32,
+    pub detail_split: f32,
+}
+
+impl Default for WebSocketsPrefs {
+    fn default() -> Self {
+        Self { list_split: 0.4, detail_split: 0.6 }
+    }
+}
+
 pub struct WebSocketsState {
+    pub prefs: WebSocketsPrefs,
     pub connections: Vec<WebSocketConn>,
     pub selected_id: Option<i64>,
     pub messages: Vec<WebSocketMessage>,
+    pub selected_msg: Option<i64>,
     pub direction_filter: String,
 }
 
 impl Default for WebSocketsState {
     fn default() -> Self {
         Self {
+            prefs: WebSocketsPrefs::default(),
             connections: Vec::new(),
             selected_id: None,
             messages: Vec::new(),
+            selected_msg: None,
             direction_filter: "ALL".to_string(),
         }
     }
@@ -32,6 +50,7 @@ impl WebSocketsState {
 
     pub fn select(&mut self, conn_id: i64, db_path: &PathBuf) {
         self.selected_id = Some(conn_id);
+        self.selected_msg = None;
         if let Ok(msgs) = mitm_core::db::ws_db::load_ws_messages(db_path, conn_id, None) {
             self.messages = msgs;
         }
