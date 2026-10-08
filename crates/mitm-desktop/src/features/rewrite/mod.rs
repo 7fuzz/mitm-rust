@@ -4,7 +4,8 @@ mod rules;
 
 use serde::{Deserialize, Serialize};
 use mitm_core::repeater::HeaderItem;
-use mitm_core::state::{RewriteHistoryEntry, RewriteRule, SourceScope};
+use std::path::Path;
+use mitm_core::state::{HistoryEntry, RewriteHistoryEntry, RewriteRule, SourceScope};
 use crate::theme::Tone;
 
 pub use rules::show;
@@ -71,6 +72,19 @@ pub struct RewriteState {
 }
 
 impl RewriteState {
+    /// Opens the log on the newest entry for this flow; the log has no flow id, so method and URL decide.
+    pub fn show_log_entry_for(&mut self, flow: &HistoryEntry, db_path: &Path) {
+        log::reload(self, db_path);
+        self.prefs.view = RewriteView::Log;
+        self.selected_log = self
+            .log
+            .iter()
+            .filter(|e| e.method.eq_ignore_ascii_case(&flow.method))
+            .filter(|e| e.original_url == flow.url || e.rewritten_url == flow.url)
+            .max_by_key(|e| e.id)
+            .map(|e| e.id);
+    }
+
     pub fn clear_log(&mut self) {
         self.log.clear();
         self.selected_log = None;

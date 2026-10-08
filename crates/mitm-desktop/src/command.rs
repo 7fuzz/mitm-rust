@@ -70,6 +70,7 @@ pub enum AppCommand {
     SetRewriteEnabled(bool),
     SetRewriteScope(mitm_core::state::SourceScope),
     ClearRewriteHistory,
+    ShowRewriteFor(i64),
     ToggleInterceptor,
     SaveInterceptRules(Vec<InterceptRule>),
 

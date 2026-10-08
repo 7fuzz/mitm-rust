@@ -287,6 +287,9 @@ fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, folders: &[CollectionTreeIt
     menu_item(ui, "🔁 Send to Repeater", AppCommand::SendFlowToRepeater(flow.id), cmds);
     menu_item(ui, "⚡ Send to Fuzzer", AppCommand::SendFlowToFuzzer(flow.id), cmds);
     menu_item(ui, "🛡 Add to Intercept Rules", AppCommand::AddInterceptRuleForHost(flow.host.clone()), cmds);
+    if flow.is_rewritten {
+        menu_item(ui, "✏ Show rewrite", AppCommand::ShowRewriteFor(flow.id), cmds);
+    }
     ui.menu_button("📁 Save to Collection", |ui| {
         for folder in folders {
             folder_entry(ui, flow.id, folder, cmds);

@@ -335,6 +335,13 @@ impl MitmApp {
             AppCommand::SetRewriteEnabled(enabled) => {
                 let _ = self.core.set_rewrite_enabled(enabled);
             }
+            AppCommand::ShowRewriteFor(flow_id) => {
+                if let Some(flow) = self.state.traffic.flow(flow_id).cloned() {
+                    let rewrite = &mut self.state.rewrite;
+                    rewrite.show_log_entry_for(&flow, db_path);
+                    dock::open_tab(&mut self.dock, Tab::Rewrite);
+                }
+            }
             AppCommand::ClearRewriteHistory => {
                 if self.core.clear_rewrite_history().is_ok() {
                     self.state.rewrite.clear_log();
