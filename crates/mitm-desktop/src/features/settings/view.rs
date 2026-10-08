@@ -29,6 +29,7 @@ pub fn show(
             SettingsSection::Proxy => proxy_section(ui, proxy, form, traffic, db_path, cmds),
             SettingsSection::Certificate => certificate_section(ui, cert, cmds),
             SettingsSection::Appearance => appearance_section(ui),
+            SettingsSection::Shortcuts => shortcuts_section(ui),
             SettingsSection::Data => data_section(ui, data, cmds),
             SettingsSection::Database => crate::features::database::show(ui, database, db_path),
         });
@@ -62,6 +63,17 @@ fn appearance_section(ui: &mut egui::Ui) {
     if ui.add(egui::Slider::new(&mut zoom, 0.5..=2.5).text("Factor").step_by(0.1)).changed() {
         ui.ctx().set_zoom_factor(zoom);
     }
+}
+
+fn shortcuts_section(ui: &mut egui::Ui) {
+    egui::Grid::new("shortcut_list").num_columns(3).striped(true).spacing([24.0, 6.0]).show(ui, |ui| {
+        for (keys, action, scope) in crate::shortcuts::listing(ui.ctx()) {
+            ui.monospace(keys);
+            ui.label(action);
+            ui.label(RichText::new(scope.unwrap_or_default()).weak());
+            ui.end_row();
+        }
+    });
 }
 
 fn data_section(ui: &mut egui::Ui, data: &mut DataSectionState, cmds: &mut Commands) {

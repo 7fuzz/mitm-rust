@@ -11,15 +11,17 @@ pub enum SettingsSection {
     Proxy,
     Certificate,
     Appearance,
+    Shortcuts,
     Data,
     Database,
 }
 
 impl SettingsSection {
-    pub const ALL: [SettingsSection; 5] = [
+    pub const ALL: [SettingsSection; 6] = [
         SettingsSection::Proxy,
         SettingsSection::Certificate,
         SettingsSection::Appearance,
+        SettingsSection::Shortcuts,
         SettingsSection::Data,
         SettingsSection::Database,
     ];
@@ -29,6 +31,7 @@ impl SettingsSection {
             SettingsSection::Proxy => "Proxy",
             SettingsSection::Certificate => "Certificate",
             SettingsSection::Appearance => "Appearance",
+            SettingsSection::Shortcuts => "Shortcuts",
             SettingsSection::Data => "Data",
             SettingsSection::Database => "Database",
         }

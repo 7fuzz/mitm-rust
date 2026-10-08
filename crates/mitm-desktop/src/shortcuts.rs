@@ -89,6 +89,24 @@ pub const SHORTCUTS: &[(KeyboardShortcut, Action)] = &[
     (KeyboardShortcut::new(Modifiers::ALT, Key::Num9), Action::FocusTabAt(8)),
 ];
 
+/// Rows for the Settings list: keys, action, and the tab the shortcut is limited to. Alt+N runs collapse into one row.
+pub fn listing(ctx: &egui::Context) -> Vec<(String, String, Option<&'static str>)> {
+    let mut rows = Vec::new();
+    let mut focus_keys: Vec<String> = Vec::new();
+    for &(shortcut, action) in SHORTCUTS {
+        let keys = ctx.format_shortcut(&shortcut);
+        if let Action::FocusTabAt(_) = action {
+            focus_keys.push(keys);
+            continue;
+        }
+        rows.push((keys, action.label(), scope(action).map(|tab| tab.name())));
+    }
+    if let (Some(first), Some(last)) = (focus_keys.first(), focus_keys.last()) {
+        rows.push((format!("{first} … {last}"), "Focus tab by position".to_string(), None));
+    }
+    rows
+}
+
 pub fn shortcut_for(action: Action) -> Option<KeyboardShortcut> {
     SHORTCUTS.iter().find(|(_, a)| *a == action).map(|(shortcut, _)| *shortcut)
 }
