@@ -16,6 +16,8 @@ pub fn show(
 ) {
     ui.horizontal(|ui| {
         search_box(ui, &mut state.prefs.search_query);
+        ui.toggle_value(&mut state.prefs.search_headers, RichText::new("H").monospace().strong())
+            .on_hover_text("Also search request and response headers");
         filters_toggle(ui, state);
         request_count(ui, state, visible_count);
 

@@ -2,7 +2,7 @@ mod columns;
 mod table;
 mod toolbar;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use mitm_core::state::{HistoryDetail, HistoryEntry, HistorySettings};
@@ -65,6 +65,7 @@ pub struct TrafficPrefs {
     pub columns: ColumnLayout,
     pub widths: HashMap<ColumnId, f32>,
     pub search_query: String,
+    pub search_headers: bool,
     pub filters_open: bool,
     pub source_filter: Option<String>,
     pub method_filters: HashMap<String, TriState>,
@@ -78,6 +79,7 @@ impl Default for TrafficPrefs {
             columns: ColumnLayout::default(),
             widths: HashMap::new(),
             search_query: String::new(),
+            search_headers: false,
             filters_open: false,
             source_filter: None,
             method_filters: neutral_filters(METHODS),
@@ -96,6 +98,9 @@ pub struct TrafficState {
     pub history_limit: HistorySettings,
     pub limit_draft: HistorySettings,
     pub has_older: bool,
+    /// Ids whose stored headers match the search; summaries are loaded without headers.
+    header_matches: HashSet<i64>,
+    header_search_key: Option<String>,
     // Bumped to make egui forget its stored column widths and start again from `prefs.widths`.
     width_epoch: u32,
     // Top visible flow id and vertical offset from the last frame.
@@ -113,6 +118,8 @@ impl Default for TrafficState {
             history_limit: HistorySettings::default(),
             limit_draft: HistorySettings::default(),
             has_older: false,
+            header_matches: HashSet::new(),
+            header_search_key: None,
             width_epoch: 0,
             scroll_anchor: None,
         }
@@ -135,6 +142,24 @@ impl TrafficState {
         let page = mitm_core::db::get_history_page(db_path, None, false, before, room as u32).unwrap_or_default();
         self.has_older = page.len() == room;
         self.flows.extend(page);
+    }
+
+    /// Re-runs the header search in the database when the query or the toggle changed.
+    pub fn sync_header_search(&mut self, db_path: &PathBuf) {
+        let query = self.prefs.search_query.trim();
+        let key = (self.prefs.search_headers && !query.is_empty()).then(|| query.to_string());
+        if key == self.header_search_key {
+            return;
+        }
+        self.header_matches = match &key {
+            Some(query) => mitm_core::db::get_history_page(db_path, Some(query), true, None, self.max_flows as u32)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|f| f.id)
+                .collect(),
+            None => HashSet::new(),
+        };
+        self.header_search_key = key;
     }
 
     pub fn set_history_limit(&mut self, settings: HistorySettings) {
@@ -191,6 +216,7 @@ impl TrafficState {
     pub fn clear(&mut self) {
         self.flows.clear();
         self.has_older = false;
+        self.header_search_key = None;
         self.selected_id = None;
         self.selected_detail = None;
     }
@@ -239,10 +265,22 @@ impl TrafficState {
                     && passes_tri_state(&self.prefs.method_filters, Some(&flow.method.to_uppercase()))
                     && passes_tri_state(&self.prefs.status_filters, status_group(flow.status_code))
                     && self.passes_flags(FlowFlags::of(flow))
-                    && matches_search(flow, &search)
+                    && (matches_search(flow, &search) || self.matches_headers(flow, &search))
             })
             .map(|(idx, _)| idx)
             .collect()
+    }
+
+    fn matches_headers(&self, flow: &HistoryEntry, search: &str) -> bool {
+        if !self.prefs.search_headers || search.is_empty() {
+            return false;
+        }
+        self.header_matches.contains(&flow.id)
+            || flow
+                .request_headers
+                .iter()
+                .chain(&flow.response_headers)
+                .any(|(k, v)| k.to_lowercase().contains(search) || v.to_lowercase().contains(search))
     }
 
     fn matches_source(&self, flow: &HistoryEntry) -> bool {

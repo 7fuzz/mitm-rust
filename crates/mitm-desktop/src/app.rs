@@ -499,6 +499,7 @@ impl eframe::App for MitmApp {
         }
         self.state.collections.flush_if_idle(&self.core.db_path, now);
         self.state.environments.flush_if_idle(&self.core.db_path, now);
+        self.state.traffic.sync_header_search(&self.core.db_path);
         self.fuzzer_worker.poll(&mut self.state.fuzzer);
         for result in self.import_files.drain().flatten() {
             let import = &mut self.state.environments.import;
