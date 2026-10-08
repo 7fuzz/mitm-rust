@@ -79,6 +79,7 @@ pub enum AppCommand {
 
     Collections(CollectionsCmd),
     SelectWsConnection(i64),
+    ConnectWs { url: String, headers: Vec<(String, String)> },
 
     SelectWorkspace(String),
     SelectEnvironment(Option<String>),

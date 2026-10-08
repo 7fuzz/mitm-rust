@@ -1,3 +1,4 @@
+mod connect;
 mod view;
 
 use std::path::PathBuf;
@@ -29,6 +30,7 @@ pub struct WebSocketsState {
     pub direction_filter: String,
     pub source_filter: String,
     pub frame_search: String,
+    pub connect: connect::WsConnect,
 }
 
 impl Default for WebSocketsState {
@@ -43,6 +45,7 @@ impl Default for WebSocketsState {
             direction_filter: "ALL".to_string(),
             source_filter: "ALL".to_string(),
             frame_search: String::new(),
+            connect: Default::default(),
         }
     }
 }
@@ -96,6 +99,18 @@ impl WebSocketsState {
         }
     }
 
+    /// Frames can arrive before the connect result does, so the session's frames
+    /// and count come from the DB rather than starting empty.
+    pub fn connected(&mut self, conn: WebSocketConn, db_path: &PathBuf) {
+        let id = conn.connection_id;
+        self.upsert_connection(conn);
+        self.select(id, db_path);
+        let count = self.messages.len() as u64;
+        if let Some(conn) = self.connections.iter_mut().find(|c| c.connection_id == id) {
+            conn.message_count = conn.message_count.max(count);
+        }
+    }
+
     fn upsert_connection(&mut self, conn: WebSocketConn) {
         match self.connections.iter_mut().find(|c| c.connection_id == conn.connection_id) {
             Some(existing) => *existing = conn,
@@ -104,10 +119,15 @@ impl WebSocketsState {
     }
 
     fn apply_message(&mut self, msg: WebSocketMessage) {
+        let selected = self.selected_id == Some(msg.connection_id);
+        // A frame stored just before a DB reload also arrives as an event afterwards.
+        if selected && self.messages.iter().rev().take(32).any(|m| m.id == msg.id) {
+            return;
+        }
         if let Some(conn) = self.connections.iter_mut().find(|c| c.connection_id == msg.connection_id) {
             conn.message_count += 1;
         }
-        if self.selected_id == Some(msg.connection_id) {
+        if selected {
             self.messages.push(msg);
         }
     }
@@ -133,9 +153,9 @@ mod tests {
         .unwrap()
     }
 
-    fn message(conn_id: i64, payload: &str) -> serde_json::Value {
+    fn message(id: i64, conn_id: i64, payload: &str) -> serde_json::Value {
         serde_json::to_value(WebSocketMessage {
-            id: 0,
+            id,
             connection_id: conn_id,
             direction: "to_client".to_string(),
             msg_type: "text".to_string(),
@@ -154,17 +174,21 @@ mod tests {
         state.apply_frame(conn(2));
         assert_eq!(state.connections.len(), 2);
 
-        state.apply_frame(message(1, "hi"));
+        state.apply_frame(message(10, 1, "hi"));
         assert_eq!(state.connections[0].message_count, 1);
         assert!(state.messages.is_empty(), "nothing selected, so no append");
 
         state.select_in_memory(1);
-        state.apply_frame(message(1, "again"));
+        state.apply_frame(message(11, 1, "again"));
         assert_eq!(state.connections[0].message_count, 2);
         assert_eq!(state.messages.len(), 1);
         assert_eq!(state.messages[0].payload, "again");
 
-        state.apply_frame(message(2, "other session"));
+        state.apply_frame(message(11, 1, "again"));
+        assert_eq!(state.messages.len(), 1, "a frame already loaded is not appended twice");
+        assert_eq!(state.connections[0].message_count, 2);
+
+        state.apply_frame(message(12, 2, "other session"));
         assert_eq!(state.messages.len(), 1, "frame for another session is not appended");
         assert_eq!(state.connections[1].message_count, 1);
     }

@@ -38,6 +38,7 @@ pub struct MitmApp {
     import_files: Jobs<Option<Result<(String, String), String>>>,
     file_saves: Jobs<Option<Result<String, String>>>,
     fuzz_search: Jobs<(i64, String, Vec<u32>)>,
+    ws_connects: Jobs<Result<mitm_core::state::WebSocketConn, String>>,
 }
 
 impl MitmApp {
@@ -57,6 +58,7 @@ impl MitmApp {
             import_files: Jobs::default(),
             file_saves: Jobs::default(),
             fuzz_search: Jobs::default(),
+            ws_connects: Jobs::default(),
         }
     }
 
@@ -454,6 +456,11 @@ impl MitmApp {
             }
             AppCommand::Collections(cmd) => self.state.collections.apply(cmd, db_path),
             AppCommand::SelectWsConnection(id) => self.state.websockets.select(id, db_path),
+            AppCommand::ConnectWs { url, headers } => {
+                let core = Arc::clone(&self.core);
+                let headers = (!headers.is_empty()).then_some(headers);
+                self.ws_connects.spawn(&self.rt, ctx, async move { core.connect_ws_client(url, headers).await });
+            }
             AppCommand::SelectWorkspace(id) => {
                 let _ = mitm_core::workspace::set_active_workspace_db(db_path, &id);
                 self.state.environments.active_workspace_id = id.clone();
@@ -662,6 +669,12 @@ impl eframe::App for MitmApp {
         }
         for result in self.file_saves.drain().flatten() {
             top_bar::flash(ui, result);
+        }
+        for result in self.ws_connects.drain() {
+            match result {
+                Ok(conn) => self.state.websockets.connected(conn, &self.core.db_path),
+                Err(e) => top_bar::flash(ui, Err(e)),
+            }
         }
         for result in self.ca_jobs.drain().flatten() {
             self.state.certificate.status = Some(match result {

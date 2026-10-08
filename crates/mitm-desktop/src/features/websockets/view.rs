@@ -8,13 +8,21 @@ use crate::widgets::split;
 use super::WebSocketsState;
 
 pub fn show(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
+    super::connect::show(ui.ctx(), &mut state.connect, cmds);
     let [mut left, mut right] = split::side_by_side(ui, "ws_list_split", &mut state.prefs.list_split);
     sessions_list(&mut left, state, cmds);
     frames_and_detail(&mut right, state, cmds);
 }
 
 fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
-    ui.heading(format!("Sessions ({})", state.connections.len()));
+    ui.horizontal(|ui| {
+        ui.heading(format!("Sessions ({})", state.connections.len()));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.button("➕").on_hover_text("Connect a WebSocket").clicked() {
+                state.connect.open();
+            }
+        });
+    });
 
     if state.connections.is_empty() {
         ui.add_space(4.0);
