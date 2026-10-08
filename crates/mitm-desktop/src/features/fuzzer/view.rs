@@ -10,8 +10,9 @@ use crate::features::request_editor::url_params::{build_url, new_id, parse_query
 use crate::format::{format_bytes, format_duration};
 use crate::theme::{self, Tone};
 use crate::widgets::pills::render_status_pill;
+use crate::widgets::tri_state::tri_state_button;
 use crate::widgets::{split, template};
-use super::{AttackType, ConfigTab, FuzzerState, MatchRule, PayloadConfig, PayloadKind, RequestTab, RunStatus};
+use super::{AttackType, ConfigTab, FuzzSortColumn, FuzzerState, MatchRule, PayloadConfig, PayloadKind, RequestTab, RunStatus};
 
 pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     toolbar(ui, fuzzer, cmds);
@@ -334,40 +335,98 @@ fn payload_set(ui: &mut egui::Ui, name: &str, cfg: &mut PayloadConfig) {
     });
 }
 
-fn results(ui: &mut egui::Ui, fuzzer: &FuzzerState) {
+fn results(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
+    results_toolbar(ui, fuzzer);
+    ui.separator();
+    results_table(ui, fuzzer);
+}
+
+fn results_toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
+    ui.horizontal(|ui| {
+        for group in ["2xx", "3xx", "4xx", "5xx", "ERR"] {
+            let state = fuzzer.status_filters.entry(group.to_string()).or_default();
+            tri_state_button(ui, group, state);
+        }
+        ui.separator();
+        if ui
+            .selectable_label(fuzzer.hide_common_size, "Hide most frequent length")
+            .on_hover_text("Hide responses with the most frequent response size")
+            .clicked()
+        {
+            fuzzer.hide_common_size = !fuzzer.hide_common_size;
+        }
+
+        if fuzzer.has_active_filters() && ui.small_button("Reset").on_hover_text("Reset filters").clicked() {
+            fuzzer.reset_filters();
+        }
+
+        let filtered_count = fuzzer.visible_indices().len();
+        let total_count = fuzzer.results.len();
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if fuzzer.has_active_filters() {
+                ui.weak(format!("{filtered_count} of {total_count}"));
+            } else if total_count > 0 {
+                ui.weak(format!("{total_count}"));
+            }
+        });
+    });
+}
+
+fn results_table(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
     let row_height = egui::TextStyle::Body.resolve(ui.style()).size + 6.0;
+    let visible_indices = fuzzer.visible_indices().to_vec();
+
     let mut builder = TableBuilder::new(ui)
         .id_salt("fuzzer_results")
         .striped(true)
         .resizable(true)
         .auto_shrink([false, false])
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::exact(55.0))
+        .column(Column::exact(60.0))
         .column(Column::remainder().at_least(100.0))
-        .column(Column::exact(55.0))
-        .column(Column::exact(70.0))
-        .column(Column::exact(65.0));
+        .column(Column::exact(65.0))
+        .column(Column::exact(75.0))
+        .column(Column::exact(70.0));
 
     for _ in &fuzzer.match_rules {
         builder = builder.column(Column::initial(80.0).at_least(50.0));
     }
 
+    let mut next_sort = None;
+
     builder
         .header(22.0, |mut header| {
-            for title in ["#", "Payload", "Status", "Size", "Time"] {
-                header.col(|ui| {
-                    ui.strong(title);
-                });
-            }
+            header.col(|ui| {
+                sort_header(ui, "#", FuzzSortColumn::Index, fuzzer.sort_column.as_ref(), fuzzer.sort_desc, &mut next_sort);
+            });
+            header.col(|ui| {
+                sort_header(ui, "Payload", FuzzSortColumn::Payload, fuzzer.sort_column.as_ref(), fuzzer.sort_desc, &mut next_sort);
+            });
+            header.col(|ui| {
+                sort_header(ui, "Status", FuzzSortColumn::Status, fuzzer.sort_column.as_ref(), fuzzer.sort_desc, &mut next_sort);
+            });
+            header.col(|ui| {
+                sort_header(ui, "Size", FuzzSortColumn::Size, fuzzer.sort_column.as_ref(), fuzzer.sort_desc, &mut next_sort);
+            });
+            header.col(|ui| {
+                sort_header(ui, "Time", FuzzSortColumn::Time, fuzzer.sort_column.as_ref(), fuzzer.sort_desc, &mut next_sort);
+            });
             for rule in &fuzzer.match_rules {
                 header.col(|ui| {
-                    ui.strong(&rule.name);
+                    sort_header(
+                        ui,
+                        &rule.name,
+                        FuzzSortColumn::Match(rule.name.clone()),
+                        fuzzer.sort_column.as_ref(),
+                        fuzzer.sort_desc,
+                        &mut next_sort,
+                    );
                 });
             }
         })
         .body(|body| {
-            body.rows(row_height, fuzzer.results.len(), |mut row| {
-                let r = &fuzzer.results[row.index()];
+            body.rows(row_height, visible_indices.len(), |mut row| {
+                let r = &fuzzer.results[visible_indices[row.index()]];
                 row.col(|ui| {
                     ui.label((r.idx + 1).to_string());
                 });
@@ -392,4 +451,27 @@ fn results(ui: &mut egui::Ui, fuzzer: &FuzzerState) {
                 }
             });
         });
+
+    if let Some(col) = next_sort {
+        fuzzer.toggle_sort(col);
+    }
+}
+
+fn sort_header(
+    ui: &mut egui::Ui,
+    title: &str,
+    col: FuzzSortColumn,
+    current_col: Option<&FuzzSortColumn>,
+    desc: bool,
+    next_sort: &mut Option<FuzzSortColumn>,
+) {
+    let is_active = current_col == Some(&col);
+    let arrow = if is_active {
+        if desc { " ▾" } else { " ▴" }
+    } else {
+        ""
+    };
+    if ui.selectable_label(is_active, RichText::new(format!("{title}{arrow}")).strong()).clicked() {
+        *next_sort = Some(col);
+    }
 }
