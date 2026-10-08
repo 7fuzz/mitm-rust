@@ -159,25 +159,23 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
 
             ui.strong("URL:");
             let mut url_layouter = crate::widgets::template::layouter(egui::TextStyle::Monospace, None);
-            let url_resp = ui.add(
-                egui::TextEdit::singleline(&mut state.edit.url)
+            crate::widgets::template::show(ui, &mut state.edit.url, |text| {
+                egui::TextEdit::singleline(text)
                     .font(egui::TextStyle::Monospace)
                     .layouter(&mut url_layouter)
-                    .desired_width(f32::INFINITY),
-            );
-            crate::widgets::template::hover_tooltip(url_resp, &state.edit.url);
+                    .desired_width(f32::INFINITY)
+            });
             ui.end_row();
 
             ui.strong("Headers:");
             let mut headers_layouter = crate::widgets::template::layouter(egui::TextStyle::Monospace, None);
-            let headers_resp = ui.add(
-                egui::TextEdit::multiline(&mut state.edit.headers)
+            crate::widgets::template::show(ui, &mut state.edit.headers, |text| {
+                egui::TextEdit::multiline(text)
                     .font(egui::TextStyle::Monospace)
                     .layouter(&mut headers_layouter)
                     .desired_rows(6)
-                    .desired_width(f32::INFINITY),
-            );
-            crate::widgets::template::hover_tooltip(headers_resp, &state.edit.headers);
+                    .desired_width(f32::INFINITY)
+            });
             ui.end_row();
 
             ui.strong("Body:");

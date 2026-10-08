@@ -49,13 +49,13 @@ pub fn code_editor(ui: &mut egui::Ui, id_salt: &str, content: &mut String) -> bo
         .auto_shrink([false, false])
         .show(ui, |ui| {
             let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
-            ui.add(
-                egui::TextEdit::multiline(content)
+            template::show(ui, content, |text| {
+                egui::TextEdit::multiline(text)
                     .code_editor()
                     .layouter(&mut layouter)
                     .desired_width(f32::INFINITY)
-                    .min_size(visible),
-            )
+                    .min_size(visible)
+            })
             .changed()
         })
         .inner
@@ -91,9 +91,10 @@ fn multipart_table(ui: &mut egui::Ui, id_salt: &str, fields: &mut Vec<MultipartF
                     let hint = if field.r#type == "file_path" { "/path/to/file" } else { "Value" };
                     let width = (ui.available_width() - 28.0).max(80.0);
                     let mut layouter = template::layouter(egui::TextStyle::Body, None);
-                    changed |= ui
-                        .add(egui::TextEdit::singleline(&mut field.value).hint_text(hint).desired_width(width).layouter(&mut layouter))
-                        .changed();
+                    changed |= template::show(ui, &mut field.value, |text| {
+                        egui::TextEdit::singleline(text).hint_text(hint).desired_width(width).layouter(&mut layouter)
+                    })
+                    .changed();
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

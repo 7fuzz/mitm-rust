@@ -32,16 +32,13 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
         changed |= method_combo(ui, &mut tab.method);
         let width = ui.available_width() - 150.0;
         let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
-        let url = template::hover_tooltip(
-            ui.add(
-                egui::TextEdit::singleline(&mut tab.url)
-                    .hint_text("https://api.example.com/v1/resource or {{BASE_URL}}/path")
-                    .layouter(&mut layouter)
-                    .font(egui::TextStyle::Monospace)
-                    .desired_width(width),
-            ),
-            &tab.url,
-        );
+        let url = template::show(ui, &mut tab.url, |text| {
+            egui::TextEdit::singleline(text)
+                .hint_text("https://api.example.com/v1/resource or {{BASE_URL}}/path")
+                .layouter(&mut layouter)
+                .font(egui::TextStyle::Monospace)
+                .desired_width(width)
+        });
         if url.changed() {
             tab.params = parse_query(&tab.url, &tab.params);
             changed = true;

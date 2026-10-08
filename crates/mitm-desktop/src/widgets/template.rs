@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::sync::Arc;
 use eframe::egui::text::{LayoutJob, TextFormat};
-use eframe::egui::{Color32, Galley, TextBuffer, TextStyle, Ui};
+use eframe::egui::{Color32, Galley, Response, TextBuffer, TextEdit, TextStyle, Ui};
 use mitm_core::workspace::Environment;
 use crate::theme::Tone;
 
@@ -44,7 +44,12 @@ fn hover_value(name: &str) -> String {
     }
 }
 
-pub fn hover_tooltip(resp: egui::Response, text: &str) -> egui::Response {
+pub fn show<'t>(ui: &mut Ui, text: &'t mut String, edit: impl FnOnce(&'t mut String) -> TextEdit<'t>) -> Response {
+    let output = edit(text).show(ui);
+    hover_tooltip(output.response.response, output.galley.text())
+}
+
+fn hover_tooltip(resp: Response, text: &str) -> Response {
     if !resp.hovered() || !text.contains("{{") {
         return resp;
     }
