@@ -11,6 +11,40 @@ use crate::features::request_editor::captured::CapturedRequest;
 
 pub use view::show;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AttackType {
+    #[default]
+    Sniper,
+    Pitchfork,
+    ClusterBomb,
+}
+
+impl AttackType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Sniper => "sniper",
+            Self::Pitchfork => "pitchfork",
+            Self::ClusterBomb => "clusterbomb",
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Sniper => "Sniper",
+            Self::Pitchfork => "Pitchfork",
+            Self::ClusterBomb => "Cluster Bomb",
+        }
+    }
+
+    pub fn tooltip(&self) -> &'static str {
+        match self {
+            Self::Sniper => "Each variable is fuzzed in turn while the others hold their first payload.",
+            Self::Pitchfork => "All variables advance together, stopping at the shortest list.",
+            Self::ClusterBomb => "Every combination of the variables' payloads.",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PayloadKind {
     List,
@@ -120,6 +154,7 @@ pub struct FuzzerState {
     pub prefs: FuzzerPrefs,
     pub config_tab: ConfigTab,
     pub request_tab: RequestTab,
+    pub attack_type: AttackType,
     pub method: String,
     pub url: String,
     pub params: Vec<ParamItem>,
@@ -141,6 +176,7 @@ impl Default for FuzzerState {
             prefs: FuzzerPrefs::default(),
             config_tab: ConfigTab::Request,
             request_tab: RequestTab::Params,
+            attack_type: AttackType::Sniper,
             method: "GET".to_string(),
             url: "https://httpbin.org/status/{{status}}".to_string(),
             params: Vec::new(),
@@ -215,11 +251,32 @@ impl FuzzerState {
             .collect();
         FuzzConfig {
             template,
-            attack_type: "pitchfork".to_string(),
+            attack_type: self.attack_type.as_str().to_string(),
             variables,
             match_rules: Vec::new(),
             concurrency: self.concurrency as u32,
             delay_ms: 0,
+        }
+    }
+
+    pub fn request_estimate(&self) -> usize {
+        let names = self.variable_names();
+        if names.is_empty() {
+            return 0;
+        }
+        let counts: Vec<usize> = names
+            .iter()
+            .map(|name| self.payloads.get(name).map_or(0, |cfg| cfg.count()))
+            .collect();
+        if counts.iter().any(|&c| c == 0) {
+            return 0;
+        }
+        match self.attack_type {
+            AttackType::Sniper => counts.iter().sum(),
+            AttackType::Pitchfork => counts.into_iter().min().unwrap_or(0),
+            AttackType::ClusterBomb => {
+                counts.into_iter().try_fold(1usize, |acc, c| acc.checked_mul(c)).unwrap_or(usize::MAX)
+            }
         }
     }
 
@@ -258,5 +315,54 @@ impl FuzzerState {
         self.run_id = None;
         self.total = 0;
         self.results = Vec::new();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attack_types_estimate_requests() {
+        let mut state = FuzzerState::default();
+        assert_eq!(state.attack_type, AttackType::Sniper);
+        assert_eq!(state.request_estimate(), 5);
+
+        state.attack_type = AttackType::Pitchfork;
+        assert_eq!(state.request_estimate(), 5);
+
+        state.attack_type = AttackType::ClusterBomb;
+        assert_eq!(state.request_estimate(), 5);
+
+        state.url = "https://httpbin.org/status/{{status}}?id={{id}}".to_string();
+        state.payloads.insert(
+            "id".to_string(),
+            PayloadConfig {
+                list_text: "1\n2\n3".to_string(),
+                ..Default::default()
+            },
+        );
+
+        state.attack_type = AttackType::Sniper;
+        assert_eq!(state.request_estimate(), 8);
+
+        state.attack_type = AttackType::Pitchfork;
+        assert_eq!(state.request_estimate(), 3);
+
+        state.attack_type = AttackType::ClusterBomb;
+        assert_eq!(state.request_estimate(), 15);
+    }
+
+    #[test]
+    fn empty_or_missing_payloads_estimate_zero() {
+        let mut state = FuzzerState::default();
+        state.url = "https://httpbin.org/status/{{missing}}".to_string();
+        assert_eq!(state.request_estimate(), 0);
+
+        state.payloads.insert("missing".to_string(), PayloadConfig::default());
+        assert_eq!(state.request_estimate(), 0);
+
+        state.url = "https://httpbin.org/status/200".to_string();
+        assert_eq!(state.request_estimate(), 0);
     }
 }

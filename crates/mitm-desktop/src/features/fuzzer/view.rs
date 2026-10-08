@@ -11,7 +11,7 @@ use crate::format::{format_bytes, format_duration};
 use crate::theme::{self, Tone};
 use crate::widgets::pills::render_status_pill;
 use crate::widgets::{split, template};
-use super::{ConfigTab, FuzzerState, PayloadConfig, PayloadKind, RequestTab, RunStatus};
+use super::{AttackType, ConfigTab, FuzzerState, PayloadConfig, PayloadKind, RequestTab, RunStatus};
 
 pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     toolbar(ui, fuzzer, cmds);
@@ -39,6 +39,19 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
         }
         if fuzzer.status != RunStatus::Idle {
             ui.label(format!("{}/{}", fuzzer.results.len(), fuzzer.total));
+        } else if !fuzzer.variable_names().is_empty() {
+            let estimate = fuzzer.request_estimate();
+            let label = if estimate == 1 {
+                "1 request".to_string()
+            } else {
+                format!("{} requests", estimate)
+            };
+            if estimate > mitm_core::fuzzer::MAX_REQUESTS {
+                ui.label(RichText::new(label).color(theme::color(ui, Tone::Danger)))
+                    .on_hover_text(format!("Limit is {} requests", mitm_core::fuzzer::MAX_REQUESTS));
+            } else {
+                ui.weak(label);
+            }
         }
         if fuzzer.status == RunStatus::Stopped {
             ui.label(RichText::new("Stopped").color(theme::color(ui, Tone::Warn)));
@@ -176,6 +189,14 @@ fn set_content_type_header(headers: &mut Vec<HeaderItem>, content_type: Option<&
 }
 
 fn payloads_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
+    ui.horizontal(|ui| {
+        for attack in [AttackType::Sniper, AttackType::Pitchfork, AttackType::ClusterBomb] {
+            ui.selectable_value(&mut fuzzer.attack_type, attack, attack.label())
+                .on_hover_text(attack.tooltip());
+        }
+    });
+    ui.separator();
+
     let names = fuzzer.variable_names();
     if names.is_empty() {
         ui.weak("No variables");
