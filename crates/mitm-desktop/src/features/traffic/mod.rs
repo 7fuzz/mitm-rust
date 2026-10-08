@@ -11,6 +11,8 @@ use crate::widgets::tri_state::TriState;
 
 pub use columns::{ColumnId, ColumnLayout};
 
+const PAGE_SIZE: usize = 200;
+
 pub const METHODS: [&str; 6] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"];
 pub const STATUS_GROUPS: [&str; 4] = ["2xx", "3xx", "4xx", "5xx"];
 pub const FLAGS: [(&str, &str); 4] = [
@@ -93,6 +95,7 @@ pub struct TrafficState {
     pub prefs: TrafficPrefs,
     pub history_limit: HistorySettings,
     pub limit_draft: HistorySettings,
+    pub has_older: bool,
     // Bumped to make egui forget its stored column widths and start again from `prefs.widths`.
     width_epoch: u32,
     // Top visible flow id and vertical offset from the last frame.
@@ -109,6 +112,7 @@ impl Default for TrafficState {
             prefs: TrafficPrefs::default(),
             history_limit: HistorySettings::default(),
             limit_draft: HistorySettings::default(),
+            has_older: false,
             width_epoch: 0,
             scroll_anchor: None,
         }
@@ -117,9 +121,20 @@ impl Default for TrafficState {
 
 impl TrafficState {
     pub fn load_from_db(&mut self, db_path: &PathBuf) {
-        if let Ok(entries) = mitm_core::db::get_history_logs(db_path, 500, 0, None, None, None, false) {
-            self.flows = entries.into();
+        self.flows.clear();
+        self.has_older = true;
+        self.load_older(db_path);
+    }
+
+    pub fn load_older(&mut self, db_path: &PathBuf) {
+        let room = self.max_flows.saturating_sub(self.flows.len()).min(PAGE_SIZE);
+        if !self.has_older || room == 0 {
+            return;
         }
+        let before = self.flows.back().map(|f| f.id);
+        let page = mitm_core::db::get_history_page(db_path, None, false, before, room as u32).unwrap_or_default();
+        self.has_older = page.len() == room;
+        self.flows.extend(page);
     }
 
     pub fn set_history_limit(&mut self, settings: HistorySettings) {
@@ -151,6 +166,7 @@ impl TrafficState {
 
         if self.flows.len() >= self.max_flows {
             self.flows.pop_back();
+            self.has_older = true;
         }
         self.flows.push_front(entry);
     }
@@ -174,6 +190,7 @@ impl TrafficState {
 
     pub fn clear(&mut self) {
         self.flows.clear();
+        self.has_older = false;
         self.selected_id = None;
         self.selected_detail = None;
     }

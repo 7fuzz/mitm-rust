@@ -34,6 +34,7 @@ pub enum AppCommand {
     FactoryReset,
 
     SelectFlow(i64),
+    LoadOlderFlows,
     ClearTraffic,
     DeleteFlow(i64),
     CopyFlow(i64, CopyFormat),

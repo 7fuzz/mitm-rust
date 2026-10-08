@@ -9,12 +9,14 @@ use crate::widgets::pills::{badge, render_method_pill, render_source_pill};
 use super::{flow_status_badge, ColumnId, ColumnLayout, FlowFlags, TrafficState};
 
 const ROW_HEIGHT: f32 = 26.0;
+const LOAD_AHEAD_ROWS: usize = 50;
 
 pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds: &mut Commands) {
     let columns = state.prefs.columns.visible();
 
     let visuals = ui.visuals().clone();
     let ctx = ui.ctx().clone();
+    let mut near_end = false;
     let held_offset = offset_holding_rows_in_place(state, visible, ROW_HEIGHT + ui.spacing().item_spacing.y);
     egui::ScrollArea::horizontal()
         .id_salt("traffic_table_hscroll")
@@ -50,6 +52,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
                 })
                 .body(|body| {
                     body.rows(ROW_HEIGHT, visible.len(), |mut row| {
+                        near_end |= row.index() + LOAD_AHEAD_ROWS >= visible.len();
                         let flow = &state.flows[visible[row.index()]];
                         let selected = state.selected_id == Some(flow.id);
                         row.set_selected(selected);
@@ -58,6 +61,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
                 });
             state.scroll_anchor = visible.first().map(|&i| (state.flows[i].id, output.state.offset.y));
         });
+
+    if state.has_older && (near_end || visible.is_empty()) {
+        cmds.push(AppCommand::LoadOlderFlows);
+    }
 
     if visible.is_empty() {
         ui.vertical_centered(|ui| {

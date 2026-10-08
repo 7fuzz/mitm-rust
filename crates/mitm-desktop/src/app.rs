@@ -185,6 +185,7 @@ impl MitmApp {
                 }
             }
 
+            AppCommand::LoadOlderFlows => self.state.traffic.load_older(db_path),
             AppCommand::SelectFlow(id) => {
                 self.state.traffic.select(id, db_path);
                 self.state.inspector.prefs.open = true;
