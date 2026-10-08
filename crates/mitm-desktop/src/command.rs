@@ -77,6 +77,7 @@ pub enum AppCommand {
     DeleteEnvironment(String),
 
     OpenImport,
+    ExportWorkspace,
     PickImportFile,
     ImportWorkspace { json: String, target: Option<String>, name: Option<String> },
 }

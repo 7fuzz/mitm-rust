@@ -5,6 +5,10 @@ use egui_dock::DockState;
 use crate::command::{AppCommand, Commands};
 use crate::dock::Tab;
 use crate::state::AppState;
+use crate::widgets::flash;
+
+pub const EXPORT_OK: &str = "workspace_export_ok";
+pub const EXPORT_ERR: &str = "workspace_export_err";
 
 pub fn show(ui: &mut egui::Ui, state: &mut AppState, dock: &DockState<Tab>, cmds: &mut Commands) {
     ui.horizontal(|ui| {
@@ -20,6 +24,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, dock: &DockState<Tab>, cmds
         }
 
         workspace_and_env_combos(ui, state, cmds);
+        for (id, tone) in [(EXPORT_OK, Tone::Success), (EXPORT_ERR, Tone::Danger)] {
+            if let Some(message) = flash::current(ui, egui::Id::new(id)) {
+                ui.label(RichText::new(message).color(theme::color(ui, tone)));
+            }
+        }
         ui.separator();
 
         add_panel_menu(ui, dock, cmds);
@@ -65,6 +74,10 @@ fn workspace_and_env_combos(ui: &mut egui::Ui, state: &mut AppState, cmds: &mut 
             }
             if ui.button("⇩ Import…").clicked() {
                 cmds.push(AppCommand::OpenImport);
+                ui.close();
+            }
+            if ui.button("⇧ Export…").clicked() {
+                cmds.push(AppCommand::ExportWorkspace);
                 ui.close();
             }
             if ui.button("⚙ Manage").clicked() {
