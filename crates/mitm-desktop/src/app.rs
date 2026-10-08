@@ -85,6 +85,10 @@ impl MitmApp {
 
     fn run_command(&mut self, ctx: &egui::Context, cmd: AppCommand) {
         let db_path = &self.core.db_path;
+        // These reload environments from the DB, and a later flush of a stale copy would undo the switch.
+        if cmd.touches_environments() {
+            self.state.environments.flush(db_path);
+        }
         match cmd {
             AppCommand::OpenPalette => self.palette.open(),
             AppCommand::OpenTab(tab) => dock::open_tab(&mut self.dock, tab),

@@ -76,6 +76,22 @@ pub enum AppCommand {
     DeleteEnvironment(String),
 }
 
+impl AppCommand {
+    pub fn touches_environments(&self) -> bool {
+        matches!(
+            self,
+            AppCommand::SelectWorkspace(_)
+                | AppCommand::SelectEnvironment(_)
+                | AppCommand::CreateWorkspace(_)
+                | AppCommand::DeleteWorkspace(_)
+                | AppCommand::CreateEnvironment { .. }
+                | AppCommand::RenameEnvironment { .. }
+                | AppCommand::DuplicateEnvironment(_)
+                | AppCommand::DeleteEnvironment(_)
+        )
+    }
+}
+
 #[derive(Default)]
 pub struct Commands(Vec<AppCommand>);
 
