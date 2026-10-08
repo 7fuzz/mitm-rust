@@ -27,10 +27,14 @@ pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerCo
             });
         });
         ui.separator();
-        if let Some(rule) = state.rules.get_mut(index) {
-            if editor::show(ui, rule) {
-                state.mark_dirty(now);
-            }
+        let Some(rule) = state.rules.get_mut(index) else { return };
+        if state.mock_headers.as_ref().is_none_or(|(id, _)| *id != rule.id) {
+            state.mock_headers = Some((rule.id.clone(), editor::mock_header_rows(rule)));
+        }
+        let Some((_, mock_headers)) = state.mock_headers.as_mut() else { return };
+        let changed = editor::show(ui, rule, mock_headers);
+        if changed {
+            state.mark_dirty(now);
         }
     });
 }

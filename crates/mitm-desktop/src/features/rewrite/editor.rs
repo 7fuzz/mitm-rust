@@ -1,5 +1,9 @@
 use eframe::egui::{self, RichText};
 use mitm_core::state::RewriteRule;
+use mitm_core::repeater::HeaderItem;
+use crate::features::request_editor::body_editor::code_editor;
+use crate::features::request_editor::captured::header_items;
+use crate::features::request_editor::kv_table::{self, KvLabels};
 use super::ACTIONS;
 
 const MATCH_FIELDS: [(&str, &str); 6] =
@@ -8,7 +12,7 @@ const OPERATORS: [(&str, &str); 5] =
     [("contains", "contains"), ("equals", "equals"), ("starts_with", "starts with"), ("ends_with", "ends with"), ("regex", "regex")];
 
 /// Edits one rule in place; the fields shown follow the action type. Returns whether anything changed.
-pub fn show(ui: &mut egui::Ui, rule: &mut RewriteRule) -> bool {
+pub fn show(ui: &mut egui::Ui, rule: &mut RewriteRule, mock_headers: &mut Vec<HeaderItem>) -> bool {
     let mut changed = false;
     egui::Grid::new(("rewrite_editor", &rule.id)).num_columns(2).spacing([10.0, 8.0]).show(ui, |ui| {
         ui.label("Name");
@@ -50,7 +54,44 @@ pub fn show(ui: &mut egui::Ui, rule: &mut RewriteRule) -> bool {
 
         changed |= action_fields(ui, rule);
     });
+    if rule.action_type == "full_response" {
+        changed |= mock_fields(ui, rule, mock_headers);
+    }
     changed
+}
+
+fn mock_fields(ui: &mut egui::Ui, rule: &mut RewriteRule, headers: &mut Vec<HeaderItem>) -> bool {
+    let mut changed = false;
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.label("Status");
+        let mut status = rule.mock_status_code.unwrap_or(200);
+        if ui.add(egui::DragValue::new(&mut status).range(100..=599)).changed() {
+            rule.mock_status_code = Some(status);
+            changed = true;
+        }
+    });
+    ui.add_space(4.0);
+    ui.strong("Headers");
+    let labels = KvLabels { key: "Header Name", value: "Header Value" };
+    if kv_table::show(ui, "rewrite_mock_headers", headers, labels, &[]) {
+        let pairs: Vec<(String, String)> =
+            headers.iter().filter(|h| h.enabled && !h.key.trim().is_empty()).map(|h| (h.key.clone(), h.value.clone())).collect();
+        rule.mock_headers_json = serde_json::to_string(&pairs).ok();
+        changed = true;
+    }
+    ui.add_space(4.0);
+    ui.strong("Body");
+    ui.allocate_ui(egui::vec2(ui.available_width(), 220.0), |ui| {
+        changed |= code_editor(ui, "rewrite_mock_body", rule.mock_body.get_or_insert_with(String::new));
+    });
+    changed
+}
+
+/// The editable rows for a rule's mock headers, read from the stored `[name, value]` pairs.
+pub fn mock_header_rows(rule: &RewriteRule) -> Vec<HeaderItem> {
+    let pairs: Vec<(String, String)> = rule.mock_headers_json.as_deref().and_then(|j| serde_json::from_str(j).ok()).unwrap_or_default();
+    header_items(&pairs)
 }
 
 fn targets(action: &str) -> &'static [(&'static str, &'static str)] {

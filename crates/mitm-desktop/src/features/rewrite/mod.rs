@@ -2,6 +2,7 @@ mod editor;
 mod rules;
 
 use serde::{Deserialize, Serialize};
+use mitm_core::repeater::HeaderItem;
 use mitm_core::state::{RewriteRule, SourceScope};
 use crate::theme::Tone;
 
@@ -50,6 +51,8 @@ pub struct RewriteState {
     pub rules: Vec<RewriteRule>,
     pub selected: Option<String>,
     pub search: String,
+    /// Mock header rows of the selected rule, kept so disabled rows survive between frames.
+    pub mock_headers: Option<(String, Vec<HeaderItem>)>,
     dirty_since: Option<f64>,
 }
 
