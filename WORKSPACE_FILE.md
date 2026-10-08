@@ -65,7 +65,7 @@ Importing as a new workspace makes the `active` environment active. Importing in
 | `secret` | bool | Masked in the app. Export leaves the value blank unless you choose **Include secret values**. |
 | `enabled` | bool | Defaults to `true`. |
 
-In the app, every variable also has an **`(auto)`** variant. Extract rules write into it.
+In the app, every variable also has an **`(auto)`** variant. Extract rules write into it. Its values come from runs, so export leaves them out unless you choose **Include (auto) values**.
 
 How a variable is imported:
 
@@ -80,7 +80,7 @@ How a variable is imported:
 - **`(auto)` starts empty**, unless `variants` lists one named `(auto)`; then its value is used.
 - **A variant already named `default`:** the `value` goes to `default1`, or `default2` if that's taken too.
 
-Export reverses this. A variable without variants is written as `value`. A variable with variants is written as its `variants` list, with `(auto)` left out when it's empty, plus `activeVariant` when the active one isn't the first.
+Export reverses this. A variable without variants is written as `value`. A variable with variants is written as its `variants` list, plus `activeVariant` when the active one isn't the first. `(auto)` is only in the list when it has a value and **Include (auto) values** is on. If `(auto)` was active, `activeVariant` still says so.
 
 ## `collections`
 
@@ -165,4 +165,9 @@ The same dialog also reads **Postman v2.1 collections**: folders, requests, head
 
 ## Exporting
 
-Use **⇧ Export…** in the workspace menu, or **Export workspace…** in the command palette. If the workspace has secret variables, you're asked whether to include their values; by default they're left blank. Unsaved edits are saved first, so the file matches what's on screen.
+Use **⇧ Export…** in the workspace menu, or **Export workspace…** in the command palette. Unsaved edits are saved first, so the file matches what's on screen.
+
+If there's something to decide, a prompt asks first. Both options are off by default:
+
+- **Include secret values**: shown when the workspace has secret variables. Without it, their values are blank.
+- **Include (auto) values**: shown when some `(auto)` variant has a value. Without it, `(auto)` variants are left out.
