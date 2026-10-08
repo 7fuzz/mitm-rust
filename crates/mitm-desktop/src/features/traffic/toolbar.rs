@@ -1,4 +1,5 @@
-use eframe::egui::{self, RichText};
+use eframe::egui::containers::menu::{MenuButton, MenuConfig};
+use eframe::egui::{self, PopupCloseBehavior, RichText};
 use mitm_core::state::ListenerConfig;
 use crate::command::{AppCommand, Commands};
 use crate::widgets::confirm::confirm_button;
@@ -78,7 +79,9 @@ fn limit_menu(ui: &mut egui::Ui, state: &mut TrafficState, cmds: &mut Commands) 
         "Limit: Off ⏷".to_string()
     };
 
-    ui.menu_button(title, |ui| {
+    // Plain menus close on any click inside, which would shut this one when toggling the checkbox.
+    let config = MenuConfig::new().close_behavior(PopupCloseBehavior::CloseOnClickOutside);
+    MenuButton::new(title).config(config).ui(ui, |ui| {
         ui.set_min_width(240.0);
         let draft = &mut state.limit_draft;
 
