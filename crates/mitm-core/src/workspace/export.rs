@@ -7,12 +7,12 @@ use crate::encoding::{MultipartBodySpec, MultipartFieldSpec, UrlEncodedParamSpec
 use crate::repeater::{HeaderItem, ParamItem};
 use crate::workspace::get_workspace_environments_db;
 use super::file::{
-    make_ref, Body, CollectionEntry, EnvironmentEntry, ExtractEntry, ExtractSource, FormField, FormFieldType, KeyValue,
+    make_ref, Body, ExportOptions, CollectionEntry, EnvironmentEntry, ExtractEntry, ExtractSource, FormField, FormFieldType, KeyValue,
     RequestEntry, VariableEntry, WorkspaceFile, WorkspaceInfo,
 };
 
-/// The workspace as a `mitm-workspace` file. Secret values are left blank unless `include_secrets`.
-pub fn export_workspace_json_db(db_path: &PathBuf, workspace_id: &str, include_secrets: bool) -> Result<String, String> {
+/// The workspace as a `mitm-workspace` file.
+pub fn export_workspace_json_db(db_path: &PathBuf, workspace_id: &str, options: ExportOptions) -> Result<String, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let (name, description): (String, Option<String>) = conn
         .query_row("SELECT name, description FROM workspaces WHERE id = ?", params![workspace_id], |row| {
@@ -26,7 +26,7 @@ pub fn export_workspace_json_db(db_path: &PathBuf, workspace_id: &str, include_s
         .map(|env| EnvironmentEntry {
             name: env.name.clone(),
             active: env.is_active,
-            variables: env.variables.iter().map(|v| VariableEntry::from_variable(v, include_secrets)).collect(),
+            variables: env.variables.iter().map(|v| VariableEntry::from_variable(v, options)).collect(),
         })
         .collect();
 
@@ -41,9 +41,9 @@ pub fn export_workspace_file_db(
     db_path: &PathBuf,
     workspace_id: &str,
     destination_path: &str,
-    include_secrets: bool,
+    options: ExportOptions,
 ) -> Result<(), String> {
-    let json = export_workspace_json_db(db_path, workspace_id, include_secrets)?;
+    let json = export_workspace_json_db(db_path, workspace_id, options)?;
     let target = std::path::Path::new(destination_path);
     if let Some(parent) = target.parent().filter(|p| !p.exists()) {
         std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create destination directory: {}", e))?;
@@ -185,7 +185,7 @@ mod tests {
     fn importing_the_example_and_exporting_it_gives_the_same_collections() {
         let (db, dir) = temp_db();
         let summary = import_workspace_json_db(&db, EXAMPLE, None, None).unwrap();
-        let exported = WorkspaceFile::parse(&export_workspace_json_db(&db, &summary.workspace_id, true).unwrap()).unwrap();
+        let exported = WorkspaceFile::parse(&export_workspace_json_db(&db, &summary.workspace_id, ExportOptions { include_secrets: true, include_auto: true }).unwrap()).unwrap();
         let original = WorkspaceFile::parse(EXAMPLE).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
 
@@ -205,8 +205,8 @@ mod tests {
     fn exporting_twice_gives_the_same_file_and_secrets_stay_blank() {
         let (db, dir) = temp_db();
         let summary = import_workspace_json_db(&db, EXAMPLE, None, None).unwrap();
-        let first = export_workspace_json_db(&db, &summary.workspace_id, false).unwrap();
-        let second = export_workspace_json_db(&db, &summary.workspace_id, false).unwrap();
+        let first = export_workspace_json_db(&db, &summary.workspace_id, ExportOptions::default()).unwrap();
+        let second = export_workspace_json_db(&db, &summary.workspace_id, ExportOptions::default()).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
 
         assert_eq!(first, second);

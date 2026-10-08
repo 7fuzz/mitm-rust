@@ -340,10 +340,10 @@ impl VariableEntry {
         (1..).map(|n| format!("{DEFAULT_VARIANT}{n}")).find(|name| !taken(name)).unwrap()
     }
 
-    /// The reverse of `to_variable`. Secret values are left blank unless `include_secrets`.
-    pub fn from_variable(var: &EnvironmentVariable, include_secrets: bool) -> Self {
+    /// The reverse of `to_variable`, leaving out what `options` excludes.
+    pub fn from_variable(var: &EnvironmentVariable, options: ExportOptions) -> Self {
         let secret = var.r#type == "secret";
-        let shown = |value: &str| if secret && !include_secrets { String::new() } else { value.to_string() };
+        let shown = |value: &str| if secret && !options.include_secrets { String::new() } else { value.to_string() };
         let mut entry = Self {
             key: var.key.clone(),
             value: String::new(),
@@ -360,13 +360,22 @@ impl VariableEntry {
             .variants
             .iter()
             .map(|v| VariantEntry { name: v.name.clone(), value: shown(&v.value) })
-            .filter(|v| !(v.name == AUTO_VARIANT && v.value.is_empty()))
+            .filter(|v| v.name != AUTO_VARIANT || (options.include_auto && !v.value.is_empty()))
             .collect();
         let active = var.variants.get(var.active_index).map_or(AUTO_VARIANT, |v| v.name.as_str());
         let implied = entry.variants.iter().map(|v| v.name.as_str()).find(|n| *n != AUTO_VARIANT).unwrap_or(AUTO_VARIANT);
         entry.active_variant = (active != implied).then(|| active.to_string());
         entry
     }
+}
+
+/// What export writes besides the workspace's structure.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ExportOptions {
+    /// Values of secret variables; left blank otherwise.
+    pub include_secrets: bool,
+    /// `(auto)` values, which extract rules wrote during runs; left out otherwise.
+    pub include_auto: bool,
 }
 
 /// A file-local id from a request name: lowercase words joined by `-`, numbered when taken.
@@ -474,7 +483,7 @@ mod tests {
             r#"{"key":"a","enabled":false}"#,
         ] {
             let var = variable(json);
-            let again = VariableEntry::from_variable(&var, true).to_variable();
+            let again = VariableEntry::from_variable(&var, ExportOptions { include_secrets: true, include_auto: true }).to_variable();
             assert_eq!(names(&again), names(&var), "{json}");
             assert_eq!(again.active_index, var.active_index, "{json}");
             assert_eq!(again.current_value(), var.current_value(), "{json}");
@@ -485,9 +494,22 @@ mod tests {
     #[test]
     fn secrets_are_blank_unless_included() {
         let var = variable(r#"{"key":"password","value":"hunter2","secret":true}"#);
-        let hidden = VariableEntry::from_variable(&var, false);
+        let hidden = VariableEntry::from_variable(&var, ExportOptions::default());
         assert!(hidden.secret && hidden.variants.iter().all(|v| v.value.is_empty()));
-        assert!(VariableEntry::from_variable(&var, true).variants.iter().any(|v| v.value == "hunter2"));
+        assert!(VariableEntry::from_variable(&var, ExportOptions { include_secrets: true, include_auto: true }).variants.iter().any(|v| v.value == "hunter2"));
+    }
+
+    #[test]
+    fn auto_values_are_left_out_unless_included() {
+        let var = variable(r#"{"key":"token","variants":[{"name":"(auto)","value":"t1"},{"name":"admin","value":"t2"}],"activeVariant":"(auto)"}"#);
+        let without = VariableEntry::from_variable(&var, ExportOptions::default());
+        assert_eq!(without.variants.iter().map(|v| v.name.as_str()).collect::<Vec<_>>(), ["admin"]);
+        assert_eq!(without.active_variant.as_deref(), Some("(auto)"));
+        let reimported = without.to_variable();
+        assert_eq!((reimported.variants[0].value.as_str(), reimported.active_index), ("", 0));
+
+        let with = VariableEntry::from_variable(&var, ExportOptions { include_auto: true, ..ExportOptions::default() });
+        assert_eq!(with.variants[0].value, "t1");
     }
 
     #[test]

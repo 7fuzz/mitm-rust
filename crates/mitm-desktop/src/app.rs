@@ -653,7 +653,7 @@ impl MitmApp {
                         &db_path,
                         &workspace.id,
                         &path.to_string_lossy(),
-                        include_secrets,
+                        mitm_core::workspace::file::ExportOptions { include_secrets, include_auto: true },
                     );
                     Some(result.map(|_| format!("Exported {}", crate::files::file_name(&path))))
                 });
