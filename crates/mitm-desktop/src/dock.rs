@@ -3,6 +3,7 @@ use eframe::egui;
 use egui_dock::{DockState, TabIndex};
 use crate::command::Commands;
 use crate::features;
+use crate::widgets::template;
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -108,7 +109,11 @@ impl egui_dock::TabViewer for TabViewer<'_> {
         let cmds = &mut *self.cmds;
         match tab {
             Tab::Traffic => features::traffic::show(ui, &mut state.traffic, &mut state.inspector, &state.proxy.listeners, cmds),
-            Tab::Repeater => features::repeater::show(ui, &mut state.repeater, cmds),
+            Tab::Repeater => {
+                template::set_active_env(state.environments.repeater_env.as_ref());
+                features::repeater::show(ui, &mut state.repeater, cmds);
+                template::set_active_env(state.environments.active_environment());
+            }
             Tab::Fuzzer => features::fuzzer::show(ui, &mut state.fuzzer, cmds),
             Tab::Intercept => features::intercept::show(ui, &mut state.intercept, cmds),
             Tab::Collections => features::collections::show(ui, &mut state.collections, cmds),

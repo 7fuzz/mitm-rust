@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::path::Path;
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
+use mitm_core::repeater::REPEATER_WORKSPACE_ID;
 use mitm_core::workspace::{Environment, EnvironmentVariable, VariableVariant, Workspace};
 use crate::command::{AppCommand, Commands};
 use crate::widgets::split;
@@ -23,6 +24,8 @@ pub struct EnvironmentsState {
     pub active_workspace_id: String,
     pub environments: Vec<Environment>,
     pub active_environment_id: Option<String>,
+    /// Repeater is a scratchpad with its own environment, kept apart from the workspaces.
+    pub repeater_env: Option<Environment>,
     pub selected_environment_id: Option<String>,
     pub split_fraction: f32,
     pub renaming_env_id: Option<String>,
@@ -51,6 +54,7 @@ impl Default for EnvironmentsState {
             active_workspace_id: String::new(),
             environments: Vec::new(),
             active_environment_id: None,
+            repeater_env: None,
             selected_environment_id: None,
             split_fraction: 0.25,
             renaming_env_id: None,
@@ -94,6 +98,26 @@ impl EnvironmentsState {
             let _ = mitm_core::workspace::set_active_workspace_db(&db_buf, &first.id);
         }
         self.reload_environments(db_path);
+        self.load_repeater_env(db_path);
+    }
+
+    fn load_repeater_env(&mut self, db_path: &Path) {
+        let db_buf = db_path.to_path_buf();
+        let envs = mitm_core::workspace::get_workspace_environments_db(&db_buf, REPEATER_WORKSPACE_ID).unwrap_or_default();
+        let existing = envs.iter().find(|e| e.is_active).or(envs.first()).cloned();
+        self.repeater_env = existing.or_else(|| {
+            let now = chrono::Utc::now().timestamp_millis();
+            let env = Environment {
+                id: uuid::Uuid::new_v4().to_string(),
+                workspace_id: REPEATER_WORKSPACE_ID.to_string(),
+                name: "Default".to_string(),
+                is_active: true,
+                variables: Vec::new(),
+                created_at_ms: now,
+                updated_at_ms: now,
+            };
+            mitm_core::workspace::save_workspace_environment_db(&db_buf, env.clone()).ok().map(|_| env)
+        });
     }
 
     pub fn reload_environments(&mut self, db_path: &Path) {
@@ -109,6 +133,7 @@ impl EnvironmentsState {
     pub fn refresh(&mut self, db_path: &Path) {
         self.flush(db_path);
         self.reload_environments(db_path);
+        self.load_repeater_env(db_path);
     }
 
     pub fn active_workspace(&self) -> Option<&Workspace> {
@@ -134,7 +159,7 @@ impl EnvironmentsState {
     pub fn flush(&mut self, db_path: &Path) {
         let db_buf = db_path.to_path_buf();
         for id in std::mem::take(&mut self.dirty) {
-            if let Some(env) = self.environments.iter().find(|e| e.id == id).cloned() {
+            if let Some(env) = self.environments.iter().chain(&self.repeater_env).find(|e| e.id == id).cloned() {
                 let _ = mitm_core::workspace::save_workspace_environment_db(&db_buf, env);
             }
         }
@@ -728,6 +753,24 @@ fn variant_modal(ctx: &egui::Context, state: &mut EnvironmentsState, env_idx: us
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repeater_gets_one_default_environment_apart_from_workspaces() {
+        let dir = std::env::temp_dir().join(format!("mitm-repeater-env-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("test.db");
+        mitm_core::db::init_database(&db, None).unwrap();
+
+        let mut state = EnvironmentsState::default();
+        state.load(&db);
+        let repeater = state.repeater_env.clone().expect("repeater env created");
+        assert_eq!(repeater.workspace_id, REPEATER_WORKSPACE_ID);
+        assert!(state.environments.iter().all(|e| e.id != repeater.id));
+
+        state.load(&db);
+        assert_eq!(state.repeater_env.unwrap().id, repeater.id);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn variant_cycling_and_current_value() {

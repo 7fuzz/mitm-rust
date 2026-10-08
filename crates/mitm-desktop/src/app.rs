@@ -446,6 +446,7 @@ impl eframe::App for MitmApp {
         let now = ui.input(|i| i.time);
         for (id, result) in self.repeater_runs.drain() {
             self.state.repeater.finish_run(&id, result, &self.core.db_path);
+            self.state.environments.refresh(&self.core.db_path);
         }
         self.state.repeater.flush_if_idle(&self.core.db_path, now);
         for (id, result) in self.collection_runs.drain() {
