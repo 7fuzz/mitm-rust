@@ -213,118 +213,117 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
         });
 }
 
+const PHASES: [(&str, &str); 3] = [("request", "Request"), ("response", "Response"), ("both", "Both")];
+const FIELDS: [(&str, &str); 5] = [("url", "URL"), ("host", "Host"), ("path", "Path"), ("method", "Method"), ("header", "Header")];
+const OPERATORS: [(&str, &str); 3] = [("contains", "contains"), ("equals", "equals"), ("regex", "regex")];
+
 fn render_rules_manager(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) {
-    ui.heading("Interception Rules");
-    ui.label(RichText::new("Traffic matching enabled rules will pause at breakpoint.").weak());
+    ui.strong("Rules");
     ui.add_space(4.0);
 
-    let mut rules = state.rules.clone();
+    let rules = &mut state.rules;
     let mut modified = false;
+    let mut delete = None;
+    let mut swap = None;
+    let count = rules.len();
 
-    egui::Grid::new("rules_table_grid")
-        .striped(true)
-        .num_columns(7)
-        .spacing([12.0, 6.0])
-        .show(ui, |ui| {
-            ui.strong("Enabled");
-            ui.strong("Phase");
-            ui.strong("Field");
-            ui.strong("Operator");
-            ui.strong("Match Value");
-            ui.strong("Action");
-            ui.strong("");
-            ui.end_row();
-
-            let mut delete_index: Option<usize> = None;
-
-            for (idx, rule) in rules.iter_mut().enumerate() {
-                if ui.checkbox(&mut rule.is_enabled, "").changed() {
-                    modified = true;
+    egui::Grid::new("rules_table_grid").striped(true).num_columns(7).spacing([8.0, 6.0]).show(ui, |ui| {
+        for (index, rule) in rules.iter_mut().enumerate() {
+            ui.push_id(&rule.id, |ui| {
+                modified |= ui.checkbox(&mut rule.is_enabled, "").changed();
+            });
+            modified |= rule_cells(ui, &rule.id, &mut rule.target_phase, &mut rule.match_field, &mut rule.operator, &mut rule.match_value, &mut rule.action);
+            ui.horizontal(|ui| {
+                if ui.add_enabled(index > 0, egui::Button::new("⏶").small()).clicked() {
+                    swap = Some((index, index - 1));
                 }
-                ui.label(&rule.target_phase);
-                ui.label(&rule.match_field);
-                ui.label(&rule.operator);
-                ui.label(&rule.match_value);
-                ui.label(&rule.action);
-
+                if ui.add_enabled(index + 1 < count, egui::Button::new("⏷").small()).clicked() {
+                    swap = Some((index, index + 1));
+                }
                 if ui.small_button("🗑").clicked() {
-                    delete_index = Some(idx);
+                    delete = Some(index);
                 }
-                ui.end_row();
-            }
-
-            if let Some(idx) = delete_index {
-                rules.remove(idx);
-                modified = true;
-            }
-        });
-
-    ui.add_space(10.0);
-    ui.separator();
-    ui.add_space(6.0);
-
-    ui.strong("Add Intercept Rule");
-    ui.horizontal(|ui| {
-        egui::ComboBox::from_id_salt("new_rule_phase")
-            .selected_text(&state.new_rule.phase)
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut state.new_rule.phase, "request".to_string(), "Request");
-                ui.selectable_value(&mut state.new_rule.phase, "response".to_string(), "Response");
-                ui.selectable_value(&mut state.new_rule.phase, "both".to_string(), "Both");
             });
+            ui.end_row();
+        }
 
-        egui::ComboBox::from_id_salt("new_rule_field")
-            .selected_text(&state.new_rule.field)
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut state.new_rule.field, "url".to_string(), "URL");
-                ui.selectable_value(&mut state.new_rule.field, "host".to_string(), "Host");
-                ui.selectable_value(&mut state.new_rule.field, "path".to_string(), "Path");
-                ui.selectable_value(&mut state.new_rule.field, "method".to_string(), "Method");
-                ui.selectable_value(&mut state.new_rule.field, "header".to_string(), "Header");
-            });
-
-        egui::ComboBox::from_id_salt("new_rule_operator")
-            .selected_text(&state.new_rule.operator)
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut state.new_rule.operator, "contains".to_string(), "contains");
-                ui.selectable_value(&mut state.new_rule.operator, "equals".to_string(), "equals");
-                ui.selectable_value(&mut state.new_rule.operator, "regex".to_string(), "regex");
-            });
-
-        ui.add(
-            egui::TextEdit::singleline(&mut state.new_rule.value)
-                .hint_text("Match pattern...")
-                .desired_width(160.0),
-        );
-
-        egui::ComboBox::from_id_salt("new_rule_action")
-            .selected_text(&state.new_rule.action)
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut state.new_rule.action, "intercept".to_string(), "Intercept");
-                ui.selectable_value(&mut state.new_rule.action, "pass".to_string(), "Pass through");
-            });
-
-        let can_add = !state.new_rule.value.trim().is_empty();
-        if ui.add_enabled(can_add, egui::Button::new("➕ Add Rule")).clicked() {
-            let new_rule = mitm_core::db::InterceptRule {
+        ui.label("");
+        let draft = &mut state.new_rule;
+        let value_before = draft.value.clone();
+        rule_cells(ui, "new_rule", &mut draft.phase, &mut draft.field, &mut draft.operator, &mut draft.value, &mut draft.action);
+        ui.label("");
+        ui.end_row();
+        if value_before.is_empty() && !draft.value.trim().is_empty() {
+            rules.push(mitm_core::db::InterceptRule {
                 id: uuid::Uuid::new_v4().to_string(),
                 is_enabled: true,
-                target_phase: state.new_rule.phase.clone(),
-                match_field: state.new_rule.field.clone(),
-                operator: state.new_rule.operator.clone(),
-                match_value: state.new_rule.value.trim().to_string(),
-                order_index: rules.len() as i32,
+                target_phase: draft.phase.clone(),
+                match_field: draft.field.clone(),
+                operator: draft.operator.clone(),
+                match_value: std::mem::take(&mut draft.value),
+                order_index: 0,
                 created_at_ms: chrono::Utc::now().timestamp_millis(),
-                action: state.new_rule.action.clone(),
-            };
-            rules.push(new_rule);
-            state.new_rule.value.clear();
+                action: draft.action.clone(),
+            });
             modified = true;
         }
     });
 
-    if modified {
-        state.rules = rules.clone();
-        cmds.push(AppCommand::SaveInterceptRules(rules));
+    if let Some((a, b)) = swap {
+        rules.swap(a, b);
+        modified = true;
     }
+    if let Some(index) = delete {
+        rules.remove(index);
+        modified = true;
+    }
+    if modified {
+        for (index, rule) in rules.iter_mut().enumerate() {
+            rule.order_index = index as i32;
+        }
+        cmds.push(AppCommand::SaveInterceptRules(rules.clone()));
+    }
+}
+
+fn rule_cells(
+    ui: &mut egui::Ui,
+    id: &str,
+    phase: &mut String,
+    field: &mut String,
+    operator: &mut String,
+    value: &mut String,
+    action: &mut String,
+) -> bool {
+    let mut changed = combo(ui, (id, "phase"), phase, &PHASES);
+    changed |= combo(ui, (id, "field"), field, &FIELDS);
+    changed |= combo(ui, (id, "operator"), operator, &OPERATORS);
+    changed |= ui
+        .add(egui::TextEdit::singleline(value).id_salt((id, "value")).hint_text("Match value").desired_width(180.0))
+        .changed();
+    changed |= action_chip(ui, action);
+    changed
+}
+
+fn combo(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debug, value: &mut String, options: &[(&str, &str)]) -> bool {
+    let before = value.clone();
+    let selected = options.iter().find(|(key, _)| *key == value).map_or(value.as_str(), |(_, label)| *label).to_string();
+    egui::ComboBox::from_id_salt(id).selected_text(selected).width(90.0).show_ui(ui, |ui| {
+        for (key, label) in options {
+            ui.selectable_value(value, key.to_string(), *label);
+        }
+    });
+    *value != before
+}
+
+// Tauri's whitelist/blacklist: a matching rule either pauses the flow or lets it pass.
+fn action_chip(ui: &mut egui::Ui, action: &mut String) -> bool {
+    let pass = action == "pass";
+    let (label, tone) = if pass { ("PASS", Tone::Success) } else { ("PAUSE", Tone::Warn) };
+    let chip = egui::Button::new(RichText::new(label).color(theme::color(ui, tone)).strong().size(11.0))
+        .fill(tone.tint(ui.visuals(), 36));
+    let clicked = ui.add(chip).on_hover_text("Click to switch between pause and pass").clicked();
+    if clicked {
+        *action = if pass { "intercept" } else { "pass" }.to_string();
+    }
+    clicked
 }
