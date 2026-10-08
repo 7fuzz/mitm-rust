@@ -42,6 +42,7 @@ impl MitmCore {
 
         db::init_database(&db_path, Some(&event_bus))?;
         let _ = fuzzer::discard_unsaved_runs_db(&db_path);
+        let _ = db::ws_db::close_stale_ws_connections(&db_path, chrono::Local::now().timestamp_millis());
 
         let (history_tx, history_rx) = mpsc::channel::<HistoryEntry>(2000);
         let (rewrite_tx, rewrite_rx) = mpsc::channel::<RewriteHistoryEntry>(2000);

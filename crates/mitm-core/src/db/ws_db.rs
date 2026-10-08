@@ -74,6 +74,16 @@ pub fn update_ws_connection_status(
     Ok(())
 }
 
+/// No socket outlives the process, so any session still marked connected was cut off by an exit or crash.
+pub fn close_stale_ws_connections(db_path: &PathBuf, now: i64) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE ws_connections SET status = 'disconnected', closed_at = COALESCE(closed_at, ?) WHERE status != 'disconnected'",
+        params![now],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn increment_ws_message_count(db_path: &PathBuf, connection_id: i64) -> Result<u64, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute(
@@ -238,6 +248,10 @@ mod tests {
         delete_ws_connection(&db_path, b).unwrap();
         assert!(load_ws_messages(&db_path, b, None).unwrap().is_empty());
         assert!(load_ws_connections(&db_path).unwrap().iter().all(|c| c.connection_id != b));
+
+        close_stale_ws_connections(&db_path, 99).unwrap();
+        let a_row = load_ws_connections(&db_path).unwrap().into_iter().find(|c| c.connection_id == a).unwrap();
+        assert_eq!((a_row.status.as_str(), a_row.closed_at), ("disconnected", Some(99)));
 
         std::fs::remove_dir_all(&dir).ok();
     }
