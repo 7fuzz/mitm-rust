@@ -9,6 +9,9 @@ pub enum Action {
     QuickVariables,
     ImportWorkspace,
     ExportWorkspace,
+    InterceptForward,
+    InterceptForwardUnmodified,
+    InterceptDrop,
     OpenTab(Tab),
     FocusTabAt(usize),
     NextTab,
@@ -26,6 +29,9 @@ impl Action {
             Action::QuickVariables => "Quick variables".to_string(),
             Action::ImportWorkspace => "Import workspace…".to_string(),
             Action::ExportWorkspace => "Export workspace…".to_string(),
+            Action::InterceptForward => "Intercept: forward with changes".to_string(),
+            Action::InterceptForwardUnmodified => "Intercept: forward unmodified".to_string(),
+            Action::InterceptDrop => "Intercept: drop".to_string(),
             Action::OpenTab(tab) => format!("Open {}", tab.name()),
             Action::FocusTabAt(index) => format!("Tab {}", index + 1),
             Action::NextTab => "Next tab".to_string(),
@@ -43,6 +49,9 @@ impl Action {
             Action::QuickVariables => AppCommand::ToggleQuickVariables,
             Action::ImportWorkspace => AppCommand::OpenImport,
             Action::ExportWorkspace => AppCommand::ExportWorkspace,
+            Action::InterceptForward => AppCommand::ForwardActiveIntercept { modified: true },
+            Action::InterceptForwardUnmodified => AppCommand::ForwardActiveIntercept { modified: false },
+            Action::InterceptDrop => AppCommand::DropActiveIntercept,
             Action::OpenTab(tab) => AppCommand::OpenTab(tab),
             Action::FocusTabAt(index) => AppCommand::FocusTabAt(index),
             Action::NextTab => AppCommand::CycleTab { forward: true },
@@ -58,6 +67,9 @@ impl Action {
 pub const SHORTCUTS: &[(KeyboardShortcut, Action)] = &[
     (KeyboardShortcut::new(Modifiers::COMMAND, Key::K), Action::OpenPalette),
     (KeyboardShortcut::new(Modifiers::COMMAND, Key::E), Action::QuickVariables),
+    (KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::Enter), Action::InterceptForwardUnmodified),
+    (KeyboardShortcut::new(Modifiers::COMMAND, Key::Enter), Action::InterceptForward),
+    (KeyboardShortcut::new(Modifiers::COMMAND, Key::Backspace), Action::InterceptDrop),
     (KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma), Action::OpenTab(Tab::Settings)),
     // Shift variants first: consume_shortcut also matches a shortcut when extra shift is held.
     (KeyboardShortcut::new(Modifiers::CTRL.plus(Modifiers::SHIFT), Key::Tab), Action::PreviousTab),
@@ -83,12 +95,28 @@ pub fn palette_actions() -> Vec<Action> {
     actions.extend(ProxyMode::ALL.map(Action::SetProxyMode));
     actions.extend([Action::ToggleInterceptor, Action::ClearTraffic, Action::QuickVariables]);
     actions.extend([Action::ImportWorkspace, Action::ExportWorkspace]);
+    actions.extend([Action::InterceptForward, Action::InterceptForwardUnmodified, Action::InterceptDrop]);
     actions
 }
 
-pub fn consume(ctx: &egui::Context, cmds: &mut Commands) {
-    for (shortcut, action) in SHORTCUTS {
-        if ctx.input_mut(|i| i.consume_shortcut(shortcut)) {
+/// The tab whose shortcuts only fire while it has focus, so Ctrl+Enter stays free elsewhere.
+fn scope(action: Action) -> Option<Tab> {
+    match action {
+        Action::InterceptForward | Action::InterceptForwardUnmodified | Action::InterceptDrop => Some(Tab::Intercept),
+        _ => None,
+    }
+}
+
+pub fn consume(ctx: &egui::Context, focused_tab: Option<Tab>, cmds: &mut Commands) {
+    for &(shortcut, action) in SHORTCUTS {
+        if scope(action).is_some_and(|tab| Some(tab) != focused_tab) {
+            continue;
+        }
+        // Ctrl+Backspace deletes a word while typing; dropping a flow by accident would lose it.
+        if action == Action::InterceptDrop && ctx.egui_wants_keyboard_input() {
+            continue;
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&shortcut)) {
             cmds.push(action.command());
         }
     }

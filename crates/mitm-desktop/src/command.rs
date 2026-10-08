@@ -62,6 +62,8 @@ pub enum AppCommand {
     },
     DropIntercept { flow_id: String },
     ForwardAllIntercepts,
+    ForwardActiveIntercept { modified: bool },
+    DropActiveIntercept,
     DropAllIntercepts,
     ConfigureInterceptor { enabled: bool, mode: String },
     SetInterceptScope(mitm_core::state::SourceScope),

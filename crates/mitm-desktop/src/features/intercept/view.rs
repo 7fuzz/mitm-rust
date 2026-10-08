@@ -141,31 +141,13 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
 
     ui.horizontal(|ui| {
         if ui.button(RichText::new("▶ Forward (with changes)").color(theme::color(ui, Tone::Success)).strong()).clicked() {
-            let headers = state.edited_headers();
-            let body_bytes = state.edit.body.as_bytes().to_vec();
-            cmds.push(AppCommand::ForwardIntercept {
-                flow_id: active_id.clone(),
-                url: Some(state.edit.url.clone()),
-                method: Some(state.edit.method.clone()),
-                headers: Some(headers),
-                body: Some(body_bytes),
-            });
+            cmds.push(AppCommand::ForwardActiveIntercept { modified: true });
         }
-
         if ui.button("▶ Forward Unmodified").clicked() {
-            cmds.push(AppCommand::ForwardIntercept {
-                flow_id: active_id.clone(),
-                url: None,
-                method: None,
-                headers: None,
-                body: None,
-            });
+            cmds.push(AppCommand::ForwardActiveIntercept { modified: false });
         }
-
         if ui.button(RichText::new("⏹ Drop Flow").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
-            cmds.push(AppCommand::DropIntercept {
-                flow_id: active_id.clone(),
-            });
+            cmds.push(AppCommand::DropActiveIntercept);
         }
 
         ui.separator();

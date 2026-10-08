@@ -299,6 +299,25 @@ impl MitmApp {
                 let _ = self.core.drop_intercepted_flow(&flow_id);
                 self.state.intercept.remove_pending(&flow_id);
             }
+            AppCommand::ForwardActiveIntercept { modified } => {
+                let intercept = &self.state.intercept;
+                if let Some(flow_id) = intercept.active_id.clone() {
+                    let edit = &intercept.edit;
+                    let cmd = AppCommand::ForwardIntercept {
+                        flow_id,
+                        url: modified.then(|| edit.url.clone()),
+                        method: modified.then(|| edit.method.clone()),
+                        headers: modified.then(|| intercept.edited_headers()),
+                        body: modified.then(|| edit.body.as_bytes().to_vec()),
+                    };
+                    self.run_command(ctx, cmd);
+                }
+            }
+            AppCommand::DropActiveIntercept => {
+                if let Some(flow_id) = self.state.intercept.active_id.clone() {
+                    self.run_command(ctx, AppCommand::DropIntercept { flow_id });
+                }
+            }
             AppCommand::ForwardAllIntercepts => {
                 self.core.forward_all_intercepted();
                 self.state.intercept.clear_pending();
@@ -528,7 +547,8 @@ impl eframe::App for MitmApp {
         while let Ok(event) = self.core_events.try_recv() {
             self.apply_core_event(ui.ctx(), event);
         }
-        shortcuts::consume(ui.ctx(), &mut self.cmds);
+        let focused_tab = self.dock.find_active_focused().map(|(_, tab)| *tab);
+        shortcuts::consume(ui.ctx(), focused_tab, &mut self.cmds);
         let now = ui.input(|i| i.time);
         for (id, result) in self.repeater_runs.drain() {
             self.state.repeater.finish_run(&id, result, &self.core.db_path);
