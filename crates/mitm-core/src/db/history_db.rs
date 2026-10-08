@@ -99,42 +99,87 @@ pub fn get_history_logs(
 
         Ok(entries)
     } else {
-        let entries = stmt.query_map(&param_refs[..], |row| {
-            let is_intercepted_int: i32 = row.get(11)?;
-            let is_rewritten_int: i32 = row.get(12)?;
-            let is_failed_int: i32 = row.get(13)?;
-            let listener_label: String = row.get(14)?;
-
-            Ok(HistoryEntry {
-                id: row.get(0)?,
-                method: row.get(1)?,
-                url: row.get(2)?,
-                host: row.get(3)?,
-                path: row.get(4)?,
-                content_type: row.get(5)?,
-                response_size: row.get(6)?,
-                status_code: row.get(7)?,
-                request_headers: Vec::new(),
-                response_headers: Vec::new(),
-                request_body: String::new(),
-                response_body: String::new(),
-                phase: row.get(8)?,
-                duration_ms: row.get(9)?,
-                created_at: row.get(10)?,
-                is_intercepted: is_intercepted_int != 0,
-                is_rewritten: is_rewritten_int != 0,
-                is_failed: is_failed_int != 0,
-                listener_label,
-                request_at: row.get(15)?,
-                response_at: row.get(16)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
+        let entries = stmt
+            .query_map(&param_refs[..], summary_from_row)
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
 
         Ok(entries)
     }
+}
+
+const SUMMARY_FIELDS: &str = "id, method, url, host, path, content_type, response_size, status_code, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at";
+
+fn summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<HistoryEntry> {
+    Ok(HistoryEntry {
+        id: row.get(0)?,
+        method: row.get(1)?,
+        url: row.get(2)?,
+        host: row.get(3)?,
+        path: row.get(4)?,
+        content_type: row.get(5)?,
+        response_size: row.get(6)?,
+        status_code: row.get(7)?,
+        request_headers: Vec::new(),
+        response_headers: Vec::new(),
+        request_body: String::new(),
+        response_body: String::new(),
+        phase: row.get(8)?,
+        duration_ms: row.get(9)?,
+        created_at: row.get(10)?,
+        is_intercepted: row.get::<_, i32>(11)? != 0,
+        is_rewritten: row.get::<_, i32>(12)? != 0,
+        is_failed: row.get::<_, i32>(13)? != 0,
+        listener_label: row.get(14)?,
+        request_at: row.get(15)?,
+        response_at: row.get(16)?,
+    })
+}
+
+/// A search over the fields the traffic list shows, optionally the raw header JSON too.
+fn search_clause(search: Option<&str>, include_headers: bool) -> (String, Option<String>) {
+    let Some(term) = search.map(str::trim).filter(|t| !t.is_empty()) else {
+        return (String::new(), None);
+    };
+    let mut fields = vec!["url", "host", "path", "method", "content_type", "listener_label", "CAST(status_code AS TEXT)"];
+    if include_headers {
+        fields.extend(["request_headers", "response_headers"]);
+    }
+    let conditions: Vec<String> = fields.iter().map(|f| format!("{f} LIKE ?1 ESCAPE '\\'")).collect();
+    let escaped = term.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    (format!(" AND ({})", conditions.join(" OR ")), Some(format!("%{escaped}%")))
+}
+
+/// Newest first; pass the smallest id seen so far as `before_id` for the next page, which stays stable while new flows arrive.
+pub fn get_history_page(
+    db_path: &PathBuf,
+    search: Option<&str>,
+    include_headers: bool,
+    before_id: Option<i64>,
+    limit: u32,
+) -> Result<Vec<HistoryEntry>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let (clause, pattern) = search_clause(search, include_headers);
+    let sql = format!(
+        "SELECT {SUMMARY_FIELDS} FROM history WHERE id < ?2{clause} ORDER BY id DESC LIMIT ?3"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(rusqlite::params![pattern, before_id.unwrap_or(i64::MAX), limit], summary_from_row)
+        .map_err(|e| e.to_string())?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+pub fn get_history_count(db_path: &PathBuf, search: Option<&str>, include_headers: bool) -> Result<u64, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let (clause, pattern) = search_clause(search, include_headers);
+    let sql = format!("SELECT COUNT(*) FROM history WHERE 1=1{clause}");
+    let count = match pattern {
+        Some(pattern) => conn.query_row(&sql, [pattern], |row| row.get(0)),
+        None => conn.query_row(&sql, [], |row| row.get(0)),
+    };
+    count.map_err(|e| e.to_string())
 }
 
 pub fn get_history_detail(
@@ -188,4 +233,48 @@ pub fn delete_history_entry(db_path: &PathBuf, id: i64) -> Result<(), String> {
     conn.execute("DELETE FROM history WHERE id = ?1", [id])
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn db_with_flows(count: i64) -> (PathBuf, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("mitm-history-page-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("test.db");
+        crate::db::init_database(&db, None).unwrap();
+        let conn = Connection::open(&db).unwrap();
+        for id in 1..=count {
+            let host = if id % 2 == 0 { "even.test" } else { "odd_test" };
+            let headers = if id == 3 { r#"[["X-Trace","needle"]]"# } else { "[]" };
+            conn.execute(
+                "INSERT INTO history (id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase) VALUES (?1, 'GET', 'http://' || ?2, ?2, 200, ?3, '[]', '', '', 'response')",
+                rusqlite::params![id, host, headers],
+            )
+            .unwrap();
+        }
+        (db, dir)
+    }
+
+    #[test]
+    fn pages_walk_backwards_by_id_without_overlap() {
+        let (db, dir) = db_with_flows(25);
+        let first = get_history_page(&db, None, false, None, 10).unwrap();
+        assert_eq!(first.first().map(|e| e.id), Some(25));
+        let next = get_history_page(&db, None, false, first.last().map(|e| e.id), 10).unwrap();
+        assert_eq!(next.first().map(|e| e.id), Some(15));
+        assert_eq!(get_history_count(&db, None, false).unwrap(), 25);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn search_covers_headers_only_when_asked_and_escapes_wildcards() {
+        let (db, dir) = db_with_flows(6);
+        assert_eq!(get_history_count(&db, Some("needle"), false).unwrap(), 0);
+        assert_eq!(get_history_count(&db, Some("needle"), true).unwrap(), 1);
+        assert_eq!(get_history_count(&db, Some("even"), false).unwrap(), 3);
+        assert_eq!(get_history_count(&db, Some("_"), false).unwrap(), 3);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
