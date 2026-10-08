@@ -21,6 +21,14 @@ cargo build --release -p mitm-desktop       # ./target/release/mitm-desktop
 cargo install --path crates/mitm-desktop    # puts mitm-desktop in ~/.cargo/bin
 ```
 
+On Linux, add the launcher entry and icon (the session's `PATH` must include `~/.cargo/bin`):
+
+```bash
+install -Dm644 packaging/linux/mitm.desktop ~/.local/share/applications/mitm.desktop
+install -Dm644 crates/mitm-desktop/assets/icons/icon.svg ~/.local/share/icons/hicolor/scalable/apps/mitm.svg
+install -Dm644 crates/mitm-desktop/assets/icons/icon-512.png ~/.local/share/icons/hicolor/512x512/apps/mitm.png
+```
+
 Data lives in your local data directory under `mitm/`. On Linux, `~/.local/share/mitm/` holds `mitm.db` (history, workspaces, rules), `ca/` (the root CA), and `app.ron` (window layout and UI preferences).
 
 Only one instance runs at a time. Launching a second one offers to switch to the running one or take over from it.

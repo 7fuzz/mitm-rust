@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=MITM
+GenericName=Intercepting Proxy
+Comment=Inspect, intercept and replay HTTP(S) and WebSocket traffic
+Exec=mitm-desktop
+Icon=mitm
+Terminal=false
+Categories=Development;Debugger;
+Keywords=proxy;http;https;websocket;intercept;debug;
+StartupWMClass=mitm
