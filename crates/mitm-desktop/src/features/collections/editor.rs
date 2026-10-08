@@ -3,13 +3,13 @@ use mitm_core::collections::{CollectionTreeItem, RequestItem};
 use crate::command::{AppCommand, Commands};
 use crate::features::request_editor::body::{convert, is_multipart, is_urlencoded, COLLECTION_BODY_TYPES};
 use crate::features::request_editor::kv_table::{self, KvLabels};
+use crate::features::request_editor::method::method_combo;
 use crate::features::request_editor::steps::{self, StepOption};
 use crate::features::request_editor::{body_editor, extract_rules};
 use crate::theme::{self, Tone};
 use crate::widgets::template;
 use super::{docs, CollectionsCmd, CollectionsState, DocsMode, EditorTab, PreviewMode};
 
-const METHODS: [&str; 6] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"];
 
 pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands, now: f64) {
     let Some(index) = state.active_id.as_ref().and_then(|id| state.open.iter().position(|r| &r.id == id)) else {
@@ -24,7 +24,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
 
     ui.horizontal(|ui| {
         ui.set_min_height(28.0);
-        changed |= method_combo(ui, &mut request.method);
+        changed |= method_combo(ui, "collection_method", &mut request.method);
         let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
         let width = ui.available_width() - 130.0;
         let url = template::show(ui, &mut request.url, |text| {
@@ -99,19 +99,6 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
     if send && !executing {
         cmds.push(AppCommand::Collections(CollectionsCmd::Execute(id)));
     }
-}
-
-fn method_combo(ui: &mut egui::Ui, method: &mut String) -> bool {
-    let before = method.clone();
-    egui::ComboBox::from_id_salt("collection_method")
-        .width(86.0)
-        .selected_text(RichText::new(method.as_str()).strong())
-        .show_ui(ui, |ui| {
-            for m in METHODS {
-                ui.selectable_value(method, m.to_string(), m);
-            }
-        });
-    *method != before
 }
 
 fn step_options(trees: &[CollectionTreeItem], exclude: &str, prefix: &str) -> Vec<StepOption> {

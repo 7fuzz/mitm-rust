@@ -3,6 +3,7 @@ pub mod body_editor;
 pub mod captured;
 pub mod extract_rules;
 pub mod kv_table;
+pub mod method;
 pub mod response_panel;
 pub mod run_list;
 pub mod steps;

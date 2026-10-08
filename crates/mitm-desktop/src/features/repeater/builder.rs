@@ -4,14 +4,13 @@ use mitm_core::repeater::{HeaderItem, RepeaterTab};
 use crate::command::{AppCommand, Commands};
 use crate::features::request_editor::body::{content_type_for, convert, REPEATER_BODY_TYPES};
 use crate::features::request_editor::kv_table::{self, standard_headers, KvLabels};
+use crate::features::request_editor::method::method_combo;
 use crate::features::request_editor::steps::{self, StepOption};
 use crate::features::request_editor::url_params::{build_url, new_id, parse_query};
 use crate::features::request_editor::{body_editor, extract_rules};
 use crate::format::pretty_json;
 use crate::widgets::template;
 use super::{EditorTab, RepeaterState};
-
-pub const METHODS: [&str; 7] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"];
 
 pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, now: f64) {
     let Some(index) = state.active_id.as_ref().and_then(|id| state.tabs.iter().position(|t| &t.id == id)) else {
@@ -30,7 +29,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
 
     ui.horizontal(|ui| {
         ui.set_min_height(28.0);
-        changed |= method_combo(ui, &mut tab.method);
+        changed |= method_combo(ui, "method", &mut tab.method);
         let width = ui.available_width() - 150.0;
         let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
         let url = template::show(ui, &mut tab.url, |text| {
@@ -141,19 +140,6 @@ fn pasted_curl(ui: &egui::Ui) -> Option<Result<ParsedCurl, String>> {
             _ => None,
         })
     })
-}
-
-pub fn method_combo(ui: &mut egui::Ui, method: &mut String) -> bool {
-    let before = method.clone();
-    egui::ComboBox::from_id_salt("method")
-        .width(86.0)
-        .selected_text(RichText::new(method.as_str()).strong())
-        .show_ui(ui, |ui| {
-            for m in METHODS {
-                ui.selectable_value(method, m.to_string(), m);
-            }
-        });
-    *method != before
 }
 
 fn body_type_combo(ui: &mut egui::Ui, tab: &mut RepeaterTab) -> bool {
