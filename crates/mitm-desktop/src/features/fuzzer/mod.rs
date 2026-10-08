@@ -163,6 +163,7 @@ pub struct FuzzerState {
     pub body_content: String,
     pub payloads: HashMap<String, PayloadConfig>,
     pub concurrency: usize,
+    pub delay_ms: u64,
     pub status: RunStatus,
     pub run_id: Option<i64>,
     pub total: usize,
@@ -193,6 +194,7 @@ impl Default for FuzzerState {
                 PayloadConfig { list_text: "200\n301\n400\n404\n500".to_string(), ..PayloadConfig::default() },
             )]),
             concurrency: 5,
+            delay_ms: 0,
             status: RunStatus::Idle,
             run_id: None,
             total: 0,
@@ -255,7 +257,7 @@ impl FuzzerState {
             variables,
             match_rules: Vec::new(),
             concurrency: self.concurrency as u32,
-            delay_ms: 0,
+            delay_ms: self.delay_ms,
         }
     }
 
@@ -364,5 +366,15 @@ mod tests {
 
         state.url = "https://httpbin.org/status/200".to_string();
         assert_eq!(state.request_estimate(), 0);
+    }
+
+    #[test]
+    fn options_populate_config() {
+        let mut state = FuzzerState::default();
+        state.concurrency = 12;
+        state.delay_ms = 250;
+        let cfg = state.config();
+        assert_eq!(cfg.concurrency, 12);
+        assert_eq!(cfg.delay_ms, 250);
     }
 }

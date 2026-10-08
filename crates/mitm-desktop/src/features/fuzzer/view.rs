@@ -77,13 +77,18 @@ fn config(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
     match fuzzer.config_tab {
         ConfigTab::Request => request_tab(ui, fuzzer),
         ConfigTab::Payloads => payloads_tab(ui, fuzzer),
-        ConfigTab::Options => {
-            ui.horizontal(|ui| {
-                ui.label("Concurrency");
-                ui.add(egui::DragValue::new(&mut fuzzer.concurrency).range(1..=50));
-            });
-        }
+        ConfigTab::Options => options_tab(ui, fuzzer),
     }
+}
+
+fn options_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
+    ui.horizontal(|ui| {
+        ui.label("Concurrency");
+        ui.add(egui::DragValue::new(&mut fuzzer.concurrency).range(1..=200));
+        ui.add_space(16.0);
+        ui.label("Delay");
+        ui.add(egui::DragValue::new(&mut fuzzer.delay_ms).range(0..=60_000).suffix(" ms"));
+    });
 }
 
 fn request_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
