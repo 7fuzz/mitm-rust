@@ -1,5 +1,6 @@
 pub mod ca;
 pub mod collections;
+pub mod curl;
 pub mod db;
 pub mod encoding;
 pub mod events;
