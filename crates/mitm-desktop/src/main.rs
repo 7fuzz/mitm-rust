@@ -21,7 +21,11 @@ fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
-            .with_title("MITM"),
+            .with_title("MITM")
+            .with_icon(
+                eframe::icon_data::from_png_bytes(include_bytes!("../assets/icons/icon-256.png"))
+                    .expect("embedded icon is a valid PNG"),
+            ),
         ..Default::default()
     };
 
