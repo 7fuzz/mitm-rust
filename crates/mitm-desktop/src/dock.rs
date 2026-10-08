@@ -113,7 +113,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Tab::Intercept => features::intercept::show(ui, &mut state.intercept, cmds),
             Tab::Collections => features::collections::show(ui, &mut state.collections, cmds),
             Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
-            Tab::Environments => features::environments::show(ui, &mut state.environments, cmds, self.db_path),
+            Tab::Environments => features::environments::show(ui, &mut state.environments, cmds),
             Tab::Settings => features::settings::show(
                 ui,
                 &mut state.settings,

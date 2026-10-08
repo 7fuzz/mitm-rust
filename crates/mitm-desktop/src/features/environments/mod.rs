@@ -129,14 +129,14 @@ impl EnvironmentsState {
     }
 }
 
-pub fn show(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut Commands, _db_path: &Path) {
+pub fn show(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut Commands) {
     let now = ui.input(|i| i.time);
     workspace_header(ui, state, cmds);
     ui.add_space(4.0);
     ui.separator();
     let [mut list_ui, mut editor_ui] = split::side_by_side(ui, "environments_split", &mut state.split_fraction);
     environment_list(&mut list_ui, state, cmds);
-    environment_editor(&mut editor_ui, state, cmds, now);
+    environment_editor(&mut editor_ui, state, now);
 }
 
 fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut Commands) {
@@ -341,7 +341,7 @@ fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
     });
 }
 
-fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, _cmds: &mut Commands, now: f64) {
+fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, now: f64) {
     let Some(selected_id) = state.selected_environment_id.clone() else {
         ui.vertical_centered(|ui| {
             ui.add_space(40.0);

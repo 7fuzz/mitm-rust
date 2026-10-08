@@ -18,11 +18,6 @@ pub fn set_active_env(env: Option<&Environment>) {
     });
 }
 
-#[allow(dead_code)]
-pub fn get_active_env() -> Option<Environment> {
-    ACTIVE_ENV.with(|cell| cell.borrow().clone())
-}
-
 pub fn resolve_var(name: &str) -> Option<String> {
     ACTIVE_ENV.with(|cell| {
         let env_ref = cell.borrow();
