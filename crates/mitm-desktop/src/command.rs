@@ -2,7 +2,7 @@ use mitm_core::db::InterceptRule;
 use mitm_core::fuzzer::FuzzTemplate;
 use mitm_core::state::{HistorySettings, ListenerConfig, ProxyMode};
 use crate::dock::Tab;
-use crate::features::collections::CollectionsCmd;
+use crate::features::collections::{CollectionsCmd, SaveTarget};
 use crate::format::CopyFormat;
 
 #[derive(Debug, Clone, Default)]
@@ -34,6 +34,7 @@ pub enum AppCommand {
     FactoryReset,
 
     SelectFlow(i64),
+    SaveFlowToCollection { flow_id: i64, target: SaveTarget },
     LoadOlderFlows,
     ClearTraffic,
     DeleteFlow(i64),

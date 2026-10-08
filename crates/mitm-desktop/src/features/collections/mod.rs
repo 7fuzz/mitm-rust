@@ -11,6 +11,8 @@ use mitm_core::collections::execute::ExecutionResult;
 use mitm_core::collections::preview::{preview_request_db, RequestPreview};
 use mitm_core::collections::{self as core_collections, Collection, CollectionTreeItem, RequestHistoryItem, RequestItem};
 use mitm_core::repeater::ExtractRuleItem;
+use crate::features::request_editor::body::{is_multipart, is_urlencoded};
+use crate::features::request_editor::captured::CapturedRequest;
 use crate::widgets::message_pane::PaneState;
 
 pub use view::show;
@@ -54,6 +56,12 @@ pub struct ExtractModal {
     pub request_ids: Vec<String>,
     pub selected: String,
     pub rules: Vec<ExtractRuleItem>,
+}
+
+#[derive(Clone)]
+pub enum SaveTarget {
+    Folder(String),
+    NewFolder(String),
 }
 
 #[derive(Clone)]
@@ -319,6 +327,32 @@ impl CollectionsState {
         }
     }
 
+    pub fn save_captured(&mut self, db_path: &PathBuf, target: SaveTarget, name: String, captured: CapturedRequest) -> Result<(), String> {
+        let folder_id = match target {
+            SaveTarget::Folder(id) => id,
+            SaveTarget::NewFolder(new_name) => {
+                core_collections::create_collection_db(db_path, self.active_workspace_id.clone(), None, new_name)?.id
+            }
+        };
+        let mut request = core_collections::create_request_db(db_path, folder_id.clone(), name)?;
+        request.method = captured.method;
+        request.url = captured.url;
+        request.params = captured.params;
+        request.headers = captured.headers;
+        let body = Some(captured.body_content);
+        match captured.body_type.as_str() {
+            "json" => request.body_json = body,
+            t if is_multipart(t) => request.body_form_data = body,
+            t if is_urlencoded(t) => request.body_urlencoded = body,
+            _ => request.body_raw = body,
+        }
+        request.body_type = captured.body_type;
+        core_collections::update_request_db(db_path, request)?;
+        self.reveal.insert(folder_id);
+        self.reload_tree(db_path);
+        Ok(())
+    }
+
     fn open_request(&mut self, id: String, db_path: &PathBuf) {
         if !self.open.iter().any(|r| r.id == id) {
             let Some(request) = self.find_request(&id).cloned() else { return };
@@ -395,5 +429,58 @@ fn patch_tree(trees: &mut [CollectionTreeItem], request: RequestItem) {
             return;
         }
         patch_tree(&mut folder.children, request.clone());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mitm_core::state::HistoryEntry;
+
+    #[test]
+    fn captured_flow_saves_as_a_request_in_a_new_folder() {
+        let dir = std::env::temp_dir().join(format!("mitm-save-flow-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("test.db");
+        mitm_core::db::init_database(&db, None).unwrap();
+        let workspace = mitm_core::workspace::create_workspace_db(&db, "W".to_string(), None).unwrap();
+
+        let flow = HistoryEntry {
+            id: 1,
+            method: "POST".to_string(),
+            url: "https://api.test/users?page=2".to_string(),
+            host: "api.test".to_string(),
+            path: "/users".to_string(),
+            content_type: String::new(),
+            response_size: 0,
+            status_code: 200,
+            request_headers: vec![("Content-Type".to_string(), "application/json".to_string())],
+            response_headers: vec![],
+            request_body: r#"{"name":"a"}"#.to_string(),
+            response_body: String::new(),
+            phase: "response".to_string(),
+            duration_ms: None,
+            created_at: String::new(),
+            is_intercepted: false,
+            is_rewritten: false,
+            is_failed: false,
+            listener_label: String::new(),
+            request_at: None,
+            response_at: None,
+        };
+        let mut state = CollectionsState::default();
+        state.load(&db, workspace.id);
+        state
+            .save_captured(&db, SaveTarget::NewFolder("Captured".to_string()), "POST /users".to_string(), CapturedRequest::from_flow(&flow, None))
+            .unwrap();
+
+        let folder = state.trees.iter().find(|f| f.name == "Captured").expect("folder created");
+        let request = &folder.requests[0];
+        assert_eq!(request.method, "POST");
+        assert_eq!(request.url, flow.url);
+        assert_eq!(request.body_type, "json");
+        assert!(request.body_json.as_deref().is_some_and(|b| b.contains("\"name\"")));
+        assert!(request.headers.iter().any(|h| h.key == "Content-Type"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

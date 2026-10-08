@@ -367,6 +367,7 @@ pub fn show(
     state: &mut TrafficState,
     inspector: &mut InspectorState,
     listeners: &[mitm_core::state::ListenerConfig],
+    folders: &[mitm_core::collections::CollectionTreeItem],
     cmds: &mut crate::command::Commands,
 ) {
     let visible = state.filtered_indices();
@@ -374,11 +375,11 @@ pub fn show(
     ui.separator();
 
     if !inspector.prefs.open || state.selected_flow().is_none() {
-        table::show(ui, state, &visible, cmds);
+        table::show(ui, state, &visible, folders, cmds);
         return;
     }
     let [mut table_ui, mut inspector_ui] =
         crate::widgets::split::stacked(ui, "traffic_inspector_split", &mut inspector.prefs.table_fraction);
-    table::show(&mut table_ui, state, &visible, cmds);
+    table::show(&mut table_ui, state, &visible, folders, cmds);
     crate::features::inspector::show(&mut inspector_ui, inspector, state);
 }

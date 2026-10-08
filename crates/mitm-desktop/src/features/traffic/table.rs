@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder, TableRow};
+use mitm_core::collections::CollectionTreeItem;
 use mitm_core::state::HistoryEntry;
 use crate::command::{AppCommand, Commands};
+use crate::features::collections::SaveTarget;
 use crate::format::{format_bytes, format_duration, local_clock, CopyFormat};
 use crate::theme::{self, Tone};
 use crate::widgets::pills::{badge, render_method_pill, render_source_pill};
@@ -11,7 +13,7 @@ use super::{flow_status_badge, ColumnId, ColumnLayout, FlowFlags, TrafficState};
 const ROW_HEIGHT: f32 = 26.0;
 const LOAD_AHEAD_ROWS: usize = 50;
 
-pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds: &mut Commands) {
+pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], folders: &[CollectionTreeItem], cmds: &mut Commands) {
     let columns = state.prefs.columns.visible();
 
     let visuals = ui.visuals().clone();
@@ -56,7 +58,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
                         let flow = &state.flows[visible[row.index()]];
                         let selected = state.selected_id == Some(flow.id);
                         row.set_selected(selected);
-                        flow_row(&mut row, &visuals, &columns, flow, selected, cmds);
+                        flow_row(&mut row, &visuals, &columns, flow, selected, folders, cmds);
                     });
                 });
             state.scroll_anchor = visible.first().map(|&i| (state.flows[i].id, output.state.offset.y));
@@ -96,6 +98,7 @@ fn flow_row(
     columns: &[ColumnId],
     flow: &HistoryEntry,
     selected: bool,
+    folders: &[CollectionTreeItem],
     cmds: &mut Commands,
 ) {
     let flags = FlowFlags::of(flow);
@@ -123,7 +126,7 @@ fn flow_row(
     if response.clicked() || response.double_clicked() {
         cmds.push(AppCommand::SelectFlow(flow.id));
     }
-    response.context_menu(|ui| flow_menu(ui, flow, cmds));
+    response.context_menu(|ui| flow_menu(ui, flow, folders, cmds));
 }
 
 fn row_tint(visuals: &egui::Visuals, flags: &FlowFlags) -> Option<Color32> {
@@ -279,29 +282,71 @@ fn column_menu(ui: &mut egui::Ui, layout: &mut ColumnLayout, clicked: Option<Col
     }
 }
 
-fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, cmds: &mut Commands) {
-    let mut item = |ui: &mut egui::Ui, label: &str, cmd: AppCommand| {
-        if ui.button(label).clicked() {
-            cmds.push(cmd);
-            ui.close();
+fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, folders: &[CollectionTreeItem], cmds: &mut Commands) {
+    menu_item(ui, "🔁 Send to Repeater", AppCommand::SendFlowToRepeater(flow.id), cmds);
+    menu_item(ui, "⚡ Send to Fuzzer", AppCommand::SendFlowToFuzzer(flow.id), cmds);
+    menu_item(ui, "🛡 Add to Intercept Rules", AppCommand::AddInterceptRuleForHost(flow.host.clone()), cmds);
+    ui.menu_button("📁 Save to Collection", |ui| {
+        for folder in folders {
+            folder_entry(ui, flow.id, folder, cmds);
         }
-    };
-
-    item(ui, "🔁 Send to Repeater", AppCommand::SendFlowToRepeater(flow.id));
-    item(ui, "⚡ Send to Fuzzer", AppCommand::SendFlowToFuzzer(flow.id));
-    item(ui, "🛡 Add to Intercept Rules", AppCommand::AddInterceptRuleForHost(flow.host.clone()));
+        if !folders.is_empty() {
+            ui.separator();
+        }
+        new_folder_entry(ui, flow.id, cmds);
+    });
     ui.menu_button("📋 Copy", |ui| {
         if ui.button("Copy URL").clicked() {
             ui.ctx().copy_text(flow.url.clone());
             ui.close();
         }
-        item(ui, "Copy Curl", AppCommand::CopyFlow(flow.id, CopyFormat::Curl));
-        item(ui, "Copy Curl and Res", AppCommand::CopyFlow(flow.id, CopyFormat::CurlAndResponse));
-        item(ui, "Copy URL, Body, and Response", AppCommand::CopyFlow(flow.id, CopyFormat::UrlBodyAndResponse));
+        menu_item(ui, "Copy Curl", AppCommand::CopyFlow(flow.id, CopyFormat::Curl), cmds);
+        menu_item(ui, "Copy Curl and Res", AppCommand::CopyFlow(flow.id, CopyFormat::CurlAndResponse), cmds);
+        menu_item(ui, "Copy URL, Body, and Response", AppCommand::CopyFlow(flow.id, CopyFormat::UrlBodyAndResponse), cmds);
     });
     ui.separator();
     if ui.button(RichText::new("🗑 Delete Item").color(theme::color(ui, Tone::Danger))).clicked() {
         cmds.push(AppCommand::DeleteFlow(flow.id));
         ui.close();
     }
+}
+
+fn menu_item(ui: &mut egui::Ui, label: &str, cmd: AppCommand, cmds: &mut Commands) {
+    if ui.button(label).clicked() {
+        cmds.push(cmd);
+        ui.close();
+    }
+}
+
+fn save_into(ui: &mut egui::Ui, label: &str, flow_id: i64, target: SaveTarget, cmds: &mut Commands) {
+    if ui.button(label).clicked() {
+        cmds.push(AppCommand::SaveFlowToCollection { flow_id, target });
+        ui.close();
+    }
+}
+
+fn folder_entry(ui: &mut egui::Ui, flow_id: i64, folder: &CollectionTreeItem, cmds: &mut Commands) {
+    if folder.children.is_empty() {
+        save_into(ui, &folder.name, flow_id, SaveTarget::Folder(folder.id.clone()), cmds);
+        return;
+    }
+    ui.menu_button(&folder.name, |ui| {
+        save_into(ui, "Save here", flow_id, SaveTarget::Folder(folder.id.clone()), cmds);
+        ui.separator();
+        for child in &folder.children {
+            folder_entry(ui, flow_id, child, cmds);
+        }
+    });
+}
+
+fn new_folder_entry(ui: &mut egui::Ui, flow_id: i64, cmds: &mut Commands) {
+    let id = egui::Id::new("traffic_new_folder_name");
+    let mut name: String = ui.data_mut(|d| d.get_temp(id)).unwrap_or_default();
+    let edit = ui.add(egui::TextEdit::singleline(&mut name).hint_text("New folder…").desired_width(160.0));
+    if edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !name.trim().is_empty() {
+        cmds.push(AppCommand::SaveFlowToCollection { flow_id, target: SaveTarget::NewFolder(name.trim().to_string()) });
+        name.clear();
+        ui.close();
+    }
+    ui.data_mut(|d| d.insert_temp(id, name));
 }

@@ -13,6 +13,7 @@ use crate::dock::{self, Tab, TabViewer};
 use mitm_core::collections::execute::ExecutionResult;
 use mitm_core::repeater::RepeaterExecutionResult;
 use crate::features::collections::CollectionsCmd;
+use crate::features::request_editor::captured::CapturedRequest;
 use crate::features::environments::{self, QuickVarScope};
 use crate::features::fuzzer::FuzzerWorker;
 use crate::features::settings::ProxyState;
@@ -186,6 +187,14 @@ impl MitmApp {
             }
 
             AppCommand::LoadOlderFlows => self.state.traffic.load_older(db_path),
+            AppCommand::SaveFlowToCollection { flow_id, target } => {
+                if let Some(flow) = self.state.traffic.flow(flow_id) {
+                    let detail = mitm_core::db::get_history_detail(db_path, flow_id).ok().flatten();
+                    let captured = CapturedRequest::from_flow(flow, detail.as_ref());
+                    let name = format!("{} {}", flow.method, if flow.path.is_empty() { &flow.url } else { &flow.path });
+                    let _ = self.state.collections.save_captured(db_path, target, name, captured);
+                }
+            }
             AppCommand::SelectFlow(id) => {
                 self.state.traffic.select(id, db_path);
                 self.state.inspector.prefs.open = true;

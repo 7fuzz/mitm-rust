@@ -108,7 +108,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
         let state = &mut *self.state;
         let cmds = &mut *self.cmds;
         match tab {
-            Tab::Traffic => features::traffic::show(ui, &mut state.traffic, &mut state.inspector, &state.proxy.listeners, cmds),
+            Tab::Traffic => features::traffic::show(ui, &mut state.traffic, &mut state.inspector, &state.proxy.listeners, &state.collections.trees, cmds),
             Tab::Repeater => {
                 template::set_active_env(state.environments.repeater_env.as_ref());
                 features::repeater::show(ui, &mut state.repeater, cmds);
