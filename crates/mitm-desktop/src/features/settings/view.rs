@@ -113,12 +113,6 @@ fn data_section(ui: &mut egui::Ui, data: &mut DataSectionState, cmds: &mut Comma
     ui.add_space(12.0);
 
     ui.strong("Danger Zone");
-    ui.add_space(4.0);
-    ui.label(
-        RichText::new("Factory reset will wipe the database and CA certificate, and restart the core.")
-            .weak()
-            .small(),
-    );
     ui.add_space(6.0);
 
     if ui.button(RichText::new("Factory Reset…").color(theme::color(ui, Tone::Danger))).clicked() {
@@ -168,7 +162,6 @@ fn certificate_section(
     cmds: &mut Commands,
 ) {
     ui.strong("Root Certificate Authority (CA)");
-    ui.label(RichText::new("Clients and browsers must trust this CA to inspect HTTPS traffic.").weak());
     ui.add_space(8.0);
 
     ui.horizontal(|ui| {
@@ -262,8 +255,6 @@ fn certificate_section(
                 });
                 ui.end_row();
             });
-    } else {
-        ui.label(RichText::new("Loading certificate info…").weak());
     }
 
     ui.add_space(12.0);
@@ -271,7 +262,6 @@ fn certificate_section(
     ui.add_space(8.0);
 
     ui.strong("Install & Trust Certificate");
-    ui.label(RichText::new("Instructions and commands to trust this root certificate on your operating system or tools.").weak());
     ui.add_space(6.0);
 
     let os = std::env::consts::OS;
@@ -349,7 +339,6 @@ fn proxy_section(
     cmds: &mut Commands,
 ) {
     ui.strong("Configured Listeners (Multi-Source)");
-    ui.label(RichText::new("Each listener binds to an IP and port with a named label so you can easily identify where traffic originated.").weak());
     ui.add_space(6.0);
 
     let mut modified = false;

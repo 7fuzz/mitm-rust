@@ -342,21 +342,8 @@ fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
 }
 
 fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, now: f64) {
-    let Some(selected_id) = state.selected_environment_id.clone() else {
-        ui.vertical_centered(|ui| {
-            ui.add_space(40.0);
-            ui.weak("Select an environment from the list or add a new one");
-        });
-        return;
-    };
-
-    let Some(env_idx) = state.environments.iter().position(|e| e.id == selected_id) else {
-        ui.vertical_centered(|ui| {
-            ui.add_space(40.0);
-            ui.weak("Environment not found");
-        });
-        return;
-    };
+    let Some(selected_id) = state.selected_environment_id.clone() else { return };
+    let Some(env_idx) = state.environments.iter().position(|e| e.id == selected_id) else { return };
 
     let env = &mut state.environments[env_idx];
 
