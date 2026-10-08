@@ -33,6 +33,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerCo
         }
         let Some((_, mock_headers)) = state.mock_headers.as_mut() else { return };
         let changed = editor::show(ui, rule, mock_headers);
+        editor::preview(ui, rule, &mut state.sample);
         if changed {
             state.mark_dirty(now);
         }

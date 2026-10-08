@@ -51,6 +51,7 @@ pub struct RewriteState {
     pub rules: Vec<RewriteRule>,
     pub selected: Option<String>,
     pub search: String,
+    pub sample: String,
     /// Mock header rows of the selected rule, kept so disabled rows survive between frames.
     pub mock_headers: Option<(String, Vec<HeaderItem>)>,
     dirty_since: Option<f64>,

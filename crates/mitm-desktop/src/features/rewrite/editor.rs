@@ -4,6 +4,8 @@ use mitm_core::repeater::HeaderItem;
 use crate::features::request_editor::body_editor::code_editor;
 use crate::features::request_editor::captured::header_items;
 use crate::features::request_editor::kv_table::{self, KvLabels};
+use mitm_core::proxy::rewrite::preview_rewrite;
+use crate::theme::{self, Tone};
 use super::ACTIONS;
 
 const MATCH_FIELDS: [(&str, &str); 6] =
@@ -156,4 +158,48 @@ fn combo(ui: &mut egui::Ui, id: &str, value: &mut String, options: &[(&str, &str
         }
     });
     *value != before
+}
+
+/// A sample of the rule's target, with the pattern's matches highlighted, and what the rule turns it into.
+pub fn preview(ui: &mut egui::Ui, rule: &RewriteRule, sample: &mut String) {
+    ui.add_space(8.0);
+    ui.strong("Preview");
+    let highlight_rule = rule.clone();
+    let mut layouter = move |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap_width: f32| {
+        let text = buf.as_str();
+        let font = egui::TextStyle::Monospace.resolve(ui.style());
+        let plain = egui::text::TextFormat::simple(font.clone(), ui.visuals().text_color());
+        let matched = egui::text::TextFormat {
+            background: Tone::Warn.tint(ui.visuals(), 70),
+            ..plain.clone()
+        };
+        let mut job = egui::text::LayoutJob::default();
+        let mut at = 0;
+        for range in preview_rewrite(&highlight_rule, text).map(|p| p.matches).unwrap_or_default() {
+            job.append(&text[at..range.start], 0.0, plain.clone());
+            job.append(&text[range.clone()], 0.0, matched.clone());
+            at = range.end;
+        }
+        job.append(&text[at..], 0.0, plain);
+        job.wrap.max_width = wrap_width;
+        ui.fonts_mut(|f| f.layout_job(job))
+    };
+    ui.add(
+        egui::TextEdit::multiline(sample)
+            .hint_text("Sample URL, body or Name: value headers")
+            .font(egui::TextStyle::Monospace)
+            .layouter(&mut layouter)
+            .desired_rows(3)
+            .desired_width(f32::INFINITY),
+    );
+    ui.label(RichText::new("⏷").weak());
+    match preview_rewrite(rule, sample) {
+        Ok(result) => {
+            let mut output = result.output.as_str();
+            ui.add(egui::TextEdit::multiline(&mut output).font(egui::TextStyle::Monospace).desired_rows(3).desired_width(f32::INFINITY));
+        }
+        Err(error) => {
+            ui.label(RichText::new(error).color(theme::color(ui, Tone::Danger)));
+        }
+    }
 }
