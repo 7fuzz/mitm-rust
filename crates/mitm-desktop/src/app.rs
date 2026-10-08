@@ -481,6 +481,12 @@ impl MitmApp {
                 Ok(()) => self.state.websockets.removed(id),
                 Err(e) => self.ws_actions.reply(ctx).send(Err(e)),
             },
+            AppCommand::SetWsMitm(enabled) => {
+                if let Err(e) = self.rt.block_on(self.core.set_ws_mitm_enabled(enabled)) {
+                    self.state.websockets.mitm_enabled = !enabled;
+                    self.ws_actions.reply(ctx).send(Err(e));
+                }
+            }
             AppCommand::SelectWorkspace(id) => {
                 let _ = mitm_core::workspace::set_active_workspace_db(db_path, &id);
                 self.state.environments.active_workspace_id = id.clone();
@@ -768,6 +774,7 @@ fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {
     state.rewrite.rules = rt.block_on(core.rewrite_rules());
     state.rewrite.enabled = core.rewrite_enabled();
     state.rewrite.scope = rt.block_on(core.rewrite_source_scope());
+    state.websockets.mitm_enabled = rt.block_on(core.ws_mitm_enabled());
     state
 }
 

@@ -84,6 +84,7 @@ pub enum AppCommand {
     DisconnectWs(i64),
     ClearWsSession(i64),
     DeleteWsSession(i64),
+    SetWsMitm(bool),
 
     SelectWorkspace(String),
     SelectEnvironment(Option<String>),

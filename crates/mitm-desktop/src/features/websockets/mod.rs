@@ -35,6 +35,7 @@ pub struct WebSocketsState {
     pub frame_search: String,
     pub connect: connect::WsConnect,
     pub composer: composer::Composer,
+    pub mitm_enabled: bool,
 }
 
 impl Default for WebSocketsState {
@@ -51,6 +52,7 @@ impl Default for WebSocketsState {
             frame_search: String::new(),
             connect: Default::default(),
             composer: Default::default(),
+            mitm_enabled: false,
         }
     }
 }

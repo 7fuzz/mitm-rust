@@ -22,6 +22,12 @@ fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comm
             if ui.button("➕").on_hover_text("Connect a WebSocket").clicked() {
                 state.connect.open();
             }
+            let mitm = ui
+                .toggle_value(&mut state.mitm_enabled, "MITM")
+                .on_hover_text("Capture proxied WebSocket frames (new connections)");
+            if mitm.changed() {
+                cmds.push(AppCommand::SetWsMitm(state.mitm_enabled));
+            }
         });
     });
 
