@@ -91,9 +91,13 @@ pub fn increment_ws_message_count(db_path: &PathBuf, connection_id: i64) -> Resu
 }
 
 pub fn delete_ws_connection(db_path: &PathBuf, id: i64) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM ws_connections WHERE id = ?", params![id])
+    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM ws_messages WHERE connection_id = ?", params![id])
         .map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM ws_connections WHERE id = ?", params![id])
+        .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -175,4 +179,66 @@ pub fn clear_ws_messages(db_path: &PathBuf, connection_id: Option<i64>) -> Resul
             .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn conn_row(url: &str) -> WebSocketConn {
+        WebSocketConn {
+            connection_id: 0,
+            url: url.to_string(),
+            status: "connected".to_string(),
+            handshake_time: 0,
+            closed_at: None,
+            protocol: None,
+            client_addr: None,
+            is_client_session: true,
+            message_count: 0,
+            listener_label: String::new(),
+        }
+    }
+
+    fn msg_row(connection_id: i64) -> WebSocketMessage {
+        WebSocketMessage {
+            id: 0,
+            connection_id,
+            direction: "to_server".to_string(),
+            msg_type: "text".to_string(),
+            payload: "hi".to_string(),
+            timestamp: 0,
+            length: 2,
+            is_injected: true,
+        }
+    }
+
+    #[test]
+    fn clear_resets_count_and_delete_removes_messages() {
+        let dir = std::env::temp_dir().join(format!("mitm-ws-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("test.db");
+        crate::db::init_database(&db_path, None).unwrap();
+
+        let a = insert_ws_connection(&db_path, &conn_row("wss://a")).unwrap();
+        let b = insert_ws_connection(&db_path, &conn_row("wss://b")).unwrap();
+        for _ in 0..3 {
+            save_ws_message(&db_path, &mut msg_row(a)).unwrap();
+            increment_ws_message_count(&db_path, a).unwrap();
+        }
+        save_ws_message(&db_path, &mut msg_row(b)).unwrap();
+        increment_ws_message_count(&db_path, b).unwrap();
+
+        clear_ws_messages(&db_path, Some(a)).unwrap();
+        assert!(load_ws_messages(&db_path, a, None).unwrap().is_empty());
+        let a_count = load_ws_connections(&db_path).unwrap().iter().find(|c| c.connection_id == a).unwrap().message_count;
+        assert_eq!(a_count, 0);
+        assert_eq!(load_ws_messages(&db_path, b, None).unwrap().len(), 1, "other session untouched");
+
+        delete_ws_connection(&db_path, b).unwrap();
+        assert!(load_ws_messages(&db_path, b, None).unwrap().is_empty());
+        assert!(load_ws_connections(&db_path).unwrap().iter().all(|c| c.connection_id != b));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

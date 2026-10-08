@@ -159,6 +159,64 @@ pub async fn connect_client_session(
     Ok(conn_info)
 }
 
+/// Sends a frame on a live session. Client sessions always send upstream; a
+/// proxied session injects toward the server or the client per `to_server`. The
+/// frame is saved and emitted as injected, since it never returns through a read
+/// loop.
+pub async fn send_frame(
+    event_bus: Option<EventBus>,
+    state: Arc<AppState>,
+    connection_id: i64,
+    msg_type: &str,
+    payload: String,
+    to_server: bool,
+) -> Result<(), String> {
+    let (message, stored_payload) = match msg_type {
+        "binary" => {
+            let bytes = hex::decode(payload.split_whitespace().collect::<String>())
+                .map_err(|e| format!("Invalid hex payload: {e}"))?;
+            let stored = format!("[Binary Frame: {} bytes] {}", bytes.len(), hex::encode(&bytes));
+            (Message::Binary(bytes.into()), stored)
+        }
+        _ => (Message::Text(payload.clone().into()), payload),
+    };
+
+    let direction = if let Some(tx) = state.ws_client_senders.get(&connection_id) {
+        tx.send(message).map_err(|_| "WebSocket client is closed".to_string())?;
+        "to_server"
+    } else if let Some(entry) = state.ws_stream_senders.get(&connection_id) {
+        let (to_server_tx, to_client_tx) = entry.value();
+        let tx = if to_server { to_server_tx } else { to_client_tx };
+        tx.send(message).map_err(|_| "WebSocket session is closed".to_string())?;
+        if to_server { "to_server" } else { "to_client" }
+    } else {
+        return Err("WebSocket session is not connected".to_string());
+    };
+
+    let mut record = WebSocketMessage {
+        id: 0,
+        connection_id,
+        direction: direction.to_string(),
+        msg_type: if msg_type == "json" { "json" } else if msg_type == "binary" { "binary" } else { "text" }.to_string(),
+        payload: stored_payload,
+        timestamp: chrono::Local::now().timestamp_millis(),
+        length: 0,
+        is_injected: true,
+    };
+    record.length = record.payload.len();
+    crate::db::ws_db::save_ws_message(&state.db_path, &mut record)?;
+    let _ = crate::db::ws_db::increment_ws_message_count(&state.db_path, connection_id);
+    if let Some(bus) = event_bus {
+        if let Ok(val) = serde_json::to_value(&record) {
+            bus.emit(crate::events::CoreEvent::WsFrameReceived {
+                session_id: connection_id.to_string(),
+                frame: val,
+            });
+        }
+    }
+    Ok(())
+}
+
 pub async fn disconnect_client_session(state: Arc<AppState>, connection_id: i64) -> Result<(), String> {
     if let Some((_, stop_mutex)) = state.ws_client_stops.remove(&connection_id) {
         let mut lock = stop_mutex.lock().await;
