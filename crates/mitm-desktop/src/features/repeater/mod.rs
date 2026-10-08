@@ -202,6 +202,48 @@ impl RepeaterState {
         self.create(tab, db_path);
     }
 
+    pub fn create_from_fuzz_result(&mut self, result: &mitm_core::fuzzer::FuzzResult, db_path: &PathBuf) {
+        let content_type = result
+            .request_headers
+            .iter()
+            .find(|h| h.key.eq_ignore_ascii_case("content-type"))
+            .map_or("", |h| h.value.as_str());
+        let (body_type, body_content) = crate::features::request_editor::body::structured_from_capture(
+            content_type,
+            result.request_body.as_deref().unwrap_or_default(),
+        );
+        let captured = CapturedRequest {
+            method: result.method.clone(),
+            url: result.url.clone(),
+            params: parse_query(&result.url, &[]),
+            headers: result.request_headers.clone(),
+            body_type,
+            body_content,
+        };
+
+        let mut tab = blank_tab(db_path);
+        apply_captured(&mut tab, captured);
+        let id = self.create(tab, db_path);
+
+        let run = RepeaterHistoryItem {
+            id: 0,
+            repeater_id: id.clone(),
+            method: result.method.clone(),
+            url: result.url.clone(),
+            request_headers: result.request_headers.clone(),
+            request_body: result.request_body.clone(),
+            status_code: result.status_code,
+            response_headers: result.response_headers.clone(),
+            response_body: result.response_body.clone(),
+            duration_ms: result.duration_ms,
+            executed_at_ms: chrono::Utc::now().timestamp_millis(),
+        };
+        if let Ok(history_id) = core_repeater::insert_repeater_history_db(db_path, &run) {
+            self.responses.insert(id.clone(), ShownResponse::from_run(&RepeaterHistoryItem { id: history_id, ..run }));
+        }
+        self.after_run(&id, db_path);
+    }
+
     pub fn delete(&mut self, id: &str, db_path: &PathBuf) {
         let _ = core_repeater::delete_repeater_tab_db(db_path, id);
         self.tabs.retain(|t| t.id != id);

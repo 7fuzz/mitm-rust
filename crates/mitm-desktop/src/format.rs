@@ -86,6 +86,33 @@ impl Exchange {
         }
     }
 
+    pub fn from_fuzz_result(result: &mitm_core::fuzzer::FuzzResult) -> Self {
+        let content_type = result
+            .response_headers
+            .iter()
+            .find(|h| h.key.eq_ignore_ascii_case("content-type"))
+            .map_or(String::new(), |h| h.value.clone());
+        Self {
+            method: result.method.clone(),
+            url: result.url.clone(),
+            request_headers: result
+                .request_headers
+                .iter()
+                .filter(|h| h.enabled)
+                .map(|h| (h.key.clone(), h.value.clone()))
+                .collect(),
+            request_body: result.request_body.clone().unwrap_or_default(),
+            status_code: result.status_code,
+            response_headers: result
+                .response_headers
+                .iter()
+                .map(|h| (h.key.clone(), h.value.clone()))
+                .collect(),
+            response_body: result.response_body.clone().unwrap_or_default(),
+            content_type,
+        }
+    }
+
     pub fn curl(&self) -> String {
         self.curl_with(&self.request_headers, &self.request_body)
     }
@@ -284,5 +311,51 @@ mod tests {
             ..CopyOptions::default()
         };
         assert_eq!(exchange.custom_text(&bare), "curl -X POST 'https://api.test/u'");
+    }
+
+    #[test]
+    fn fuzz_result_formats_as_curl() {
+        use mitm_core::fuzzer::FuzzResult;
+        use mitm_core::repeater::HeaderItem;
+
+        let result = FuzzResult {
+            idx: 0,
+            payloads: vec!["admin".to_string()],
+            method: "POST".to_string(),
+            url: "https://example.com/login".to_string(),
+            request_headers: vec![
+                HeaderItem {
+                    id: "1".to_string(),
+                    key: "Content-Type".to_string(),
+                    value: "application/json".to_string(),
+                    enabled: true,
+                },
+                HeaderItem {
+                    id: "2".to_string(),
+                    key: "Disabled".to_string(),
+                    value: "val".to_string(),
+                    enabled: false,
+                },
+            ],
+            request_body: Some(r#"{"user":"admin"}"#.to_string()),
+            status_code: 200,
+            response_headers: vec![HeaderItem {
+                id: "3".to_string(),
+                key: "Content-Type".to_string(),
+                value: "application/json".to_string(),
+                enabled: true,
+            }],
+            response_body: Some(r#"{"token":"xyz"}"#.to_string()),
+            response_size: 15,
+            duration_ms: 42,
+            error: None,
+            matches: vec![],
+        };
+        let exchange = Exchange::from_fuzz_result(&result);
+        let curl = exchange.curl();
+        assert!(curl.starts_with("curl -X POST 'https://example.com/login'"));
+        assert!(curl.contains("-H 'Content-Type: application/json'"));
+        assert!(!curl.contains("Disabled"));
+        assert!(curl.contains(r#"--data-raw '{"user":"admin"}'"#));
     }
 }

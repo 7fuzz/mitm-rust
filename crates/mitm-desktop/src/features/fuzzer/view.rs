@@ -19,7 +19,7 @@ pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     ui.separator();
     let [mut top, mut bottom] = split::stacked(ui, "fuzzer_split", &mut fuzzer.prefs.split);
     config(&mut top, fuzzer);
-    results(&mut bottom, fuzzer);
+    results(&mut bottom, fuzzer, cmds);
     // Any request not taken by a focused field this frame is dropped so it never fires later.
     template::clear_mark_request();
 }
@@ -335,10 +335,23 @@ fn payload_set(ui: &mut egui::Ui, name: &str, cfg: &mut PayloadConfig) {
     });
 }
 
-fn results(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
+fn results(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
+    if fuzzer.status == RunStatus::Idle && fuzzer.results.is_empty() {
+        return;
+    }
+    if fuzzer.selected_idx.is_some() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        fuzzer.selected_idx = None;
+        fuzzer.selected_result = None;
+    }
     results_toolbar(ui, fuzzer);
     ui.separator();
-    results_table(ui, fuzzer);
+    if fuzzer.selected_idx.is_some() {
+        let [mut left, mut right] = split::side_by_side(ui, "fuzzer_results_split", &mut fuzzer.prefs.detail_split);
+        results_table(&mut left, fuzzer, cmds);
+        response_pane(&mut right, fuzzer, cmds);
+    } else {
+        results_table(ui, fuzzer, cmds);
+    }
 }
 
 fn results_toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
@@ -372,7 +385,7 @@ fn results_toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
     });
 }
 
-fn results_table(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
+fn results_table(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     let row_height = egui::TextStyle::Body.resolve(ui.style()).size + 6.0;
     let visible_indices = fuzzer.visible_indices().to_vec();
 
@@ -380,6 +393,7 @@ fn results_table(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
         .id_salt("fuzzer_results")
         .striped(true)
         .resizable(true)
+        .sense(egui::Sense::click())
         .auto_shrink([false, false])
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
         .column(Column::exact(60.0))
@@ -427,34 +441,146 @@ fn results_table(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
         .body(|body| {
             body.rows(row_height, visible_indices.len(), |mut row| {
                 let r = &fuzzer.results[visible_indices[row.index()]];
+                let selected = fuzzer.selected_idx == Some(r.idx);
+                row.set_selected(selected);
+                let mut text_cells: Vec<egui::Response> = Vec::new();
+
                 row.col(|ui| {
-                    ui.label((r.idx + 1).to_string());
+                    text_cells.push(ui.label((r.idx + 1).to_string()));
                 });
                 row.col(|ui| {
-                    ui.add(egui::Label::new(RichText::new(r.payloads.join(", ")).monospace()).truncate());
+                    text_cells.push(ui.add(egui::Label::new(RichText::new(r.payloads.join(", ")).monospace()).truncate()));
                 });
-                let (_, status_cell) = row.col(|ui| render_status_pill(ui, r.status_code));
+                let (_, mut status_cell) = row.col(|ui| render_status_pill(ui, r.status_code));
                 if let Some(err) = &r.error {
-                    status_cell.on_hover_text(err);
+                    status_cell = status_cell.on_hover_text(err);
                 }
+                text_cells.push(status_cell);
                 row.col(|ui| {
-                    ui.label(format_bytes(r.response_size));
+                    text_cells.push(ui.label(format_bytes(r.response_size)));
                 });
                 row.col(|ui| {
-                    ui.label(format_duration(Some(r.duration_ms)));
+                    text_cells.push(ui.label(format_duration(Some(r.duration_ms))));
                 });
                 for (i, _) in fuzzer.match_rules.iter().enumerate() {
                     row.col(|ui| {
                         let text = r.matches.get(i).map(String::as_str).unwrap_or("");
-                        ui.add(egui::Label::new(text).truncate());
+                        text_cells.push(ui.add(egui::Label::new(text).truncate()));
                     });
                 }
+
+                let response = text_cells.into_iter().fold(row.response(), |acc, resp| acc | resp);
+                if (response.clicked() || response.secondary_clicked()) && fuzzer.selected_idx != Some(r.idx) {
+                    if let Some(run_id) = fuzzer.run_id {
+                        cmds.push(AppCommand::SelectFuzzResult { run_id, idx: r.idx });
+                    }
+                }
+                response.context_menu(|ui| {
+                    if let Some(run_id) = fuzzer.run_id {
+                        if ui.button("🔁 Send to Repeater").clicked() {
+                            cmds.push(AppCommand::SendFuzzResultToRepeater { run_id, idx: r.idx });
+                            ui.close();
+                        }
+                    }
+                    if ui.button("📋 Copy payload").clicked() {
+                        let text = if r.payloads.len() == 1 {
+                            r.payloads[0].clone()
+                        } else {
+                            r.payloads.join(", ")
+                        };
+                        ui.ctx().copy_text(text);
+                        ui.close();
+                    }
+                    if let Some(run_id) = fuzzer.run_id {
+                        if ui.button("📋 Copy cURL").clicked() {
+                            cmds.push(AppCommand::CopyFuzzCurl { run_id, idx: r.idx });
+                            ui.close();
+                        }
+                    }
+                });
             });
         });
 
     if let Some(col) = next_sort {
         fuzzer.toggle_sort(col);
     }
+}
+
+fn response_pane(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
+    let Some(result) = &fuzzer.selected_result else {
+        ui.centered_and_justified(|ui| {
+            ui.weak("Loading response…");
+        });
+        return;
+    };
+
+    let mut close = false;
+    ui.horizontal(|ui| {
+        render_status_pill(ui, result.status_code);
+        ui.label(format_bytes(result.response_size));
+        ui.label(format_duration(Some(result.duration_ms)));
+        if let Some(err) = &result.error {
+            ui.label(RichText::new(err).color(theme::color(ui, Tone::Danger)));
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.small_button("✕").on_hover_text("Close response").clicked() {
+                close = true;
+            }
+            ui.add(egui::Label::new(RichText::new(&result.url).monospace()).truncate());
+        });
+    });
+    if close {
+        fuzzer.selected_idx = None;
+        fuzzer.selected_result = None;
+        return;
+    }
+    ui.separator();
+
+    let headers: Vec<(String, String)> = result
+        .response_headers
+        .iter()
+        .map(|h| (h.key.clone(), h.value.clone()))
+        .collect();
+    let content_type = headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+        .map_or("", |(_, v)| v.as_str());
+
+    let cookies = response_cookies(&headers);
+    let body = result.response_body.as_deref().unwrap_or_default();
+
+    let pane_data = crate::widgets::message_pane::PaneData {
+        cache_key: ((fuzzer.run_id.unwrap_or(0) as u64) << 32) | (result.idx as u64),
+        title: "Response",
+        headers: &headers,
+        body,
+        content_type,
+        params: None,
+        cookies: Some(cookies),
+        form_parser: Some(crate::features::request_editor::body::captured_form),
+    };
+
+    if let Some(save) = crate::widgets::message_pane::show(
+        ui,
+        "fuzzer_response_pane",
+        &mut fuzzer.response_pane,
+        &pane_data,
+    ) {
+        cmds.push(AppCommand::SaveBody(save));
+    }
+}
+
+fn split_cookie(pair: &str) -> (String, String) {
+    let (key, value) = pair.trim().split_once('=').unwrap_or((pair.trim(), ""));
+    (key.to_string(), value.to_string())
+}
+
+fn response_cookies(headers: &[(String, String)]) -> Vec<(String, String)> {
+    headers
+        .iter()
+        .filter(|(k, _)| k.eq_ignore_ascii_case("set-cookie"))
+        .map(|(_, v)| split_cookie(v.split(';').next().unwrap_or_default()))
+        .collect()
 }
 
 fn sort_header(

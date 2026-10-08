@@ -48,6 +48,9 @@ pub enum AppCommand {
     RepeaterSend(String),
     StartFuzzer(FuzzConfig),
     StopFuzzer,
+    SelectFuzzResult { run_id: i64, idx: u32 },
+    SendFuzzResultToRepeater { run_id: i64, idx: u32 },
+    CopyFuzzCurl { run_id: i64, idx: u32 },
 
     ForwardIntercept {
         flow_id: String,

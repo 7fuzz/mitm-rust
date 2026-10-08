@@ -166,11 +166,12 @@ pub enum RequestTab {
 #[serde(default)]
 pub struct FuzzerPrefs {
     pub split: f32,
+    pub detail_split: f32,
 }
 
 impl Default for FuzzerPrefs {
     fn default() -> Self {
-        Self { split: 0.45 }
+        Self { split: 0.45, detail_split: 0.55 }
     }
 }
 
@@ -198,6 +199,9 @@ pub struct FuzzerState {
     pub run_id: Option<i64>,
     pub total: usize,
     pub results: Vec<FuzzRow>,
+    pub selected_idx: Option<u32>,
+    pub selected_result: Option<mitm_core::fuzzer::FuzzResult>,
+    pub response_pane: crate::widgets::message_pane::PaneState,
     pub error: Option<String>,
 }
 
@@ -235,6 +239,9 @@ impl Default for FuzzerState {
             run_id: None,
             total: 0,
             results: Vec::new(),
+            selected_idx: None,
+            selected_result: None,
+            response_pane: crate::widgets::message_pane::PaneState::default(),
             error: None,
         }
     }
@@ -325,6 +332,8 @@ impl FuzzerState {
                 self.run_id = Some(start.run_id);
                 self.total = start.total;
                 self.results = Vec::with_capacity(start.total);
+                self.selected_idx = None;
+                self.selected_result = None;
                 self.error = None;
             }
             Err(e) => self.error = Some(e),
@@ -454,11 +463,21 @@ impl FuzzerState {
         indices
     }
 
+    pub fn select_result(&mut self, run_id: i64, idx: u32, db_path: &std::path::PathBuf) {
+        if self.selected_idx == Some(idx) && self.selected_result.is_some() {
+            return;
+        }
+        self.selected_idx = Some(idx);
+        self.selected_result = mitm_core::fuzzer::get_result_db(db_path, run_id, idx).ok().flatten();
+    }
+
     pub fn clear(&mut self) {
         self.status = RunStatus::Idle;
         self.run_id = None;
         self.total = 0;
         self.results = Vec::new();
+        self.selected_idx = None;
+        self.selected_result = None;
         self.cache = FuzzerCache::default();
     }
 }
@@ -634,5 +653,32 @@ mod tests {
         state.reset_filters();
         state.status_filters.insert("2xx".to_string(), TriState::Exclude);
         assert_eq!(state.visible_indices(), &[1, 2]);
+    }
+
+    #[test]
+    fn select_and_clear_result() {
+        let mut state = FuzzerState::default();
+        state.selected_idx = Some(5);
+        state.selected_result = Some(mitm_core::fuzzer::FuzzResult {
+            idx: 5,
+            payloads: vec!["foo".to_string()],
+            method: "GET".to_string(),
+            url: "https://example.com/foo".to_string(),
+            request_headers: vec![],
+            request_body: None,
+            status_code: 200,
+            response_headers: vec![],
+            response_body: Some("ok".to_string()),
+            response_size: 2,
+            duration_ms: 10,
+            error: None,
+            matches: vec![],
+        });
+        assert_eq!(state.selected_idx, Some(5));
+        assert!(state.selected_result.is_some());
+
+        state.clear();
+        assert_eq!(state.selected_idx, None);
+        assert!(state.selected_result.is_none());
     }
 }

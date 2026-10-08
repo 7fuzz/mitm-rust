@@ -302,6 +302,30 @@ impl MitmApp {
                 self.state.fuzzer.started(start);
             }
             AppCommand::StopFuzzer => self.core.stop_fuzz(),
+            AppCommand::SelectFuzzResult { run_id, idx } => {
+                self.state.fuzzer.select_result(run_id, idx, db_path);
+            }
+            AppCommand::SendFuzzResultToRepeater { run_id, idx } => {
+                let result = if self.state.fuzzer.selected_result.as_ref().is_some_and(|r| r.idx == idx && self.state.fuzzer.run_id == Some(run_id)) {
+                    self.state.fuzzer.selected_result.clone()
+                } else {
+                    mitm_core::fuzzer::get_result_db(db_path, run_id, idx).ok().flatten()
+                };
+                if let Some(result) = result {
+                    self.state.repeater.create_from_fuzz_result(&result, db_path);
+                    dock::open_tab(&mut self.dock, Tab::Repeater);
+                }
+            }
+            AppCommand::CopyFuzzCurl { run_id, idx } => {
+                let result = if self.state.fuzzer.selected_result.as_ref().is_some_and(|r| r.idx == idx && self.state.fuzzer.run_id == Some(run_id)) {
+                    self.state.fuzzer.selected_result.clone()
+                } else {
+                    mitm_core::fuzzer::get_result_db(db_path, run_id, idx).ok().flatten()
+                };
+                if let Some(result) = result {
+                    ctx.copy_text(crate::format::Exchange::from_fuzz_result(&result).curl());
+                }
+            }
 
             AppCommand::ForwardIntercept { flow_id, url, method, headers, body } => {
                 let _ = self.core.forward_intercepted_flow(&flow_id, url, method, headers, body);
