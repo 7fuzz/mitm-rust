@@ -94,6 +94,7 @@ pub fn show(
         content_type: content_type(&r.headers),
         params: None,
         cookies: None,
+        form_parser: Some(super::body::captured_form),
     };
     message_pane::show(ui, id_salt, pane, &data)
 }

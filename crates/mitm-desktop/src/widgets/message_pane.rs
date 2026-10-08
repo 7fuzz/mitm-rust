@@ -3,6 +3,7 @@ use eframe::egui::{self, Galley, RichText};
 use crate::theme::{self, Tone};
 use crate::format::{body_bytes, display_body, hex_dump};
 use crate::widgets::code_view::{self, Lang};
+use crate::widgets::form_view::{self, FormField};
 use crate::widgets::json_tree::JsonTree;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,6 +16,7 @@ pub enum PaneTab {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BodyFormat {
+    Form,
     Preview,
     Pretty,
     Tree,
@@ -31,6 +33,7 @@ pub struct PaneState {
     rendered: Option<(RenderKey, Arc<Galley>)>,
     tree: Option<((u64, usize), Option<JsonTree>)>,
     image: Option<PaneImage>,
+    form: Option<((u64, usize), Option<Vec<FormField>>)>,
 }
 
 struct PaneImage {
@@ -47,6 +50,7 @@ impl Default for PaneState {
             rendered: None,
             tree: None,
             image: None,
+            form: None,
         }
     }
 }
@@ -59,7 +63,11 @@ pub struct PaneData<'a> {
     pub content_type: &'a str,
     pub params: Option<Vec<(String, String)>>,
     pub cookies: Option<Vec<(String, String)>>,
+    /// Reads multipart or url-encoded bodies for the Form view; `None` hides it.
+    pub form_parser: Option<FormParser>,
 }
+
+pub type FormParser = fn(&str, &str) -> Option<Vec<FormField>>;
 
 /// A body the user asked to save; the caller runs the save dialog.
 #[derive(Clone)]
@@ -77,6 +85,11 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
     if pane.image.as_ref().is_some_and(|image| image.key != body_key) {
         forget_image(ui.ctx(), pane);
     }
+    if pane.form.as_ref().is_none_or(|(key, _)| *key != body_key) {
+        let parsed = data.form_parser.and_then(|parse| parse(data.content_type, data.body));
+        pane.form = Some((body_key, parsed));
+    }
+    let is_form = pane.form.as_ref().is_some_and(|(_, fields)| fields.is_some());
     ui.horizontal(|ui| {
         if !data.title.is_empty() {
             ui.label(RichText::new(data.title).strong());
@@ -111,6 +124,9 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
                 if is_image {
                     ui.selectable_value(&mut pane.format, BodyFormat::Preview, "Preview");
                 }
+                if is_form {
+                    ui.selectable_value(&mut pane.format, BodyFormat::Form, "Form");
+                }
             });
         }
     });
@@ -123,6 +139,9 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
     if pane.tab == PaneTab::Body && pane.format == BodyFormat::Preview && is_image {
         image_preview(ui, id_salt, pane, data);
         return save;
+    }
+    if let Some((_, Some(fields))) = pane.form.as_ref().filter(|_| pane.tab == PaneTab::Body && pane.format == BodyFormat::Form) {
+        return form_view::show(ui, id_salt, fields).or(save);
     }
 
     egui::ScrollArea::both()
@@ -185,7 +204,7 @@ fn body(ui: &mut egui::Ui, pane: &mut PaneState, data: &PaneData) {
     );
     if pane.rendered.as_ref().is_none_or(|(cached, _)| *cached != key) {
         let (text, lang) = match pane.format {
-            BodyFormat::Pretty | BodyFormat::Tree | BodyFormat::Preview => {
+            BodyFormat::Pretty | BodyFormat::Tree | BodyFormat::Preview | BodyFormat::Form => {
                 let text = display_body(data.body, data.content_type);
                 let lang = code_view::detect(data.content_type, &text);
                 (text, lang)

@@ -2,6 +2,7 @@ pub mod code_view;
 pub mod confirm;
 pub mod copy_custom;
 pub mod flash;
+pub mod form_view;
 pub mod json_tree;
 pub mod pills;
 pub mod tri_state;

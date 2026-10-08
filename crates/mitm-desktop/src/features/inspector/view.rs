@@ -7,7 +7,8 @@ use crate::theme::{self, Tone};
 use crate::widgets::pills::{method_text, status_text};
 use crate::widgets::split;
 use crate::widgets::message_pane::{self as pane, PaneData};
-use super::{query_params, request_cookies, response_cookies, InspectorState};
+use crate::features::request_editor::body::captured_form;
+use super::{header_values, query_params, request_cookies, response_cookies, InspectorState};
 
 pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficState, cmds: &mut Commands) {
     let Some(flow) = traffic.selected_flow() else { return };
@@ -26,9 +27,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficStat
         title: "Request",
         headers: request_headers,
         body: detail.map_or(&flow.request_body, |d| &d.request_body),
-        content_type: "",
+        content_type: header_value(request_headers, "content-type"),
         params: Some(query_params(&flow.url)),
         cookies: Some(request_cookies(request_headers)),
+        form_parser: Some(captured_form),
     };
     let response = PaneData {
         cache_key: flow.id as u64,
@@ -38,6 +40,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficStat
         content_type: &flow.content_type,
         params: None,
         cookies: Some(response_cookies(response_headers)),
+        form_parser: Some(captured_form),
     };
 
     let [mut request_ui, mut response_ui] = split::side_by_side(ui, "inspector_split", &mut state.prefs.split);
@@ -91,4 +94,8 @@ fn url_bar(ui: &mut egui::Ui, url: &str) {
             .desired_width(f32::INFINITY)
             .font(egui::TextStyle::Monospace),
     );
+}
+
+fn header_value<'a>(headers: &'a [(String, String)], name: &'a str) -> &'a str {
+    header_values(headers, name).next().unwrap_or_default()
 }

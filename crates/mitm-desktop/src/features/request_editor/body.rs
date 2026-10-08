@@ -1,6 +1,7 @@
 use base64::Engine;
 use mitm_core::encoding::{MultipartBodySpec, MultipartFieldSpec, UrlEncodedParamSpec};
 use crate::format::pretty_json;
+use crate::widgets::form_view::{FormField, FormValue};
 use super::url_params::{decode, new_id};
 
 pub const REPEATER_BODY_TYPES: [(&str, &str); 6] = [
@@ -75,6 +76,33 @@ pub fn text_field(key: String, value: String) -> MultipartFieldSpec {
         file_name: None,
         content_type: None,
     }
+}
+
+/// A captured multipart or url-encoded body as form fields, for the read-only Form view.
+pub fn captured_form(content_type: &str, body: &str) -> Option<Vec<FormField>> {
+    if let Some(fields) = multipart_boundary(content_type, body).and_then(|b| parse_multipart(body, &b)) {
+        return Some(fields.into_iter().map(form_field).collect());
+    }
+    if !content_type.to_lowercase().contains("x-www-form-urlencoded") {
+        return None;
+    }
+    let rows = parse_urlencoded(body.trim());
+    Some(rows.into_iter().map(|r| FormField { key: r.key, value: FormValue::Text(r.value) }).collect())
+}
+
+fn form_field(spec: MultipartFieldSpec) -> FormField {
+    let value = match spec.r#type.as_str() {
+        "base64" => {
+            let encoded = spec.value.split_once(";base64,").map_or(spec.value.as_str(), |(_, data)| data);
+            FormValue::File {
+                name: spec.file_name.unwrap_or_else(|| "file".to_string()),
+                content_type: spec.content_type.unwrap_or_default(),
+                bytes: base64::engine::general_purpose::STANDARD.decode(encoded).unwrap_or_default(),
+            }
+        }
+        _ => FormValue::Text(spec.value),
+    };
+    FormField { key: spec.key, value }
 }
 
 pub fn structured_from_capture(content_type: &str, body: &str) -> (String, String) {
@@ -316,6 +344,18 @@ mod tests {
         assert_eq!(fields[0].value, "hello");
         assert_eq!(fields[1].r#type, "base64");
         assert_eq!(fields[1].file_name.as_deref(), Some("a.txt"));
+    }
+
+    #[test]
+    fn captured_forms_keep_text_and_file_parts() {
+        let body = "--XYZ\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nhello\r\n--XYZ\r\nContent-Disposition: form-data; name=\"doc\"; filename=\"a.txt\"\r\nContent-Type: text/plain\r\n\r\nfile body\r\n--XYZ--\r\n";
+        let fields = captured_form("multipart/form-data; boundary=XYZ", body).unwrap();
+        assert!(matches!(&fields[0].value, FormValue::Text(t) if t == "hello"));
+        assert!(matches!(&fields[1].value, FormValue::File { name, bytes, .. } if name == "a.txt" && bytes == b"file body"));
+
+        let fields = captured_form("application/x-www-form-urlencoded", "a%5Bb%5D=1&c=x+y").unwrap();
+        assert_eq!(fields[0].key, "a[b]");
+        assert!(captured_form("application/json", "{}").is_none());
     }
 
     #[test]
