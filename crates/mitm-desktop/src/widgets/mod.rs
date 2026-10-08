@@ -1,6 +1,7 @@
 pub mod code_view;
 pub mod confirm;
 pub mod copy_custom;
+pub mod diff;
 pub mod flash;
 pub mod form_view;
 pub mod json_tree;

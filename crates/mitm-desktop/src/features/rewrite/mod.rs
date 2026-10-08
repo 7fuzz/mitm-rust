@@ -1,9 +1,10 @@
 mod editor;
+mod log;
 mod rules;
 
 use serde::{Deserialize, Serialize};
 use mitm_core::repeater::HeaderItem;
-use mitm_core::state::{RewriteRule, SourceScope};
+use mitm_core::state::{RewriteHistoryEntry, RewriteRule, SourceScope};
 use crate::theme::Tone;
 
 pub use rules::show;
@@ -35,12 +36,20 @@ pub fn action_tone(action: &str) -> Tone {
 #[serde(default)]
 pub struct RewritePrefs {
     pub list_fraction: f32,
+    pub log_fraction: f32,
+    pub view: RewriteView,
 }
 
 impl Default for RewritePrefs {
     fn default() -> Self {
-        Self { list_fraction: 0.45 }
+        Self { list_fraction: 0.45, log_fraction: 0.5, view: RewriteView::Rules }
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RewriteView {
+    Rules,
+    Log,
 }
 
 #[derive(Default)]
@@ -54,10 +63,20 @@ pub struct RewriteState {
     pub sample: String,
     /// Mock header rows of the selected rule, kept so disabled rows survive between frames.
     pub mock_headers: Option<(String, Vec<HeaderItem>)>,
+    pub log: Vec<RewriteHistoryEntry>,
+    pub log_loaded: bool,
+    pub selected_log: Option<i64>,
+    log_diff: Option<log::EntryDiff>,
     dirty_since: Option<f64>,
 }
 
 impl RewriteState {
+    pub fn clear_log(&mut self) {
+        self.log.clear();
+        self.selected_log = None;
+        self.log_diff = None;
+    }
+
     pub fn mark_dirty(&mut self, now: f64) {
         self.dirty_since = Some(now);
     }

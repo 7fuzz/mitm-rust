@@ -119,7 +119,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             }
             Tab::Fuzzer => features::fuzzer::show(ui, &mut state.fuzzer, cmds),
             Tab::Intercept => features::intercept::show(ui, &mut state.intercept, &state.proxy.listeners, cmds),
-            Tab::Rewrite => features::rewrite::show(ui, &mut state.rewrite, &state.proxy.listeners, cmds),
+            Tab::Rewrite => features::rewrite::show(ui, &mut state.rewrite, &state.proxy.listeners, self.db_path, cmds),
             Tab::Collections => features::collections::show(ui, &mut state.collections, cmds),
             Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
             Tab::Environments => features::environments::show(ui, &mut state.environments, cmds),

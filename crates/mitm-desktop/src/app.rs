@@ -335,6 +335,11 @@ impl MitmApp {
             AppCommand::SetRewriteEnabled(enabled) => {
                 let _ = self.core.set_rewrite_enabled(enabled);
             }
+            AppCommand::ClearRewriteHistory => {
+                if self.core.clear_rewrite_history().is_ok() {
+                    self.state.rewrite.clear_log();
+                }
+            }
             AppCommand::SetRewriteScope(scope) => {
                 let _ = self.rt.block_on(self.core.set_rewrite_source_scope(scope));
             }

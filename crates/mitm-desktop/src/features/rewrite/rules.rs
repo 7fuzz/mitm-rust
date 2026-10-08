@@ -3,12 +3,17 @@ use mitm_core::state::{ListenerConfig, RewriteRule};
 use crate::command::{AppCommand, Commands};
 use crate::theme;
 use crate::widgets::{source_scope, split};
-use super::{action_label, action_tone, editor, RewriteState};
+use std::path::Path;
+use super::{action_label, action_tone, editor, log, RewriteState, RewriteView};
 
-pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerConfig], cmds: &mut Commands) {
+pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerConfig], db_path: &Path, cmds: &mut Commands) {
     let now = ui.input(|i| i.time);
     toolbar(ui, state, listeners, cmds, now);
     ui.separator();
+    if state.prefs.view == RewriteView::Log {
+        log::show(ui, state, db_path, cmds);
+        return;
+    }
     let Some(index) = state.selected_index() else {
         list(ui, state, now);
         return;
@@ -57,12 +62,16 @@ fn toolbar(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerCon
             cmds.push(AppCommand::SetRewriteScope(state.scope.clone()));
         }
         ui.separator();
-        ui.add(egui::TextEdit::singleline(&mut state.search).hint_text("🔍 Search rules").desired_width(180.0));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("➕").on_hover_text("Add rule").clicked() {
-                state.add_rule(now);
-            }
-        });
+        ui.selectable_value(&mut state.prefs.view, RewriteView::Rules, "Rules");
+        ui.selectable_value(&mut state.prefs.view, RewriteView::Log, "Log");
+        if state.prefs.view == RewriteView::Rules {
+            ui.add(egui::TextEdit::singleline(&mut state.search).hint_text("🔍 Search rules").desired_width(180.0));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("➕").on_hover_text("Add rule").clicked() {
+                    state.add_rule(now);
+                }
+            });
+        }
     });
 }
 

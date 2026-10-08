@@ -22,3 +22,4 @@ uuid = { version = "1", features = ["v4"] }
 rfd = "0.17"
 open = "5"
 http = "1"
+similar = "2"
