@@ -59,6 +59,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
     };
 
     egui::ScrollArea::vertical().id_salt("collections_tree").auto_shrink([false, false]).show(ui, |ui| {
+        ui.visuals_mut().indent_has_left_vline = false;
         if matches!(tree.edit, Some(TreeEdit::NewFolder { parent: None })) {
             tree.name_input(ui, "Folder name");
         }
@@ -117,7 +118,7 @@ fn apply(action: TreeAction, state: &mut CollectionsState, cmds: &mut Commands) 
 }
 
 impl TreeUi<'_> {
-    fn folder(&mut self, ui: &mut egui::Ui, folder: &CollectionTreeItem) {
+    fn folder(&mut self, ui: &mut egui::Ui, folder: &CollectionTreeItem) -> egui::Rect {
         let id = ui.make_persistent_id(("collection_folder", &folder.id, self.searching));
         let mut collapsing = CollapsingState::load_with_default_open(ui.ctx(), id, true);
         let adding_here = matches!(self.edit,
@@ -142,20 +143,23 @@ impl TreeUi<'_> {
             self.folder_interactions(response, folder);
         }
 
-        header.body(|ui| {
+        let (toggle, ..) = header.body(|ui| {
             if matches!(self.edit, Some(TreeEdit::NewFolder { parent: Some(p) }) if *p == folder.id) {
                 self.name_input(ui, "Folder name");
             }
             if matches!(self.edit, Some(TreeEdit::NewRequest { collection_id }) if *collection_id == folder.id) {
                 self.name_input(ui, "Request name");
             }
+            let mut rows = Vec::with_capacity(folder.children.len() + folder.requests.len());
             for child in &folder.children {
-                self.folder(ui, child);
+                rows.push(self.folder(ui, child));
             }
             for request in &folder.requests {
-                self.request(ui, request);
+                rows.push(self.request(ui, request));
             }
+            guide_lines(ui, &rows);
         });
+        toggle.rect
     }
 
     fn folder_interactions(&mut self, response: &egui::Response, folder: &CollectionTreeItem) {
@@ -185,10 +189,9 @@ impl TreeUi<'_> {
         response.context_menu(|ui| self.folder_menu(ui, folder));
     }
 
-    fn request(&mut self, ui: &mut egui::Ui, request: &RequestItem) {
+    fn request(&mut self, ui: &mut egui::Ui, request: &RequestItem) -> egui::Rect {
         if matches!(self.edit, Some(TreeEdit::RenameRequest { id }) if *id == request.id) {
-            self.inline_rename(ui);
-            return;
+            return self.inline_rename(ui).rect;
         }
 
         let mut text = egui::text::LayoutJob::default();
@@ -217,6 +220,7 @@ impl TreeUi<'_> {
             });
         }
         response.context_menu(|ui| self.request_menu(ui, request));
+        response.rect
     }
 
     fn folder_menu(&mut self, ui: &mut egui::Ui, folder: &CollectionTreeItem) {
@@ -271,7 +275,7 @@ impl TreeUi<'_> {
         }
     }
 
-    fn inline_rename(&mut self, ui: &mut egui::Ui) {
+    fn inline_rename(&mut self, ui: &mut egui::Ui) -> egui::Response {
         let response = ui.add(egui::TextEdit::singleline(self.edit_text).desired_width(f32::INFINITY));
         self.take_focus(&response);
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -279,6 +283,7 @@ impl TreeUi<'_> {
         } else if response.lost_focus() {
             self.actions.push(TreeAction::CommitEdit);
         }
+        response
     }
 
     fn take_focus(&mut self, response: &egui::Response) {
@@ -307,6 +312,18 @@ impl TreeUi<'_> {
                 ui.close();
             }
         });
+    }
+}
+
+fn guide_lines(ui: &egui::Ui, rows: &[egui::Rect]) {
+    let Some(last) = rows.last() else { return };
+    let stroke = ui.visuals().widgets.noninteractive.bg_stroke;
+    // Under the parent's toggle arrow, which fills the indent left of the body.
+    let x = ui.max_rect().left() - ui.spacing().indent * 0.5;
+    let painter = ui.painter();
+    painter.line_segment([egui::pos2(x, ui.max_rect().top()), egui::pos2(x, last.center().y)], stroke);
+    for row in rows {
+        painter.line_segment([egui::pos2(x, row.center().y), egui::pos2(row.left() - 2.0, row.center().y)], stroke);
     }
 }
 
