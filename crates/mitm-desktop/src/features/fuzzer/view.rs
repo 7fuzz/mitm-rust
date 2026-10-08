@@ -11,7 +11,7 @@ use crate::format::{format_bytes, format_duration};
 use crate::theme::{self, Tone};
 use crate::widgets::pills::render_status_pill;
 use crate::widgets::{split, template};
-use super::{AttackType, ConfigTab, FuzzerState, PayloadConfig, PayloadKind, RequestTab, RunStatus};
+use super::{AttackType, ConfigTab, FuzzerState, MatchRule, PayloadConfig, PayloadKind, RequestTab, RunStatus};
 
 pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     toolbar(ui, fuzzer, cmds);
@@ -69,7 +69,12 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
 
 fn config(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
     ui.horizontal(|ui| {
-        for (value, label) in [(ConfigTab::Request, "Request"), (ConfigTab::Payloads, "Payloads"), (ConfigTab::Options, "Options")] {
+        for (value, label) in [
+            (ConfigTab::Request, "Request"),
+            (ConfigTab::Payloads, "Payloads"),
+            (ConfigTab::Match, "Match"),
+            (ConfigTab::Options, "Options"),
+        ] {
             ui.selectable_value(&mut fuzzer.config_tab, value, label);
         }
     });
@@ -77,7 +82,78 @@ fn config(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
     match fuzzer.config_tab {
         ConfigTab::Request => request_tab(ui, fuzzer),
         ConfigTab::Payloads => payloads_tab(ui, fuzzer),
+        ConfigTab::Match => match_tab(ui, fuzzer),
         ConfigTab::Options => options_tab(ui, fuzzer),
+    }
+}
+
+fn match_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
+    ui.horizontal(|ui| {
+        if ui.button("➕ Add rule").clicked() {
+            let next_idx = fuzzer.match_rules.len() + 1;
+            fuzzer.match_rules.push(MatchRule {
+                name: format!("match{}", next_idx),
+                kind: "contains".to_string(),
+                pattern: String::new(),
+            });
+        }
+    });
+    ui.separator();
+
+    if fuzzer.match_rules.is_empty() {
+        ui.weak("No match rules");
+        return;
+    }
+
+    let mut remove_idx = None;
+    egui::ScrollArea::vertical().id_salt("fuzzer_match_scroll").auto_shrink([false, false]).show(ui, |ui| {
+        TableBuilder::new(ui)
+            .id_salt("fuzzer_match_table")
+            .striped(true)
+            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+            .column(Column::initial(130.0).at_least(80.0))
+            .column(Column::exact(130.0))
+            .column(Column::remainder())
+            .column(Column::exact(28.0))
+            .header(20.0, |mut header| {
+                header.col(|ui| {
+                    ui.strong("Name");
+                });
+                header.col(|ui| {
+                    ui.strong("Type");
+                });
+                header.col(|ui| {
+                    ui.strong("Pattern");
+                });
+                header.col(|_ui| {});
+            })
+            .body(|body| {
+                let row_height = 24.0;
+                body.rows(row_height, fuzzer.match_rules.len(), |mut row| {
+                    let idx = row.index();
+                    let rule = &mut fuzzer.match_rules[idx];
+                    row.col(|ui| {
+                        ui.add(egui::TextEdit::singleline(&mut rule.name).desired_width(f32::INFINITY));
+                    });
+                    row.col(|ui| {
+                        ui.selectable_value(&mut rule.kind, "contains".to_string(), "Count");
+                        ui.selectable_value(&mut rule.kind, "regex".to_string(), "Regex");
+                    });
+                    row.col(|ui| {
+                        let hint = if rule.kind == "regex" { "\"token\":\"(\\w+)\"" } else { "string" };
+                        ui.add(egui::TextEdit::singleline(&mut rule.pattern).hint_text(hint).desired_width(f32::INFINITY));
+                    });
+                    row.col(|ui| {
+                        if ui.small_button("🗑").on_hover_text("Remove rule").clicked() {
+                            remove_idx = Some(idx);
+                        }
+                    });
+                });
+            });
+    });
+
+    if let Some(idx) = remove_idx {
+        fuzzer.match_rules.remove(idx);
     }
 }
 
@@ -260,21 +336,32 @@ fn payload_set(ui: &mut egui::Ui, name: &str, cfg: &mut PayloadConfig) {
 
 fn results(ui: &mut egui::Ui, fuzzer: &FuzzerState) {
     let row_height = egui::TextStyle::Body.resolve(ui.style()).size + 6.0;
-    TableBuilder::new(ui)
+    let mut builder = TableBuilder::new(ui)
         .id_salt("fuzzer_results")
         .striped(true)
         .resizable(true)
         .auto_shrink([false, false])
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
         .column(Column::exact(55.0))
-        .column(Column::remainder())
+        .column(Column::remainder().at_least(100.0))
         .column(Column::exact(55.0))
         .column(Column::exact(70.0))
-        .column(Column::exact(65.0))
+        .column(Column::exact(65.0));
+
+    for _ in &fuzzer.match_rules {
+        builder = builder.column(Column::initial(80.0).at_least(50.0));
+    }
+
+    builder
         .header(22.0, |mut header| {
             for title in ["#", "Payload", "Status", "Size", "Time"] {
                 header.col(|ui| {
                     ui.strong(title);
+                });
+            }
+            for rule in &fuzzer.match_rules {
+                header.col(|ui| {
+                    ui.strong(&rule.name);
                 });
             }
         })
@@ -297,6 +384,12 @@ fn results(ui: &mut egui::Ui, fuzzer: &FuzzerState) {
                 row.col(|ui| {
                     ui.label(format_duration(Some(r.duration_ms)));
                 });
+                for (i, _) in fuzzer.match_rules.iter().enumerate() {
+                    row.col(|ui| {
+                        let text = r.matches.get(i).map(String::as_str).unwrap_or("");
+                        ui.add(egui::Label::new(text).truncate());
+                    });
+                }
             });
         });
 }

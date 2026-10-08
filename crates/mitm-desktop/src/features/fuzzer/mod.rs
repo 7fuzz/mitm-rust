@@ -4,11 +4,13 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use mitm_core::fuzzer::{
-    marker_re, parse_variables, FuzzConfig, FuzzRow, FuzzStart, FuzzTemplate, FuzzVariable, PayloadSet, MAX_REQUESTS,
+    marker_re, parse_variables, FuzzConfig, FuzzRow, FuzzStart, FuzzTemplate, FuzzVariable, PayloadSet,
+    MAX_REQUESTS,
 };
 use mitm_core::repeater::{HeaderItem, ParamItem};
 use crate::features::request_editor::captured::CapturedRequest;
 
+pub use mitm_core::fuzzer::MatchRule;
 pub use view::show;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -128,6 +130,7 @@ pub enum RunStatus {
 pub enum ConfigTab {
     Request,
     Payloads,
+    Match,
     Options,
 }
 
@@ -162,6 +165,7 @@ pub struct FuzzerState {
     pub body_type: String,
     pub body_content: String,
     pub payloads: HashMap<String, PayloadConfig>,
+    pub match_rules: Vec<MatchRule>,
     pub concurrency: usize,
     pub delay_ms: u64,
     pub status: RunStatus,
@@ -193,6 +197,7 @@ impl Default for FuzzerState {
                 "status".to_string(),
                 PayloadConfig { list_text: "200\n301\n400\n404\n500".to_string(), ..PayloadConfig::default() },
             )]),
+            match_rules: Vec::new(),
             concurrency: 5,
             delay_ms: 0,
             status: RunStatus::Idle,
@@ -255,7 +260,7 @@ impl FuzzerState {
             template,
             attack_type: self.attack_type.as_str().to_string(),
             variables,
-            match_rules: Vec::new(),
+            match_rules: self.match_rules.clone(),
             concurrency: self.concurrency as u32,
             delay_ms: self.delay_ms,
         }
@@ -376,5 +381,19 @@ mod tests {
         let cfg = state.config();
         assert_eq!(cfg.concurrency, 12);
         assert_eq!(cfg.delay_ms, 250);
+    }
+
+    #[test]
+    fn match_rules_populate_config() {
+        let mut state = FuzzerState::default();
+        state.match_rules.push(MatchRule {
+            name: "err".to_string(),
+            kind: "contains".to_string(),
+            pattern: "500".to_string(),
+        });
+        let cfg = state.config();
+        assert_eq!(cfg.match_rules.len(), 1);
+        assert_eq!(cfg.match_rules[0].name, "err");
+        assert_eq!(cfg.match_rules[0].pattern, "500");
     }
 }
