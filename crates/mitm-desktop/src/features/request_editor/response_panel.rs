@@ -2,7 +2,7 @@ use eframe::egui::{self, RichText};
 use mitm_core::repeater::HeaderItem;
 use crate::format::{format_bytes, CopyFormat, Exchange};
 use crate::widgets::flash;
-use crate::widgets::message_pane::{self, PaneData, PaneState};
+use crate::widgets::message_pane::{self, PaneData, PaneState, SaveBody};
 use crate::widgets::pills::status_text;
 
 pub struct ResponseData<'a> {
@@ -57,7 +57,7 @@ pub fn show(
     request: Option<&RequestCopy>,
     exchange: Option<&Exchange>,
     toolbar: impl FnOnce(&mut egui::Ui),
-) {
+) -> Option<SaveBody> {
     ui.horizontal(|ui| {
         ui.set_min_height(24.0);
         match &response {
@@ -84,7 +84,7 @@ pub fn show(
             ui.add_space(40.0);
             ui.label(RichText::new("Send the request to see the response").weak().italics());
         });
-        return;
+        return None;
     };
     let data = PaneData {
         cache_key: r.cache_key,
@@ -95,7 +95,7 @@ pub fn show(
         params: None,
         cookies: None,
     };
-    message_pane::show(ui, id_salt, pane, &data);
+    message_pane::show(ui, id_salt, pane, &data)
 }
 
 fn content_type(headers: &[(String, String)]) -> &str {

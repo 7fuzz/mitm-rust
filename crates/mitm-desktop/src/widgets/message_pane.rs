@@ -61,7 +61,16 @@ pub struct PaneData<'a> {
     pub cookies: Option<Vec<(String, String)>>,
 }
 
-pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneData) {
+/// A body the user asked to save; the caller runs the save dialog.
+#[derive(Clone)]
+pub struct SaveBody {
+    pub file_name: String,
+    pub bytes: Vec<u8>,
+}
+
+pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneData) -> Option<SaveBody> {
+    let mut save = None;
+    let file_ext = (!data.body.is_empty()).then(|| file_extension(data.content_type)).flatten();
     let is_json = !data.body.is_empty() && code_view::detect(data.content_type, data.body) == Lang::Json;
     let is_image = !data.body.is_empty() && data.content_type.trim().to_lowercase().starts_with("image/");
     let body_key = (data.cache_key, data.body.len());
@@ -84,6 +93,15 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
 
         if pane.tab == PaneTab::Body {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if let Some(ext) = file_ext {
+                    if ui.small_button("Save…").clicked() {
+                        save = Some(SaveBody { file_name: format!("body.{ext}"), bytes: body_bytes(data.body) });
+                    }
+                    if ui.small_button("Open ↗").on_hover_text("Open in the default app").clicked() {
+                        open_externally(data, id_salt, ext);
+                    }
+                    ui.separator();
+                }
                 for (format, label) in [(BodyFormat::Hex, "Hex"), (BodyFormat::Raw, "Raw"), (BodyFormat::Pretty, "Pretty")] {
                     ui.selectable_value(&mut pane.format, format, label);
                 }
@@ -100,11 +118,11 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
 
     if pane.tab == PaneTab::Body && pane.format == BodyFormat::Tree && is_json {
         tree(ui, id_salt, pane, data);
-        return;
+        return save;
     }
     if pane.tab == PaneTab::Body && pane.format == BodyFormat::Preview && is_image {
         image_preview(ui, id_salt, pane, data);
-        return;
+        return save;
     }
 
     egui::ScrollArea::both()
@@ -116,6 +134,37 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
             PaneTab::Params => key_values(ui, id_salt, data.params.as_deref().unwrap_or_default()),
             PaneTab::Cookies => key_values(ui, id_salt, data.cookies.as_deref().unwrap_or_default()),
         });
+    save
+}
+
+/// Bodies egui can't render (html, pdf, media) or that are worth keeping as files (images).
+fn file_extension(content_type: &str) -> Option<&'static str> {
+    let mime = content_type.split(';').next().unwrap_or_default().trim().to_lowercase();
+    let ext = match mime.as_str() {
+        "text/html" => "html",
+        "application/pdf" => "pdf",
+        "image/svg+xml" => "svg",
+        "image/png" => "png",
+        "image/jpeg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "audio/mpeg" => "mp3",
+        "audio/ogg" => "ogg",
+        "audio/wav" | "audio/x-wav" => "wav",
+        "video/mp4" => "mp4",
+        "video/webm" => "webm",
+        "video/quicktime" => "mov",
+        m if m.starts_with("audio/") || m.starts_with("video/") || m.starts_with("image/") => "bin",
+        _ => return None,
+    };
+    Some(ext)
+}
+
+fn open_externally(data: &PaneData, id_salt: &str, ext: &str) {
+    let path = std::env::temp_dir().join(format!("mitm-{id_salt}-{}.{ext}", data.cache_key));
+    if std::fs::write(&path, body_bytes(data.body)).is_ok() {
+        let _ = crate::files::open_external(&path);
+    }
 }
 
 fn tab_label(ui: &mut egui::Ui, pane: &mut PaneState, tab: PaneTab, label: String) {
@@ -213,4 +262,18 @@ fn key_values(ui: &mut egui::Ui, id_salt: &str, rows: &[(String, String)]) {
 fn empty(ui: &mut egui::Ui, text: &str) {
     ui.add_space(8.0);
     ui.label(RichText::new(text).weak().italics());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::file_extension;
+
+    #[test]
+    fn only_bodies_egui_cannot_show_or_media_get_file_actions() {
+        assert_eq!(file_extension("text/html; charset=utf-8"), Some("html"));
+        assert_eq!(file_extension("application/PDF"), Some("pdf"));
+        assert_eq!(file_extension("video/x-matroska"), Some("bin"));
+        assert_eq!(file_extension("application/json"), None);
+        assert_eq!(file_extension(""), None);
+    }
 }

@@ -40,7 +40,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let [mut request_ui, mut response_ui] = split::side_by_side(ui, "collections_split", &mut state.prefs.split);
             editor::show(&mut request_ui, state, cmds, now);
-            response(&mut response_ui, state, &active_id);
+            response(&mut response_ui, state, &active_id, cmds);
         });
     });
 
@@ -77,7 +77,7 @@ fn tab_strip(ui: &mut egui::Ui, state: &CollectionsState, cmds: &mut Commands) {
         });
 }
 
-fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str) {
+fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str, cmds: &mut Commands) {
     let runs = state.runs.get(request_id).map(Vec::as_slice).unwrap_or_default();
     let latest = state.latest.get(request_id);
 
@@ -122,7 +122,7 @@ fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str) {
     let older_run = run.filter(|_| run_index > 0).map(|r| (runs.len() - run_index, local_time(r.executed_at_ms)));
     let mut show_latest = false;
 
-    response_panel::show(ui, "collections_response", &mut state.response_pane, data, None, exchange.as_ref(), |ui| {
+    let save = response_panel::show(ui, "collections_response", &mut state.response_pane, data, None, exchange.as_ref(), |ui| {
         if let Some((number, time)) = &older_run {
             if ui.small_button("Latest").on_hover_text("Show the latest run").clicked() {
                 show_latest = true;
@@ -132,6 +132,9 @@ fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str) {
     });
     if show_latest {
         state.selected_run.remove(request_id);
+    }
+    if let Some(save) = save {
+        cmds.push(AppCommand::SaveBody(save));
     }
 }
 

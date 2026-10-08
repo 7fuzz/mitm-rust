@@ -39,11 +39,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
     egui::CentralPanel::no_frame().show(ui, |ui| {
         let [mut request_ui, mut response_ui] = split::side_by_side(ui, "repeater_split", &mut state.prefs.split);
         builder::show(&mut request_ui, state, cmds, now);
-        response(&mut response_ui, state, &active_id);
+        response(&mut response_ui, state, &active_id, cmds);
     });
 }
 
-fn response(ui: &mut egui::Ui, state: &mut RepeaterState, tab_id: &str) {
+fn response(ui: &mut egui::Ui, state: &mut RepeaterState, tab_id: &str, cmds: &mut Commands) {
     let Some(tab) = state.tabs.iter().find(|t| t.id == tab_id) else { return };
     let request = RequestCopy {
         method: tab.method.clone(),
@@ -72,11 +72,14 @@ fn response(ui: &mut egui::Ui, state: &mut RepeaterState, tab_id: &str) {
     });
     let executing = state.executing.contains(tab_id);
 
-    response_panel::show(ui, "repeater_response", &mut state.response_pane, data, Some(&request), exchange.as_ref(), |ui| {
+    let save = response_panel::show(ui, "repeater_response", &mut state.response_pane, data, Some(&request), exchange.as_ref(), |ui| {
         if executing {
             ui.spinner();
         }
     });
+    if let Some(save) = save {
+        cmds.push(AppCommand::SaveBody(save));
+    }
 }
 
 fn history_drawer(ui: &mut egui::Ui, state: &mut RepeaterState, tab_id: &str, now: f64) {

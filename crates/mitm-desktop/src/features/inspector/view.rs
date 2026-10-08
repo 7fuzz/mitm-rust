@@ -1,5 +1,6 @@
 use eframe::egui;
 use mitm_core::state::HistoryEntry;
+use crate::command::{AppCommand, Commands};
 use crate::features::traffic::{FlowFlags, TrafficState};
 use crate::format::{format_bytes, format_duration};
 use crate::theme::{self, Tone};
@@ -8,7 +9,7 @@ use crate::widgets::split;
 use crate::widgets::message_pane::{self as pane, PaneData};
 use super::{query_params, request_cookies, response_cookies, InspectorState};
 
-pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficState) {
+pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficState, cmds: &mut Commands) {
     let Some(flow) = traffic.selected_flow() else { return };
 
     let detail = traffic.selected_detail.as_ref().filter(|d| d.id == flow.id);
@@ -40,8 +41,13 @@ pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficStat
     };
 
     let [mut request_ui, mut response_ui] = split::side_by_side(ui, "inspector_split", &mut state.prefs.split);
-    pane::show(&mut request_ui, "inspector_request", &mut state.request, &request);
-    pane::show(&mut response_ui, "inspector_response", &mut state.response, &response);
+    let saves = [
+        pane::show(&mut request_ui, "inspector_request", &mut state.request, &request),
+        pane::show(&mut response_ui, "inspector_response", &mut state.response, &response),
+    ];
+    for save in saves.into_iter().flatten() {
+        cmds.push(AppCommand::SaveBody(save));
+    }
 }
 
 fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, open: &mut bool) {

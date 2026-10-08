@@ -381,5 +381,5 @@ pub fn show(
     let [mut table_ui, mut inspector_ui] =
         crate::widgets::split::stacked(ui, "traffic_inspector_split", &mut inspector.prefs.table_fraction);
     table::show(&mut table_ui, state, &visible, folders, cmds);
-    crate::features::inspector::show(&mut inspector_ui, inspector, state);
+    crate::features::inspector::show(&mut inspector_ui, inspector, state, cmds);
 }

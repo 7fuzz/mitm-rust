@@ -218,6 +218,13 @@ impl MitmApp {
                     ctx.copy_text(Exchange::from_flow(flow, detail.as_ref()).custom_text(&options));
                 }
             }
+            AppCommand::SaveBody(body) => {
+                self.file_saves.spawn(&self.rt, ctx, async move {
+                    let path = crate::files::pick_save(&body.file_name, &[]).await?;
+                    let result = std::fs::write(&path, &body.bytes).map_err(|e| e.to_string());
+                    Some(result.map(|_| format!("Saved {}", crate::files::file_name(&path))))
+                });
+            }
             AppCommand::SetHistoryLimit(settings) => {
                 if self.rt.block_on(self.core.set_history_settings(settings.clone())).is_ok() {
                     self.state.traffic.set_history_limit(settings);
