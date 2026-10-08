@@ -13,11 +13,12 @@ const MAX_DELIVERIES: usize = 1000;
 #[serde(default)]
 pub struct WebhooksPrefs {
     pub list_split: f32,
+    pub detail_split: f32,
 }
 
 impl Default for WebhooksPrefs {
     fn default() -> Self {
-        Self { list_split: 0.3 }
+        Self { list_split: 0.3, detail_split: 0.55 }
     }
 }
 
@@ -44,6 +45,8 @@ pub struct WebhooksState {
     pub filter: EndpointFilter,
     pub search: String,
     pub draft: Option<EndpointDraft>,
+    pub selected_delivery: Option<i64>,
+    pub detail_pane: crate::widgets::message_pane::PaneState,
 }
 
 impl Default for WebhooksState {
@@ -57,6 +60,8 @@ impl Default for WebhooksState {
             filter: EndpointFilter::All,
             search: String::new(),
             draft: None,
+            selected_delivery: None,
+            detail_pane: Default::default(),
         }
     }
 }
@@ -82,6 +87,7 @@ impl WebhooksState {
 
     pub fn deliveries_cleared(&mut self) {
         self.deliveries.clear();
+        self.selected_delivery = None;
     }
 
     pub fn base_url(&self) -> String {
@@ -100,6 +106,9 @@ impl WebhooksState {
     pub fn removed(&mut self, id: &str) {
         self.endpoints.retain(|e| e.id != id);
         self.deliveries.retain(|d| d.endpoint_id != id);
+        if !self.deliveries.iter().any(|d| Some(d.id) == self.selected_delivery) {
+            self.selected_delivery = None;
+        }
         if self.filter == EndpointFilter::Endpoint(id.to_string()) {
             self.filter = EndpointFilter::All;
         }

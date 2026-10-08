@@ -5,6 +5,8 @@ use crate::command::{AppCommand, Commands};
 use crate::format::format_bytes;
 use crate::theme::{self, Tone};
 use crate::widgets::confirm::confirm_button;
+use crate::widgets::message_pane::{self, PaneData};
+use crate::widgets::pills::badge;
 use crate::widgets::split;
 use super::{EndpointDraft, EndpointFilter, WebhooksState};
 
@@ -151,6 +153,14 @@ fn deliveries(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands)
     });
     ui.add_space(2.0);
 
+    let mut fraction = state.prefs.detail_split;
+    let [mut top, mut bottom] = split::stacked(ui, "wh_detail_split", &mut fraction);
+    state.prefs.detail_split = fraction;
+    deliveries_table(&mut top, state);
+    delivery_detail(&mut bottom, state, cmds);
+}
+
+fn deliveries_table(ui: &mut egui::Ui, state: &mut WebhooksState) {
     let query = state.search.to_lowercase();
     let rows: Vec<usize> = state
         .deliveries
@@ -171,9 +181,11 @@ fn deliveries(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands)
     }
 
     let row_height = egui::TextStyle::Body.resolve(ui.style()).size + 6.0;
+    let mut new_selection = None;
     TableBuilder::new(ui)
         .striped(true)
         .resizable(true)
+        .sense(egui::Sense::click())
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
         .column(Column::exact(75.0))
         .column(Column::remainder())
@@ -188,12 +200,94 @@ fn deliveries(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands)
         .body(|body| {
             body.rows(row_height, rows.len(), |mut row| {
                 let delivery = &state.deliveries[rows[row.index()]];
+                row.set_selected(state.selected_delivery == Some(delivery.id));
                 row.col(|ui| { ui.label(clock(delivery.timestamp)); });
                 row.col(|ui| { ui.add(egui::Label::new(&delivery.endpoint_path).truncate()); });
                 row.col(|ui| { ui.label(format_bytes(delivery.payload.len() as u64)); });
                 row.col(|ui| { signature_chip(ui, &delivery.signature_status); });
+                if row.response().clicked() {
+                    new_selection = Some(delivery.id);
+                }
             });
         });
+
+    if let Some(id) = new_selection {
+        state.selected_delivery = Some(id);
+    }
+}
+
+fn delivery_detail(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
+    let Some(id) = state.selected_delivery else {
+        ui.weak("Select a delivery");
+        return;
+    };
+    let Some(delivery) = state.deliveries.iter().find(|d| d.id == id) else {
+        ui.weak("Select a delivery");
+        return;
+    };
+
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(&delivery.endpoint_path).strong());
+        ui.weak(clock(delivery.timestamp));
+        ui.weak(format_bytes(delivery.payload.len() as u64));
+        if delivery.endpoint_id == "unmatched" {
+            badge(ui, "UNMATCHED", Tone::Warn);
+        }
+    });
+    signature_view(ui, delivery);
+    ui.separator();
+
+    let data = PaneData {
+        cache_key: delivery.id as u64,
+        title: "",
+        headers: &delivery.headers,
+        body: &delivery.payload,
+        content_type: content_type(&delivery.headers),
+        params: None,
+        cookies: None,
+        form_parser: None,
+    };
+    if let Some(save) = message_pane::show(ui, "wh_delivery_pane", &mut state.detail_pane, &data) {
+        cmds.push(AppCommand::SaveBody(save));
+    }
+}
+
+fn signature_view(ui: &mut egui::Ui, delivery: &WebhookDelivery) {
+    ui.horizontal(|ui| {
+        ui.label("Signature:");
+        match delivery.signature_status.as_str() {
+            "valid" => badge(ui, "VALID", Tone::Success),
+            "invalid" => badge(ui, "INVALID", Tone::Danger),
+            _ => badge(ui, "NONE", Tone::Neutral),
+        };
+    });
+    if let Some(provided) = &delivery.provided_hmac {
+        ui.horizontal(|ui| {
+            ui.weak("received");
+            ui.add(egui::Label::new(RichText::new(provided).monospace()).truncate());
+        });
+    }
+    if let Some(expected) = &delivery.computed_hmac {
+        ui.horizontal(|ui| {
+            ui.weak("expected");
+            ui.add(egui::Label::new(RichText::new(expected).monospace()).truncate());
+        });
+    }
+}
+
+fn content_type(headers: &[(String, String)]) -> &'static str {
+    let raw = headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+        .map(|(_, v)| v.as_str())
+        .unwrap_or("");
+    if raw.contains("json") {
+        "application/json"
+    } else if raw.contains("xml") {
+        "application/xml"
+    } else {
+        "text/plain"
+    }
 }
 
 fn endpoint_matches(filter: &EndpointFilter, delivery: &WebhookDelivery) -> bool {
