@@ -312,24 +312,21 @@ impl CvssV4Base {
         let score_eq1 = lookup_score(eq1 + 1, eq2, eq3, eq4, eq5, eq6);
         let score_eq2 = lookup_score(eq1, eq2 + 1, eq3, eq4, eq5, eq6);
 
-        let score_eq3eq6 = if eq3 == 1 && eq6 == 1 {
-            lookup_score(eq1, eq2, eq3 + 1, eq4, eq5, eq6)
-        } else if eq3 == 0 && eq6 == 1 {
-            lookup_score(eq1, eq2, eq3 + 1, eq4, eq5, eq6)
-        } else if eq3 == 1 && eq6 == 0 {
-            lookup_score(eq1, eq2, eq3, eq4, eq5, eq6 + 1)
-        } else if eq3 == 0 && eq6 == 0 {
-            let s_left = lookup_score(eq1, eq2, eq3, eq4, eq5, eq6 + 1);
-            let s_right = lookup_score(eq1, eq2, eq3 + 1, eq4, eq5, eq6);
-            if s_left.is_nan() {
-                s_right
-            } else if s_right.is_nan() {
-                s_left
-            } else {
-                s_left.max(s_right)
+        let score_eq3eq6 = match (eq3, eq6) {
+            (0 | 1, 1) => lookup_score(eq1, eq2, eq3 + 1, eq4, eq5, eq6),
+            (1, 0) => lookup_score(eq1, eq2, eq3, eq4, eq5, eq6 + 1),
+            (0, 0) => {
+                let s_left = lookup_score(eq1, eq2, eq3, eq4, eq5, eq6 + 1);
+                let s_right = lookup_score(eq1, eq2, eq3 + 1, eq4, eq5, eq6);
+                if s_left.is_nan() {
+                    s_right
+                } else if s_right.is_nan() {
+                    s_left
+                } else {
+                    s_left.max(s_right)
+                }
             }
-        } else {
-            lookup_score(eq1, eq2, eq3 + 1, eq4, eq5, eq6 + 1)
+            _ => lookup_score(eq1, eq2, eq3 + 1, eq4, eq5, eq6 + 1),
         };
 
         let score_eq4 = lookup_score(eq1, eq2, eq3, eq4 + 1, eq5, eq6);

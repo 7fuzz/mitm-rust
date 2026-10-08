@@ -35,7 +35,7 @@ pub fn base64_decode(input: &str, url_safe: bool) -> Result<String, String> {
     if url_safe {
         cleaned = cleaned.replace('-', "+").replace('_', "/");
     }
-    while cleaned.len() % 4 != 0 {
+    while !cleaned.len().is_multiple_of(4) {
         cleaned.push('=');
     }
     let bytes = STANDARD
@@ -145,7 +145,7 @@ pub fn hex_decode(input: &str) -> Result<String, String> {
     if cleaned.is_empty() {
         return Ok(String::new());
     }
-    if cleaned.len() % 2 != 0 {
+    if !cleaned.len().is_multiple_of(2) {
         return Err(format!("Odd number of hex digits ({})", cleaned.len()));
     }
     if !cleaned.chars().all(|c| c.is_ascii_hexdigit()) {
