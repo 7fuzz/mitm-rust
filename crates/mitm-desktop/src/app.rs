@@ -637,7 +637,7 @@ impl MitmApp {
                 let db_path = db_path.clone();
                 self.file_saves.spawn(&self.rt, ctx, async move {
                     let path = crate::files::pick_save(&format!("{}.json", workspace.name), &[("JSON", &["json"])]).await?;
-                    let result = mitm_core::workspace::export::export_workspace_file_db(&db_path, &workspace.id, &path.to_string_lossy());
+                    let result = mitm_core::workspace::export::export_workspace_file_db(&db_path, &workspace.id, &path.to_string_lossy(), false);
                     Some(result.map(|_| format!("Exported {}", crate::files::file_name(&path))))
                 });
             }
