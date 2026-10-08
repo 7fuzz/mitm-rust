@@ -28,14 +28,15 @@ pub enum CoreEvent {
     InterceptPrompt(PendingFlowPayload),
     InterceptResolved { flow_id: String },
 
-    FuzzProgress {
-        run_id: String,
+    FuzzResult {
+        run_id: i64,
+        row: crate::fuzzer::FuzzRow,
+    },
+    FuzzFinished {
+        run_id: i64,
         completed: usize,
         total: usize,
-    },
-    FuzzResult {
-        run_id: String,
-        result: serde_json::Value,
+        stopped: bool,
     },
 
     WsFrameReceived {

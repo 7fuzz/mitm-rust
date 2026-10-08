@@ -98,13 +98,6 @@ fn default_concurrency() -> u32 {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MatchResult {
-    pub name: String,
-    pub value: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct FuzzResult {
     pub idx: u32,
     pub payloads: Vec<String>,
@@ -118,7 +111,43 @@ pub struct FuzzResult {
     pub response_size: u64,
     pub duration_ms: u64,
     pub error: Option<String>,
-    pub matches: Vec<MatchResult>,
+    /// One value per match rule, in rule order.
+    pub matches: Vec<String>,
+}
+
+/// What a results table needs from a result, without its bodies and headers.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FuzzRow {
+    pub idx: u32,
+    pub payloads: Vec<String>,
+    pub status_code: u16,
+    pub response_size: u64,
+    pub duration_ms: u64,
+    pub error: Option<String>,
+    pub matches: Vec<String>,
+}
+
+impl FuzzResult {
+    pub fn row(&self) -> FuzzRow {
+        FuzzRow {
+            idx: self.idx,
+            payloads: self.payloads.clone(),
+            status_code: self.status_code,
+            response_size: self.response_size,
+            duration_ms: self.duration_ms,
+            error: self.error.clone(),
+            matches: self.matches.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FuzzStart {
+    pub run_id: i64,
+    /// Variable names in the order each row's payloads are listed.
+    pub names: Vec<String>,
+    pub total: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -367,11 +396,11 @@ pub fn generate_combos(config: &FuzzConfig) -> Result<(Vec<String>, Vec<Vec<Stri
     Ok((names, rows))
 }
 
-pub fn evaluate_matches(rules: &[MatchRule], body: &str) -> Vec<MatchResult> {
+pub fn evaluate_matches(rules: &[MatchRule], body: &str) -> Vec<String> {
     rules
         .iter()
         .map(|rule| {
-            let value = if rule.kind == "regex" {
+            if rule.kind == "regex" {
                 match regex::Regex::new(&rule.pattern) {
                     Ok(re) => re
                         .captures(body)
@@ -382,10 +411,6 @@ pub fn evaluate_matches(rules: &[MatchRule], body: &str) -> Vec<MatchResult> {
                 }
             } else {
                 body.matches(&rule.pattern).count().to_string()
-            };
-            MatchResult {
-                name: rule.name.clone(),
-                value,
             }
         })
         .collect()
@@ -393,61 +418,67 @@ pub fn evaluate_matches(rules: &[MatchRule], body: &str) -> Vec<MatchResult> {
 
 // ---- persistence ----
 
-pub fn save_run_db(
-    db_path: &PathBuf,
-    id: i64,
-    name: &str,
-    config: &FuzzConfig,
-    results: &[FuzzResult],
-) -> Result<(), String> {
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+/// Inserts the run as unsaved, so its results can be written while it runs.
+pub fn begin_run_db(db_path: &PathBuf, id: i64, config: &FuzzConfig, total: usize) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let config_json = serde_json::to_string(config).map_err(|e| e.to_string())?;
     let now = chrono::Local::now().timestamp_millis();
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
-    tx.execute(
-        "INSERT OR REPLACE INTO fuzz_runs (id, name, attack_type, config_json, total, created_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?)",
-        params![id, name, config.attack_type, config_json, results.len() as i64, now],
-    )
-    .map_err(|e| e.to_string())?;
-    tx.execute("DELETE FROM fuzz_results WHERE run_id = ?", params![id])
-        .map_err(|e| e.to_string())?;
-    for r in results {
-        insert_result(&tx, id, r)?;
-    }
-    tx.commit().map_err(|e| e.to_string())
-}
-
-fn insert_result(conn: &Connection, run_id: i64, r: &FuzzResult) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO fuzz_results
-            (run_id, idx, payloads_json, method, url, request_headers_json, request_body,
-             status_code, response_headers_json, response_body, response_size, duration_ms, error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        params![
-            run_id,
-            r.idx,
-            serde_json::to_string(&r.payloads).unwrap_or_else(|_| "[]".into()),
-            r.method,
-            r.url,
-            serde_json::to_string(&r.request_headers).unwrap_or_else(|_| "[]".into()),
-            r.request_body,
-            r.status_code,
-            serde_json::to_string(&r.response_headers).unwrap_or_else(|_| "[]".into()),
-            r.response_body,
-            r.response_size as i64,
-            r.duration_ms as i64,
-            r.error,
-        ],
+        "INSERT OR REPLACE INTO fuzz_runs (id, name, attack_type, config_json, total, created_at_ms, saved)
+         VALUES (?, '', ?, ?, ?, ?, 0)",
+        params![id, config.attack_type, config_json, total as i64, now],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
 }
 
+pub fn insert_results(conn: &mut Connection, run_id: i64, results: &[FuzzResult]) -> Result<(), String> {
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    {
+        let mut stmt = tx
+            .prepare_cached(
+                "INSERT INTO fuzz_results
+                    (run_id, idx, payloads_json, method, url, request_headers_json, request_body, status_code,
+                     response_headers_json, response_body, response_size, duration_ms, error, matches_json)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .map_err(|e| e.to_string())?;
+        for r in results {
+            stmt.execute(params![
+                run_id,
+                r.idx,
+                serde_json::to_string(&r.payloads).unwrap_or_else(|_| "[]".into()),
+                r.method,
+                r.url,
+                serde_json::to_string(&r.request_headers).unwrap_or_else(|_| "[]".into()),
+                r.request_body,
+                r.status_code,
+                serde_json::to_string(&r.response_headers).unwrap_or_else(|_| "[]".into()),
+                r.response_body,
+                r.response_size as i64,
+                r.duration_ms as i64,
+                r.error,
+                serde_json::to_string(&r.matches).unwrap_or_else(|_| "[]".into()),
+            ])
+            .map_err(|e| e.to_string())?;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())
+}
+
+pub fn discard_unsaved_runs_db(db_path: &PathBuf) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute_batch(
+        "DELETE FROM fuzz_results WHERE run_id IN (SELECT id FROM fuzz_runs WHERE saved = 0);
+         DELETE FROM fuzz_runs WHERE saved = 0;",
+    )
+    .map_err(|e| e.to_string())
+}
+
 pub fn list_runs_db(db_path: &PathBuf) -> Result<Vec<FuzzRunMeta>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, name, attack_type, total, created_at_ms FROM fuzz_runs ORDER BY created_at_ms DESC")
+        .prepare("SELECT id, name, attack_type, total, created_at_ms FROM fuzz_runs WHERE saved = 1 ORDER BY created_at_ms DESC")
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |row| {
@@ -473,36 +504,72 @@ pub fn get_run_config_db(db_path: &PathBuf, id: i64) -> Result<FuzzConfig, Strin
     serde_json::from_str(&json).map_err(|e| e.to_string())
 }
 
-pub fn get_run_results_db(db_path: &PathBuf, id: i64) -> Result<Vec<FuzzResult>, String> {
+pub fn get_run_rows_db(db_path: &PathBuf, id: i64) -> Result<Vec<FuzzRow>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
-            "SELECT idx, payloads_json, method, url, request_headers_json, request_body,
-                    status_code, response_headers_json, response_body, response_size, duration_ms, error
+            "SELECT idx, payloads_json, status_code, response_size, duration_ms, error, matches_json
              FROM fuzz_results WHERE run_id = ? ORDER BY idx ASC",
         )
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map(params![id], |row| {
-            let payloads_json: String = row.get(1)?;
-            let req_h: String = row.get(4)?;
-            let res_h: String = row.get(7)?;
+            Ok(FuzzRow {
+                idx: row.get::<_, i64>(0)? as u32,
+                payloads: serde_json::from_str(&row.get::<_, String>(1)?).unwrap_or_default(),
+                status_code: row.get::<_, i64>(2)? as u16,
+                response_size: row.get::<_, i64>(3)? as u64,
+                duration_ms: row.get::<_, i64>(4)? as u64,
+                error: row.get(5)?,
+                matches: serde_json::from_str(&row.get::<_, String>(6)?).unwrap_or_default(),
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(rows)
+}
+
+pub fn get_result_db(db_path: &PathBuf, run_id: i64, idx: u32) -> Result<Option<FuzzResult>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let result = conn.query_row(
+        "SELECT idx, payloads_json, method, url, request_headers_json, request_body, status_code,
+                response_headers_json, response_body, response_size, duration_ms, error, matches_json
+         FROM fuzz_results WHERE run_id = ? AND idx = ?",
+        params![run_id, idx],
+        |row| {
             Ok(FuzzResult {
                 idx: row.get::<_, i64>(0)? as u32,
-                payloads: serde_json::from_str(&payloads_json).unwrap_or_default(),
+                payloads: serde_json::from_str(&row.get::<_, String>(1)?).unwrap_or_default(),
                 method: row.get(2)?,
                 url: row.get(3)?,
-                request_headers: serde_json::from_str(&req_h).unwrap_or_default(),
+                request_headers: serde_json::from_str(&row.get::<_, String>(4)?).unwrap_or_default(),
                 request_body: row.get(5)?,
                 status_code: row.get::<_, i64>(6)? as u16,
-                response_headers: serde_json::from_str(&res_h).unwrap_or_default(),
+                response_headers: serde_json::from_str(&row.get::<_, String>(7)?).unwrap_or_default(),
                 response_body: row.get(8)?,
                 response_size: row.get::<_, i64>(9)? as u64,
                 duration_ms: row.get::<_, i64>(10)? as u64,
                 error: row.get(11)?,
-                matches: Vec::new(),
+                matches: serde_json::from_str(&row.get::<_, String>(12)?).unwrap_or_default(),
             })
-        })
+        },
+    );
+    match result {
+        Ok(result) => Ok(Some(result)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Indexes of the results whose response body contains `query`, ignoring ASCII case.
+pub fn search_responses_db(db_path: &PathBuf, run_id: i64, query: &str) -> Result<Vec<u32>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT idx FROM fuzz_results WHERE run_id = ? AND instr(lower(response_body), lower(?)) > 0 ORDER BY idx")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![run_id, query], |row| row.get::<_, i64>(0).map(|i| i as u32))
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();

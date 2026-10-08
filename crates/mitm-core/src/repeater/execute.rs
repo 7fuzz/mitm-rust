@@ -64,7 +64,7 @@ pub struct SentRequest {
     pub duration_ms: u64,
 }
 
-fn http_client(jar: Option<Arc<Jar>>) -> Result<reqwest::Client, String> {
+pub(crate) fn http_client(jar: Option<Arc<Jar>>) -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .gzip(true)
@@ -83,7 +83,7 @@ pub async fn send_tab_request(tab: &RepeaterTab) -> Result<SentRequest, String> 
     send_tab_request_with(&http_client(None)?, tab).await
 }
 
-async fn send_tab_request_with(client: &reqwest::Client, tab: &RepeaterTab) -> Result<SentRequest, String> {
+pub(crate) async fn send_tab_request_with(client: &reqwest::Client, tab: &RepeaterTab) -> Result<SentRequest, String> {
     // Parse method (fallback to GET if invalid)
     let method = Method::from_bytes(tab.method.as_bytes())
         .unwrap_or(Method::GET);

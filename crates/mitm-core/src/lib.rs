@@ -41,6 +41,7 @@ impl MitmCore {
         let db_path = db::get_default_db_path();
 
         db::init_database(&db_path, Some(&event_bus))?;
+        let _ = fuzzer::discard_unsaved_runs_db(&db_path);
 
         let (history_tx, history_rx) = mpsc::channel::<HistoryEntry>(2000);
         let (rewrite_tx, rewrite_rx) = mpsc::channel::<RewriteHistoryEntry>(2000);
@@ -115,6 +116,40 @@ impl MitmCore {
 
     pub fn clear_fuzz_runs(&self) -> Result<(), String> {
         fuzzer::clear_fuzz_runs(&self.db_path)
+    }
+
+    /// Starts an attack in the background. Results arrive as `CoreEvent::FuzzResult` once they're stored,
+    /// then `CoreEvent::FuzzFinished`. The previous unsaved run is discarded.
+    pub async fn start_fuzz(&self, config: fuzzer::FuzzConfig) -> Result<fuzzer::FuzzStart, String> {
+        let (names, combos) = fuzzer::generate_combos(&config)?;
+        let cancel = self.state.fuzz.begin()?;
+        let run_id = self.state.next_fuzz_run_id();
+        let begun = fuzzer::discard_unsaved_runs_db(&self.db_path)
+            .and_then(|_| fuzzer::begin_run_db(&self.db_path, run_id, &config, combos.len()));
+        if let Err(e) = begun {
+            cancel.cancel();
+            return Err(e);
+        }
+        let start = fuzzer::FuzzStart { run_id, names: names.clone(), total: combos.len() };
+        let (bus, db_path) = (self.event_bus.clone(), self.db_path.clone());
+        tokio::spawn(fuzzer::execute::run_attack(bus, db_path, run_id, config, names, combos, cancel));
+        Ok(start)
+    }
+
+    pub fn stop_fuzz(&self) {
+        self.state.fuzz.stop();
+    }
+
+    pub fn fuzz_result(&self, run_id: i64, idx: u32) -> Result<Option<fuzzer::FuzzResult>, String> {
+        fuzzer::get_result_db(&self.db_path, run_id, idx)
+    }
+
+    pub fn fuzz_rows(&self, run_id: i64) -> Result<Vec<fuzzer::FuzzRow>, String> {
+        fuzzer::get_run_rows_db(&self.db_path, run_id)
+    }
+
+    pub fn search_fuzz_responses(&self, run_id: i64, query: &str) -> Result<Vec<u32>, String> {
+        fuzzer::search_responses_db(&self.db_path, run_id, query)
     }
 
     pub fn clear_rewrite_history(&self) -> Result<(), String> {

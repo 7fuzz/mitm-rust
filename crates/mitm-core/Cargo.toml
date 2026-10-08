@@ -10,6 +10,7 @@ time = "0.3"
 rusqlite = { version = "0.31", features = ["bundled"] }
 rcgen = { version = "0.13", features = ["pem", "x509-parser"] }
 tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
 hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 tokio-rustls = "0.26"

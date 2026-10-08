@@ -486,9 +486,7 @@ pub struct AppState {
     pub next_history_id: Arc<AtomicU64>,
     pub next_rewrite_history_id: Arc<AtomicU64>,
     pub next_fuzz_run_id: Arc<AtomicU64>,
-    pub fuzz_cancel: Arc<AtomicBool>,
-    pub fuzz_running: Arc<AtomicBool>,
-    pub fuzz_buffer: Arc<RwLock<Option<crate::fuzzer::execute::FuzzRunBuffer>>>,
+    pub fuzz: Arc<crate::fuzzer::execute::FuzzControl>,
 }
 
 /// Highest id in `table`, so in-memory id counters resume after it
@@ -582,9 +580,7 @@ impl AppState {
             webhook_running: Arc::new(AtomicBool::new(false)),
             webhook_port: Arc::new(RwLock::new(initial_webhook_port)),
             webhook_stop_signal: Arc::new(Mutex::new(None)),
-            fuzz_cancel: Arc::new(AtomicBool::new(false)),
-            fuzz_running: Arc::new(AtomicBool::new(false)),
-            fuzz_buffer: Arc::new(RwLock::new(None)),
+            fuzz: Arc::default(),
             ws_stream_senders: Arc::new(DashMap::new()),
             ws_client_senders: Arc::new(DashMap::new()),
             ws_client_stops: Arc::new(DashMap::new()),
