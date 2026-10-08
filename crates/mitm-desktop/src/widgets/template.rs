@@ -30,6 +30,25 @@ pub fn resolve_var(name: &str) -> Option<String> {
     })
 }
 
+fn is_secret(name: &str) -> bool {
+    let name = name.trim();
+    ACTIVE_ENV.with(|cell| {
+        cell.borrow().as_ref().is_some_and(|env| {
+            env.variables
+                .iter()
+                .any(|v| v.enabled && v.r#type == "secret" && v.key.trim().eq_ignore_ascii_case(name))
+        })
+    })
+}
+
+fn hover_value(name: &str) -> String {
+    match resolve_var(name) {
+        Some(_) if is_secret(name) => "••••••".to_string(),
+        Some(value) => value,
+        None => "undefined".to_string(),
+    }
+}
+
 pub fn hover_tooltip(resp: egui::Response, text: &str) -> egui::Response {
     if !resp.hovered() || !text.contains("{{") {
         return resp;
@@ -44,8 +63,7 @@ pub fn hover_tooltip(resp: egui::Response, text: &str) -> egui::Response {
 
     let mut lines = Vec::new();
     for v in &vars {
-        let val = resolve_var(v).unwrap_or_else(|| "undefined".to_string());
-        lines.push(format!("{{{{{}}}}}: {}", v, val));
+        lines.push(format!("{{{{{}}}}}: {}", v, hover_value(v)));
     }
     resp.on_hover_text(lines.join("\n"))
 }
@@ -168,5 +186,31 @@ mod tests {
         assert_eq!(resolve_var("BASE_URL").as_deref(), Some("https://example.com"));
         assert_eq!(resolve_var("MISSING"), None);
         assert!(resolve_var("$guid").is_some());
+    }
+
+    #[test]
+    fn secret_values_are_masked_in_hovers() {
+        let mut env = Environment {
+            id: "e1".to_string(),
+            workspace_id: "w1".to_string(),
+            name: "Dev".to_string(),
+            is_active: true,
+            variables: vec![mitm_core::workspace::EnvironmentVariable {
+                key: "TOKEN".to_string(),
+                value: "hunter2".to_string(),
+                enabled: true,
+                r#type: "secret".to_string(),
+                active_index: 0,
+                variants: vec![],
+            }],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        };
+        set_active_env(Some(&env));
+        assert_eq!(hover_value("token"), "••••••");
+        env.variables[0].r#type = "default".to_string();
+        set_active_env(Some(&env));
+        assert_eq!(hover_value("TOKEN"), "hunter2");
+        assert_eq!(hover_value("MISSING"), "undefined");
     }
 }
