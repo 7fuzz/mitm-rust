@@ -1,3 +1,4 @@
+mod editor;
 mod rules;
 
 use serde::{Deserialize, Serialize};
@@ -90,6 +91,11 @@ impl RewriteState {
         self.selected = Some(rule.id.clone());
         self.rules.push(rule);
         self.mark_dirty(now);
+    }
+
+    pub fn selected_index(&self) -> Option<usize> {
+        let id = self.selected.as_deref()?;
+        self.rules.iter().position(|r| r.id == id)
     }
 
     pub fn duplicate(&mut self, index: usize, now: f64) {

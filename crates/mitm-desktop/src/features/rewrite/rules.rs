@@ -2,13 +2,40 @@ use eframe::egui::{self, RichText};
 use mitm_core::state::{ListenerConfig, RewriteRule};
 use crate::command::{AppCommand, Commands};
 use crate::theme;
-use crate::widgets::source_scope;
-use super::{action_label, action_tone, RewriteState};
+use crate::widgets::{source_scope, split};
+use super::{action_label, action_tone, editor, RewriteState};
 
 pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerConfig], cmds: &mut Commands) {
     let now = ui.input(|i| i.time);
     toolbar(ui, state, listeners, cmds, now);
     ui.separator();
+    let Some(index) = state.selected_index() else {
+        list(ui, state, now);
+        return;
+    };
+    let mut fraction = state.prefs.list_fraction;
+    let [mut list_ui, mut editor_ui] = split::side_by_side(ui, "rewrite_split", &mut fraction);
+    state.prefs.list_fraction = fraction;
+    list(&mut list_ui, state, now);
+    egui::ScrollArea::vertical().id_salt("rewrite_editor").auto_shrink([false, false]).show(&mut editor_ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.strong("Rule");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.small_button("✖").on_hover_text("Close editor").clicked() {
+                    state.selected = None;
+                }
+            });
+        });
+        ui.separator();
+        if let Some(rule) = state.rules.get_mut(index) {
+            if editor::show(ui, rule) {
+                state.mark_dirty(now);
+            }
+        }
+    });
+}
+
+fn list(ui: &mut egui::Ui, state: &mut RewriteState, now: f64) {
     egui::ScrollArea::vertical().id_salt("rewrite_rules").auto_shrink([false, false]).show(ui, |ui| {
         rules_table(ui, state, now);
     });
