@@ -364,6 +364,19 @@ impl MitmCore {
         }
     }
 
+    /// The interceptor settings as they were loaded at startup or last set.
+    pub async fn intercept_config(&self) -> (bool, String, state::SourceScope) {
+        let cfg = self.state.proxy_config.read().await;
+        (cfg.intercept_enabled, cfg.intercept_mode.clone(), cfg.intercept_source_scope.clone())
+    }
+
+    pub async fn set_intercept_source_scope(&self, scope: state::SourceScope) -> Result<(), String> {
+        let json = serde_json::to_string(&scope).map_err(|e| e.to_string())?;
+        db::set_preference(&self.db_path, "intercept_source_scope", &json)?;
+        self.state.proxy_config.write().await.intercept_source_scope = scope;
+        Ok(())
+    }
+
     /// Forwards every paused flow unmodified and returns how many were released.
     pub fn forward_all_intercepted(&self) -> usize {
         self.pending_flow_ids()
@@ -518,6 +531,28 @@ mod tests {
             },
         );
         rx
+    }
+
+    #[test]
+    fn interceptor_settings_survive_a_restart() {
+        let (core, dir) = test_core();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            core.toggle_interceptor(true, "both".to_string()).await.unwrap();
+            core.set_intercept_source_scope(state::SourceScope { all: false, ids: vec![2] }).await.unwrap();
+        });
+        let (history_tx, _) = mpsc::channel(1);
+        let (rewrite_tx, _) = mpsc::channel(1);
+        let reopened = MitmCore {
+            state: Arc::new(AppState::new(core.db_path.clone(), history_tx, rewrite_tx)),
+            event_bus: EventBus::default(),
+            db_path: core.db_path.clone(),
+        };
+        let (enabled, mode, scope) = rt.block_on(reopened.intercept_config());
+        assert!(enabled);
+        assert_eq!(mode, "both");
+        assert!(!scope.all && scope.ids == vec![2]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
