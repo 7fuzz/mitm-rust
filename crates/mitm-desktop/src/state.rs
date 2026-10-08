@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use crate::features::collections::CollectionsState;
 use crate::features::encoding::EncodingState;
 use crate::features::fuzzer::FuzzerState;
+use crate::features::hashing::HashingState;
 use crate::features::inspector::InspectorState;
 use crate::features::intercept::InterceptState;
 use crate::features::repeater::RepeaterState;
@@ -27,6 +28,7 @@ pub struct AppState {
     pub websockets: WebSocketsState,
     pub webhooks: WebhooksState,
     pub encoding: EncodingState,
+    pub hashing: HashingState,
     pub database: crate::features::database::DatabaseState,
     pub environments: crate::features::environments::EnvironmentsState,
 }

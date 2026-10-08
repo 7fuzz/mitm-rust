@@ -42,6 +42,7 @@ pub struct MitmApp {
     ws_actions: Jobs<Result<(), String>>,
     webhook_actions: Jobs<Result<(), String>>,
     webhook_replays: Jobs<(i64, Result<mitm_core::webhook::WebhookReplayResult, String>)>,
+    bcrypt_jobs: Jobs<crate::features::hashing::BcryptOutcome>,
 }
 
 impl MitmApp {
@@ -65,6 +66,7 @@ impl MitmApp {
             ws_actions: Jobs::default(),
             webhook_actions: Jobs::default(),
             webhook_replays: Jobs::default(),
+            bcrypt_jobs: Jobs::default(),
         }
     }
 
@@ -529,6 +531,24 @@ impl MitmApp {
                 self.state.encoding.load_for_decode(text);
                 dock::open_tab(&mut self.dock, Tab::Encoding);
             }
+            AppCommand::GenerateBcrypt { password, cost } => {
+                use crate::features::hashing::BcryptOutcome;
+                self.bcrypt_jobs.spawn(&self.rt, ctx, async move {
+                    let result = tokio::task::spawn_blocking(move || mitm_core::utils::hashing::bcrypt_hash(&password, cost))
+                        .await
+                        .unwrap_or_else(|e| Err(e.to_string()));
+                    BcryptOutcome::Hash(result)
+                });
+            }
+            AppCommand::VerifyBcrypt { password, hash } => {
+                use crate::features::hashing::BcryptOutcome;
+                self.bcrypt_jobs.spawn(&self.rt, ctx, async move {
+                    let result = tokio::task::spawn_blocking(move || mitm_core::utils::hashing::bcrypt_verify(&password, &hash))
+                        .await
+                        .unwrap_or_else(|e| Err(e.to_string()));
+                    BcryptOutcome::Verify(result)
+                });
+            }
             AppCommand::ReplayWebhook { id, url } => {
                 if let Some(delivery) = self.state.webhooks.deliveries.iter().find(|d| d.id == id).cloned() {
                     let core = Arc::clone(&self.core);
@@ -775,6 +795,9 @@ impl eframe::App for MitmApp {
         }
         for (id, result) in self.webhook_replays.drain() {
             self.state.webhooks.replay_done(id, result);
+        }
+        for outcome in self.bcrypt_jobs.drain() {
+            self.state.hashing.bcrypt_done(outcome);
         }
         for result in self.ca_jobs.drain().flatten() {
             self.state.certificate.status = Some(match result {

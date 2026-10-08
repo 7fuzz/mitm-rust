@@ -19,10 +19,11 @@ pub enum Tab {
     Environments,
     Settings,
     Encoding,
+    Hashing,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 11] = [
+    pub const ALL: [Tab; 12] = [
         Tab::Traffic,
         Tab::Repeater,
         Tab::Fuzzer,
@@ -34,6 +35,7 @@ impl Tab {
         Tab::Environments,
         Tab::Settings,
         Tab::Encoding,
+        Tab::Hashing,
     ];
 
     pub fn name(&self) -> &'static str {
@@ -49,11 +51,12 @@ impl Tab {
             Tab::Environments => "Environments",
             Tab::Settings => "Settings",
             Tab::Encoding => "Encoding tool",
+            Tab::Hashing => "Hashing tool",
         }
     }
 
     /// Utility tabs, in the order they appear under the **Utilities ▸** submenu.
-    pub const UTILITIES: &'static [Tab] = &[Tab::Encoding];
+    pub const UTILITIES: &'static [Tab] = &[Tab::Encoding, Tab::Hashing];
 
     pub fn is_utility(&self) -> bool {
         Self::UTILITIES.contains(self)
@@ -191,6 +194,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
             Tab::Webhooks => features::webhooks::show(ui, &mut state.webhooks, cmds),
             Tab::Encoding => features::encoding::show(ui, &mut state.encoding),
+            Tab::Hashing => features::hashing::show(ui, &mut state.hashing, cmds),
             Tab::Environments => features::environments::show(ui, &mut state.environments, cmds),
             Tab::Settings => features::settings::show(
                 ui,

@@ -95,6 +95,8 @@ pub enum AppCommand {
     ClearWebhookDeliveries,
     ReplayWebhook { id: i64, url: String },
     DecodeInEncodingTool(String),
+    GenerateBcrypt { password: String, cost: u32 },
+    VerifyBcrypt { password: String, hash: String },
 
     SelectWorkspace(String),
     SelectEnvironment(Option<String>),

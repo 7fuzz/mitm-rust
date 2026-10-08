@@ -2,6 +2,7 @@ pub mod collections;
 pub mod database;
 pub mod encoding;
 pub mod environments;
+pub mod hashing;
 pub mod fuzzer;
 pub mod inspector;
 pub mod intercept;
