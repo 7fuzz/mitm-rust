@@ -1,47 +1,32 @@
 use eframe::egui::{self, RichText};
-use crate::theme::{self, Tone};
 use egui_extras::{Column, TableBuilder};
 use crate::command::{AppCommand, Commands};
+use crate::features::request_editor::method::method_combo;
 use crate::format::{format_bytes, format_duration};
-use crate::widgets::pills::{render_method_pill, render_status_pill};
-use crate::widgets::template;
-use super::{FuzzerState, RunStatus};
+use crate::theme::{self, Tone};
+use crate::widgets::pills::render_status_pill;
+use crate::widgets::{split, template};
+use super::{ConfigTab, FuzzerState, RunStatus};
 
 pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
+    toolbar(ui, fuzzer, cmds);
+    ui.separator();
+    let [mut top, mut bottom] = split::stacked(ui, "fuzzer_split", &mut fuzzer.prefs.split);
+    config(&mut top, fuzzer);
+    results(&mut bottom, fuzzer);
+}
 
+fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     ui.horizontal(|ui| {
-        ui.heading("HTTP Fuzzer");
-        ui.separator();
-
-        render_method_pill(ui, &fuzzer.method);
-
-        egui::ComboBox::from_id_salt("fuzzer_method_combo")
-            .selected_text(&fuzzer.method)
-            .show_ui(ui, |ui| {
-                for m in &["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] {
-                    ui.selectable_value(&mut fuzzer.method, m.to_string(), *m);
-                }
-            });
-
-        let mut layouter = template::layouter(egui::TextStyle::Body, None);
-        let width = ui.available_width() - 260.0;
-        template::show(ui, &mut fuzzer.url, |text| {
-            egui::TextEdit::singleline(text)
-                .hint_text("Target URL with placeholder e.g. https://target.com/api/{{id}}")
-                .layouter(&mut layouter)
-                .desired_width(width)
-        });
-
+        ui.set_min_height(28.0);
         if fuzzer.status == RunStatus::Running {
             if ui.button(RichText::new("⏹ Stop").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
                 cmds.push(AppCommand::StopFuzzer);
             }
             ui.spinner();
         } else {
-            let start_btn = RichText::new("▶ Start Fuzzing")
-                .color(theme::color(ui, Tone::Success))
-                .strong();
-            if ui.button(start_btn).clicked() {
+            let start = RichText::new("▶ Start").color(theme::color(ui, Tone::Success)).strong();
+            if ui.button(start).clicked() {
                 cmds.push(AppCommand::StartFuzzer(fuzzer.config()));
             }
         }
@@ -60,105 +45,107 @@ pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
             fuzzer.clear();
         }
     });
+}
 
+fn config(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
+    ui.horizontal(|ui| {
+        for (value, label) in [(ConfigTab::Request, "Request"), (ConfigTab::Payloads, "Payloads"), (ConfigTab::Options, "Options")] {
+            ui.selectable_value(&mut fuzzer.config_tab, value, label);
+        }
+    });
     ui.separator();
-
-    ui.columns(2, |columns| {
-        columns[0].vertical(|ui| {
-            ui.heading("Wordlist & Markers");
-            ui.label(RichText::new("Use {{variable}} anywhere in the URL, headers, or body.").weak());
-            ui.add_space(4.0);
-
-            ui.horizontal(|ui| {
-                ui.strong("Concurrency:");
-                ui.add(egui::DragValue::new(&mut fuzzer.concurrency).range(1..=50));
-            });
-
-            ui.add_space(6.0);
-            ui.strong("Payload Wordlist (one per line):");
+    egui::ScrollArea::vertical().id_salt("fuzzer_config").auto_shrink([false, false]).show(ui, |ui| match fuzzer.config_tab {
+        ConfigTab::Request => request_tab(ui, fuzzer),
+        ConfigTab::Payloads => {
             ui.add(
                 egui::TextEdit::multiline(&mut fuzzer.wordlist_input)
                     .font(egui::TextStyle::Monospace)
-                    .desired_rows(8)
+                    .desired_rows(10)
                     .desired_width(f32::INFINITY),
             );
-
-            ui.add_space(6.0);
-            ui.strong("Headers Template:");
-            let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
-            template::show(ui, &mut fuzzer.headers, |text| {
-                egui::TextEdit::multiline(text)
-                    .layouter(&mut layouter)
-                    .font(egui::TextStyle::Monospace)
-                    .desired_rows(4)
-                    .desired_width(f32::INFINITY)
+        }
+        ConfigTab::Options => {
+            ui.horizontal(|ui| {
+                ui.label("Concurrency");
+                ui.add(egui::DragValue::new(&mut fuzzer.concurrency).range(1..=50));
             });
+        }
+    });
+}
 
-            ui.add_space(6.0);
-            ui.strong("Body Template:");
-            let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
-            template::show(ui, &mut fuzzer.body, |text| {
-                egui::TextEdit::multiline(text)
-                    .layouter(&mut layouter)
-                    .font(egui::TextStyle::Monospace)
-                    .desired_rows(6)
-                    .desired_width(f32::INFINITY)
-            });
-        });
-
-        columns[1].vertical(|ui| {
-            ui.heading(format!("Results ({})", fuzzer.results.len()));
-            ui.add_space(4.0);
-
-            let num_rows = fuzzer.results.len();
-            let text_height = egui::TextStyle::Body.resolve(ui.style()).size;
-            let row_height = text_height + 6.0;
-
-            TableBuilder::new(ui)
-                .striped(true)
-                .resizable(true)
-                .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                .column(Column::exact(45.0))
-                .column(Column::remainder())
-                .column(Column::exact(55.0))
-                .column(Column::exact(65.0))
-                .column(Column::exact(60.0))
-                .header(22.0, |mut header| {
-                    header.col(|ui| { ui.strong("#"); });
-                    header.col(|ui| { ui.strong("Payload"); });
-                    header.col(|ui| { ui.strong("Status"); });
-                    header.col(|ui| { ui.strong("Size"); });
-                    header.col(|ui| { ui.strong("Time"); });
-                })
-                .body(|body| {
-                    body.rows(row_height, num_rows, |mut row| {
-                        let idx = row.index();
-                        let r = &fuzzer.results[idx];
-
-                        row.col(|ui| {
-                            ui.label((r.idx + 1).to_string());
-                        });
-
-                        row.col(|ui| {
-                            ui.label(RichText::new(r.payloads.join(", ")).strong());
-                        });
-
-                        let (_, status_cell) = row.col(|ui| {
-                            render_status_pill(ui, r.status_code);
-                        });
-                        if let Some(err) = &r.error {
-                            status_cell.on_hover_text(err);
-                        }
-
-                        row.col(|ui| {
-                            ui.label(format_bytes(r.response_size));
-                        });
-
-                        row.col(|ui| {
-                            ui.label(format_duration(Some(r.duration_ms)));
-                        });
-                    });
-                });
+fn request_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
+    ui.horizontal(|ui| {
+        method_combo(ui, "fuzzer_method", &mut fuzzer.method);
+        let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
+        template::show(ui, &mut fuzzer.url, |text| {
+            egui::TextEdit::singleline(text)
+                .hint_text("https://target.com/api/{{id}}")
+                .layouter(&mut layouter)
+                .font(egui::TextStyle::Monospace)
+                .desired_width(f32::INFINITY)
         });
     });
+    ui.add_space(6.0);
+    ui.strong("Headers");
+    let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
+    template::show(ui, &mut fuzzer.headers, |text| {
+        egui::TextEdit::multiline(text)
+            .layouter(&mut layouter)
+            .font(egui::TextStyle::Monospace)
+            .desired_rows(4)
+            .desired_width(f32::INFINITY)
+    });
+    ui.add_space(6.0);
+    ui.strong("Body");
+    let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
+    template::show(ui, &mut fuzzer.body, |text| {
+        egui::TextEdit::multiline(text)
+            .layouter(&mut layouter)
+            .font(egui::TextStyle::Monospace)
+            .desired_rows(6)
+            .desired_width(f32::INFINITY)
+    });
+}
+
+fn results(ui: &mut egui::Ui, fuzzer: &FuzzerState) {
+    let row_height = egui::TextStyle::Body.resolve(ui.style()).size + 6.0;
+    TableBuilder::new(ui)
+        .id_salt("fuzzer_results")
+        .striped(true)
+        .resizable(true)
+        .auto_shrink([false, false])
+        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+        .column(Column::exact(55.0))
+        .column(Column::remainder())
+        .column(Column::exact(55.0))
+        .column(Column::exact(70.0))
+        .column(Column::exact(65.0))
+        .header(22.0, |mut header| {
+            for title in ["#", "Payload", "Status", "Size", "Time"] {
+                header.col(|ui| {
+                    ui.strong(title);
+                });
+            }
+        })
+        .body(|body| {
+            body.rows(row_height, fuzzer.results.len(), |mut row| {
+                let r = &fuzzer.results[row.index()];
+                row.col(|ui| {
+                    ui.label((r.idx + 1).to_string());
+                });
+                row.col(|ui| {
+                    ui.add(egui::Label::new(RichText::new(r.payloads.join(", ")).monospace()).truncate());
+                });
+                let (_, status_cell) = row.col(|ui| render_status_pill(ui, r.status_code));
+                if let Some(err) = &r.error {
+                    status_cell.on_hover_text(err);
+                }
+                row.col(|ui| {
+                    ui.label(format_bytes(r.response_size));
+                });
+                row.col(|ui| {
+                    ui.label(format_duration(Some(r.duration_ms)));
+                });
+            });
+        });
 }

@@ -1,5 +1,6 @@
 mod view;
 
+use serde::{Deserialize, Serialize};
 use mitm_core::fuzzer::{parse_variables, FuzzConfig, FuzzRow, FuzzStart, FuzzTemplate, FuzzVariable, PayloadSet};
 use crate::command::RequestDraft;
 use crate::format::parse_header_items;
@@ -14,7 +15,28 @@ pub enum RunStatus {
     Done,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigTab {
+    Request,
+    Payloads,
+    Options,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FuzzerPrefs {
+    pub split: f32,
+}
+
+impl Default for FuzzerPrefs {
+    fn default() -> Self {
+        Self { split: 0.45 }
+    }
+}
+
 pub struct FuzzerState {
+    pub prefs: FuzzerPrefs,
+    pub config_tab: ConfigTab,
     pub method: String,
     pub url: String,
     pub headers: String,
@@ -31,6 +53,8 @@ pub struct FuzzerState {
 impl Default for FuzzerState {
     fn default() -> Self {
         Self {
+            prefs: FuzzerPrefs::default(),
+            config_tab: ConfigTab::Request,
             method: "GET".to_string(),
             url: "https://httpbin.org/status/{{status}}".to_string(),
             headers: "User-Agent: MITM-Native/0.2".to_string(),
