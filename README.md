@@ -100,4 +100,4 @@ crates/
     └── app.rs       # Applies AppCommands and core events
 ```
 
-More docs: [API.md](API.md) (the `MitmCore` API), [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md), [IMPORT.md](IMPORT.md).
+More docs: [WORKSPACE_FILE.md](WORKSPACE_FILE.md) (the import/export format), [API.md](API.md) (the `MitmCore` API), [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md).

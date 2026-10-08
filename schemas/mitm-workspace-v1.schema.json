@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MITM workspace file, version 1",
+  "description": "A workspace's environments and collections. See WORKSPACE_FILE.md.",
+  "type": "object",
+  "required": ["format", "version", "workspace"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "format": { "const": "mitm-workspace" },
+    "version": { "const": 1 },
+    "workspace": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "environments": { "type": "array", "items": { "$ref": "#/$defs/environment" } },
+    "collections": { "type": "array", "items": { "$ref": "#/$defs/collection" } }
+  },
+  "$defs": {
+    "environment": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "active": { "type": "boolean", "default": false },
+        "variables": { "type": "array", "items": { "$ref": "#/$defs/variable" } }
+      }
+    },
+    "variable": {
+      "type": "object",
+      "required": ["key"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string" },
+        "value": { "type": "string", "description": "Imported as the \"default\" variant." },
+        "enabled": { "type": "boolean", "default": true },
+        "secret": { "type": "boolean", "default": false },
+        "variants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        },
+        "activeVariant": { "type": "string", "description": "The name of the variant in use." }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "requests": { "type": "array", "items": { "$ref": "#/$defs/request" } },
+        "collections": { "type": "array", "items": { "$ref": "#/$defs/collection" } }
+      }
+    },
+    "request": {
+      "type": "object",
+      "required": ["name", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "ref": { "type": "string" },
+        "name": { "type": "string" },
+        "method": { "type": "string", "default": "GET" },
+        "url": { "type": "string" },
+        "description": { "type": "string" },
+        "params": { "type": "array", "items": { "$ref": "#/$defs/row" } },
+        "headers": { "type": "array", "items": { "$ref": "#/$defs/row" } },
+        "body": { "$ref": "#/$defs/body" },
+        "extract": { "type": "array", "items": { "$ref": "#/$defs/extract" } },
+        "before": { "type": "array", "items": { "type": "string" } },
+        "after": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "row": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "value": { "type": "string" },
+        "enabled": { "type": "boolean", "default": true }
+      }
+    },
+    "body": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "content"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "enum": ["json", "raw"] },
+            "content": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "fields"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "urlencoded" },
+            "fields": { "type": "array", "items": { "$ref": "#/$defs/row" } }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "fields"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "form" },
+            "fields": { "type": "array", "items": { "$ref": "#/$defs/formField" } }
+          }
+        }
+      ]
+    },
+    "formField": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "value": { "type": "string" },
+        "type": { "enum": ["text", "file", "base64"], "default": "text" },
+        "fileName": { "type": "string" },
+        "contentType": { "type": "string" },
+        "enabled": { "type": "boolean", "default": true }
+      }
+    },
+    "extract": {
+      "type": "object",
+      "required": ["variable", "from", "expression"],
+      "additionalProperties": false,
+      "properties": {
+        "variable": { "type": "string" },
+        "from": { "enum": ["json", "header", "regex", "after", "before", "between"] },
+        "expression": { "type": "string" },
+        "enabled": { "type": "boolean", "default": true }
+      }
+    }
+  }
+}

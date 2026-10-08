@@ -114,7 +114,7 @@ Errors are `Result<_, String>` with a message meant for the UI.
 | `get_workspace_environments(ws)` / `get_workspace_environment(id)` / `save_workspace_environment(env)` / `delete_workspace_environment(id)` / `duplicate_workspace_environment(id, name)` | Environments hold variables with variants. |
 | `set_active_environment(ws, env)` / `get_active_environment()` | |
 | `resolve_vars(text)` / `variable_value(name)` | `{{var}}` substitution against the active environment. Returns the unresolved names too. |
-| `workspace::import::import_workspace_json_db` / `workspace::export::export_workspace_file_db` | Workspace files. See [IMPORT.md](IMPORT.md). |
+| `workspace::import::import_workspace_json_db` / `workspace::export::export_workspace_file_db` | Workspace files (`mitm-workspace` v1, or Postman v2.1 on import). `workspace::file` holds the format types. See [WORKSPACE_FILE.md](WORKSPACE_FILE.md). |
 
 Each method also exists as a `workspace::*_db(db_path, …)` function. The desktop uses those directly.
 
