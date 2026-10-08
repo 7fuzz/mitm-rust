@@ -116,6 +116,25 @@ impl WebSocketsState {
         }
     }
 
+    pub fn cleared(&mut self, conn_id: i64) {
+        if let Some(conn) = self.connections.iter_mut().find(|c| c.connection_id == conn_id) {
+            conn.message_count = 0;
+        }
+        if self.selected_id == Some(conn_id) {
+            self.messages.clear();
+            self.selected_msg = None;
+        }
+    }
+
+    pub fn removed(&mut self, conn_id: i64) {
+        self.connections.retain(|c| c.connection_id != conn_id);
+        if self.selected_id == Some(conn_id) {
+            self.selected_id = None;
+            self.messages.clear();
+            self.selected_msg = None;
+        }
+    }
+
     fn upsert_connection(&mut self, conn: WebSocketConn) {
         match self.connections.iter_mut().find(|c| c.connection_id == conn.connection_id) {
             // Core re-announces a session with the count it had at open time.
@@ -206,6 +225,14 @@ mod tests {
         state.apply_frame(closed);
         assert_eq!(state.connections[0].status, "disconnected");
         assert_eq!(state.connections[0].message_count, 2, "re-announce keeps the count");
+
+        state.cleared(1);
+        assert_eq!(state.connections[0].message_count, 0);
+        assert!(state.messages.is_empty());
+
+        state.removed(1);
+        assert_eq!(state.connections.len(), 1);
+        assert_eq!(state.selected_id, None);
     }
 
     #[test]

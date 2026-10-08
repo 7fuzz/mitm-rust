@@ -469,6 +469,18 @@ impl MitmApp {
                     core.send_ws_frame(connection_id, msg_type, payload, to_server).await
                 });
             }
+            AppCommand::DisconnectWs(id) => {
+                let core = Arc::clone(&self.core);
+                self.ws_actions.spawn(&self.rt, ctx, async move { core.disconnect_ws(id).await });
+            }
+            AppCommand::ClearWsSession(id) => match self.core.clear_ws_session(id) {
+                Ok(()) => self.state.websockets.cleared(id),
+                Err(e) => self.ws_actions.reply(ctx).send(Err(e)),
+            },
+            AppCommand::DeleteWsSession(id) => match self.core.delete_ws_connection(id) {
+                Ok(()) => self.state.websockets.removed(id),
+                Err(e) => self.ws_actions.reply(ctx).send(Err(e)),
+            },
             AppCommand::SelectWorkspace(id) => {
                 let _ = mitm_core::workspace::set_active_workspace_db(db_path, &id);
                 self.state.environments.active_workspace_id = id.clone();

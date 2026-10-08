@@ -1,8 +1,9 @@
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
+use mitm_core::state::WebSocketConn;
 use crate::command::{AppCommand, Commands};
 use crate::format::format_bytes;
-use crate::theme::Tone;
+use crate::theme::{self, Tone};
 use crate::widgets::pills::badge;
 use crate::widgets::split;
 use super::WebSocketsState;
@@ -51,6 +52,7 @@ fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comm
 
     let row_height = egui::TextStyle::Body.resolve(ui.style()).size + 6.0;
     let mut new_selection = None;
+    let mut action = None;
 
     TableBuilder::new(ui)
         .striped(true)
@@ -76,14 +78,44 @@ fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comm
                 row.col(|ui| { ui.add(egui::Label::new(&conn.url).truncate()); });
                 row.col(|ui| { status_badge(ui, &conn.status); });
                 row.col(|ui| { ui.label(conn.message_count.to_string()); });
-                if row.response().clicked() {
+                let response = row.response();
+                if response.clicked() {
                     new_selection = Some(conn.connection_id);
                 }
+                response.context_menu(|ui| session_menu(ui, conn, &mut action));
             });
         });
 
     if let Some(id) = new_selection {
         cmds.push(AppCommand::SelectWsConnection(id));
+    }
+    if let Some(action) = action {
+        cmds.push(action);
+    }
+}
+
+fn session_menu(ui: &mut egui::Ui, conn: &WebSocketConn, action: &mut Option<AppCommand>) {
+    let id = conn.connection_id;
+    let open = is_open(&conn.status);
+    if ui.button("📋 Copy URL").clicked() {
+        ui.ctx().copy_text(conn.url.clone());
+        ui.close();
+    }
+    if conn.is_client_session && open && ui.button("⏹ Disconnect").clicked() {
+        *action = Some(AppCommand::DisconnectWs(id));
+        ui.close();
+    }
+    ui.separator();
+    if ui.button("Clear frames").clicked() {
+        *action = Some(AppCommand::ClearWsSession(id));
+        ui.close();
+    }
+    let delete = ui
+        .add_enabled(!open, egui::Button::new(RichText::new("🗑 Delete").color(theme::color(ui, Tone::Danger))))
+        .on_disabled_hover_text("Session is still open");
+    if delete.clicked() {
+        *action = Some(AppCommand::DeleteWsSession(id));
+        ui.close();
     }
 }
 

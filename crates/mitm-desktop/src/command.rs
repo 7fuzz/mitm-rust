@@ -81,6 +81,9 @@ pub enum AppCommand {
     SelectWsConnection(i64),
     ConnectWs { url: String, headers: Vec<(String, String)> },
     SendWsFrame { connection_id: i64, msg_type: String, payload: String, to_server: bool },
+    DisconnectWs(i64),
+    ClearWsSession(i64),
+    DeleteWsSession(i64),
 
     SelectWorkspace(String),
     SelectEnvironment(Option<String>),
