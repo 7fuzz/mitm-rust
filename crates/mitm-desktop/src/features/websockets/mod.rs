@@ -113,7 +113,11 @@ impl WebSocketsState {
 
     fn upsert_connection(&mut self, conn: WebSocketConn) {
         match self.connections.iter_mut().find(|c| c.connection_id == conn.connection_id) {
-            Some(existing) => *existing = conn,
+            // Core re-announces a session with the count it had at open time.
+            Some(existing) => {
+                let count = existing.message_count.max(conn.message_count);
+                *existing = WebSocketConn { message_count: count, ..conn };
+            }
             None => self.connections.push(conn),
         }
     }
@@ -191,6 +195,12 @@ mod tests {
         state.apply_frame(message(12, 2, "other session"));
         assert_eq!(state.messages.len(), 1, "frame for another session is not appended");
         assert_eq!(state.connections[1].message_count, 1);
+
+        let mut closed = conn(1);
+        closed["status"] = "disconnected".into();
+        state.apply_frame(closed);
+        assert_eq!(state.connections[0].status, "disconnected");
+        assert_eq!(state.connections[0].message_count, 2, "re-announce keeps the count");
     }
 
     #[test]
