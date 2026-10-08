@@ -3,6 +3,7 @@ use regex::Regex;
 use crate::db::InterceptRule;
 use crate::state::{AppState, InterceptPhase};
 
+#[allow(clippy::too_many_arguments)]
 pub async fn should_intercept(
     state: &Arc<AppState>,
     phase: InterceptPhase,
@@ -71,6 +72,7 @@ pub async fn should_intercept(
 /// Matches one rule against a flow. Responses are matched against the request that
 /// produced them (method, URL, host, path), and header rules see both the request
 /// headers and the response headers.
+#[allow(clippy::too_many_arguments)]
 fn rule_matches(
     rule: &InterceptRule,
     phase: InterceptPhase,

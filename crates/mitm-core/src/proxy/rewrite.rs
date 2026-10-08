@@ -167,6 +167,7 @@ pub fn matches_rule(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn apply_request_rewrite_pipeline(
     _event_bus: Option<&EventBus>,
     state: &Arc<AppState>,
@@ -288,11 +289,9 @@ pub async fn apply_request_rewrite_pipeline(
                         *body = rule.replacement_value.as_bytes().to_vec();
                         changed = true;
                     }
-                    "method" => {
-                        if !rule.replacement_value.is_empty() {
-                            *method = rule.replacement_value.to_uppercase();
-                            changed = true;
-                        }
+                    "method" if !rule.replacement_value.is_empty() => {
+                        *method = rule.replacement_value.to_uppercase();
+                        changed = true;
                     }
                     _ => {}
                 }
@@ -410,6 +409,7 @@ pub async fn apply_request_rewrite_pipeline(
     None
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn apply_response_rewrite_pipeline(
     _event_bus: Option<&EventBus>,
     state: &Arc<AppState>,

@@ -611,7 +611,7 @@ async fn handle_http(
             if rewrite::apply_response_rewrite_pipeline(
                 event_bus.as_ref(),
                 &state,
-                &final_req_method.to_string(),
+                final_req_method.as_ref(),
                 &final_req_url,
                 &final_host,
                 &mut res_status,
@@ -629,7 +629,7 @@ async fn handle_http(
                 event_bus.as_ref(),
                 &state,
                 InterceptPhase::Response,
-                &final_req_method.to_string(),
+                final_req_method.as_ref(),
                 &final_req_url,
                 &final_host,
                 res_headers.clone(),
@@ -643,7 +643,7 @@ async fn handle_http(
                         &request_at,
                         event_bus.as_ref(),
                         &state,
-                        &final_req_method.to_string(),
+                        final_req_method.as_ref(),
                         &final_req_url,
                         &final_host,
                         &final_path,
@@ -684,7 +684,7 @@ async fn handle_http(
                 &request_at,
                 event_bus.as_ref(),
                 &state,
-                &final_req_method.to_string(),
+                final_req_method.as_ref(),
                 &final_req_url,
                 &final_host,
                 &final_path,
@@ -725,7 +725,7 @@ async fn handle_http(
                 &request_at,
                 event_bus.as_ref(),
                 &state,
-                &final_req_method.to_string(),
+                final_req_method.as_ref(),
                 &final_req_url,
                 &final_host,
                 &final_path,
@@ -750,6 +750,7 @@ async fn handle_http(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn log_and_emit_history(
     entry_id: i64,
     request_at: &str,

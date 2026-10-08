@@ -177,9 +177,9 @@ pub async fn send_frame(
             let bytes = hex::decode(payload.split_whitespace().collect::<String>())
                 .map_err(|e| format!("Invalid hex payload: {e}"))?;
             let stored = format!("[Binary Frame: {} bytes] {}", bytes.len(), hex::encode(&bytes));
-            (Message::Binary(bytes.into()), stored)
+            (Message::Binary(bytes), stored)
         }
-        _ => (Message::Text(payload.clone().into()), payload),
+        _ => (Message::Text(payload.clone()), payload),
     };
 
     let direction = if let Some(tx) = state.ws_client_senders.get(&connection_id) {

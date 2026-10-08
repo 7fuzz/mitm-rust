@@ -6,6 +6,7 @@ use crate::events::EventBus;
 use crate::proxy::rules::should_intercept;
 use crate::state::{AppState, HistoryEntry, InterceptAction, InterceptPhase, PendingFlow, PendingFlowPayload, TrafficCapturedEvent};
 
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_intercept_hook(
     entry_id: Option<i64>,
     request_at: &str,
