@@ -169,12 +169,7 @@ impl RepeaterState {
         let body_content = captured.body_content.clone();
 
         let mut tab = blank_tab(db_path);
-        tab.method = captured.method;
-        tab.url = captured.url;
-        tab.params = captured.params;
-        tab.headers = captured.headers;
-        tab.body_type = captured.body_type;
-        tab.body_content = Some(captured.body_content);
+        apply_captured(&mut tab, captured);
         let id = self.create(tab, db_path);
 
         let run = RepeaterHistoryItem {
@@ -271,6 +266,15 @@ impl RepeaterState {
         self.responses.insert(tab_id.to_string(), ShownResponse::from_run(&run));
         self.mark_dirty(tab_id, now);
     }
+}
+
+fn apply_captured(tab: &mut RepeaterTab, captured: CapturedRequest) {
+    tab.method = captured.method;
+    tab.url = captured.url;
+    tab.params = captured.params;
+    tab.headers = captured.headers;
+    tab.body_type = captured.body_type;
+    tab.body_content = Some(captured.body_content);
 }
 
 fn header(key: &str, value: &str, enabled: bool) -> HeaderItem {

@@ -18,16 +18,20 @@ impl CapturedRequest {
     pub fn from_flow(flow: &HistoryEntry, detail: Option<&HistoryDetail>) -> Self {
         let request_headers = detail.map_or(&flow.request_headers, |d| &d.request_headers);
         let request_body = detail.map_or(&flow.request_body, |d| &d.request_body);
-        let content_type = request_headers
+        Self::new(flow.method.clone(), flow.url.clone(), request_headers, request_body)
+    }
+
+    pub fn new(method: String, url: String, headers: &[(String, String)], body: &str) -> Self {
+        let content_type = headers
             .iter()
             .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
             .map_or("", |(_, v)| v.as_str());
-        let (body_type, body_content) = structured_from_capture(content_type, request_body);
+        let (body_type, body_content) = structured_from_capture(content_type, body);
         Self {
-            method: flow.method.clone(),
-            url: flow.url.clone(),
-            params: parse_query(&flow.url, &[]),
-            headers: header_items(request_headers),
+            params: parse_query(&url, &[]),
+            method,
+            url,
+            headers: header_items(headers),
             body_type,
             body_content,
         }
