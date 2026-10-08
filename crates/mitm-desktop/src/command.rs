@@ -12,6 +12,7 @@ pub enum AppCommand {
     OpenPalette,
     ToggleQuickVariables,
     OpenTab(Tab),
+    OpenSettings(crate::features::settings::SettingsSection),
     FocusTabAt(usize),
     CycleTab { forward: bool },
     ToggleProxy,

@@ -175,7 +175,10 @@ fn proxy_controls(ui: &mut egui::Ui, state: &AppState, cmds: &mut Commands) {
     });
     let problems = proxy.problems();
     if !problems.is_empty() {
-        ui.label(RichText::new("⚠").color(theme::color(ui, Tone::Danger)).strong()).on_hover_text(problems.join("\n"));
+        let warning = egui::Label::new(RichText::new("⚠").color(theme::color(ui, Tone::Danger)).strong()).sense(egui::Sense::click());
+        if ui.add(warning).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(problems.join("\n")).clicked() {
+            cmds.push(AppCommand::OpenSettings(crate::features::settings::SettingsSection::Proxy));
+        }
     }
     ui.separator();
 

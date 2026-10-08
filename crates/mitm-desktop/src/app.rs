@@ -128,6 +128,10 @@ impl MitmApp {
                 }
             }
             AppCommand::OpenTab(tab) => dock::open_tab(&mut self.dock, tab),
+            AppCommand::OpenSettings(section) => {
+                self.state.settings.section = section;
+                dock::open_tab(&mut self.dock, Tab::Settings);
+            }
             AppCommand::FocusTabAt(index) => dock::focus_tab_at(&mut self.dock, index),
             AppCommand::CycleTab { forward } => dock::cycle_tab(&mut self.dock, forward),
             AppCommand::ToggleProxy => {
