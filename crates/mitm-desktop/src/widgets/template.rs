@@ -2,7 +2,10 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::sync::Arc;
 use eframe::egui::text::{LayoutJob, TextFormat};
-use eframe::egui::{Color32, Galley, Response, TextBuffer, TextEdit, TextStyle, Ui};
+use eframe::egui::text::CCursor;
+use eframe::egui::text_edit::{TextEditOutput, TextEditState};
+use eframe::egui::text_selection::CCursorRange;
+use eframe::egui::{self, Color32, Galley, Id, Key, Modifiers, Response, RichText, TextBuffer, TextEdit, TextStyle, Ui};
 use mitm_core::workspace::Environment;
 use crate::theme::Tone;
 
@@ -45,8 +48,195 @@ fn hover_value(name: &str) -> String {
 }
 
 pub fn show<'t>(ui: &mut Ui, text: &'t mut String, edit: impl FnOnce(&'t mut String) -> TextEdit<'t>) -> Response {
+    // The edit has no id salt, so it takes the next auto id; keys must be consumed before it reads them.
+    let owner = ui.next_auto_id();
+    let inserted = handle_picker_keys(ui, owner, text);
     let output = edit(text).show(ui);
-    hover_tooltip(output.response.response, output.galley.text())
+    let mut response = output.response.response.clone();
+    if inserted {
+        response.mark_changed();
+    }
+    update_picker(ui, &output);
+    hover_tooltip(response, output.galley.text())
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct Trigger {
+    start: usize,
+    end: usize,
+    prefix: String,
+}
+
+#[derive(Clone)]
+struct Picker {
+    owner: Id,
+    trigger: Trigger,
+    matches: Vec<String>,
+    selected: usize,
+    accept: Option<usize>,
+}
+
+/// The `{{` the user pressed Esc on, so the picker stays closed until the cursor leaves it.
+#[derive(Clone, Copy, PartialEq)]
+struct Dismissed {
+    owner: Id,
+    start: usize,
+}
+
+fn picker_id() -> Id {
+    Id::new("template_var_picker")
+}
+
+fn handle_picker_keys(ui: &mut Ui, owner: Id, text: &mut String) -> bool {
+    let Some(mut picker) = ui.data(|d| d.get_temp::<Picker>(picker_id())) else { return false };
+    if picker.owner != owner || (picker.accept.is_none() && !ui.memory(|m| m.has_focus(owner))) {
+        return false;
+    }
+    let (down, up, enter, escape) = ui.input_mut(|i| {
+        (
+            i.consume_key(Modifiers::NONE, Key::ArrowDown),
+            i.consume_key(Modifiers::NONE, Key::ArrowUp),
+            i.consume_key(Modifiers::NONE, Key::Enter) | i.consume_key(Modifiers::NONE, Key::Tab),
+            i.consume_key(Modifiers::NONE, Key::Escape),
+        )
+    });
+    if escape {
+        ui.data_mut(|d| {
+            d.remove::<Picker>(picker_id());
+            d.insert_temp(picker_id(), Dismissed { owner, start: picker.trigger.start });
+        });
+        return false;
+    }
+    let count = picker.matches.len();
+    if down {
+        picker.selected = (picker.selected + 1) % count;
+    }
+    if up {
+        picker.selected = (picker.selected + count - 1) % count;
+    }
+    let accept = picker.accept.or(enter.then_some(picker.selected));
+    let Some(key) = accept.and_then(|i| picker.matches.get(i)) else {
+        ui.data_mut(|d| d.insert_temp(picker_id(), picker));
+        return false;
+    };
+    let cursor = insert_variable(text, &picker.trigger, key);
+    let mut state = TextEditState::load(ui.ctx(), owner).unwrap_or_default();
+    state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor))));
+    state.store(ui.ctx(), owner);
+    ui.memory_mut(|m| m.request_focus(owner));
+    ui.data_mut(|d| d.remove::<Picker>(picker_id()));
+    true
+}
+
+fn update_picker(ui: &mut Ui, output: &TextEditOutput) {
+    let response = &output.response.response;
+    let owner = response.id;
+    let text = output.galley.text();
+    let previous = ui.data(|d| d.get_temp::<Picker>(picker_id())).filter(|p| p.owner == owner);
+    // A click on the picker takes focus from the edit this frame; keep the picker up so the click lands.
+    let active = response.has_focus() || (previous.is_some() && ui.input(|i| i.pointer.any_released()));
+    let trigger = output
+        .cursor_range
+        .filter(|range| active && range.is_empty())
+        .and_then(|range| trigger_at(text, range.primary.index.0));
+    let dismissed = ui.data(|d| d.get_temp::<Dismissed>(picker_id()));
+
+    let Some(trigger) = trigger else {
+        ui.data_mut(|d| {
+            if previous.is_some_and(|p| p.accept.is_none()) {
+                d.remove::<Picker>(picker_id());
+            }
+            if dismissed.is_some_and(|x| x.owner == owner) {
+                d.remove::<Dismissed>(picker_id());
+            }
+        });
+        return;
+    };
+    if dismissed == Some(Dismissed { owner, start: trigger.start }) {
+        return;
+    }
+    let matches = matching_keys(&trigger.prefix);
+    if matches.is_empty() {
+        if previous.is_some() {
+            ui.data_mut(|d| d.remove::<Picker>(picker_id()));
+        }
+        return;
+    }
+    let selected = previous
+        .as_ref()
+        .filter(|p| p.trigger.start == trigger.start)
+        .map_or(0, |p| p.selected.min(matches.len() - 1));
+    let anchor = output.galley.pos_from_cursor(CCursor::new(trigger.start));
+    let mut picker = Picker { owner, trigger, matches, selected, accept: None };
+
+    egui::Area::new(owner.with("var_picker"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(output.galley_pos + anchor.left_bottom().to_vec2())
+        .show(ui.ctx(), |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
+                    for (index, key) in picker.matches.iter().enumerate() {
+                        let selected = index == picker.selected;
+                        let item = ui.add(egui::Button::selectable(selected, RichText::new(key).monospace()).frame_when_inactive(false));
+                        if selected {
+                            item.scroll_to_me(None);
+                        }
+                        if item.clicked() {
+                            picker.accept = Some(index);
+                        }
+                    }
+                });
+            });
+        });
+    if picker.accept.is_some() {
+        ui.memory_mut(|m| m.request_focus(owner));
+    }
+    ui.data_mut(|d| d.insert_temp(picker_id(), picker));
+}
+
+fn matching_keys(prefix: &str) -> Vec<String> {
+    let prefix = prefix.to_lowercase();
+    let mut keys: Vec<String> = ACTIVE_ENV.with(|cell| {
+        cell.borrow().as_ref().map_or_else(Vec::new, |env| {
+            env.variables
+                .iter()
+                .filter(|v| v.enabled)
+                .map(|v| v.key.trim())
+                .filter(|k| !k.is_empty() && k.to_lowercase().contains(&prefix))
+                .map(str::to_string)
+                .collect()
+        })
+    });
+    keys.dedup();
+    keys.sort_by_key(|k| !k.to_lowercase().starts_with(&prefix));
+    keys
+}
+
+/// The `{{name` the cursor sits in, as char indices; `end` also covers an existing `}}` after the cursor.
+fn trigger_at(text: &str, cursor: usize) -> Option<Trigger> {
+    let byte = text.char_indices().nth(cursor).map_or(text.len(), |(b, _)| b);
+    let before = &text[..byte];
+    let open = before.rfind("{{")?;
+    let prefix = before[open + 2..].trim_start();
+    if prefix.contains(['{', '}']) || prefix.contains(char::is_whitespace) {
+        return None;
+    }
+    let after = &text[byte..];
+    let rest = after.find(|c: char| c == '{' || c == '}' || c.is_whitespace()).unwrap_or(after.len());
+    let tail = if after[rest..].starts_with("}}") { after[..rest].chars().count() + 2 } else { 0 };
+    Some(Trigger {
+        start: before[..open].chars().count(),
+        end: cursor + tail,
+        prefix: prefix.to_string(),
+    })
+}
+
+/// Replaces the trigger with `{{key}}` and returns the char index just after it.
+fn insert_variable(text: &mut String, trigger: &Trigger, key: &str) -> usize {
+    let byte_at = |index: usize| text.char_indices().nth(index).map_or(text.len(), |(b, _)| b);
+    let range = byte_at(trigger.start)..byte_at(trigger.end);
+    text.replace_range(range, &format!("{{{{{key}}}}}"));
+    trigger.start + key.chars().count() + 4
 }
 
 fn hover_tooltip(resp: Response, text: &str) -> Response {
@@ -186,6 +376,37 @@ mod tests {
         assert_eq!(resolve_var("BASE_URL").as_deref(), Some("https://example.com"));
         assert_eq!(resolve_var("MISSING"), None);
         assert!(resolve_var("$guid").is_some());
+    }
+
+    #[test]
+    fn trigger_finds_the_open_variable_before_the_cursor() {
+        let text = "https://{{BA/x";
+        assert_eq!(trigger_at(text, 12), Some(Trigger { start: 8, end: 12, prefix: "BA".to_string() }));
+        assert_eq!(trigger_at("a {{", 4), Some(Trigger { start: 2, end: 4, prefix: String::new() }));
+        assert_eq!(trigger_at("{{a}} b", 7), None);
+        assert_eq!(trigger_at("{{a b", 5), None);
+        assert_eq!(trigger_at("no braces", 3), None);
+    }
+
+    #[test]
+    fn trigger_covers_an_existing_close_after_the_cursor() {
+        let text = "é{{BA_URL}}/x";
+        let trigger = trigger_at(text, 5).unwrap();
+        assert_eq!(trigger, Trigger { start: 1, end: 11, prefix: "BA".to_string() });
+    }
+
+    #[test]
+    fn inserting_replaces_the_trigger_and_returns_the_cursor_after_it() {
+        let mut text = "é{{BA_URL}}/x".to_string();
+        let trigger = trigger_at(&text, 5).unwrap();
+        let cursor = insert_variable(&mut text, &trigger, "BASE_URL");
+        assert_eq!(text, "é{{BASE_URL}}/x");
+        assert_eq!(cursor, 13);
+
+        let mut text = "get {{ho".to_string();
+        let trigger = trigger_at(&text, 8).unwrap();
+        assert_eq!(insert_variable(&mut text, &trigger, "host"), 12);
+        assert_eq!(text, "get {{host}}");
     }
 
     #[test]
