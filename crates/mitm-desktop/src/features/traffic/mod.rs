@@ -98,6 +98,8 @@ pub struct TrafficState {
     pub history_limit: HistorySettings,
     pub limit_draft: HistorySettings,
     pub has_older: bool,
+    /// Rows in the history table, which can be more than the flows loaded here.
+    pub stored_count: u64,
     /// Ids whose stored headers match the search; summaries are loaded without headers.
     header_matches: HashSet<i64>,
     header_search_key: Option<String>,
@@ -118,6 +120,7 @@ impl Default for TrafficState {
             history_limit: HistorySettings::default(),
             limit_draft: HistorySettings::default(),
             has_older: false,
+            stored_count: 0,
             header_matches: HashSet::new(),
             header_search_key: None,
             width_epoch: 0,
@@ -128,6 +131,7 @@ impl Default for TrafficState {
 
 impl TrafficState {
     pub fn load_from_db(&mut self, db_path: &PathBuf) {
+        self.stored_count = mitm_core::db::get_history_count(db_path, None, false).unwrap_or(0);
         self.flows.clear();
         self.has_older = true;
         self.load_older(db_path);
@@ -189,6 +193,13 @@ impl TrafficState {
             return;
         }
 
+        // An update for an old flow that isn't loaded also lands here; only newer ids are new rows.
+        if self.flows.front().is_none_or(|newest| entry.id > newest.id) {
+            self.stored_count += 1;
+            if self.history_limit.limiter_enabled {
+                self.stored_count = self.stored_count.min(u64::from(self.history_limit.max_rows));
+            }
+        }
         if self.flows.len() >= self.max_flows {
             self.flows.pop_back();
             self.has_older = true;
@@ -207,6 +218,7 @@ impl TrafficState {
 
     pub fn remove(&mut self, id: i64) {
         self.flows.retain(|f| f.id != id);
+        self.stored_count = self.stored_count.saturating_sub(1);
         if self.selected_id == Some(id) {
             self.selected_id = None;
             self.selected_detail = None;
@@ -215,6 +227,7 @@ impl TrafficState {
 
     pub fn clear(&mut self) {
         self.flows.clear();
+        self.stored_count = 0;
         self.has_older = false;
         self.header_search_key = None;
         self.selected_id = None;
@@ -382,4 +395,58 @@ pub fn show(
         crate::widgets::split::stacked(ui, "traffic_inspector_split", &mut inspector.prefs.table_fraction);
     table::show(&mut table_ui, state, &visible, folders, cmds);
     crate::features::inspector::show(&mut inspector_ui, inspector, state, cmds);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn flow(id: i64) -> HistoryEntry {
+        HistoryEntry {
+            id,
+            method: "GET".into(),
+            url: format!("http://example.test/{id}"),
+            host: "example.test".into(),
+            path: format!("/{id}"),
+            content_type: "-".into(),
+            response_size: 0,
+            status_code: 0,
+            request_headers: Vec::new(),
+            response_headers: Vec::new(),
+            request_body: String::new(),
+            response_body: String::new(),
+            phase: "request".into(),
+            duration_ms: None,
+            created_at: String::new(),
+            is_intercepted: false,
+            is_rewritten: false,
+            is_failed: false,
+            listener_label: String::new(),
+            request_at: None,
+            response_at: None,
+        }
+    }
+
+    #[test]
+    fn stored_count_follows_new_rows_and_the_limit() {
+        let mut state = TrafficState { stored_count: 40, ..TrafficState::default() };
+        state.upsert(flow(10));
+        state.upsert(flow(11));
+        state.upsert(flow(11));
+        assert_eq!(state.stored_count, 42);
+
+        // An update for an older flow that wasn't loaded isn't a new row.
+        state.upsert(flow(3));
+        assert_eq!(state.stored_count, 42);
+
+        state.remove(11);
+        assert_eq!(state.stored_count, 41);
+
+        state.history_limit = HistorySettings { limiter_enabled: true, max_rows: 41 };
+        state.upsert(flow(12));
+        assert_eq!(state.stored_count, 41);
+
+        state.clear();
+        assert_eq!(state.stored_count, 0);
+    }
 }

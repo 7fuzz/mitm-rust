@@ -225,7 +225,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
 
     fn title(&mut self, tab: &mut Tab) -> egui::WidgetText {
         let count = match tab {
-            Tab::Traffic => Some(self.state.traffic.flows.len()),
+            Tab::Traffic => usize::try_from(self.state.traffic.stored_count).ok(),
             Tab::Repeater => Some(self.state.repeater.tabs.len()),
             Tab::WebSockets => Some(self.state.websockets.connections.len()),
             Tab::Intercept => Some(self.state.intercept.pending.len()).filter(|&n| n > 0),
