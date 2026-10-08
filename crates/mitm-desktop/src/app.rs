@@ -633,14 +633,12 @@ impl MitmApp {
                 });
             }
             AppCommand::ExportWorkspace => {
-                let environments = &self.state.environments.environments;
-                if environments.iter().flat_map(|e| &e.variables).any(|v| v.r#type == "secret") {
-                    self.state.environments.export.open();
-                } else {
-                    self.run_command(ctx, AppCommand::ExportWorkspaceFile { include_secrets: false });
+                let environments = &mut self.state.environments;
+                if let Some(options) = environments.export.ask(&environments.environments) {
+                    self.run_command(ctx, AppCommand::ExportWorkspaceFile(options));
                 }
             }
-            AppCommand::ExportWorkspaceFile { include_secrets } => {
+            AppCommand::ExportWorkspaceFile(options) => {
                 let Some(workspace) = self.state.environments.active_workspace().cloned() else { return };
                 // Export reads the database, so edits still waiting for their debounced save go first.
                 self.state.environments.flush(db_path);
@@ -653,7 +651,7 @@ impl MitmApp {
                         &db_path,
                         &workspace.id,
                         &path.to_string_lossy(),
-                        mitm_core::workspace::file::ExportOptions { include_secrets, include_auto: true },
+                        options,
                     );
                     Some(result.map(|_| format!("Exported {}", crate::files::file_name(&path))))
                 });
