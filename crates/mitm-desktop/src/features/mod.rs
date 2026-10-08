@@ -4,6 +4,7 @@ pub mod encoding;
 pub mod environments;
 pub mod hashing;
 pub mod hmac_tool;
+pub mod json_tools;
 pub mod fuzzer;
 pub mod inspector;
 pub mod intercept;
