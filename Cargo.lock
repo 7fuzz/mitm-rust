@@ -2813,7 +2813,6 @@ dependencies = [
  "rustls-pki-types",
  "serde",
  "serde_json",
- "similar",
  "time",
  "tokio",
  "tokio-rustls",
