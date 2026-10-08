@@ -138,6 +138,7 @@ impl MitmApp {
                         self.state.certificate.status = Some((e, Tone::Danger));
                     }
                 }
+                self.refresh_listeners();
             }
             AppCommand::ClearDataCategory(category) => {
                 match self.core.clear_data_category(category) {
