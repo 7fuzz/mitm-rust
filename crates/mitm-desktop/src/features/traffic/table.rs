@@ -5,15 +5,12 @@ use crate::command::{AppCommand, Commands};
 use crate::format::{format_bytes, format_duration, local_clock, CopyFormat};
 use crate::theme::{self, Tone};
 use crate::widgets::pills::{badge, render_method_pill, render_source_pill};
-use super::{flow_status_badge, ColumnId, FlowFlags, TrafficState};
+use super::{flow_status_badge, ColumnId, ColumnLayout, FlowFlags, TrafficState};
 
 const ROW_HEIGHT: f32 = 26.0;
 
 pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds: &mut Commands) {
-    let columns: Vec<ColumnId> = ColumnId::ALL
-        .into_iter()
-        .filter(|c| !state.hidden_columns.contains(c))
-        .collect();
+    let columns = state.columns.visible();
 
     let visuals = ui.visuals().clone();
     let held_offset = offset_holding_rows_in_place(state, visible, ROW_HEIGHT + ui.spacing().item_spacing.y);
@@ -38,14 +35,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], cmds
 
             let output = builder
                 .header(24.0, |mut header| {
-                    for col in &columns {
-                        header.col(|ui| {
-                            aligned(ui, col.align(), |ui| {
-                                ui.add(egui::Label::new(RichText::new(col.label()).strong().size(11.0)).selectable(false));
-                            });
-                        });
+                    for &col in &columns {
+                        header.col(|ui| header_cell(ui, col, &mut state.columns));
                     }
-                    header.response().context_menu(|ui| column_menu(ui, &mut state.hidden_columns));
+                    header.response().context_menu(|ui| column_menu(ui, &mut state.columns, None));
                 })
                 .body(|body| {
                     body.rows(ROW_HEIGHT, visible.len(), |mut row| {
@@ -207,23 +200,52 @@ fn clock_cell(ui: &mut egui::Ui, at: Option<&str>) -> egui::Response {
     }
 }
 
-fn column_menu(ui: &mut egui::Ui, hidden: &mut Vec<ColumnId>) {
+// The whole cell is the drag handle and drop zone; dropping on its right half places the column after it.
+fn header_cell(ui: &mut egui::Ui, col: ColumnId, layout: &mut ColumnLayout) {
+    aligned(ui, col.align(), |ui| {
+        ui.add(egui::Label::new(RichText::new(col.label()).strong().size(11.0)).selectable(false));
+    });
+    let rect = ui.max_rect();
+    let response = ui.interact(rect, ui.id().with(("traffic_header", col)), egui::Sense::click_and_drag());
+    response.dnd_set_drag_payload(col);
+    let after = response.hover_pos().is_some_and(|p| p.x > rect.center().x);
+    if response.dnd_hover_payload::<ColumnId>().is_some_and(|dragged| *dragged != col) {
+        let x = if after { rect.right() } else { rect.left() };
+        let stroke = egui::Stroke::new(2.0, ui.visuals().selection.stroke.color);
+        ui.painter().with_clip_rect(rect.expand(2.0)).vline(x, rect.y_range(), stroke);
+    }
+    if let Some(dragged) = response.dnd_release_payload::<ColumnId>() {
+        layout.move_next_to(*dragged, col, after);
+    }
+    response.context_menu(|ui| column_menu(ui, layout, Some(col)));
+}
+
+fn column_menu(ui: &mut egui::Ui, layout: &mut ColumnLayout, clicked: Option<ColumnId>) {
+    if let Some(col) = clicked {
+        let visible = layout.visible();
+        let index = visible.iter().position(|&c| c == col).unwrap_or(0);
+        if ui.add_enabled(index > 0, egui::Button::new("Move left")).clicked() {
+            layout.shift(col, false);
+            ui.close();
+        }
+        if ui.add_enabled(index + 1 < visible.len(), egui::Button::new("Move right")).clicked() {
+            layout.shift(col, true);
+            ui.close();
+        }
+        ui.separator();
+    }
     ui.label(RichText::new("COLUMNS").weak().size(10.0).strong());
-    let visible_count = ColumnId::ALL.len() - hidden.len();
+    let visible_count = layout.visible().len();
     for col in ColumnId::ALL {
-        let mut shown = !hidden.contains(&col);
+        let mut shown = layout.is_shown(col);
         let is_last = shown && visible_count == 1;
         if ui.add_enabled(!is_last, egui::Checkbox::new(&mut shown, col.menu_label())).changed() {
-            if shown {
-                hidden.retain(|&c| c != col);
-            } else {
-                hidden.push(col);
-            }
+            layout.set_shown(col, shown);
         }
     }
     ui.separator();
     if ui.button("Reset columns").clicked() {
-        hidden.clear();
+        *layout = ColumnLayout::default();
         ui.close();
     }
 }

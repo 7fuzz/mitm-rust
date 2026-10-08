@@ -8,7 +8,7 @@ use mitm_core::state::{HistoryDetail, HistoryEntry, HistorySettings};
 use crate::features::inspector::InspectorState;
 use crate::widgets::tri_state::TriState;
 
-pub use columns::ColumnId;
+pub use columns::{ColumnId, ColumnLayout};
 
 pub const METHODS: [&str; 6] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"];
 pub const STATUS_GROUPS: [&str; 4] = ["2xx", "3xx", "4xx", "5xx"];
@@ -67,7 +67,7 @@ pub struct TrafficState {
     pub method_filters: HashMap<String, TriState>,
     pub status_filters: HashMap<String, TriState>,
     pub flag_filters: HashMap<String, TriState>,
-    pub hidden_columns: Vec<ColumnId>,
+    pub columns: ColumnLayout,
     pub history_limit: HistorySettings,
     pub limit_draft: HistorySettings,
     // Top visible flow id and vertical offset from the last frame.
@@ -87,7 +87,7 @@ impl Default for TrafficState {
             method_filters: neutral_filters(METHODS),
             status_filters: neutral_filters(STATUS_GROUPS),
             flag_filters: neutral_filters(FLAGS.map(|(key, _)| key)),
-            hidden_columns: Vec::new(),
+            columns: ColumnLayout::default(),
             history_limit: HistorySettings::default(),
             limit_draft: HistorySettings::default(),
             scroll_anchor: None,
