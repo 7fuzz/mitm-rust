@@ -9,6 +9,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut JsonToolsState) {
         ui.selectable_value(&mut state.prefs.mode, Mode::Format, "Format");
         ui.selectable_value(&mut state.prefs.mode, Mode::Minify, "Minify");
         ui.selectable_value(&mut state.prefs.mode, Mode::Escape, "Escape");
+        ui.selectable_value(&mut state.prefs.mode, Mode::Unescape, "Unescape");
         if state.prefs.mode == Mode::Format {
             ui.separator();
             egui::ComboBox::from_id_salt("json_indent")

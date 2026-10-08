@@ -10,6 +10,7 @@ pub enum Mode {
     Format,
     Minify,
     Escape,
+    Unescape,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq)]
@@ -90,6 +91,7 @@ fn compute(prefs: &JsonToolsPrefs, input: &str) -> Result<String, String> {
         Mode::Format => json::format(input, prefs.indent.to_core(), prefs.sort_keys),
         Mode::Minify => json::minify(input),
         Mode::Escape => Ok(json::escape(input)),
+        Mode::Unescape => json::unescape(input),
     }
 }
 
@@ -98,7 +100,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn format_minify_escape_and_errors() {
+    fn each_mode_and_parse_errors() {
         let mut state = JsonToolsState::default();
         state.input = "{\"b\":1,\"a\":2}".to_string();
         state.prefs.mode = Mode::Format;
@@ -110,6 +112,10 @@ mod tests {
 
         state.prefs.mode = Mode::Escape;
         assert_eq!(state.output().as_ref().unwrap(), "\"{\\\"b\\\":1,\\\"a\\\":2}\"");
+
+        state.input = state.output().clone().unwrap();
+        state.prefs.mode = Mode::Unescape;
+        assert_eq!(state.output().as_ref().unwrap(), "{\"b\":1,\"a\":2}");
 
         state.prefs.mode = Mode::Format;
         state.input = "{invalid}".to_string();
