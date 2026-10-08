@@ -217,6 +217,12 @@ pub struct FuzzerState {
     pub response_matches: Option<std::collections::HashSet<u32>>,
     pub pending_search_key: Option<(i64, String)>,
     response_matches_ver: usize,
+    pub is_saved: bool,
+    pub run_name: Option<String>,
+    pub saving_run: bool,
+    pub focus_save_input: bool,
+    pub save_name_input: String,
+    pub saved_runs: Vec<mitm_core::fuzzer::FuzzRunMeta>,
     pub error: Option<String>,
 }
 
@@ -262,6 +268,12 @@ impl Default for FuzzerState {
             response_matches: None,
             pending_search_key: None,
             response_matches_ver: 0,
+            is_saved: false,
+            run_name: None,
+            saving_run: false,
+            focus_save_input: false,
+            save_name_input: String::new(),
+            saved_runs: Vec::new(),
             error: None,
         }
     }
@@ -350,6 +362,10 @@ impl FuzzerState {
             Ok(start) => {
                 self.status = RunStatus::Running;
                 self.run_id = Some(start.run_id);
+                self.run_name = None;
+                self.is_saved = false;
+                self.saving_run = false;
+                self.save_name_input.clear();
                 self.total = start.total;
                 self.results = Vec::with_capacity(start.total);
                 self.selected_idx = None;
@@ -576,6 +592,10 @@ impl FuzzerState {
     pub fn clear(&mut self) {
         self.status = RunStatus::Idle;
         self.run_id = None;
+        self.run_name = None;
+        self.is_saved = false;
+        self.saving_run = false;
+        self.save_name_input.clear();
         self.total = 0;
         self.results = Vec::new();
         self.selected_idx = None;
@@ -584,6 +604,63 @@ impl FuzzerState {
         self.response_matches = None;
         self.response_matches_ver += 1;
         self.cache = FuzzerCache::default();
+    }
+
+    pub fn load_saved_runs(&mut self, db_path: &std::path::PathBuf) {
+        if let Ok(runs) = mitm_core::fuzzer::list_runs_db(db_path) {
+            self.saved_runs = runs;
+        }
+    }
+
+    pub fn load_run(&mut self, loaded: mitm_core::fuzzer::LoadedFuzzRun) {
+        self.run_id = Some(loaded.id);
+        self.run_name = Some(loaded.name);
+        self.is_saved = true;
+        self.saving_run = false;
+        self.save_name_input.clear();
+        self.status = RunStatus::Done;
+        self.total = loaded.total as usize;
+        self.results = loaded.rows;
+        self.attack_type = match loaded.attack_type.as_str() {
+            "pitchfork" => AttackType::Pitchfork,
+            "clusterbomb" => AttackType::ClusterBomb,
+            _ => AttackType::Sniper,
+        };
+        self.method = loaded.config.template.method;
+        self.url = loaded.config.template.url;
+        self.params = loaded.config.template.params;
+        self.headers = loaded.config.template.headers;
+        self.body_type = loaded.config.template.body_type;
+        self.body_content = loaded.config.template.body.unwrap_or_default();
+        self.payloads.clear();
+        for v in loaded.config.variables {
+            let kind = match v.set.kind.as_str() {
+                "numbers" => PayloadKind::Numbers,
+                _ => PayloadKind::List,
+            };
+            let list_text = v.set.list.join("\n");
+            self.payloads.insert(
+                v.name,
+                PayloadConfig {
+                    kind,
+                    list_text,
+                    from: v.set.from,
+                    to: v.set.to,
+                    step: v.set.step,
+                    pad: v.set.pad,
+                    prefix: v.set.prefix,
+                    suffix: v.set.suffix,
+                    url_encode: v.set.url_encode,
+                },
+            );
+        }
+        self.match_rules = loaded.config.match_rules;
+        self.concurrency = loaded.config.concurrency as usize;
+        self.delay_ms = loaded.config.delay_ms;
+        self.selected_idx = None;
+        self.selected_result = None;
+        self.reset_filters();
+        self.error = None;
     }
 }
 
@@ -836,5 +913,71 @@ mod tests {
         state.reset_filters();
         assert_eq!(state.visible_indices(), &[0, 1, 2]);
         assert_eq!(state.search_query, "");
+    }
+
+    #[test]
+    fn load_run_restores_state_and_config() {
+        let mut state = FuzzerState::default();
+        let loaded = mitm_core::fuzzer::LoadedFuzzRun {
+            id: 99,
+            name: "Test Run".to_string(),
+            attack_type: "pitchfork".to_string(),
+            total: 1,
+            config: FuzzConfig {
+                template: mitm_core::fuzzer::FuzzTemplate {
+                    method: "POST".to_string(),
+                    url: "http://example.com/api/{{id}}".to_string(),
+                    headers: vec![],
+                    params: vec![],
+                    body_type: "raw".to_string(),
+                    body: Some("payload".to_string()),
+                },
+                attack_type: "pitchfork".to_string(),
+                variables: vec![FuzzVariable {
+                    name: "id".to_string(),
+                    set: PayloadSet {
+                        kind: "list".to_string(),
+                        list: vec!["foo".to_string()],
+                        from: 0.0,
+                        to: 0.0,
+                        step: 0.0,
+                        pad: 0,
+                        url_encode: false,
+                        prefix: String::new(),
+                        suffix: String::new(),
+                    },
+                }],
+                match_rules: vec![],
+                concurrency: 12,
+                delay_ms: 50,
+            },
+            rows: vec![FuzzRow {
+                idx: 0,
+                payloads: vec!["foo".to_string()],
+                status_code: 200,
+                response_size: 42,
+                duration_ms: 15,
+                error: None,
+                matches: vec![],
+            }],
+        };
+
+        state.load_run(loaded);
+        assert_eq!(state.run_id, Some(99));
+        assert_eq!(state.run_name.as_deref(), Some("Test Run"));
+        assert!(state.is_saved);
+        assert_eq!(state.attack_type, AttackType::Pitchfork);
+        assert_eq!(state.method, "POST");
+        assert_eq!(state.url, "http://example.com/api/{{id}}");
+        assert_eq!(state.concurrency, 12);
+        assert_eq!(state.delay_ms, 50);
+        assert_eq!(state.results.len(), 1);
+        assert_eq!(state.status, RunStatus::Done);
+
+        state.clear();
+        assert_eq!(state.run_id, None);
+        assert_eq!(state.run_name, None);
+        assert!(!state.is_saved);
+        assert_eq!(state.status, RunStatus::Idle);
     }
 }

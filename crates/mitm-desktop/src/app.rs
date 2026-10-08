@@ -328,6 +328,41 @@ impl MitmApp {
                     ctx.copy_text(crate::format::Exchange::from_fuzz_result(&result).curl());
                 }
             }
+            AppCommand::SaveFuzzRun { run_id, name } => {
+                match self.core.save_fuzz_run(run_id, &name) {
+                    Ok(()) => {
+                        if self.state.fuzzer.run_id == Some(run_id) {
+                            self.state.fuzzer.is_saved = true;
+                            self.state.fuzzer.run_name = Some(name);
+                        }
+                        self.state.fuzzer.load_saved_runs(db_path);
+                    }
+                    Err(e) => {
+                        self.state.fuzzer.error = Some(e);
+                    }
+                }
+            }
+            AppCommand::LoadFuzzRun(id) => {
+                match self.core.load_fuzz_run(id) {
+                    Ok(loaded) => {
+                        self.state.fuzzer.load_run(loaded);
+                    }
+                    Err(e) => {
+                        self.state.fuzzer.error = Some(e);
+                    }
+                }
+            }
+            AppCommand::DeleteFuzzRun(id) => {
+                let _ = self.core.delete_fuzz_run(id);
+                if self.state.fuzzer.run_id == Some(id) {
+                    self.state.fuzzer.is_saved = false;
+                    self.state.fuzzer.run_name = None;
+                }
+                self.state.fuzzer.load_saved_runs(db_path);
+            }
+            AppCommand::ReloadSavedFuzzRuns => {
+                self.state.fuzzer.load_saved_runs(db_path);
+            }
 
             AppCommand::ForwardIntercept { flow_id, url, method, headers, body } => {
                 let _ = self.core.forward_intercepted_flow(&flow_id, url, method, headers, body);

@@ -38,6 +38,7 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
                 cmds.push(AppCommand::StartFuzzer(fuzzer.config()));
             }
         }
+        runs_popover(ui, fuzzer, cmds);
         if fuzzer.status != RunStatus::Idle {
             ui.label(format!("{}/{}", fuzzer.results.len(), fuzzer.total));
         } else if !fuzzer.variable_names().is_empty() {
@@ -54,6 +55,48 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
                 ui.weak(label);
             }
         }
+
+        if fuzzer.run_id.is_some() {
+            if !fuzzer.is_saved {
+                ui.label(RichText::new("●").color(theme::color(ui, Tone::Warn)))
+                    .on_hover_text("Unsaved");
+                if fuzzer.saving_run {
+                    let text_edit = ui.add(
+                        egui::TextEdit::singleline(&mut fuzzer.save_name_input)
+                            .hint_text("Run name")
+                            .desired_width(120.0),
+                    );
+                    if fuzzer.focus_save_input {
+                        text_edit.request_focus();
+                        fuzzer.focus_save_input = false;
+                    }
+                    let enter = text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    if enter || ui.button("Save").clicked() {
+                        let run_id = fuzzer.run_id.unwrap();
+                        let name = if fuzzer.save_name_input.trim().is_empty() {
+                            format!("Run #{}", run_id)
+                        } else {
+                            fuzzer.save_name_input.trim().to_string()
+                        };
+                        cmds.push(AppCommand::SaveFuzzRun { run_id, name });
+                        fuzzer.saving_run = false;
+                    }
+                    if ui.button("✕").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        fuzzer.saving_run = false;
+                    }
+                } else if ui.button("Save run…").clicked() {
+                    fuzzer.saving_run = true;
+                    fuzzer.focus_save_input = true;
+                    fuzzer.save_name_input = fuzzer
+                        .run_name
+                        .clone()
+                        .unwrap_or_else(|| format!("Run #{}", fuzzer.run_id.unwrap()));
+                }
+            } else if let Some(ref name) = fuzzer.run_name {
+                ui.label(RichText::new(name).strong());
+            }
+        }
+
         if fuzzer.status == RunStatus::Stopped {
             ui.label(RichText::new("Stopped").color(theme::color(ui, Tone::Warn)));
         }
@@ -66,6 +109,51 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
             fuzzer.clear();
         }
     });
+}
+
+fn runs_popover(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
+    let menu = ui.menu_button("🕘", |ui| {
+        ui.set_min_width(300.0);
+        if fuzzer.saved_runs.is_empty() {
+            ui.weak("No saved runs");
+            return;
+        }
+        egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
+            let mut to_load = None;
+            let mut to_delete = None;
+            for run in &fuzzer.saved_runs {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.strong(&run.name);
+                        let date = chrono::DateTime::from_timestamp_millis(run.created_at_ms)
+                            .map(|at| at.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string())
+                            .unwrap_or_default();
+                        ui.weak(format!("{} · {} reqs · {}", run.attack_type, run.total, date));
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("🗑").on_hover_text("Delete run").clicked() {
+                            to_delete = Some(run.id);
+                        }
+                        if ui.button("Open").clicked() {
+                            to_load = Some(run.id);
+                            ui.close();
+                        }
+                    });
+                });
+                ui.separator();
+            }
+            if let Some(id) = to_load {
+                cmds.push(AppCommand::LoadFuzzRun(id));
+            }
+            if let Some(id) = to_delete {
+                cmds.push(AppCommand::DeleteFuzzRun(id));
+            }
+        });
+    });
+    if menu.response.clicked() {
+        cmds.push(AppCommand::ReloadSavedFuzzRuns);
+    }
+    menu.response.on_hover_text("Saved runs");
 }
 
 fn config(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
