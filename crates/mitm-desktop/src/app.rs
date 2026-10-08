@@ -101,7 +101,9 @@ impl MitmApp {
             AppCommand::SetProxyMode(mode) => self.set_proxy_mode(mode),
             AppCommand::SaveListeners(listeners) => self.save_listeners(listeners),
             AppCommand::SetListenerEnabled { id, enabled } => {
-                let _ = self.rt.block_on(self.core.set_listener_enabled(id, enabled));
+                if let Err(e) = self.rt.block_on(self.core.set_listener_enabled(id, enabled)) {
+                    self.state.proxy.error = Some(e);
+                }
                 self.refresh_listeners();
             }
             AppCommand::ExportCa(format) => {
