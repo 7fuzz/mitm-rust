@@ -9,6 +9,7 @@ pub enum Action {
     QuickVariables,
     ImportWorkspace,
     ExportWorkspace,
+    ImportCurl,
     InterceptForward,
     InterceptForwardUnmodified,
     InterceptDrop,
@@ -29,6 +30,7 @@ impl Action {
             Action::QuickVariables => "Quick variables".to_string(),
             Action::ImportWorkspace => "Import workspace…".to_string(),
             Action::ExportWorkspace => "Export workspace…".to_string(),
+            Action::ImportCurl => "Import cURL…".to_string(),
             Action::InterceptForward => "Intercept: forward with changes".to_string(),
             Action::InterceptForwardUnmodified => "Intercept: forward unmodified".to_string(),
             Action::InterceptDrop => "Intercept: drop".to_string(),
@@ -49,6 +51,7 @@ impl Action {
             Action::QuickVariables => AppCommand::ToggleQuickVariables,
             Action::ImportWorkspace => AppCommand::OpenImport,
             Action::ExportWorkspace => AppCommand::ExportWorkspace,
+            Action::ImportCurl => AppCommand::OpenCurlImport,
             Action::InterceptForward => AppCommand::ForwardActiveIntercept { modified: true },
             Action::InterceptForwardUnmodified => AppCommand::ForwardActiveIntercept { modified: false },
             Action::InterceptDrop => AppCommand::DropActiveIntercept,
@@ -94,7 +97,7 @@ pub fn palette_actions() -> Vec<Action> {
     actions.extend([Action::NextTab, Action::PreviousTab, Action::ToggleProxy]);
     actions.extend(ProxyMode::ALL.map(Action::SetProxyMode));
     actions.extend([Action::ToggleInterceptor, Action::ClearTraffic, Action::QuickVariables]);
-    actions.extend([Action::ImportWorkspace, Action::ExportWorkspace]);
+    actions.extend([Action::ImportWorkspace, Action::ExportWorkspace, Action::ImportCurl]);
     actions.extend([Action::InterceptForward, Action::InterceptForwardUnmodified, Action::InterceptDrop]);
     actions
 }

@@ -1,4 +1,5 @@
 use eframe::egui::{self, RichText};
+use mitm_core::curl::{parse_curl, ParsedCurl};
 use mitm_core::repeater::{HeaderItem, RepeaterTab};
 use crate::command::{AppCommand, Commands};
 use crate::features::request_editor::body::{content_type_for, convert, REPEATER_BODY_TYPES};
@@ -40,6 +41,12 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
                 .desired_width(width)
         });
         if url.changed() {
+            if let Some(curl) = pasted_curl(ui) {
+                match curl {
+                    Ok(curl) => super::apply_captured(tab, curl.into()),
+                    Err(e) => crate::top_bar::flash(ui, Err(format!("cURL: {e}"))),
+                }
+            }
             tab.params = parse_query(&tab.url, &tab.params);
             changed = true;
         }
@@ -124,6 +131,16 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
     if send {
         cmds.push(AppCommand::RepeaterSend(id));
     }
+}
+
+/// Read from the paste event, since a single-line edit has already folded the line continuations into spaces.
+fn pasted_curl(ui: &egui::Ui) -> Option<Result<ParsedCurl, String>> {
+    ui.input(|i| {
+        i.events.iter().find_map(|e| match e {
+            egui::Event::Paste(text) if text.trim_start().starts_with("curl ") => Some(parse_curl(text.trim())),
+            _ => None,
+        })
+    })
 }
 
 pub fn method_combo(ui: &mut egui::Ui, method: &mut String) -> bool {

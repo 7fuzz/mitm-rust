@@ -273,6 +273,11 @@ impl MitmApp {
             }
 
             AppCommand::RepeaterNew => self.state.repeater.create_blank(db_path),
+            AppCommand::OpenCurlImport => self.state.repeater.curl_import.open(),
+            AppCommand::RepeaterImportCurl(curl) => {
+                self.state.repeater.create_from_curl(curl, db_path);
+                dock::open_tab(&mut self.dock, Tab::Repeater);
+            }
             AppCommand::RepeaterSelect(id) => self.state.repeater.select(id, db_path),
             AppCommand::RepeaterDelete(id) => self.state.repeater.delete(&id, db_path),
             AppCommand::RepeaterSend(id) => {
@@ -620,6 +625,7 @@ impl eframe::App for MitmApp {
         };
         DockArea::new(&mut self.dock).show_inside(ui, &mut viewer);
         palette::show(ui.ctx(), &mut self.palette, &self.state, &mut self.cmds);
+        crate::features::repeater::show_curl_import(ui.ctx(), &mut self.state.repeater.curl_import, &mut self.cmds);
         crate::features::inspector::show_window(ui.ctx(), &mut self.state.inspector, &self.state.traffic, &mut self.cmds);
         let now = ui.input(|i| i.time);
         environments::show_quick_vars(ui.ctx(), &mut self.state.environments, now);

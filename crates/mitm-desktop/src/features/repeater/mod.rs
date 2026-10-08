@@ -1,10 +1,12 @@
 mod builder;
+mod curl_import;
 mod sidebar;
 mod view;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use mitm_core::curl::ParsedCurl;
 use mitm_core::repeater::{
     self as core_repeater, HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab,
 };
@@ -15,6 +17,7 @@ use crate::features::request_editor::url_params::{new_id, parse_query};
 use crate::features::request_editor::run_list::RunDetails;
 use crate::widgets::message_pane::PaneState;
 
+pub use curl_import::{show as show_curl_import, CurlImport};
 pub use view::show;
 
 const SAVE_DELAY_SECS: f64 = 0.6;
@@ -86,6 +89,7 @@ pub struct RepeaterState {
     pub editor_tab: EditorTab,
     pub response_pane: PaneState,
     pub run_details: RunDetails,
+    pub curl_import: CurlImport,
     pub responses: HashMap<String, ShownResponse>,
     pub executing: HashSet<String>,
     pub history: HashMap<String, Vec<RepeaterHistoryItem>>,
@@ -103,6 +107,7 @@ impl Default for RepeaterState {
             editor_tab: EditorTab::Body,
             response_pane: PaneState::default(),
             run_details: RunDetails::default(),
+            curl_import: CurlImport::default(),
             responses: HashMap::new(),
             executing: HashSet::new(),
             history: HashMap::new(),
@@ -189,6 +194,12 @@ impl RepeaterState {
             self.responses.insert(id.clone(), ShownResponse::from_run(&RepeaterHistoryItem { id: history_id, ..run }));
         }
         self.after_run(&id, db_path);
+    }
+
+    pub fn create_from_curl(&mut self, curl: ParsedCurl, db_path: &PathBuf) {
+        let mut tab = blank_tab(db_path);
+        apply_captured(&mut tab, curl.into());
+        self.create(tab, db_path);
     }
 
     pub fn delete(&mut self, id: &str, db_path: &PathBuf) {

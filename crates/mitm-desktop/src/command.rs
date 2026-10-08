@@ -1,3 +1,4 @@
+use mitm_core::curl::ParsedCurl;
 use mitm_core::db::InterceptRule;
 use mitm_core::fuzzer::FuzzTemplate;
 use mitm_core::state::{HistorySettings, ListenerConfig, ProxyMode};
@@ -48,6 +49,8 @@ pub enum AppCommand {
     SendFlowToFuzzer(i64),
 
     RepeaterNew,
+    OpenCurlImport,
+    RepeaterImportCurl(ParsedCurl),
     RepeaterSelect(String),
     RepeaterDelete(String),
     RepeaterSend(String),

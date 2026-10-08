@@ -1,3 +1,4 @@
+use mitm_core::curl::ParsedCurl;
 use mitm_core::repeater::{HeaderItem, ParamItem};
 use mitm_core::state::{HistoryDetail, HistoryEntry};
 use super::body::structured_from_capture;
@@ -38,9 +39,33 @@ impl CapturedRequest {
     }
 }
 
+impl From<ParsedCurl> for CapturedRequest {
+    fn from(curl: ParsedCurl) -> Self {
+        Self::new(curl.method, curl.url, &curl.headers, curl.body.as_deref().unwrap_or_default())
+    }
+}
+
 pub fn header_items(headers: &[(String, String)]) -> Vec<HeaderItem> {
     headers
         .iter()
         .map(|(key, value)| HeaderItem { id: new_id(), key: key.clone(), value: value.clone(), enabled: true })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn curl_becomes_params_headers_and_typed_body() {
+        let curl = mitm_core::curl::parse_curl(
+            "curl 'https://a.test/x?page=2' -H 'Content-Type: application/json' --data-raw '{\"a\":1}'",
+        )
+        .unwrap();
+        let captured = CapturedRequest::from(curl);
+        assert_eq!(captured.method, "POST");
+        assert_eq!(captured.params[0].value, "2");
+        assert_eq!(captured.headers[0].key, "Content-Type");
+        assert_eq!(captured.body_type, "json");
+    }
 }
