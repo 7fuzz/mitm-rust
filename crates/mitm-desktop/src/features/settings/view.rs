@@ -488,9 +488,6 @@ fn proxy_section(
             }
         })
         .body(|ui| {
-            if proxy.host_ips.is_empty() {
-                proxy.reload_host_ips();
-            }
             egui::Grid::new("host_ips_grid")
                 .striped(true)
                 .num_columns(4)
@@ -512,28 +509,9 @@ fn proxy_section(
 
                         let ip_resp = ui.selectable_label(false, RichText::new(&ip_info.ip).monospace());
                         let iface_resp = ui.label(&ip_info.interface);
-
-                        let ip = &ip_info.ip;
-                        ip_resp.context_menu(|ui| {
-                            if ui.button("Copy").clicked() {
-                                ui.ctx().copy_text(ip.clone());
-                                ui.close();
-                            }
-                            if ui.button("Use in new listener").clicked() {
-                                form.host = ip.clone();
-                                ui.close();
-                            }
-                        });
-                        iface_resp.context_menu(|ui| {
-                            if ui.button("Copy").clicked() {
-                                ui.ctx().copy_text(ip.clone());
-                                ui.close();
-                            }
-                            if ui.button("Use in new listener").clicked() {
-                                form.host = ip.clone();
-                                ui.close();
-                            }
-                        });
+                        for resp in [ip_resp, iface_resp] {
+                            host_ip_menu(&resp, &ip_info.ip, form);
+                        }
 
                         if ip_info.is_link_local {
                             ui.label(RichText::new("link-local").weak().small());
@@ -574,6 +552,19 @@ fn proxy_section(
             ui.label(db_path.to_string_lossy());
             ui.end_row();
         });
+}
+
+fn host_ip_menu(resp: &egui::Response, ip: &str, form: &mut ListenerForm) {
+    resp.context_menu(|ui| {
+        if ui.button("Copy").clicked() {
+            ui.ctx().copy_text(ip.to_string());
+            ui.close();
+        }
+        if ui.button("Use in new listener").clicked() {
+            form.host = ip.to_string();
+            ui.close();
+        }
+    });
 }
 
 fn find_listener_overlap(listeners: &[mitm_core::state::ListenerConfig], host: &str, port: u16) -> Option<u32> {
