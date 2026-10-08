@@ -95,6 +95,7 @@ impl MitmApp {
             }
             CoreEvent::InterceptResolved { flow_id } => self.state.intercept.remove_pending(&flow_id),
             CoreEvent::WsFrameReceived { frame, .. } => self.state.websockets.apply_frame(frame),
+            CoreEvent::WebhookDelivery(event) => self.state.webhooks.apply_delivery(event),
             _ => {}
         }
     }
@@ -516,6 +517,10 @@ impl MitmApp {
             }
             AppCommand::DeleteWebhookEndpoint(id) => match self.core.delete_webhook_endpoint(&id) {
                 Ok(()) => self.state.webhooks.removed(&id),
+                Err(e) => self.webhook_actions.reply(ctx).send(Err(e)),
+            },
+            AppCommand::ClearWebhookDeliveries => match self.core.clear_webhook_deliveries() {
+                Ok(()) => self.state.webhooks.deliveries_cleared(),
                 Err(e) => self.webhook_actions.reply(ctx).send(Err(e)),
             },
             AppCommand::CopyWebhookTestCurl(id) => {

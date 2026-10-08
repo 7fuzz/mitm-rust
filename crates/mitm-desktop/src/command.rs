@@ -92,6 +92,7 @@ pub enum AppCommand {
     CreateWebhookEndpoint { name: String, path: String, secret: String },
     DeleteWebhookEndpoint(String),
     CopyWebhookTestCurl(String),
+    ClearWebhookDeliveries,
 
     SelectWorkspace(String),
     SelectEnvironment(Option<String>),

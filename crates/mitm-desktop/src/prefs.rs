@@ -11,6 +11,7 @@ use crate::features::repeater::RepeaterPrefs;
 use crate::features::rewrite::RewritePrefs;
 use crate::features::settings::SettingsPrefs;
 use crate::features::traffic::TrafficPrefs;
+use crate::features::webhooks::WebhooksPrefs;
 use crate::features::websockets::WebSocketsPrefs;
 use crate::state::AppState;
 
@@ -62,6 +63,10 @@ impl Section for WebSocketsPrefs {
     const KEY: &'static str = "websockets";
 }
 
+impl Section for WebhooksPrefs {
+    const KEY: &'static str = "webhooks";
+}
+
 fn load<T: Section>(storage: Option<&dyn Storage>) -> T {
     storage.and_then(|s| eframe::get_value(s, T::KEY)).unwrap_or_default()
 }
@@ -76,6 +81,7 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     state.collections.prefs = load(storage);
     state.fuzzer.prefs = load(storage);
     state.websockets.prefs = load(storage);
+    state.webhooks.prefs = load(storage);
     state.settings = load(storage);
     state.traffic.prefs = load(storage);
     state.intercept.prefs = load(storage);
@@ -89,6 +95,7 @@ pub fn carry_over(from: &mut AppState, to: &mut AppState) {
     to.collections.prefs = std::mem::take(&mut from.collections.prefs);
     to.fuzzer.prefs = std::mem::take(&mut from.fuzzer.prefs);
     to.websockets.prefs = std::mem::take(&mut from.websockets.prefs);
+    to.webhooks.prefs = std::mem::take(&mut from.webhooks.prefs);
     to.settings = std::mem::take(&mut from.settings);
     to.traffic.prefs = std::mem::take(&mut from.traffic.prefs);
     to.intercept.prefs = std::mem::take(&mut from.intercept.prefs);
@@ -102,6 +109,7 @@ pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppStat
     save(storage, &state.collections.prefs);
     save(storage, &state.fuzzer.prefs);
     save(storage, &state.websockets.prefs);
+    save(storage, &state.webhooks.prefs);
     save(storage, &state.settings);
     save(storage, &state.traffic.prefs);
     save(storage, &state.intercept.prefs);
