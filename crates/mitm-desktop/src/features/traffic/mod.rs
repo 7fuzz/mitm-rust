@@ -374,7 +374,7 @@ pub fn show(
     toolbar::show(ui, state, listeners, visible.len(), cmds);
     ui.separator();
 
-    if !inspector.prefs.open || state.selected_flow().is_none() {
+    if !inspector.prefs.open || inspector.prefs.popped_out || state.selected_flow().is_none() {
         table::show(ui, state, &visible, folders, cmds);
         return;
     }

@@ -8,7 +8,7 @@ use crate::widgets::pills::{method_text, status_text};
 use crate::widgets::split;
 use crate::widgets::message_pane::{self as pane, PaneData};
 use crate::features::request_editor::body::captured_form;
-use super::{header_values, query_params, request_cookies, response_cookies, InspectorState};
+use super::{header_values, query_params, request_cookies, response_cookies, InspectorPrefs, InspectorState};
 
 pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficState, cmds: &mut Commands) {
     let Some(flow) = traffic.selected_flow() else { return };
@@ -16,7 +16,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficStat
     let detail = traffic.selected_detail.as_ref().filter(|d| d.id == flow.id);
     let flags = FlowFlags::of(flow);
 
-    summary(ui, flow, &flags, &mut state.prefs.open);
+    summary(ui, flow, &flags, &mut state.prefs);
     url_bar(ui, &flow.url);
     ui.separator();
 
@@ -53,7 +53,24 @@ pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficStat
     }
 }
 
-fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, open: &mut bool) {
+/// The inspector in its own OS window, e.g. on a second monitor; closing it docks the inspector back.
+pub fn show_window(ctx: &egui::Context, state: &mut InspectorState, traffic: &TrafficState, cmds: &mut Commands) {
+    if !state.prefs.popped_out {
+        return;
+    }
+    let builder = egui::ViewportBuilder::default().with_title("Inspector").with_inner_size([960.0, 720.0]);
+    ctx.show_viewport_immediate(egui::ViewportId::from_hash_of("inspector_window"), builder, |ui, _| {
+        egui::Frame::central_panel(ui.style()).show(ui, |ui| {
+            ui.set_min_size(ui.available_size());
+            show(ui, state, traffic, cmds);
+        });
+        if ui.ctx().input(|i| i.viewport().close_requested()) {
+            state.prefs.popped_out = false;
+        }
+    });
+}
+
+fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, prefs: &mut InspectorPrefs) {
     egui::Sides::new().shrink_left().truncate().show(
         ui,
         |ui| {
@@ -77,8 +94,12 @@ fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, open: &mut
             }
         },
         |ui| {
-            if ui.small_button("✖").on_hover_text("Hide inspector").clicked() {
-                *open = false;
+            if !prefs.popped_out && ui.small_button("✖").on_hover_text("Hide inspector").clicked() {
+                prefs.open = false;
+            }
+            let hint = if prefs.popped_out { "Dock back into the main window" } else { "Open in its own window" };
+            if ui.small_button("⧉").on_hover_text(hint).clicked() {
+                prefs.popped_out = !prefs.popped_out;
             }
             if !flags.is_pending() {
                 ui.weak(format!("{} · {}", format_duration(flow.duration_ms), format_bytes(flow.response_size)));

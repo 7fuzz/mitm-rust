@@ -553,6 +553,7 @@ impl eframe::App for MitmApp {
         };
         DockArea::new(&mut self.dock).show_inside(ui, &mut viewer);
         palette::show(ui.ctx(), &mut self.palette, &self.state, &mut self.cmds);
+        crate::features::inspector::show_window(ui.ctx(), &mut self.state.inspector, &self.state.traffic, &mut self.cmds);
         let now = ui.input(|i| i.time);
         environments::show_quick_vars(ui.ctx(), &mut self.state.environments, now);
         let workspace = self.state.environments.active_workspace().map(|w| (w.id.clone(), w.name.clone())).unwrap_or_default();
