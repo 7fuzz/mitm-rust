@@ -7,4 +7,5 @@ pub mod method;
 pub mod response_panel;
 pub mod run_list;
 pub mod steps;
+pub mod url_field;
 pub mod url_params;

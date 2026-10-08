@@ -6,10 +6,10 @@ use crate::features::request_editor::body::{content_type_for, convert, REPEATER_
 use crate::features::request_editor::kv_table::{self, standard_headers, KvLabels};
 use crate::features::request_editor::method::method_combo;
 use crate::features::request_editor::steps::{self, StepOption};
+use crate::features::request_editor::url_field::url_field;
 use crate::features::request_editor::url_params::{build_url, new_id, parse_query};
 use crate::features::request_editor::{body_editor, extract_rules};
 use crate::format::pretty_json;
-use crate::widgets::template;
 use super::{EditorTab, RepeaterState};
 
 const MIN_URL_WIDTH: f32 = 160.0;
@@ -33,14 +33,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
         ui.set_min_height(28.0);
         changed |= method_combo(ui, "method", &mut tab.method);
         let width = (ui.available_width() - 150.0).max(MIN_URL_WIDTH);
-        let mut layouter = template::singleline_layouter(egui::TextStyle::Monospace, None);
-        let url = template::show(ui, &mut tab.url, |text| {
-            egui::TextEdit::singleline(text)
-                .hint_text("https://api.example.com/v1/resource or {{BASE_URL}}/path")
-                .layouter(&mut layouter)
-                .font(egui::TextStyle::Monospace)
-                .desired_width(width)
-        });
+        let url = url_field(ui, &mut tab.url, "https://api.example.com/v1/resource or {{BASE_URL}}/path", width);
         if url.changed() {
             if let Some(curl) = pasted_curl(ui) {
                 match curl {

@@ -7,7 +7,7 @@ use crate::features::request_editor::method::method_combo;
 use crate::features::request_editor::steps::{self, StepOption};
 use crate::features::request_editor::{body_editor, extract_rules};
 use crate::theme::{self, Tone};
-use crate::widgets::template;
+use crate::features::request_editor::url_field::url_field;
 use super::{docs, CollectionsCmd, CollectionsState, DocsMode, EditorTab, PreviewMode};
 
 
@@ -25,17 +25,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
     ui.horizontal_wrapped(|ui| {
         ui.set_min_height(28.0);
         changed |= method_combo(ui, "collection_method", &mut request.method);
-        let mut layouter = template::singleline_layouter(egui::TextStyle::Monospace, None);
         let width = (ui.available_width() - 130.0).max(160.0);
-        let url = template::show(ui, &mut request.url, |text| {
-            egui::TextEdit::singleline(text)
-                .hint_text("https://api.example.com/v1/resource or {{BASE_URL}}/endpoint")
-                .layouter(&mut layouter)
-                .font(egui::TextStyle::Monospace)
-                .desired_width(width)
-        });
+        let url = url_field(ui, &mut request.url, "https://api.example.com/v1/resource or {{BASE_URL}}/endpoint", width);
         changed |= url.changed();
-        send |= url.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        send |= url.has_focus() && ui.input(|i| i.modifiers.is_none() && i.key_pressed(egui::Key::Enter));
         let label = if executing { "Sending..." } else { "▶ Send" };
         let button = egui::Button::new(RichText::new(label).strong()).fill(ui.visuals().selection.bg_fill);
         send |= ui.add_enabled(!executing, button).on_hover_text("Ctrl+Enter").clicked();
