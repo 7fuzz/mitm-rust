@@ -51,6 +51,13 @@ impl Tab {
             Tab::Encoding => "Encoding tool",
         }
     }
+
+    /// Utility tabs, in the order they appear under the **Utilities ▸** submenu.
+    pub const UTILITIES: &'static [Tab] = &[Tab::Encoding];
+
+    pub fn is_utility(&self) -> bool {
+        Self::UTILITIES.contains(self)
+    }
 }
 
 pub fn initial_layout() -> DockState<Tab> {
@@ -80,12 +87,21 @@ pub fn tab_bar_menus(ui: &mut egui::Ui, dock: &DockState<Tab>) -> Option<(NodePa
         }
         let response = ui.interact(bar, ui.id().with(("tab_bar_menu", path)), egui::Sense::click());
         response.context_menu(|ui| {
-            for tab in Tab::ALL {
+            for tab in Tab::ALL.into_iter().filter(|t| !t.is_utility()) {
                 if ui.selectable_label(leaf.tabs.contains(&tab), tab.name()).clicked() {
                     picked = Some((path, tab));
                     ui.close();
                 }
             }
+            ui.separator();
+            ui.menu_button("Utilities ▸", |ui| {
+                for &tab in Tab::UTILITIES {
+                    if ui.selectable_label(leaf.tabs.contains(&tab), tab.name()).clicked() {
+                        picked = Some((path, tab));
+                        ui.close();
+                    }
+                }
+            });
         });
     }
     picked

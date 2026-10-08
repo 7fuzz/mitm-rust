@@ -34,6 +34,7 @@ impl Action {
             Action::InterceptForward => "Intercept: forward with changes".to_string(),
             Action::InterceptForwardUnmodified => "Intercept: forward unmodified".to_string(),
             Action::InterceptDrop => "Intercept: drop".to_string(),
+            Action::OpenTab(tab) if tab.is_utility() => format!("Utilities: {}", tab.name()),
             Action::OpenTab(tab) => format!("Open {}", tab.name()),
             Action::FocusTabAt(index) => format!("Tab {}", index + 1),
             Action::NextTab => "Next tab".to_string(),

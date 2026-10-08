@@ -205,17 +205,30 @@ fn mode_text(ui: &egui::Ui, mode: ProxyMode) -> RichText {
 }
 
 fn add_panel_menu(ui: &mut egui::Ui, dock: &DockState<Tab>, cmds: &mut Commands) {
-    let absent: Vec<Tab> = Tab::ALL.into_iter().filter(|t| dock.find_tab(t).is_none()).collect();
+    let absent = |tab: &Tab| dock.find_tab(tab).is_none();
+    let top: Vec<Tab> = Tab::ALL.into_iter().filter(|t| !t.is_utility() && absent(t)).collect();
+    let utilities: Vec<Tab> = Tab::UTILITIES.iter().copied().filter(absent).collect();
 
     ui.menu_button("➕ Add Panel ▾", |ui| {
-        if absent.is_empty() {
+        if top.is_empty() && utilities.is_empty() {
             ui.label(RichText::new("All panels are open").weak());
         }
-        for tab in absent {
+        for tab in top {
             if ui.button(tab.name()).clicked() {
                 cmds.push(AppCommand::OpenTab(tab));
                 ui.close();
             }
+        }
+        if !utilities.is_empty() {
+            ui.separator();
+            ui.menu_button("Utilities ▸", |ui| {
+                for tab in utilities {
+                    if ui.button(tab.name()).clicked() {
+                        cmds.push(AppCommand::OpenTab(tab));
+                        ui.close();
+                    }
+                }
+            });
         }
     });
 }
