@@ -7,6 +7,7 @@ use crate::command::{AppCommand, Commands};
 use crate::features::collections::SaveTarget;
 use crate::format::{format_bytes, format_duration, local_clock, CopyFormat};
 use crate::theme::{self, Tone};
+use crate::widgets::copy_custom;
 use crate::widgets::pills::{badge, render_method_pill, render_source_pill};
 use super::{flow_status_badge, ColumnId, ColumnLayout, FlowFlags, TrafficState};
 
@@ -303,6 +304,9 @@ fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, folders: &[CollectionTreeIt
         menu_item(ui, "Copy Curl", AppCommand::CopyFlow(flow.id, CopyFormat::Curl), cmds);
         menu_item(ui, "Copy Curl and Res", AppCommand::CopyFlow(flow.id, CopyFormat::CurlAndResponse), cmds);
         menu_item(ui, "Copy URL, Body, and Response", AppCommand::CopyFlow(flow.id, CopyFormat::UrlBodyAndResponse), cmds);
+        if let Some(options) = copy_custom::submenu(ui) {
+            cmds.push(AppCommand::CopyFlowCustom(flow.id, options));
+        }
     });
     ui.separator();
     if ui.button(RichText::new("🗑 Delete Item").color(theme::color(ui, Tone::Danger))).clicked() {

@@ -28,6 +28,7 @@ pub trait Run {
             request_headers: self.request_headers().iter().map(|h| (h.key.clone(), h.value.clone())).collect(),
             request_body: self.request_body().to_string(),
             status_code: self.status_code(),
+            response_headers: self.response_headers().iter().map(|h| (h.key.clone(), h.value.clone())).collect(),
             response_body: self.response_body().to_string(),
             content_type,
         }

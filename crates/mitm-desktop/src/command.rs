@@ -3,7 +3,7 @@ use mitm_core::fuzzer::FuzzTemplate;
 use mitm_core::state::{HistorySettings, ListenerConfig, ProxyMode};
 use crate::dock::Tab;
 use crate::features::collections::{CollectionsCmd, SaveTarget};
-use crate::format::CopyFormat;
+use crate::format::{CopyFormat, CopyOptions};
 
 #[derive(Debug, Clone, Default)]
 pub struct RequestDraft {
@@ -39,6 +39,7 @@ pub enum AppCommand {
     ClearTraffic,
     DeleteFlow(i64),
     CopyFlow(i64, CopyFormat),
+    CopyFlowCustom(i64, CopyOptions),
     SetHistoryLimit(HistorySettings),
     AddInterceptRuleForHost(String),
     SendFlowToRepeater(i64),

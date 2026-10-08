@@ -213,6 +213,12 @@ impl MitmApp {
                     ctx.copy_text(Exchange::from_flow(flow, detail.as_ref()).copy_text(format));
                 }
             }
+            AppCommand::CopyFlowCustom(id, options) => {
+                if let Some(flow) = self.state.traffic.flow(id) {
+                    let detail = mitm_core::db::get_history_detail(db_path, id).ok().flatten();
+                    ctx.copy_text(Exchange::from_flow(flow, detail.as_ref()).custom_text(&options));
+                }
+            }
             AppCommand::SetHistoryLimit(settings) => {
                 if self.rt.block_on(self.core.set_history_settings(settings.clone())).is_ok() {
                     self.state.traffic.set_history_limit(settings);

@@ -89,6 +89,7 @@ pub struct Exchange {
     pub request_headers: Vec<(String, String)>,
     pub request_body: String,
     pub status_code: u16,
+    pub response_headers: Vec<(String, String)>,
     pub response_body: String,
     pub content_type: String,
 }
@@ -101,22 +102,59 @@ impl Exchange {
             request_headers: detail.map_or(&flow.request_headers, |d| &d.request_headers).clone(),
             request_body: detail.map_or(&flow.request_body, |d| &d.request_body).clone(),
             status_code: flow.status_code,
+            response_headers: detail.map_or(&flow.response_headers, |d| &d.response_headers).clone(),
             response_body: detail.map_or(&flow.response_body, |d| &d.response_body).clone(),
             content_type: flow.content_type.clone(),
         }
     }
 
     pub fn curl(&self) -> String {
+        self.curl_with(&self.request_headers, &self.request_body)
+    }
+
+    fn curl_with(&self, headers: &[(String, String)], body: &str) -> String {
         let mut curl = format!("curl -X {} '{}'", self.method, self.url);
-        for (k, v) in &self.request_headers {
+        for (k, v) in headers {
             if !k.eq_ignore_ascii_case("content-length") {
                 curl.push_str(&format!(" \\\n  -H '{}: {}'", k, shell_quote(v)));
             }
         }
-        if !self.request_body.is_empty() {
-            curl.push_str(&format!(" \\\n  --data-raw '{}'", shell_quote(&self.request_body)));
+        if !body.is_empty() {
+            curl.push_str(&format!(" \\\n  --data-raw '{}'", shell_quote(body)));
         }
         curl
+    }
+
+    pub fn custom_text(&self, options: &CopyOptions) -> String {
+        let pretty = |body: &str, content_type: &str| {
+            options.pretty_json.then(|| pretty_json(body)).flatten().unwrap_or_else(|| display_body(body, content_type))
+        };
+        let headers = if options.request_headers { self.request_headers.as_slice() } else { &[] };
+        let body = if options.request_body { pretty(&self.request_body, "") } else { String::new() };
+        let mut text = self.curl_with(headers, body.trim());
+
+        let mut response = Vec::new();
+        let reason = || http::StatusCode::from_u16(self.status_code).ok().and_then(|s| s.canonical_reason()).unwrap_or("");
+        match (options.response_status, options.status_text) {
+            (true, true) => response.push(format!("HTTP/1.1 {} {}", self.status_code, reason()).trim_end().to_string()),
+            (true, false) => response.push(format!("HTTP/1.1 {}", self.status_code)),
+            (false, true) => response.push(reason().to_string()),
+            (false, false) => {}
+        }
+        if options.response_headers {
+            response.extend(self.response_headers.iter().map(|(k, v)| format!("{k}: {v}")));
+        }
+        if options.response_body && !self.response_body.trim().is_empty() {
+            if !response.is_empty() {
+                response.push(String::new());
+            }
+            response.push(pretty(&self.response_body, &self.content_type));
+        }
+        if !response.is_empty() {
+            text.push_str("\n\n");
+            text.push_str(&response.join("\n"));
+        }
+        text
     }
 
     pub fn copy_text(&self, format: CopyFormat) -> String {
@@ -146,6 +184,32 @@ impl Exchange {
 
 fn shell_quote(text: &str) -> String {
     text.replace('\'', "'\\''")
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct CopyOptions {
+    pub request_headers: bool,
+    pub request_body: bool,
+    pub response_status: bool,
+    pub status_text: bool,
+    pub response_headers: bool,
+    pub response_body: bool,
+    pub pretty_json: bool,
+}
+
+impl Default for CopyOptions {
+    fn default() -> Self {
+        Self {
+            request_headers: true,
+            request_body: true,
+            response_status: true,
+            status_text: false,
+            response_headers: false,
+            response_body: true,
+            pretty_json: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -214,5 +278,33 @@ mod tests {
         assert!(looks_like_base64("data:image/png;base64,iVBORw0KGgo="));
         assert!(!looks_like_base64("hello world"));
         assert!(!looks_like_base64("ab"));
+    }
+
+    #[test]
+    fn custom_copy_includes_only_the_chosen_parts() {
+        let exchange = Exchange {
+            method: "POST".to_string(),
+            url: "https://api.test/u".to_string(),
+            request_headers: vec![("X-A".to_string(), "1".to_string())],
+            request_body: r#"{"a":1}"#.to_string(),
+            status_code: 404,
+            response_headers: vec![("Server".to_string(), "t".to_string())],
+            response_body: "missing".to_string(),
+            content_type: "text/plain".to_string(),
+        };
+        let all = CopyOptions { status_text: true, response_headers: true, ..CopyOptions::default() };
+        let text = exchange.custom_text(&all);
+        assert!(text.contains("-H 'X-A: 1'"));
+        assert!(text.contains("\"a\": 1"));
+        assert!(text.ends_with("HTTP/1.1 404 Not Found\nServer: t\n\nmissing"));
+
+        let bare = CopyOptions {
+            request_headers: false,
+            request_body: false,
+            response_status: false,
+            response_body: false,
+            ..CopyOptions::default()
+        };
+        assert_eq!(exchange.custom_text(&bare), "curl -X POST 'https://api.test/u'");
     }
 }
