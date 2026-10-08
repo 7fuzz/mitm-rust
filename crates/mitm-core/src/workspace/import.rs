@@ -442,7 +442,7 @@ fn import_into(
         let mut imported = ImportedRequests::default();
         for (idx, tc) in test_cases.iter().enumerate() {
             process_custom_folder(
-                &conn,
+                conn,
                 &workspace_id,
                 None,
                 tc,
@@ -454,13 +454,13 @@ fn import_into(
                 &mut imported,
             )?;
         }
-        imported.link(&conn)?;
+        imported.link(conn)?;
     } else if let Ok(collection) = serde_json::from_str::<PostmanCollection>(json_content) {
         // Fallback Postman v2.1 collection format
         if let Some(items) = collection.item {
             for (idx, item) in items.into_iter().enumerate() {
                 process_postman_item(
-                    &conn,
+                    conn,
                     &workspace_id,
                     None,
                     item,
@@ -482,6 +482,7 @@ fn import_into(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn process_postman_item(
     conn: &Connection,
     workspace_id: &str,
@@ -586,6 +587,7 @@ fn process_postman_item(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn process_custom_folder(
     conn: &Connection,
     workspace_id: &str,
@@ -642,6 +644,7 @@ fn process_custom_folder(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn process_custom_target(
     conn: &Connection,
     col_id: &str,

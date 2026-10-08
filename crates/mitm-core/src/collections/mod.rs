@@ -520,6 +520,7 @@ pub fn duplicate_collection_db(db_path: &PathBuf, collection_id: &str) -> Result
     ).map_err(|e| e.to_string())?;
 
     let mut req_stmt = conn.prepare("SELECT id, name, method, url, headers_json, params_json, body_type, body_json, body_raw, body_form_data, body_urlencoded, extract_rules_json, description, order_index FROM requests WHERE collection_id = ?").map_err(|e| e.to_string())?;
+    #[allow(clippy::type_complexity)]
     let reqs: Vec<(String, String, String, String, String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, String, Option<String>, i32)> = req_stmt.query_map([collection_id], |row| {
         Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?, row.get(10)?, row.get(11)?, row.get(12)?, row.get(13)?))
     }).map_err(|e| e.to_string())?.filter_map(|r| r.ok()).collect();

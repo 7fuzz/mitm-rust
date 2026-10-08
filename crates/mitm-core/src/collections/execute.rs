@@ -120,6 +120,7 @@ async fn send_collection_request(
             )
             .map_err(|e| e.to_string())?;
 
+        #[allow(clippy::type_complexity)]
         let (id, _col_id, workspace_id, _name, raw_method, raw_url, headers_json, params_json, body_type, b_json, b_raw, b_form, b_url, raw_extract_rules): 
             (String, String, String, String, String, String, String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>) = 
             stmt.query_row([request_id], |row| {
@@ -337,14 +338,10 @@ async fn send_collection_request(
 
 fn evaluate_json_path(value: &serde_json::Value, expr: &str) -> Option<serde_json::Value> {
     let clean_expr = expr.trim();
-    // Remove leading '$' or '$.' if present
-    let path = if clean_expr.starts_with("$.") {
-        &clean_expr[2..]
-    } else if clean_expr.starts_with('$') {
-        &clean_expr[1..]
-    } else {
-        clean_expr
-    };
+    let path = clean_expr
+        .strip_prefix("$.")
+        .or_else(|| clean_expr.strip_prefix('$'))
+        .unwrap_or(clean_expr);
 
     if path.is_empty() {
         return Some(value.clone());
@@ -436,7 +433,7 @@ pub fn evaluate_rust_extract_rule(
         }
         "after_string" => {
             let parts: Vec<&str> = rule.expression.split("||").collect();
-            let prefix = parts.get(0)?;
+            let prefix = parts.first()?;
             if prefix.is_empty() {
                 return None;
             }
@@ -451,20 +448,20 @@ pub fn evaluate_rust_extract_rule(
         }
         "before_string" => {
             let parts: Vec<&str> = rule.expression.split("||").collect();
-            let suffix = parts.get(0)?;
+            let suffix = parts.first()?;
             if suffix.is_empty() {
                 return None;
             }
             let limit: usize = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(256);
             let idx = response_body.find(suffix)?;
-            let start = if idx > limit { idx - limit } else { 0 };
+            let start = idx.saturating_sub(limit);
             let sub = &response_body[start..idx];
             let line = sub.lines().last().unwrap_or(sub);
             Some(line.to_string())
         }
         "between_string" => {
             let parts: Vec<&str> = rule.expression.split("||").collect();
-            let start_delim = parts.get(0)?;
+            let start_delim = parts.first()?;
             let end_delim = parts.get(1)?;
             if start_delim.is_empty() || end_delim.is_empty() {
                 return None;

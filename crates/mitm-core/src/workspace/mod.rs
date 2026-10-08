@@ -633,7 +633,7 @@ pub fn resolve_dynamic_variable(key: &str) -> Option<String> {
         }
         "randomboolean" | "random_boolean" | "randombool" | "random_bool" => {
             let u = Uuid::new_v4().as_u128();
-            if u % 2 == 0 {
+            if u.is_multiple_of(2) {
                 Some("true".to_string())
             } else {
                 Some("false".to_string())
