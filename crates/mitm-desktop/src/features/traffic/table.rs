@@ -44,7 +44,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], fold
             let output = builder
                 .header(24.0, |mut header| {
                     for &col in &columns {
-                        let (rect, _) = header.col(|ui| header_cell(ui, col, &mut state.prefs.columns));
+                        // The returned rect only covers the label; the response spans the whole column.
+                        let (_, cell) = header.col(|ui| header_cell(ui, col, &mut state.prefs.columns));
+                        let rect = cell.rect;
                         remember_width(&mut state.prefs.widths, col, rect.width());
                         if edge_double_clicked(&ctx, rect) {
                             state.prefs.widths.remove(&col);
