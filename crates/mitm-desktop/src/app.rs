@@ -633,11 +633,28 @@ impl MitmApp {
                 });
             }
             AppCommand::ExportWorkspace => {
+                let environments = &self.state.environments.environments;
+                if environments.iter().flat_map(|e| &e.variables).any(|v| v.r#type == "secret") {
+                    self.state.environments.export.open();
+                } else {
+                    self.run_command(ctx, AppCommand::ExportWorkspaceFile { include_secrets: false });
+                }
+            }
+            AppCommand::ExportWorkspaceFile { include_secrets } => {
                 let Some(workspace) = self.state.environments.active_workspace().cloned() else { return };
+                // Export reads the database, so edits still waiting for their debounced save go first.
+                self.state.environments.flush(db_path);
+                self.state.collections.flush(db_path);
                 let db_path = db_path.clone();
                 self.file_saves.spawn(&self.rt, ctx, async move {
-                    let path = crate::files::pick_save(&format!("{}.json", workspace.name), &[("JSON", &["json"])]).await?;
-                    let result = mitm_core::workspace::export::export_workspace_file_db(&db_path, &workspace.id, &path.to_string_lossy(), false);
+                    let name = format!("{}.mitm.json", workspace.name);
+                    let path = crate::files::pick_save(&name, &[("Workspace file", &["json"])]).await?;
+                    let result = mitm_core::workspace::export::export_workspace_file_db(
+                        &db_path,
+                        &workspace.id,
+                        &path.to_string_lossy(),
+                        include_secrets,
+                    );
                     Some(result.map(|_| format!("Exported {}", crate::files::file_name(&path))))
                 });
             }
@@ -840,6 +857,7 @@ impl eframe::App for MitmApp {
         let now = ui.input(|i| i.time);
         environments::show_quick_vars(ui.ctx(), &mut self.state.environments, now);
         let workspace = self.state.environments.active_workspace().map(|w| (w.id.clone(), w.name.clone())).unwrap_or_default();
+        environments::show_export(ui.ctx(), &mut self.state.environments.export, &mut self.cmds);
         environments::show_import(
             ui.ctx(),
             &mut self.state.environments.import,

@@ -115,6 +115,7 @@ pub enum AppCommand {
 
     OpenImport,
     ExportWorkspace,
+    ExportWorkspaceFile { include_secrets: bool },
     PickImportFile,
     ImportWorkspace { json: String, target: Option<String>, name: Option<String> },
 }

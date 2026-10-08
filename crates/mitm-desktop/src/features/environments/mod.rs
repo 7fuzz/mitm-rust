@@ -1,3 +1,4 @@
+mod export;
 mod import;
 mod quick;
 
@@ -12,6 +13,7 @@ use crate::widgets::split;
 
 const SAVE_DELAY_SECS: f64 = 0.6;
 
+pub use export::show as show_export;
 pub use import::{file_label, is_json_file, show as show_import};
 pub use quick::{show as show_quick_vars, Scope as QuickVarScope};
 
@@ -46,6 +48,7 @@ pub struct EnvironmentsState {
     pub confirm_delete_workspace: bool,
     pub quick: quick::QuickVars,
     pub import: import::ImportState,
+    pub export: export::ExportPrompt,
     dirty: HashSet<String>,
     last_edit: f64,
 }
@@ -76,6 +79,7 @@ impl Default for EnvironmentsState {
             confirm_delete_workspace: false,
             quick: quick::QuickVars::default(),
             import: import::ImportState::default(),
+            export: export::ExportPrompt::default(),
             dirty: HashSet::new(),
             last_edit: 0.0,
         }
