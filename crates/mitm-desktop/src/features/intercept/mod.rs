@@ -2,7 +2,7 @@ mod view;
 
 use serde::{Deserialize, Serialize};
 use mitm_core::db::InterceptRule;
-use mitm_core::state::PendingFlowPayload;
+use mitm_core::state::{PendingFlowPayload, SourceScope};
 use mitm_core::repeater::HeaderItem;
 use crate::features::request_editor::captured::header_items;
 
@@ -53,6 +53,7 @@ pub struct InterceptState {
     pub prefs: InterceptPrefs,
     pub enabled: bool,
     pub mode: String,
+    pub source_scope: SourceScope,
     pub pending: Vec<PendingFlowPayload>,
     pub active_id: Option<String>,
     pub rules: Vec<InterceptRule>,
@@ -66,6 +67,7 @@ impl Default for InterceptState {
             prefs: InterceptPrefs::default(),
             enabled: false,
             mode: "request".to_string(),
+            source_scope: SourceScope::default(),
             pending: Vec::new(),
             active_id: None,
             rules: Vec::new(),

@@ -604,6 +604,10 @@ fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {
     refresh_listener_state(rt, core, &mut state.proxy);
     state.proxy.reload_host_ips();
     state.certificate.info = core.ca_info().ok();
+    let (enabled, mode, scope) = rt.block_on(core.intercept_config());
+    state.intercept.enabled = enabled;
+    state.intercept.mode = mode;
+    state.intercept.source_scope = scope;
     state
 }
 
