@@ -3,6 +3,7 @@ use crate::theme::{self, Tone};
 use crate::command::{AppCommand, Commands};
 use crate::widgets::pills::{badge, render_method_pill};
 use crate::widgets::split;
+use crate::features::request_editor::kv_table::{self, KvLabels};
 use super::InterceptState;
 
 pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) {
@@ -195,13 +196,9 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
             ui.end_row();
 
             ui.strong("Headers:");
-            let mut headers_layouter = crate::widgets::template::layouter(egui::TextStyle::Monospace, None);
-            crate::widgets::template::show(ui, &mut state.edit.headers, |text| {
-                egui::TextEdit::multiline(text)
-                    .font(egui::TextStyle::Monospace)
-                    .layouter(&mut headers_layouter)
-                    .desired_rows(6)
-                    .desired_width(f32::INFINITY)
+            ui.vertical(|ui| {
+                let labels = KvLabels { key: "Header Name", value: "Header Value" };
+                kv_table::show(ui, "intercept_headers", &mut state.edit.headers, labels, &[]);
             });
             ui.end_row();
 

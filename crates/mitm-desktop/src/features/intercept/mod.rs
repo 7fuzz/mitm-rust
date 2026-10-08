@@ -3,7 +3,8 @@ mod view;
 use serde::{Deserialize, Serialize};
 use mitm_core::db::InterceptRule;
 use mitm_core::state::PendingFlowPayload;
-use crate::format::{headers_to_text, parse_header_lines};
+use mitm_core::repeater::HeaderItem;
+use crate::features::request_editor::captured::header_items;
 
 pub use view::show;
 
@@ -31,7 +32,7 @@ impl Default for RuleDraft {
 pub struct FlowEdit {
     pub url: String,
     pub method: String,
-    pub headers: String,
+    pub headers: Vec<HeaderItem>,
     pub body: String,
 }
 
@@ -114,13 +115,18 @@ impl InterceptState {
             self.edit = FlowEdit {
                 url: p.url.clone(),
                 method: p.method.clone(),
-                headers: headers_to_text(&p.headers),
+                headers: header_items(&p.headers),
                 body: p.body_text.clone(),
             };
         }
     }
 
     pub fn edited_headers(&self) -> Vec<(String, String)> {
-        parse_header_lines(&self.edit.headers)
+        self.edit
+            .headers
+            .iter()
+            .filter(|h| h.enabled && !h.key.trim().is_empty())
+            .map(|h| (h.key.clone(), h.value.clone()))
+            .collect()
     }
 }
