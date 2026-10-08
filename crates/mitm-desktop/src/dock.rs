@@ -1,6 +1,6 @@
 use std::path::Path;
 use eframe::egui;
-use egui_dock::{DockState, TabIndex};
+use egui_dock::{DockState, NodePath, TabIndex};
 use crate::command::Commands;
 use crate::features;
 use crate::widgets::template;
@@ -58,6 +58,51 @@ pub fn open_tab(dock: &mut DockState<Tab>, tab: Tab) {
         }
         None => dock.push_to_focused_leaf(tab),
     }
+}
+
+/// egui_dock's tab bar background only senses hover, so a right-click on its empty part goes to an area
+/// registered here before the dock draws. Tabs are added later and still take their own clicks.
+pub fn tab_bar_menus(ui: &mut egui::Ui, dock: &DockState<Tab>) -> Option<(NodePath, Tab)> {
+    let mut picked = None;
+    for (path, leaf) in dock.iter_leaves() {
+        if !path.surface.is_main() || leaf.tab_bar_hidden || leaf.collapsed {
+            continue;
+        }
+        let bar = egui::Rect::from_min_max(leaf.rect.min, egui::pos2(leaf.rect.max.x, leaf.viewport.min.y));
+        if !bar.is_positive() {
+            continue;
+        }
+        let response = ui.interact(bar, ui.id().with(("tab_bar_menu", path)), egui::Sense::click());
+        response.context_menu(|ui| {
+            for tab in Tab::ALL {
+                if ui.selectable_label(leaf.tabs.contains(&tab), tab.name()).clicked() {
+                    picked = Some((path, tab));
+                    ui.close();
+                }
+            }
+        });
+    }
+    picked
+}
+
+/// Opens `tab` in the leaf at `target`, moving it there if it's open in another leaf.
+pub fn open_in_leaf(dock: &mut DockState<Tab>, target: NodePath, tab: Tab) {
+    let anchor = dock.leaf(target).ok().and_then(|leaf| leaf.tabs.first().copied());
+    if let Some(from) = dock.find_tab(&tab) {
+        if from.surface == target.surface && from.node == target.node {
+            let _ = dock.set_active_tab(from);
+            return;
+        }
+        dock.remove_tab(from);
+    }
+    // Removing the tab can collapse its old leaf and renumber the tree, so find the target again by a tab it holds.
+    let target = anchor
+        .and_then(|anchor| dock.find_tab(&anchor))
+        .map_or(target, |p| NodePath { surface: p.surface, node: p.node });
+    if let Ok(leaf) = dock.leaf_mut(target) {
+        leaf.append_tab(tab);
+    }
+    dock.set_focused_node_and_surface(target);
 }
 
 pub fn focus_tab_at(dock: &mut DockState<Tab>, index: usize) {
@@ -143,5 +188,39 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Tab::Collections => [false, true],
             _ => [false, false],
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui_dock::{NodeIndex, SurfaceIndex};
+
+    fn leaf_of(dock: &DockState<Tab>, tab: Tab) -> NodePath {
+        let p = dock.find_tab(&tab).unwrap();
+        NodePath { surface: p.surface, node: p.node }
+    }
+
+    #[test]
+    fn opening_into_a_leaf_adds_activates_or_moves() {
+        let mut dock = DockState::new(vec![Tab::Traffic, Tab::Intercept]);
+        dock.main_surface_mut().split_right(NodeIndex::root(), 0.5, vec![Tab::Repeater]);
+        let left = leaf_of(&dock, Tab::Traffic);
+        assert_eq!(left.surface, SurfaceIndex::main());
+
+        open_in_leaf(&mut dock, left, Tab::Fuzzer);
+        assert_eq!(leaf_of(&dock, Tab::Fuzzer), left);
+
+        open_in_leaf(&mut dock, left, Tab::Traffic);
+        assert_eq!(dock.leaf(left).unwrap().active, TabIndex(0));
+
+        // Moving the right leaf's only tab collapses that leaf and renumbers the tree.
+        open_in_leaf(&mut dock, left, Tab::Repeater);
+        let traffic_leaf = leaf_of(&dock, Tab::Traffic);
+        assert_eq!(leaf_of(&dock, Tab::Repeater), traffic_leaf);
+        assert_eq!(dock.iter_leaves().count(), 1);
+        let leaf = dock.leaf(traffic_leaf).unwrap();
+        assert_eq!(leaf.tabs.len(), 4);
+        assert_eq!(leaf.tabs[leaf.active.0], Tab::Repeater);
     }
 }

@@ -716,6 +716,9 @@ impl eframe::App for MitmApp {
             top_bar::show(ui, &mut self.state, &self.dock, &mut self.cmds);
         });
 
+        if let Some((path, tab)) = dock::tab_bar_menus(ui, &self.dock) {
+            dock::open_in_leaf(&mut self.dock, path, tab);
+        }
         let mut viewer = TabViewer {
             state: &mut self.state,
             cmds: &mut self.cmds,
