@@ -4,6 +4,7 @@ use crate::features::encoding::EncodingState;
 use crate::features::fuzzer::FuzzerState;
 use crate::features::hashing::HashingState;
 use crate::features::hmac_tool::HmacToolState;
+use crate::features::json_diff::JsonDiffState;
 use crate::features::json_tools::JsonToolsState;
 use crate::features::inspector::InspectorState;
 use crate::features::intercept::InterceptState;
@@ -32,6 +33,7 @@ pub struct AppState {
     pub encoding: EncodingState,
     pub hashing: HashingState,
     pub hmac_tool: HmacToolState,
+    pub json_diff: JsonDiffState,
     pub json_tools: JsonToolsState,
     pub database: crate::features::database::DatabaseState,
     pub environments: crate::features::environments::EnvironmentsState,

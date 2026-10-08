@@ -21,11 +21,12 @@ pub enum Tab {
     Encoding,
     Hashing,
     HmacTool,
+    JsonDiff,
     JsonTools,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 14] = [
+    pub const ALL: [Tab; 15] = [
         Tab::Traffic,
         Tab::Repeater,
         Tab::Fuzzer,
@@ -39,6 +40,7 @@ impl Tab {
         Tab::Encoding,
         Tab::Hashing,
         Tab::HmacTool,
+        Tab::JsonDiff,
         Tab::JsonTools,
     ];
 
@@ -57,12 +59,14 @@ impl Tab {
             Tab::Encoding => "Encoding tool",
             Tab::Hashing => "Hashing tool",
             Tab::HmacTool => "HMAC signature",
+            Tab::JsonDiff => "JSON Diff",
             Tab::JsonTools => "JSON Tools",
         }
     }
 
     /// Utility tabs, in the order they appear under the **Utilities ▸** submenu.
     pub const UTILITIES: &'static [Tab] = &[
+        Tab::JsonDiff,
         Tab::JsonTools,
         Tab::Encoding,
         Tab::Hashing,
@@ -207,6 +211,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Tab::Encoding => features::encoding::show(ui, &mut state.encoding),
             Tab::Hashing => features::hashing::show(ui, &mut state.hashing, cmds),
             Tab::HmacTool => features::hmac_tool::show(ui, &mut state.hmac_tool),
+            Tab::JsonDiff => features::json_diff::show(ui, &mut state.json_diff),
             Tab::JsonTools => features::json_tools::show(ui, &mut state.json_tools),
             Tab::Environments => features::environments::show(ui, &mut state.environments, cmds),
             Tab::Settings => features::settings::show(

@@ -3,6 +3,7 @@ use eframe::egui::{self, RichText};
 use similar::{ChangeTag, TextDiff};
 use crate::theme::Tone;
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct DiffLine {
     pub tag: ChangeTag,
     pub text: String,
@@ -19,8 +20,22 @@ pub fn diff_lines(before: &str, after: &str) -> Vec<DiffLine> {
 }
 
 pub fn show(ui: &mut egui::Ui, id_salt: &str, lines: &[DiffLine]) {
+    show_internal(ui, id_salt, lines, Some(260.0))
+}
+
+pub fn show_fill(ui: &mut egui::Ui, id_salt: &str, lines: &[DiffLine]) {
+    show_internal(ui, id_salt, lines, None)
+}
+
+fn show_internal(ui: &mut egui::Ui, id_salt: &str, lines: &[DiffLine], max_h: Option<f32>) {
     let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
-    egui::ScrollArea::both().id_salt(id_salt).max_height(260.0).auto_shrink([false, true]).show_rows(ui, row_height, lines.len(), |ui, rows| {
+    let mut area = egui::ScrollArea::both().id_salt(id_salt);
+    if let Some(h) = max_h {
+        area = area.max_height(h).auto_shrink([false, true]);
+    } else {
+        area = area.auto_shrink([false, false]);
+    }
+    area.show_rows(ui, row_height, lines.len(), |ui, rows| {
         for line in &lines[rows] {
             let (prefix, tone) = match line.tag {
                 ChangeTag::Insert => ("+ ", Some(Tone::Success)),

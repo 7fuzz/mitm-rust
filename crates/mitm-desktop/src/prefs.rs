@@ -8,6 +8,7 @@ use crate::features::encoding::EncodingPrefs;
 use crate::features::fuzzer::FuzzerPrefs;
 use crate::features::hashing::HashingPrefs;
 use crate::features::hmac_tool::HmacToolPrefs;
+use crate::features::json_diff::JsonDiffPrefs;
 use crate::features::json_tools::JsonToolsPrefs;
 use crate::features::inspector::InspectorPrefs;
 use crate::features::intercept::InterceptPrefs;
@@ -83,6 +84,10 @@ impl Section for HmacToolPrefs {
     const KEY: &'static str = "hmac_tool";
 }
 
+impl Section for JsonDiffPrefs {
+    const KEY: &'static str = "json_diff";
+}
+
 impl Section for JsonToolsPrefs {
     const KEY: &'static str = "json_tools";
 }
@@ -105,6 +110,7 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     state.encoding.prefs = load(storage);
     state.hashing.prefs = load(storage);
     state.hmac_tool.prefs = load(storage);
+    state.json_diff.prefs = load(storage);
     state.json_tools.prefs = load(storage);
     state.settings = load(storage);
     state.traffic.prefs = load(storage);
@@ -123,6 +129,7 @@ pub fn carry_over(from: &mut AppState, to: &mut AppState) {
     to.encoding.prefs = std::mem::take(&mut from.encoding.prefs);
     to.hashing.prefs = std::mem::take(&mut from.hashing.prefs);
     to.hmac_tool.prefs = std::mem::take(&mut from.hmac_tool.prefs);
+    to.json_diff.prefs = std::mem::take(&mut from.json_diff.prefs);
     to.json_tools.prefs = std::mem::take(&mut from.json_tools.prefs);
     to.settings = std::mem::take(&mut from.settings);
     to.traffic.prefs = std::mem::take(&mut from.traffic.prefs);
@@ -141,6 +148,7 @@ pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppStat
     save(storage, &state.encoding.prefs);
     save(storage, &state.hashing.prefs);
     save(storage, &state.hmac_tool.prefs);
+    save(storage, &state.json_diff.prefs);
     save(storage, &state.json_tools.prefs);
     save(storage, &state.settings);
     save(storage, &state.traffic.prefs);
