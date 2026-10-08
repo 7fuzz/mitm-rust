@@ -40,6 +40,7 @@ pub struct MitmApp {
     fuzz_search: Jobs<(i64, String, Vec<u32>)>,
     ws_connects: Jobs<Result<mitm_core::state::WebSocketConn, String>>,
     ws_actions: Jobs<Result<(), String>>,
+    webhook_actions: Jobs<Result<(), String>>,
 }
 
 impl MitmApp {
@@ -61,6 +62,7 @@ impl MitmApp {
             fuzz_search: Jobs::default(),
             ws_connects: Jobs::default(),
             ws_actions: Jobs::default(),
+            webhook_actions: Jobs::default(),
         }
     }
 
@@ -487,6 +489,50 @@ impl MitmApp {
                     self.ws_actions.reply(ctx).send(Err(e));
                 }
             }
+            AppCommand::StartWebhookReceiver => {
+                let port = self.state.webhooks.port;
+                match self.rt.block_on(self.core.start_webhook_receiver(port)) {
+                    Ok(()) => self.state.webhooks.running = true,
+                    Err(e) => {
+                        self.state.webhooks.running = false;
+                        self.webhook_actions.reply(ctx).send(Err(e));
+                    }
+                }
+            }
+            AppCommand::StopWebhookReceiver => match self.rt.block_on(self.core.stop_webhook_receiver()) {
+                Ok(()) => self.state.webhooks.running = false,
+                Err(e) => self.webhook_actions.reply(ctx).send(Err(e)),
+            },
+            AppCommand::SetWebhookPort(port) => {
+                if let Err(e) = self.rt.block_on(self.core.set_webhook_port(port)) {
+                    self.webhook_actions.reply(ctx).send(Err(e));
+                }
+            }
+            AppCommand::CreateWebhookEndpoint { name, path, secret } => {
+                match self.core.create_webhook_endpoint(name, path, secret) {
+                    Ok(endpoint) => self.state.webhooks.created(endpoint),
+                    Err(e) => self.webhook_actions.reply(ctx).send(Err(e)),
+                }
+            }
+            AppCommand::DeleteWebhookEndpoint(id) => match self.core.delete_webhook_endpoint(&id) {
+                Ok(()) => self.state.webhooks.removed(&id),
+                Err(e) => self.webhook_actions.reply(ctx).send(Err(e)),
+            },
+            AppCommand::CopyWebhookTestCurl(id) => {
+                if let Some(endpoint) = self.state.webhooks.endpoints.iter().find(|e| e.id == id) {
+                    let body = r#"{"event":"test","message":"hello"}"#;
+                    let mut curl = format!(
+                        "curl -X POST '{}' \\\n  -H 'Content-Type: application/json'",
+                        self.state.webhooks.endpoint_url(&endpoint.path)
+                    );
+                    if !endpoint.secret_key.trim().is_empty() {
+                        let sig = self.core.calculate_webhook_signature(&endpoint.secret_key, body, "github");
+                        curl.push_str(&format!(" \\\n  -H '{}: {}'", sig.header_name, sig.header_value));
+                    }
+                    curl.push_str(&format!(" \\\n  -d '{}'", body));
+                    ctx.copy_text(curl);
+                }
+            }
             AppCommand::SelectWorkspace(id) => {
                 let _ = mitm_core::workspace::set_active_workspace_db(db_path, &id);
                 self.state.environments.active_workspace_id = id.clone();
@@ -705,6 +751,9 @@ impl eframe::App for MitmApp {
         for error in self.ws_actions.drain().filter_map(Result::err) {
             top_bar::flash(ui, Err(error));
         }
+        for error in self.webhook_actions.drain().filter_map(Result::err) {
+            top_bar::flash(ui, Err(error));
+        }
         for result in self.ca_jobs.drain().flatten() {
             self.state.certificate.status = Some(match result {
                 Ok(path) => (format!("Exported to {}", path.display()), Tone::Success),
@@ -778,6 +827,9 @@ fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {
     state.rewrite.enabled = core.rewrite_enabled();
     state.rewrite.scope = rt.block_on(core.rewrite_source_scope());
     state.websockets.mitm_enabled = rt.block_on(core.ws_mitm_enabled());
+    let webhook = rt.block_on(core.webhook_status());
+    state.webhooks.running = webhook.is_running;
+    state.webhooks.port = webhook.port;
     state
 }
 

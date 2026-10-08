@@ -15,12 +15,13 @@ pub enum Tab {
     Rewrite,
     Collections,
     WebSockets,
+    Webhooks,
     Environments,
     Settings,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 9] = [
+    pub const ALL: [Tab; 10] = [
         Tab::Traffic,
         Tab::Repeater,
         Tab::Fuzzer,
@@ -28,6 +29,7 @@ impl Tab {
         Tab::Rewrite,
         Tab::Collections,
         Tab::WebSockets,
+        Tab::Webhooks,
         Tab::Environments,
         Tab::Settings,
     ];
@@ -41,6 +43,7 @@ impl Tab {
             Tab::Rewrite => "Rewrite",
             Tab::Collections => "Collections",
             Tab::WebSockets => "WebSockets",
+            Tab::Webhooks => "Webhooks",
             Tab::Environments => "Environments",
             Tab::Settings => "Settings",
         }
@@ -167,6 +170,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Tab::Rewrite => features::rewrite::show(ui, &mut state.rewrite, &state.proxy.listeners, self.db_path, cmds),
             Tab::Collections => features::collections::show(ui, &mut state.collections, cmds),
             Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
+            Tab::Webhooks => features::webhooks::show(ui, &mut state.webhooks, cmds),
             Tab::Environments => features::environments::show(ui, &mut state.environments, cmds),
             Tab::Settings => features::settings::show(
                 ui,

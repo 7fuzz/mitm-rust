@@ -9,4 +9,5 @@ pub mod rewrite;
 pub mod request_editor;
 pub mod settings;
 pub mod traffic;
+pub mod webhooks;
 pub mod websockets;

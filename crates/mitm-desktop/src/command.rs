@@ -86,6 +86,13 @@ pub enum AppCommand {
     DeleteWsSession(i64),
     SetWsMitm(bool),
 
+    StartWebhookReceiver,
+    StopWebhookReceiver,
+    SetWebhookPort(u16),
+    CreateWebhookEndpoint { name: String, path: String, secret: String },
+    DeleteWebhookEndpoint(String),
+    CopyWebhookTestCurl(String),
+
     SelectWorkspace(String),
     SelectEnvironment(Option<String>),
     CreateWorkspace(String),
