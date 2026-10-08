@@ -23,10 +23,11 @@ pub enum Tab {
     HmacTool,
     JsonDiff,
     JsonTools,
+    Cvss,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 15] = [
+    pub const ALL: [Tab; 16] = [
         Tab::Traffic,
         Tab::Repeater,
         Tab::Fuzzer,
@@ -42,6 +43,7 @@ impl Tab {
         Tab::HmacTool,
         Tab::JsonDiff,
         Tab::JsonTools,
+        Tab::Cvss,
     ];
 
     pub fn name(&self) -> &'static str {
@@ -61,6 +63,7 @@ impl Tab {
             Tab::HmacTool => "HMAC signature",
             Tab::JsonDiff => "JSON Diff",
             Tab::JsonTools => "JSON Tools",
+            Tab::Cvss => "CVSS",
         }
     }
 
@@ -68,6 +71,7 @@ impl Tab {
     pub const UTILITIES: &'static [Tab] = &[
         Tab::JsonDiff,
         Tab::JsonTools,
+        Tab::Cvss,
         Tab::Encoding,
         Tab::Hashing,
         Tab::HmacTool,
@@ -213,6 +217,7 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Tab::HmacTool => features::hmac_tool::show(ui, &mut state.hmac_tool),
             Tab::JsonDiff => features::json_diff::show(ui, &mut state.json_diff),
             Tab::JsonTools => features::json_tools::show(ui, &mut state.json_tools),
+            Tab::Cvss => features::cvss::show(ui, &mut state.cvss),
             Tab::Environments => features::environments::show(ui, &mut state.environments, cmds),
             Tab::Settings => features::settings::show(
                 ui,

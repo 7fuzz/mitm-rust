@@ -1,4 +1,5 @@
 pub mod collections;
+pub mod cvss;
 pub mod database;
 pub mod encoding;
 pub mod environments;

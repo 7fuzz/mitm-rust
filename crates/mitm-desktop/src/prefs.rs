@@ -4,6 +4,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use crate::dock::{self, Tab};
 use crate::features::collections::CollectionsPrefs;
+use crate::features::cvss::CvssPrefs;
 use crate::features::encoding::EncodingPrefs;
 use crate::features::fuzzer::FuzzerPrefs;
 use crate::features::hashing::HashingPrefs;
@@ -84,6 +85,10 @@ impl Section for HmacToolPrefs {
     const KEY: &'static str = "hmac_tool";
 }
 
+impl Section for CvssPrefs {
+    const KEY: &'static str = "cvss";
+}
+
 impl Section for JsonDiffPrefs {
     const KEY: &'static str = "json_diff";
 }
@@ -107,6 +112,7 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     state.fuzzer.prefs = load(storage);
     state.websockets.prefs = load(storage);
     state.webhooks.prefs = load(storage);
+    state.cvss.prefs = load(storage);
     state.encoding.prefs = load(storage);
     state.hashing.prefs = load(storage);
     state.hmac_tool.prefs = load(storage);
@@ -126,6 +132,7 @@ pub fn carry_over(from: &mut AppState, to: &mut AppState) {
     to.fuzzer.prefs = std::mem::take(&mut from.fuzzer.prefs);
     to.websockets.prefs = std::mem::take(&mut from.websockets.prefs);
     to.webhooks.prefs = std::mem::take(&mut from.webhooks.prefs);
+    to.cvss.prefs = std::mem::take(&mut from.cvss.prefs);
     to.encoding.prefs = std::mem::take(&mut from.encoding.prefs);
     to.hashing.prefs = std::mem::take(&mut from.hashing.prefs);
     to.hmac_tool.prefs = std::mem::take(&mut from.hmac_tool.prefs);
@@ -145,6 +152,7 @@ pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppStat
     save(storage, &state.fuzzer.prefs);
     save(storage, &state.websockets.prefs);
     save(storage, &state.webhooks.prefs);
+    save(storage, &state.cvss.prefs);
     save(storage, &state.encoding.prefs);
     save(storage, &state.hashing.prefs);
     save(storage, &state.hmac_tool.prefs);

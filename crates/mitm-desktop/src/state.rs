@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use crate::features::collections::CollectionsState;
+use crate::features::cvss::CvssState;
 use crate::features::encoding::EncodingState;
 use crate::features::fuzzer::FuzzerState;
 use crate::features::hashing::HashingState;
@@ -30,6 +31,7 @@ pub struct AppState {
     pub collections: CollectionsState,
     pub websockets: WebSocketsState,
     pub webhooks: WebhooksState,
+    pub cvss: CvssState,
     pub encoding: EncodingState,
     pub hashing: HashingState,
     pub hmac_tool: HmacToolState,
