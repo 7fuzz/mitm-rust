@@ -55,18 +55,19 @@ pub fn load_workspace_steps(conn: &Connection, workspace_id: &str) -> rusqlite::
 
 /// Replaces a request's steps. Ids of missing requests and of the request itself are dropped.
 pub fn save_steps(conn: &Connection, request_id: &str, pre: &[String], post: &[String]) -> rusqlite::Result<()> {
-    let tx = conn.unchecked_transaction()?;
-    tx.execute("DELETE FROM request_steps WHERE request_id = ?", params![request_id])?;
+    // Inside a caller's transaction the steps are already atomic, and SQLite can't nest another.
+    let tx = conn.is_autocommit().then(|| conn.unchecked_transaction()).transpose()?;
+    conn.execute("DELETE FROM request_steps WHERE request_id = ?", params![request_id])?;
     for (phase, ids) in [("pre", pre), ("post", post)] {
         for (position, step_id) in ids.iter().enumerate() {
-            tx.execute(
+            conn.execute(
                 "INSERT INTO request_steps (request_id, phase, position, step_request_id)
                  SELECT ?1, ?2, ?3, id FROM requests WHERE id = ?4 AND id != ?1",
                 params![request_id, phase, position as i64, step_id],
             )?;
         }
     }
-    tx.commit()
+    tx.map_or(Ok(()), |tx| tx.commit())
 }
 
 /// Gives a copied request the original's steps, pointing at copies where `copies` maps old ids to new ones.
@@ -147,6 +148,17 @@ mod tests {
         assert!(main.pre.is_empty());
         assert_eq!(main.post, ["logout"]);
         assert_eq!(rows, 1);
+    }
+
+    #[test]
+    fn saving_inside_an_outer_transaction_rolls_back_with_it() {
+        let (path, mut conn) = db_with_requests(&["main", "token"]);
+        let tx = conn.transaction().unwrap();
+        save_steps(&tx, "main", &ids(&["token"]), &[]).unwrap();
+        tx.rollback().unwrap();
+        let steps = load_steps(&conn, "main").unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(steps.pre.is_empty());
     }
 
     #[test]
