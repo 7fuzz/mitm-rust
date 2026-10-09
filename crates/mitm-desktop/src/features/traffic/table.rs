@@ -44,9 +44,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], fold
             let output = builder
                 .header(24.0, |mut header| {
                     for &col in &columns {
-                        // The returned rect only covers the label; the response spans the whole column.
-                        let (_, cell) = header.col(|ui| header_cell(ui, col, &mut state.prefs.columns));
-                        let rect = cell.rect;
+                        let mut rect = egui::Rect::NOTHING;
+                        header.col(|ui| rect = header_cell(ui, col, &mut state.prefs.columns));
                         remember_width(&mut state.prefs.widths, col, rect.width());
                         if edge_double_clicked(&ctx, rect) {
                             state.prefs.widths.remove(&col);
@@ -235,8 +234,9 @@ fn remember_width(widths: &mut HashMap<ColumnId, f32>, col: ColumnId, width: f32
     }
 }
 
-// The whole cell is the drag handle and drop zone; dropping on its right half places the column after it.
-fn header_cell(ui: &mut egui::Ui, col: ColumnId, layout: &mut ColumnLayout) {
+/// The whole cell is the drag handle and drop zone; dropping on its right half places the column after it.
+/// Returns the cell's rect: the column's real width, unlike the cell response, which grows with its content.
+fn header_cell(ui: &mut egui::Ui, col: ColumnId, layout: &mut ColumnLayout) -> egui::Rect {
     aligned(ui, col.align(), |ui| {
         ui.add(egui::Label::new(RichText::new(col.label()).strong().size(11.0)).selectable(false));
     });
@@ -253,6 +253,7 @@ fn header_cell(ui: &mut egui::Ui, col: ColumnId, layout: &mut ColumnLayout) {
         layout.move_next_to(*dragged, col, after);
     }
     response.context_menu(|ui| column_menu(ui, layout, Some(col)));
+    rect
 }
 
 fn column_menu(ui: &mut egui::Ui, layout: &mut ColumnLayout, clicked: Option<ColumnId>) {
@@ -358,4 +359,32 @@ fn new_folder_entry(ui: &mut egui::Ui, flow_id: i64, cmds: &mut Commands) {
         ui.close();
     }
     ui.data_mut(|d| d.insert_temp(id, name));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn column_widths_survive_restarts_unchanged() {
+        let mut state = TrafficState::default();
+        let restored = state.prefs.columns.visible().iter().map(|c| (*c, c.default_width() + 7.0)).collect();
+        state.prefs.widths = restored;
+        let before = state.prefs.widths.clone();
+        for _restart in 0..3 {
+            let ctx = egui::Context::default();
+            let mut cmds = Commands::default();
+            for _frame in 0..3 {
+                let input = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200.0, 600.0))),
+                    ..Default::default()
+                };
+                let mut output = ctx.run_ui(input, |ui| show(ui, &mut state, &[], &[], &mut cmds));
+                output.textures_delta.clear();
+            }
+        }
+        for (col, width) in &before {
+            assert!((state.prefs.widths[col] - width).abs() < 0.5, "{col:?}: {width} became {}", state.prefs.widths[col]);
+        }
+    }
 }
