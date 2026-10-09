@@ -1,6 +1,6 @@
 use base64::Engine;
 use mitm_core::encoding::{MultipartBodySpec, MultipartFieldSpec, UrlEncodedParamSpec};
-use crate::format::pretty_json;
+use crate::util::format::pretty_json;
 use crate::widgets::form_view::{FormField, FormValue};
 use super::url_params::{decode, new_id};
 

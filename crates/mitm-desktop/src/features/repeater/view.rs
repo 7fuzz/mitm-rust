@@ -1,5 +1,5 @@
 use eframe::egui::{self, RichText};
-use crate::command::{AppCommand, Commands};
+use crate::app::command::{AppCommand, Commands};
 use crate::features::request_editor::response_panel::{self, header_pairs, RequestCopy, ResponseData};
 use crate::features::request_editor::run_list::{self, Run, RunAction};
 use crate::features::request_editor::url_params::build_url;

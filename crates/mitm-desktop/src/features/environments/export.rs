@@ -1,7 +1,7 @@
 use eframe::egui;
 use mitm_core::workspace::file::{ExportOptions, AUTO_VARIANT};
 use mitm_core::workspace::Environment;
-use crate::command::{AppCommand, Commands};
+use crate::app::command::{AppCommand, Commands};
 
 /// Asks what goes into the file; only shown when the workspace has secrets or `(auto)` values.
 #[derive(Default)]

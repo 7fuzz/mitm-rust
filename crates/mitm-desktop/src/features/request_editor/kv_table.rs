@@ -1,7 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::encoding::UrlEncodedParamSpec;
 use mitm_core::repeater::{HeaderItem, ParamItem};
-use crate::theme::{self, Tone};
+use crate::ui::theme::{self, Tone};
 use crate::widgets::template;
 use super::url_params::new_id;
 

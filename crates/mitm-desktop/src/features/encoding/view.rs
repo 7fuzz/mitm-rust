@@ -1,5 +1,5 @@
 use eframe::egui::{self};
-use crate::theme::{self, Tone};
+use crate::ui::theme::{self, Tone};
 use crate::widgets::code_view::{self, Lang};
 use crate::widgets::split;
 use super::{Algorithm, Computed, EncodingPrefs, EncodingState, HexFmt};

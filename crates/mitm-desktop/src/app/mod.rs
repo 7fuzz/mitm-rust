@@ -1,3 +1,8 @@
+pub mod command;
+pub mod jobs;
+pub mod prefs;
+pub mod state;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 use crossbeam_channel::Receiver;
@@ -9,20 +14,20 @@ use mitm_core::state::{ListenerConfig, ProxyMode};
 use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
 use tokio::sync::broadcast::error::RecvError;
-use crate::command::{AppCommand, Commands};
-use crate::dock::{self, Tab, TabViewer};
+use command::{AppCommand, Commands};
+use crate::ui::dock::{self, Tab, TabViewer};
 use mitm_core::collections::execute::ExecutionResult;
 use mitm_core::repeater::RepeaterExecutionResult;
 use crate::features::collections::CollectionsCmd;
 use crate::features::request_editor::captured::CapturedRequest;
 use crate::features::environments::{self, QuickVarScope};
 use crate::features::settings::ProxyState;
-use crate::format::Exchange;
-use crate::jobs::Jobs;
-use crate::state::AppState;
-use crate::palette::{self, PaletteState};
-use crate::theme::Tone;
-use crate::{prefs, shortcuts, top_bar};
+use crate::util::format::Exchange;
+use jobs::Jobs;
+use state::AppState;
+use crate::ui::palette::{self, PaletteState};
+use crate::ui::theme::Tone;
+use crate::ui::{shortcuts, top_bar};
 
 pub struct MitmApp {
     dock: DockState<Tab>,
@@ -153,7 +158,7 @@ impl MitmApp {
                     mitm_core::CaFormat::Der => ("mitm-ca.cer", "DER certificate", "cer"),
                 };
                 self.ca_jobs.spawn(&self.rt, ctx, async move {
-                    let path = crate::files::pick_save(file_name, &[(filter_name, &[ext])]).await?;
+                    let path = crate::util::files::pick_save(file_name, &[(filter_name, &[ext])]).await?;
                     let res = core.export_ca(&path, format).map(|_| path);
                     Some(res)
                 });
@@ -165,7 +170,7 @@ impl MitmApp {
             }
             AppCommand::OpenCaFolder => {
                 if let Ok(info) = self.core.ca_info() {
-                    let _ = crate::files::open_external(&info.ca_dir);
+                    let _ = crate::util::files::open_external(&info.ca_dir);
                 }
             }
             AppCommand::RegenerateCa => {
@@ -251,9 +256,9 @@ impl MitmApp {
             }
             AppCommand::SaveBody(body) => {
                 self.file_saves.spawn(&self.rt, ctx, async move {
-                    let path = crate::files::pick_save(&body.file_name, &[]).await?;
+                    let path = crate::util::files::pick_save(&body.file_name, &[]).await?;
                     let result = std::fs::write(&path, &body.bytes).map_err(|e| e.to_string());
-                    Some(result.map(|_| format!("Saved {}", crate::files::file_name(&path))))
+                    Some(result.map(|_| format!("Saved {}", crate::util::files::file_name(&path))))
                 });
             }
             AppCommand::SetHistoryLimit(settings) => {
@@ -344,7 +349,7 @@ impl MitmApp {
                     mitm_core::fuzzer::get_result_db(db_path, run_id, idx).ok().flatten()
                 };
                 if let Some(result) = result {
-                    ctx.copy_text(crate::format::Exchange::from_fuzz_result(&result).curl());
+                    ctx.copy_text(crate::util::format::Exchange::from_fuzz_result(&result).curl());
                 }
             }
             AppCommand::SaveFuzzRun { run_id, name } => {
@@ -627,7 +632,7 @@ impl MitmApp {
             AppCommand::OpenImport => self.state.environments.import.open_with(None, String::new()),
             AppCommand::PickImportFile => {
                 self.import_files.spawn(&self.rt, ctx, async {
-                    let path = crate::files::pick_open(&[("JSON", &["json"])]).await?;
+                    let path = crate::util::files::pick_open(&[("JSON", &["json"])]).await?;
                     let name = path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned());
                     Some(std::fs::read_to_string(&path).map(|json| (name, json)).map_err(|e| e.to_string()))
                 });
@@ -646,14 +651,14 @@ impl MitmApp {
                 let db_path = db_path.clone();
                 self.file_saves.spawn(&self.rt, ctx, async move {
                     let name = format!("{}.mitm.json", workspace.name);
-                    let path = crate::files::pick_save(&name, &[("Workspace file", &["json"])]).await?;
+                    let path = crate::util::files::pick_save(&name, &[("Workspace file", &["json"])]).await?;
                     let result = mitm_core::workspace::export::export_workspace_file_db(
                         &db_path,
                         &workspace.id,
                         &path.to_string_lossy(),
                         options,
                     );
-                    Some(result.map(|_| format!("Exported {}", crate::files::file_name(&path))))
+                    Some(result.map(|_| format!("Exported {}", crate::util::files::file_name(&path))))
                 });
             }
             AppCommand::ImportWorkspace { json, target, name } => {

@@ -1,8 +1,8 @@
 use eframe::egui::{self, Key, Modifiers, RichText};
 use mitm_core::state::WebSocketConn;
 use serde::{Deserialize, Serialize};
-use crate::command::{AppCommand, Commands};
-use crate::theme::{self, Tone};
+use crate::app::command::{AppCommand, Commands};
+use crate::ui::theme::{self, Tone};
 use crate::widgets::code_view::{self, Lang};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

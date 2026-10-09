@@ -1,7 +1,7 @@
 use std::time::Duration;
 use eframe::egui::{self, RichText};
 use similar::{ChangeTag, TextDiff};
-use crate::theme::Tone;
+use crate::ui::theme::Tone;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DiffLine {

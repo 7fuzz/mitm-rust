@@ -1,6 +1,6 @@
 use eframe::egui;
 use mitm_core::repeater::HeaderItem;
-use crate::command::{AppCommand, Commands};
+use crate::app::command::{AppCommand, Commands};
 use crate::features::request_editor::kv_table::{self, KvLabels};
 
 #[derive(Default)]

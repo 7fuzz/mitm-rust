@@ -3,8 +3,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use eframe::egui::{self, Color32, RichText};
 use serde_json::Value;
-use crate::format::{decode_base64, hex_dump, looks_like_base64};
-use crate::theme::Tone;
+use crate::util::format::{decode_base64, hex_dump, looks_like_base64};
+use crate::ui::theme::Tone;
 use crate::widgets::flash;
 use crate::widgets::search::search_field;
 

@@ -2,8 +2,8 @@ use std::time::Duration;
 use eframe::egui::{self, RichText};
 use mitm_core::instance::{self, Claim, OtherInstance};
 use tokio::runtime::Runtime;
-use crate::jobs::Jobs;
-use crate::theme::{self, Tone};
+use crate::app::jobs::Jobs;
+use crate::ui::theme::{self, Tone};
 
 const TAKE_OVER_ATTEMPTS: u32 = 50;
 

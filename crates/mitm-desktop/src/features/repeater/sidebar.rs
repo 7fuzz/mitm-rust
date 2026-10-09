@@ -1,7 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::repeater::RepeaterTab;
-use crate::command::{AppCommand, Commands};
-use crate::theme::{self, Tone};
+use crate::app::command::{AppCommand, Commands};
+use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::{method_text, status_text};
 use crate::widgets::search::search_field;
 use super::RepeaterState;

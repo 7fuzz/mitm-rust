@@ -6,7 +6,7 @@ use mitm_core::events::{CoreEvent, EventBus, MigrationProgressPayload};
 use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
 use tokio::sync::broadcast::{self, error::TryRecvError};
-use crate::jobs::Jobs;
+use crate::app::jobs::Jobs;
 
 pub struct Starting {
     events: broadcast::Receiver<CoreEvent>,

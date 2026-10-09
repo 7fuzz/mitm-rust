@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use mitm_core::repeater::HeaderItem;
 use std::path::Path;
 use mitm_core::state::{HistoryEntry, RewriteHistoryEntry, RewriteRule, SourceScope};
-use crate::theme::Tone;
+use crate::ui::theme::Tone;
 
 pub use rules::show;
 

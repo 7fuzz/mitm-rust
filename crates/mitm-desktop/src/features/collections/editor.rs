@@ -1,12 +1,12 @@
 use eframe::egui::{self, RichText};
 use mitm_core::collections::{CollectionTreeItem, RequestItem};
-use crate::command::{AppCommand, Commands};
+use crate::app::command::{AppCommand, Commands};
 use crate::features::request_editor::body::{convert, is_multipart, is_urlencoded, COLLECTION_BODY_TYPES};
 use crate::features::request_editor::kv_table::{self, KvLabels};
 use crate::features::request_editor::method::method_combo;
 use crate::features::request_editor::steps::{self, StepOption};
 use crate::features::request_editor::{body_editor, extract_rules};
-use crate::theme::{self, Tone};
+use crate::ui::theme::{self, Tone};
 use crate::features::request_editor::url_field::url_field;
 use super::{docs, CollectionsCmd, CollectionsState, DocsMode, EditorTab, PreviewMode};
 

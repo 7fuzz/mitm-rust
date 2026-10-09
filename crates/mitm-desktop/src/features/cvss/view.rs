@@ -3,7 +3,7 @@ use mitm_core::utils::cvss::{
     AttackComplexity, AttackRequirements, AttackVector, CvssV3Base, CvssV4Base, CvssVersion, ImpactMetric,
     PrivilegesRequired, Scope, Severity, UserInteraction, UserInteractionV4,
 };
-use crate::theme::{self, Tone};
+use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::badge;
 use super::CvssState;
 

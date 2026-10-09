@@ -1,8 +1,8 @@
 use base64::Engine;
 use eframe::egui::{self, RichText};
 use mitm_core::encoding::MultipartFieldSpec;
-use crate::format::format_bytes;
-use crate::theme::{self, Tone};
+use crate::util::format::format_bytes;
+use crate::ui::theme::{self, Tone};
 use crate::widgets::template;
 use super::body::{is_multipart, is_urlencoded, read_multipart, read_urlencoded, store_multipart, store_urlencoded, text_field};
 use super::kv_table::{self, KvLabels};

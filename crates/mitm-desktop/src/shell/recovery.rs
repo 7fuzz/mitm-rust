@@ -2,9 +2,9 @@ use std::path::PathBuf;
 use eframe::egui::{self, RichText};
 use mitm_core::db::{recovery, InitError};
 use tokio::runtime::Runtime;
-use crate::files;
-use crate::jobs::Jobs;
-use crate::theme::{self, Tone};
+use crate::util::files;
+use crate::app::jobs::Jobs;
+use crate::ui::theme::{self, Tone};
 use crate::widgets::confirm::confirm_button;
 
 pub struct Recovery {

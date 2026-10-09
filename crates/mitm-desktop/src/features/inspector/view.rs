@@ -1,9 +1,9 @@
 use eframe::egui;
 use mitm_core::state::HistoryEntry;
-use crate::command::{AppCommand, Commands};
+use crate::app::command::{AppCommand, Commands};
 use crate::features::traffic::{FlowFlags, TrafficState};
-use crate::format::{format_bytes, format_duration};
-use crate::theme::{self, Tone};
+use crate::util::format::{format_bytes, format_duration};
+use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::{method_text, status_text};
 use crate::widgets::split;
 use crate::widgets::message_pane::{self as pane, PaneData};

@@ -1,6 +1,6 @@
 use eframe::egui::{self, RichText};
-use crate::format::format_bytes;
-use crate::theme::{self, Tone};
+use crate::util::format::format_bytes;
+use crate::ui::theme::{self, Tone};
 use super::message_pane::SaveBody;
 
 pub struct FormField {

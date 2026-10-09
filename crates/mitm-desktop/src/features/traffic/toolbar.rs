@@ -1,7 +1,7 @@
 use eframe::egui::containers::menu::{MenuButton, MenuConfig};
 use eframe::egui::{self, PopupCloseBehavior, RichText};
 use mitm_core::state::ListenerConfig;
-use crate::command::{AppCommand, Commands};
+use crate::app::command::{AppCommand, Commands};
 use crate::widgets::confirm::confirm_button;
 use crate::widgets::tri_state::tri_state_button;
 use super::{TrafficState, FLAGS, METHODS, STATUS_GROUPS};

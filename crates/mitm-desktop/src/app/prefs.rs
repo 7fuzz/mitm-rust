@@ -2,7 +2,7 @@ use eframe::Storage;
 use egui_dock::DockState;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use crate::dock::{self, Tab};
+use crate::ui::dock::{self, Tab};
 use crate::features::collections::CollectionsPrefs;
 use crate::features::cvss::CvssPrefs;
 use crate::features::encoding::EncodingPrefs;
@@ -19,7 +19,7 @@ use crate::features::settings::SettingsPrefs;
 use crate::features::traffic::TrafficPrefs;
 use crate::features::webhooks::WebhooksPrefs;
 use crate::features::websockets::WebSocketsPrefs;
-use crate::state::AppState;
+use crate::app::state::AppState;
 
 // Separate keys, so a section that stops parsing resets alone instead of wiping the rest.
 trait Section: Serialize + DeserializeOwned + Default {

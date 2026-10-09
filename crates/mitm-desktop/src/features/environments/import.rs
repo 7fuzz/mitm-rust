@@ -1,8 +1,8 @@
 use std::path::Path;
 use eframe::egui::{self, RichText};
 use mitm_core::workspace::import::{preview_workspace_import_db, ImportPreview};
-use crate::command::{AppCommand, Commands};
-use crate::theme::{self, Tone};
+use crate::app::command::{AppCommand, Commands};
+use crate::ui::theme::{self, Tone};
 
 #[derive(Default)]
 pub struct ImportState {

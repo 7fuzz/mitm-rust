@@ -5,7 +5,7 @@ use crate::features::request_editor::body_editor::code_editor;
 use crate::features::request_editor::captured::header_items;
 use crate::features::request_editor::kv_table::{self, KvLabels};
 use mitm_core::proxy::rewrite::preview_rewrite;
-use crate::theme::{self, Tone};
+use crate::ui::theme::{self, Tone};
 use super::ACTIONS;
 
 const MATCH_FIELDS: [(&str, &str); 6] =

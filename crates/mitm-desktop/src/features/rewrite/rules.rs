@@ -1,7 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::state::{ListenerConfig, RewriteRule};
-use crate::command::{AppCommand, Commands};
-use crate::theme;
+use crate::app::command::{AppCommand, Commands};
+use crate::ui::theme;
 use crate::widgets::{source_scope, split};
 use std::path::Path;
 use super::{action_label, action_tone, editor, log, RewriteState, RewriteView};

@@ -1,14 +1,14 @@
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use mitm_core::repeater::HeaderItem;
-use crate::command::{AppCommand, Commands};
+use crate::app::command::{AppCommand, Commands};
 use crate::features::request_editor::body::{content_type_for, convert, REPEATER_BODY_TYPES};
 use crate::features::request_editor::body_editor;
 use crate::features::request_editor::kv_table::{self, standard_headers, KvLabels};
 use crate::features::request_editor::method::method_combo;
 use crate::features::request_editor::url_params::{build_url, new_id, parse_query};
-use crate::format::{format_bytes, format_duration};
-use crate::theme::{self, Tone};
+use crate::util::format::{format_bytes, format_duration};
+use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::render_status_pill;
 use crate::widgets::tri_state::tri_state_button;
 use crate::widgets::{split, template};

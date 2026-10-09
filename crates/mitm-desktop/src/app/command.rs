@@ -2,9 +2,9 @@ use mitm_core::curl::ParsedCurl;
 use mitm_core::db::InterceptRule;
 use mitm_core::fuzzer::FuzzConfig;
 use mitm_core::state::{HistorySettings, ListenerConfig, ProxyMode};
-use crate::dock::Tab;
+use crate::ui::dock::Tab;
 use crate::features::collections::{CollectionsCmd, SaveTarget};
-use crate::format::{CopyFormat, CopyOptions};
+use crate::util::format::{CopyFormat, CopyOptions};
 use crate::widgets::message_pane::SaveBody;
 
 #[derive(Clone)]

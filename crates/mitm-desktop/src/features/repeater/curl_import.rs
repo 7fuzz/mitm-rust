@@ -1,7 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::curl::{parse_curl, ParsedCurl};
-use crate::command::{AppCommand, Commands};
-use crate::theme::{self, Tone};
+use crate::app::command::{AppCommand, Commands};
+use crate::ui::theme::{self, Tone};
 
 #[derive(Default)]
 pub struct CurlImport {

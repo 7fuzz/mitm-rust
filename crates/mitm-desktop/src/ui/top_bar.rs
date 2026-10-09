@@ -1,10 +1,10 @@
 use eframe::egui::{self, RichText};
 use mitm_core::state::ProxyMode;
-use crate::theme::{self, Tone};
+use crate::ui::theme::{self, Tone};
 use egui_dock::DockState;
-use crate::command::{AppCommand, Commands};
-use crate::dock::Tab;
-use crate::state::AppState;
+use crate::app::command::{AppCommand, Commands};
+use crate::ui::dock::Tab;
+use crate::app::state::AppState;
 use crate::widgets::flash;
 
 const FLASH_OK: &str = "top_bar_flash_ok";

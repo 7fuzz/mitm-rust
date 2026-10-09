@@ -1,6 +1,6 @@
 use eframe::egui::text::{LayoutJob, TextFormat};
 use eframe::egui::{Color32, FontId, Style, TextStyle};
-use crate::theme::Tone;
+use crate::ui::theme::Tone;
 
 const MAX_HIGHLIGHT_BYTES: usize = 1024 * 1024;
 

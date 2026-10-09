@@ -1,7 +1,7 @@
 use eframe::egui::{self, Align2, Key, Modifiers, RichText};
-use crate::command::{AppCommand, Commands};
-use crate::shortcuts;
-use crate::state::AppState;
+use crate::app::command::{AppCommand, Commands};
+use crate::ui::shortcuts;
+use crate::app::state::AppState;
 
 #[derive(Default)]
 pub struct PaletteState {
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn palette_items_include_workspaces_and_environments() {
-        let mut state = crate::state::AppState::default();
+        let mut state = crate::app::state::AppState::default();
         state.environments.workspaces.push(mitm_core::workspace::Workspace {
             id: "ws-1".to_string(),
             name: "Backend WS".to_string(),

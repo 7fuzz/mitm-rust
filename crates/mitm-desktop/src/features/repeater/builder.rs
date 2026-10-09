@@ -1,7 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::curl::{parse_curl, ParsedCurl};
 use mitm_core::repeater::{HeaderItem, RepeaterTab};
-use crate::command::{AppCommand, Commands};
+use crate::app::command::{AppCommand, Commands};
 use crate::features::request_editor::body::{content_type_for, convert, REPEATER_BODY_TYPES};
 use crate::features::request_editor::kv_table::{self, standard_headers, KvLabels};
 use crate::features::request_editor::method::method_combo;
@@ -9,7 +9,7 @@ use crate::features::request_editor::steps::{self, StepOption};
 use crate::features::request_editor::url_field::url_field;
 use crate::features::request_editor::url_params::{build_url, new_id, parse_query};
 use crate::features::request_editor::{body_editor, extract_rules};
-use crate::format::pretty_json;
+use crate::util::format::pretty_json;
 use super::{EditorTab, RepeaterState};
 
 const MIN_URL_WIDTH: f32 = 160.0;
@@ -38,7 +38,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
             if let Some(curl) = pasted_curl(ui) {
                 match curl {
                     Ok(curl) => super::apply_captured(tab, curl.into()),
-                    Err(e) => crate::top_bar::flash(ui, Err(format!("cURL: {e}"))),
+                    Err(e) => crate::ui::top_bar::flash(ui, Err(format!("cURL: {e}"))),
                 }
             }
             tab.params = parse_query(&tab.url, &tab.params);

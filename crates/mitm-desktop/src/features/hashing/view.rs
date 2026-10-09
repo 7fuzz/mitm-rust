@@ -1,7 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::utils::hashing::{self, HmacAlgo};
-use crate::command::{AppCommand, Commands};
-use crate::theme::{self, Tone};
+use crate::app::command::{AppCommand, Commands};
+use crate::ui::theme::{self, Tone};
 use super::{HashingState, Mode};
 
 pub fn show(ui: &mut egui::Ui, state: &mut HashingState, cmds: &mut Commands) {

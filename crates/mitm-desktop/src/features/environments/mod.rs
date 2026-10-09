@@ -8,7 +8,7 @@ use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use mitm_core::repeater::REPEATER_WORKSPACE_ID;
 use mitm_core::workspace::{Environment, EnvironmentVariable, VariableVariant, Workspace};
-use crate::command::{AppCommand, Commands};
+use crate::app::command::{AppCommand, Commands};
 use crate::widgets::split;
 
 const SAVE_DELAY_SECS: f64 = 0.6;

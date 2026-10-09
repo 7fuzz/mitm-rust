@@ -617,7 +617,7 @@ impl FuzzerState {
         rt: &tokio::runtime::Runtime,
         ctx: &eframe::egui::Context,
         core: &std::sync::Arc<mitm_core::MitmCore>,
-        jobs: &crate::jobs::Jobs<(i64, String, Vec<u32>)>,
+        jobs: &crate::app::jobs::Jobs<(i64, String, Vec<u32>)>,
     ) {
         let query = self.search_query.trim();
         if self.search_scope != FuzzSearchScope::Response || query.is_empty() {

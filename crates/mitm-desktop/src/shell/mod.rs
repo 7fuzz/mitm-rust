@@ -1,11 +1,15 @@
+mod conflict;
+mod recovery;
+mod startup;
+
 use std::sync::Arc;
 use eframe::egui;
 use mitm_core::instance::{self, Claim};
 use tokio::runtime::Runtime;
 use crate::app::MitmApp;
-use crate::conflict::{self, Conflict};
-use crate::recovery::Recovery;
-use crate::startup::Starting;
+use conflict::Conflict;
+use recovery::Recovery;
+use startup::Starting;
 
 pub struct Shell {
     rt: Arc<Runtime>,

@@ -323,7 +323,7 @@ impl TrafficState {
 }
 
 pub fn flow_status_badge(ui: &mut eframe::egui::Ui, code: u16, flags: &FlowFlags) {
-    use crate::theme::Tone;
+    use crate::ui::theme::Tone;
     use crate::widgets::pills::{badge, render_status_pill};
     if flags.pending_intercept {
         badge(ui, "PAUSED", Tone::Warn);
@@ -381,7 +381,7 @@ pub fn show(
     inspector: &mut InspectorState,
     listeners: &[mitm_core::state::ListenerConfig],
     folders: &[mitm_core::collections::CollectionTreeItem],
-    cmds: &mut crate::command::Commands,
+    cmds: &mut crate::app::command::Commands,
 ) {
     let visible = state.filtered_indices();
     toolbar::show(ui, state, listeners, visible.len(), cmds);

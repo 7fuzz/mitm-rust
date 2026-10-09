@@ -1,5 +1,5 @@
 use eframe::egui::{self, RichText};
-use crate::theme::{self, Tone};
+use crate::ui::theme::{self, Tone};
 
 // First click arms the button, second click confirms; moving the pointer away disarms it.
 pub fn confirm_button(ui: &mut egui::Ui, id: egui::Id, idle: RichText, armed: &str, hover: &str) -> bool {

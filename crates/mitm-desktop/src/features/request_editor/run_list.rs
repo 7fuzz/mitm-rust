@@ -1,7 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::collections::RequestHistoryItem;
 use mitm_core::repeater::{HeaderItem, RepeaterHistoryItem};
-use crate::format::{CopyFormat, Exchange};
+use crate::util::format::{CopyFormat, Exchange};
 use crate::widgets::copy_custom;
 use crate::widgets::message_pane::{self, PaneData, PaneState};
 use crate::widgets::pills::status_text;

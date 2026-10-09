@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use eframe::egui::{self, Galley, RichText};
-use crate::theme::{self, Tone};
-use crate::format::{body_bytes, display_body, hex_dump};
+use crate::ui::theme::{self, Tone};
+use crate::util::format::{body_bytes, display_body, hex_dump};
 use crate::widgets::code_view::{self, Lang};
 use crate::widgets::form_view::{self, FormField};
 use crate::widgets::json_tree::JsonTree;
@@ -228,7 +228,7 @@ fn file_extension(content_type: &str) -> Option<&'static str> {
 fn open_externally(data: &PaneData, id_salt: &str, ext: &str) {
     let path = std::env::temp_dir().join(format!("mitm-{id_salt}-{}.{ext}", data.cache_key));
     if std::fs::write(&path, body_bytes(data.body)).is_ok() {
-        let _ = crate::files::open_external(&path);
+        let _ = crate::util::files::open_external(&path);
     }
 }
 

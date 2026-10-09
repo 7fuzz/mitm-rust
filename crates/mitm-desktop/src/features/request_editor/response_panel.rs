@@ -1,6 +1,6 @@
 use eframe::egui::{self, RichText};
 use mitm_core::repeater::HeaderItem;
-use crate::format::{format_bytes, CopyFormat, Exchange};
+use crate::util::format::{format_bytes, CopyFormat, Exchange};
 use crate::widgets::flash;
 use crate::widgets::copy_custom;
 use crate::widgets::message_pane::{self, PaneData, PaneState, SaveBody};

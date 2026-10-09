@@ -1,8 +1,8 @@
 use eframe::egui::{self, RichText};
-use crate::command::{AppCommand, Commands};
+use crate::app::command::{AppCommand, Commands};
 use crate::features::request_editor::response_panel::{self, header_pairs, ResponseData};
 use crate::features::request_editor::run_list::{self, local_time, Run, RunAction};
-use crate::theme::{self, Tone};
+use crate::ui::theme::{self, Tone};
 use crate::widgets::confirm::confirm_button;
 use crate::widgets::pills::method_text;
 use crate::widgets::split;

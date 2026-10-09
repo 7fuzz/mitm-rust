@@ -1,6 +1,6 @@
 use eframe::egui::containers::menu::{MenuConfig, SubMenuButton};
 use eframe::egui::{self, PopupCloseBehavior};
-use crate::format::CopyOptions;
+use crate::util::format::CopyOptions;
 
 /// A "Custom" submenu of what to include; returns the choices when its Copy button is pressed.
 pub fn submenu(ui: &mut egui::Ui) -> Option<CopyOptions> {

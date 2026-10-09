@@ -1,9 +1,9 @@
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use mitm_core::state::WebSocketConn;
-use crate::command::{AppCommand, Commands};
-use crate::format::format_bytes;
-use crate::theme::{self, Tone};
+use crate::app::command::{AppCommand, Commands};
+use crate::util::format::format_bytes;
+use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::badge;
 use crate::widgets::split;
 use super::WebSocketsState;

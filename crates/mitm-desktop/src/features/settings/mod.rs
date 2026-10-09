@@ -54,13 +54,13 @@ impl Default for SettingsPrefs {
 #[derive(Default)]
 pub struct CertificateState {
     pub info: Option<mitm_core::CaInfo>,
-    pub status: Option<(String, crate::theme::Tone)>,
+    pub status: Option<(String, crate::ui::theme::Tone)>,
 }
 
 #[derive(Default)]
 pub struct DataSectionState {
     pub counts: Option<mitm_core::db::DataCategoryCounts>,
-    pub status: Option<(String, crate::theme::Tone)>,
+    pub status: Option<(String, crate::ui::theme::Tone)>,
     pub factory_reset_open: bool,
     pub factory_reset_input: String,
 }

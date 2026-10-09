@@ -1,10 +1,10 @@
 use std::path::Path;
 use eframe::egui;
 use egui_dock::{DockState, NodePath, TabIndex};
-use crate::command::Commands;
+use crate::app::command::Commands;
 use crate::features;
 use crate::widgets::template;
-use crate::state::AppState;
+use crate::app::state::AppState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Tab {

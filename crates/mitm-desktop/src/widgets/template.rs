@@ -7,7 +7,7 @@ use eframe::egui::text_edit::{TextEditOutput, TextEditState};
 use eframe::egui::text_selection::CCursorRange;
 use eframe::egui::{self, Color32, Galley, Id, Key, Modifiers, Response, RichText, TextBuffer, TextEdit, TextStyle, Ui};
 use mitm_core::workspace::Environment;
-use crate::theme::Tone;
+use crate::ui::theme::Tone;
 
 const MAX_HIGHLIGHT_BYTES: usize = 256 * 1024;
 

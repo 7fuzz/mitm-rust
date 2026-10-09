@@ -1,6 +1,6 @@
 use eframe::egui::{self, RichText};
 use mitm_core::repeater::ExtractRuleItem;
-use crate::theme::{self, Tone};
+use crate::ui::theme::{self, Tone};
 use super::url_params::new_id;
 
 const MODES: [(&str, &str, &str); 6] = [

@@ -1,5 +1,5 @@
 use eframe::egui::{self, CornerRadius, RichText, Visuals};
-use crate::theme::{method_tone, status_tone, Tone};
+use crate::ui::theme::{method_tone, status_tone, Tone};
 
 pub fn render_method_pill(ui: &mut egui::Ui, method: &str) {
     pill(ui, |text| text.size(11.0).strong(), &method.to_uppercase(), method_tone(method));

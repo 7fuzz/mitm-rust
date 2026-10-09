@@ -1,7 +1,7 @@
 use std::path::Path;
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
-use crate::theme::{self, Tone};
+use crate::ui::theme::{self, Tone};
 use crate::widgets::split;
 use mitm_core::db::browser::DbColumn;
 use super::{DatabaseState, DatabaseTab};

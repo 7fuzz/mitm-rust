@@ -1,7 +1,7 @@
 use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
-use crate::command::{AppCommand, Commands};
+use crate::app::command::{AppCommand, Commands};
 use mitm_core::state::ProxyMode;
-use crate::dock::Tab;
+use crate::ui::dock::Tab;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -41,7 +41,7 @@ impl Action {
             Action::NextTab => "Next tab".to_string(),
             Action::PreviousTab => "Previous tab".to_string(),
             Action::ToggleProxy => "Toggle proxy".to_string(),
-            Action::SetProxyMode(mode) => format!("Proxy: {}", crate::top_bar::mode_label(mode).to_lowercase()),
+            Action::SetProxyMode(mode) => format!("Proxy: {}", crate::ui::top_bar::mode_label(mode).to_lowercase()),
             Action::ToggleInterceptor => "Toggle interceptor".to_string(),
             Action::ClearTraffic => "Clear traffic".to_string(),
             Action::FocusSearch => "Focus search".to_string(),

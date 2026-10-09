@@ -1,7 +1,7 @@
 use std::path::Path;
 use eframe::egui::{self, RichText};
-use crate::theme::{self, Tone};
-use crate::command::{AppCommand, Commands};
+use crate::ui::theme::{self, Tone};
+use crate::app::command::{AppCommand, Commands};
 use crate::features::traffic::TrafficState;
 use crate::widgets::split;
 use super::{CertificateState, DataSectionState, ListenerForm, ProxyState, SettingsPrefs, SettingsSection};
@@ -68,7 +68,7 @@ fn appearance_section(ui: &mut egui::Ui) {
 
 fn shortcuts_section(ui: &mut egui::Ui) {
     egui::Grid::new("shortcut_list").num_columns(3).striped(true).spacing([24.0, 6.0]).show(ui, |ui| {
-        for (keys, action, scope) in crate::shortcuts::listing(ui.ctx()) {
+        for (keys, action, scope) in crate::ui::shortcuts::listing(ui.ctx()) {
             ui.monospace(keys);
             ui.label(action);
             ui.label(RichText::new(scope.unwrap_or_default()).weak());

@@ -1,5 +1,5 @@
 use eframe::egui::{self, RichText};
-use crate::command::{AppCommand, Commands};
+use crate::app::command::{AppCommand, Commands};
 use crate::features::request_editor::extract_rules;
 use super::{CollectionsCmd, CollectionsState};
 

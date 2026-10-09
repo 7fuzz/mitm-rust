@@ -1,6 +1,6 @@
 use eframe::egui::{self, RichText};
-use crate::theme::{self, Tone};
-use crate::command::{AppCommand, Commands};
+use crate::ui::theme::{self, Tone};
+use crate::app::command::{AppCommand, Commands};
 use crate::widgets::pills::{badge, render_method_pill};
 use crate::widgets::{source_scope, split};
 use mitm_core::state::ListenerConfig;

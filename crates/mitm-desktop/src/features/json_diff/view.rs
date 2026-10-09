@@ -1,5 +1,5 @@
 use eframe::egui::{self, RichText};
-use crate::theme::{self, Tone};
+use crate::ui::theme::{self, Tone};
 use crate::widgets::diff;
 use crate::widgets::split;
 use super::{DiffStatus, JsonDiffState};

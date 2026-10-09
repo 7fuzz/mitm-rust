@@ -1,5 +1,5 @@
 use eframe::egui::{self, RichText};
-use crate::theme::{self, Tone};
+use crate::ui::theme::{self, Tone};
 
 pub struct StepOption {
     pub id: String,

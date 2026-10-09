@@ -1,20 +1,8 @@
 mod app;
-mod command;
-mod conflict;
-mod dock;
 mod features;
-mod files;
-mod format;
-mod jobs;
-mod palette;
-mod prefs;
-mod recovery;
 mod shell;
-mod shortcuts;
-mod startup;
-mod state;
-mod theme;
-mod top_bar;
+mod ui;
+mod util;
 mod widgets;
 
 fn main() -> eframe::Result<()> {
