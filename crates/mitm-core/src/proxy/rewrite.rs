@@ -136,7 +136,6 @@ pub fn matches_rule(
                     return false;
                 }
             } else {
-                // Check all headers string
                 return headers.iter().any(|(k, v)| {
                     k.to_lowercase().contains(&rule.match_value.to_lowercase())
                         || v.to_lowercase().contains(&rule.match_value.to_lowercase())
@@ -225,7 +224,6 @@ pub async fn apply_request_rewrite_pipeline(
                             changed = true;
                         }
 
-                        // Re-extract host if URL changed
                         if changed {
                             if let Ok(parsed_uri) = url.parse::<Uri>() {
                                 if let Some(h) = parsed_uri.host() {
@@ -346,7 +344,6 @@ pub async fn apply_request_rewrite_pipeline(
                 });
             }
             "full_response" => {
-                // Short-circuit with mock response
                 let status = rule.mock_status_code.unwrap_or(200);
                 let mock_headers: Vec<(String, String)> = rule.mock_headers_json
                     .as_deref()

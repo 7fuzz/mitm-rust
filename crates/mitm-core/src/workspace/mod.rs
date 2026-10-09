@@ -172,10 +172,8 @@ pub fn delete_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let _ = conn.execute("PRAGMA foreign_keys = ON;", []);
 
-    // 1. Delete associated environments
     let _ = conn.execute("DELETE FROM environments WHERE workspace_id = ?", params![id]);
 
-    // 2. Find and delete requests & request execution histories inside collections of this workspace
     let mut stmt = conn.prepare("SELECT id FROM collections WHERE workspace_id = ?").map_err(|e| e.to_string())?;
     let col_ids: Vec<String> = stmt
         .query_map([id], |row| row.get(0))
@@ -198,7 +196,6 @@ pub fn delete_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
         let _ = conn.execute("DELETE FROM requests WHERE collection_id = ?", params![&col_id]);
     }
 
-    // 3. Delete collections and workspace record
     let _ = conn.execute("DELETE FROM collections WHERE workspace_id = ?", params![id]);
     conn.execute("DELETE FROM workspaces WHERE id = ?", params![id]).map_err(|e| e.to_string())?;
 
@@ -678,15 +675,12 @@ pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
         let next_result = re
             .replace_all(&result, |caps: &regex::Captures| {
                 let key = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
-                // 1. Try exact user variable match
                 if let Some(val) = var_map.get(key) {
                     changed = true;
                     val.to_string()
-                // 2. Try case-insensitive user variable match
                 } else if let Some(val) = lower_var_map.get(&key.to_lowercase()) {
                     changed = true;
                     val.to_string()
-                // 3. Try dynamic built-in variable match (e.g. {{$timestamp}}, {{$guid}}, {{$randomUUID}})
                 } else if let Some(val) = resolve_dynamic_variable(key) {
                     changed = true;
                     val

@@ -430,8 +430,6 @@ pub fn evaluate_matches(rules: &[MatchRule], body: &str) -> Vec<String> {
         .collect()
 }
 
-// ---- persistence ----
-
 /// Inserts the run as unsaved, so its results can be written while it runs.
 pub fn begin_run_db(db_path: &PathBuf, id: i64, config: &FuzzConfig, total: usize) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;

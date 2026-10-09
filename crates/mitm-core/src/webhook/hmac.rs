@@ -92,7 +92,7 @@ pub fn verify_signature(
             .map(|(_, v)| v.trim().to_string())
     };
 
-    // 1. GitHub SHA-256
+    // GitHub
     if let Some(provided) = get_header("x-hub-signature-256") {
         let expected = format!("sha256={}", to_hex(&compute_hmac_sha256(secret.as_bytes(), body)));
         let status = if provided == expected || provided.trim_start_matches("sha256=") == expected.trim_start_matches("sha256=") {
@@ -103,7 +103,7 @@ pub fn verify_signature(
         return (status.to_string(), Some(expected), Some(provided));
     }
 
-    // 2. GitHub SHA-1 (Legacy)
+    // GitHub's legacy SHA-1 signature
     if let Some(provided) = get_header("x-hub-signature") {
         let expected = format!("sha1={}", to_hex(&compute_hmac_sha1(secret.as_bytes(), body)));
         let status = if provided == expected || provided.trim_start_matches("sha1=") == expected.trim_start_matches("sha1=") {
@@ -114,7 +114,7 @@ pub fn verify_signature(
         return (status.to_string(), Some(expected), Some(provided));
     }
 
-    // 3. Stripe Signature (t=...,v1=...)
+    // Stripe: t=<timestamp>,v1=<signature>
     if let Some(provided) = get_header("stripe-signature") {
         let mut t_val = "";
         let mut v1_val = "";
@@ -140,14 +140,12 @@ pub fn verify_signature(
         }
     }
 
-    // 4. Shopify Base64 HMAC SHA-256
     if let Some(provided) = get_header("x-shopify-hmac-sha256") {
         let expected = base64::engine::general_purpose::STANDARD.encode(compute_hmac_sha256(secret.as_bytes(), body));
         let status = if provided == expected { "valid" } else { "invalid" };
         return (status.to_string(), Some(expected), Some(provided));
     }
 
-    // 5. Generic X-Signature / X-Signature-256
     if let Some(provided) = get_header("x-signature").or_else(|| get_header("x-signature-256")) {
         let expected = to_hex(&compute_hmac_sha256(secret.as_bytes(), body));
         let status = if provided == expected { "valid" } else { "invalid" };

@@ -127,7 +127,6 @@ pub fn load_webhook_deliveries(db_path: &PathBuf, limit: Option<u32>) -> Result<
     Ok(deliveries)
 }
 
-/// Inserts the delivery and returns its new id
 pub fn save_webhook_delivery(db_path: &PathBuf, delivery: &WebhookDelivery) -> Result<i64, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let headers_json = serde_json::to_string(&delivery.headers).unwrap_or_else(|_| "[]".to_string());

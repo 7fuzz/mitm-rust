@@ -33,7 +33,6 @@ pub fn load_ws_connections(db_path: &PathBuf) -> Result<Vec<WebSocketConn>, Stri
     Ok(rows.flatten().collect())
 }
 
-/// Inserts the connection and returns its new id
 pub fn insert_ws_connection(db_path: &PathBuf, conn_info: &WebSocketConn) -> Result<i64, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute(

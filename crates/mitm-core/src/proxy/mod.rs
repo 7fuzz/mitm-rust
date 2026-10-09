@@ -383,7 +383,6 @@ async fn handle_http(
     let mut was_rewritten = false;
     let mut was_intercepted = false;
 
-    // 1. Request Rewrite Engine (Auto background transformation & Mocking)
     let mut req_method_str = method.to_string();
     let mut req_url_str = url.clone();
     let mut req_host_str = host.clone();
@@ -433,7 +432,6 @@ async fn handle_http(
         was_rewritten = true;
     }
 
-    // Emit initial in-flight request to history list immediately
     {
         let now = time::OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Rfc3339)
@@ -466,7 +464,6 @@ async fn handle_http(
         }
     }
 
-    // 2. Request Intercept Hook (Manual pause)
     let (final_req_url, final_req_method, final_req_headers, final_req_body) = match handle_intercept_hook(
         Some(entry_id),
         &request_at,
@@ -518,7 +515,6 @@ async fn handle_http(
             let h = modified_headers.unwrap_or(req_headers);
             let b = modified_body.unwrap_or(req_body_bytes);
 
-            // Re-emit in-flight request as waiting for upstream response
             let now = time::OffsetDateTime::now_utc()
                 .format(&time::format_description::well_known::Rfc3339)
                 .unwrap_or_default();
@@ -603,7 +599,6 @@ async fn handle_http(
             let collected_res_body = body.collect().await?.to_bytes();
             let response_body_bytes = collected_res_body;
 
-            // 3. Response Rewrite Engine
             let mut res_status = status;
             let mut res_headers = response_headers;
             let mut res_body = response_body_bytes.to_vec();
@@ -622,7 +617,6 @@ async fn handle_http(
                 was_rewritten = true;
             }
 
-            // 4. Response Intercept Hook (Manual pause)
             let (final_res_headers, final_res_body) = match handle_intercept_hook(
                 Some(entry_id),
                 &request_at,

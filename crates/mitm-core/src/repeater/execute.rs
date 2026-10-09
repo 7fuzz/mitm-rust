@@ -84,11 +84,9 @@ pub async fn send_tab_request(tab: &RepeaterTab) -> Result<SentRequest, String> 
 }
 
 pub(crate) async fn send_tab_request_with(client: &reqwest::Client, tab: &RepeaterTab) -> Result<SentRequest, String> {
-    // Parse method (fallback to GET if invalid)
     let method = Method::from_bytes(tab.method.as_bytes())
         .unwrap_or(Method::GET);
 
-    // Filter enabled query parameters
     let enabled_params: Vec<&super::ParamItem> = tab
         .params
         .iter()
@@ -110,7 +108,6 @@ pub(crate) async fn send_tab_request_with(client: &reqwest::Client, tab: &Repeat
 
     let mut req_builder = client.request(method, &final_url_str);
 
-    // Filter enabled request headers
     let enabled_headers: Vec<HeaderItem> = tab
         .headers
         .iter()
@@ -144,7 +141,6 @@ pub(crate) async fn send_tab_request_with(client: &reqwest::Client, tab: &Repeat
         }
     }
 
-    // Attach multipart form, urlencoded form, or raw body
     let req_body_str = tab.body_content.clone().filter(|b| !b.trim().is_empty());
     let mut logged_headers = enabled_headers.clone();
 

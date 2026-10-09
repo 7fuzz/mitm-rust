@@ -117,15 +117,14 @@ pub fn run_all(event_bus: Option<&EventBus>, conn: &Connection) -> Result<(), St
         }
     };
 
-    // 1. Check if legacy user_version conflict exists (> LATEST_VERSION)
     let pragma_user_version: u32 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap_or(0);
 
     let latest_version = MIGRATIONS.last().map(|m| m.version).unwrap_or(0);
 
-    // If pragma_user_version is corrupted or artificially inflated above latest schema (e.g. version 13 from plugin conflict)
-    // AND essential tables like 'requests' are missing, raise a explicit schema mismatch error so recovery modal activates!
+    // A user_version above our latest one without the core tables means another tool wrote this file;
+    // report it as a mismatch so the recovery screen opens.
     let requests_exists = conn.prepare("SELECT 1 FROM requests LIMIT 1").is_ok();
     if pragma_user_version > latest_version && !requests_exists {
         let err_msg = format!(
@@ -144,7 +143,6 @@ pub fn run_all(event_bus: Option<&EventBus>, conn: &Connection) -> Result<(), St
         return Err(err_msg);
     }
 
-    // 2. Ensure internal migrations table exists
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS _schema_migrations (
             name TEXT PRIMARY KEY,
@@ -216,7 +214,6 @@ pub fn run_all(event_bus: Option<&EventBus>, conn: &Connection) -> Result<(), St
         }
     }
 
-    // Reset user_version to match latest migration version for consistency
     let _ = conn.execute(&format!("PRAGMA user_version = {}", latest_version), []);
 
     emit_progress(MigrationProgressPayload {

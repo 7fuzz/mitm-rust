@@ -107,7 +107,7 @@ async fn send_collection_request(
     client: &reqwest::Client,
     jar: &Jar,
 ) -> Result<ExecutionResult, String> {
-    // 1. Fetch request details & interpolate variables in scope block so Connection is dropped before .await
+    // Scoped so the Connection is dropped before the .await below.
     let (id, workspace_id, raw_method, target_url, mut logged_req_headers, final_body, mut req_headers_map, body_type, extract_rules_json) = {
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
@@ -218,7 +218,6 @@ async fn send_collection_request(
         (id, workspace_id, raw_method, url, logged_req_headers, final_body, req_headers_map, body_type, extract_rules_json)
     };
 
-    // 2. Send request
     if !req_headers_map.contains_key(reqwest::header::COOKIE) {
         if let Some(cookie) = jar_cookie(jar, &target_url) {
             if let Ok(hv) = HeaderValue::from_str(&cookie) {
@@ -291,10 +290,8 @@ async fn send_collection_request(
 
     let executed_at = now_ms();
 
-    // 3. Perform auto-extraction if extract_rules_json is present
     perform_auto_extraction_db(db_path, &workspace_id, &extract_rules_json, &decoded_body, &response_headers);
 
-    // 4. Store history log in separate DB connection
     let history_id = {
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
         let req_headers_json = serde_json::to_string(&logged_req_headers).unwrap_or_else(|_| "[]".to_string());
@@ -478,7 +475,6 @@ pub fn evaluate_rust_extract_rule(
             Some(val.as_str().to_string())
         }
         _ => {
-            // Fallback: If type is unrecognized, try JSON extraction first, then regex
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(response_body) {
                 if let Some(val) = evaluate_json_path(&parsed, &rule.expression) {
                     return json_value_to_string(&val);

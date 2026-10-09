@@ -103,7 +103,6 @@ pub fn get_collections_db(
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
 
-    // Load all collections for this workspace
     let mut stmt = conn
         .prepare("SELECT id, workspace_id, parent_id, name, description, order_index, created_at_ms, updated_at_ms FROM collections WHERE workspace_id = ? ORDER BY order_index ASC, created_at_ms ASC")
         .map_err(|e| e.to_string())?;
@@ -125,7 +124,6 @@ pub fn get_collections_db(
         .filter_map(|r| r.ok())
         .collect();
 
-    // Load all requests for these collections
     let mut req_stmt = conn
         .prepare(
             "SELECT r.id, r.collection_id, r.name, r.method, r.url, r.headers_json, r.params_json, r.body_type, r.body_json, r.body_raw, r.body_form_data, r.body_urlencoded, r.extract_rules_json, r.description, r.order_index, r.created_at_ms, r.updated_at_ms 
@@ -180,7 +178,6 @@ pub fn get_collections_db(
         }
     }
 
-    // Build hierarchical tree
     fn build_tree_level(parent_id: Option<&str>, cols: &[Collection], reqs: &[RequestItem]) -> Vec<CollectionTreeItem> {
         cols.iter()
             .filter(|c| c.parent_id.as_deref() == parent_id)

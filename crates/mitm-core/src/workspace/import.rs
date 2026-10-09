@@ -21,7 +21,6 @@ fn detect_and_assign_body(
 
     let b_raw = if payload.is_empty() { None } else { Some(payload.to_string()) };
 
-    // Explicit mode handling
     if mode == "formdata" || mode == "form-data" || mode == "multipart" {
         return ("form-data".to_string(), None, b_raw.clone(), b_raw, None);
     }
@@ -35,14 +34,12 @@ fn detect_and_assign_body(
     }
 
     if mode == "raw" {
-        // If mode is raw but content is valid JSON, auto-assign both json AND raw!
         if !payload.is_empty() && serde_json::from_str::<serde_json::Value>(payload).is_ok() {
             return ("json".to_string(), b_raw.clone(), b_raw, None, None);
         }
         return ("raw".to_string(), None, b_raw, None, None);
     }
 
-    // Auto-detection when mode is unspecified or "none" but payload exists
     if !payload.is_empty() {
         if serde_json::from_str::<serde_json::Value>(payload).is_ok() {
             return ("json".to_string(), b_raw.clone(), b_raw, None, None);
@@ -526,12 +523,10 @@ fn process_postman_item(
     req_count: &mut usize,
 ) -> Result<(), String> {
     if let Some(req_spec) = item.request {
-        // It's a Request Item
         let req_id = Uuid::new_v4().to_string();
         let col_id = match parent_id {
             Some(pid) => pid,
             None => {
-                // Create a root fallback collection if request is at root level
                 let root_col_id = Uuid::new_v4().to_string();
                 conn.execute(
                     "INSERT INTO collections (id, workspace_id, parent_id, name, description, order_index, created_at_ms, updated_at_ms)
@@ -591,7 +586,6 @@ fn process_postman_item(
 
         *req_count += 1;
     } else {
-        // It's a Collection / Subfolder
         let col_id = Uuid::new_v4().to_string();
         conn.execute(
             "INSERT INTO collections (id, workspace_id, parent_id, name, description, order_index, created_at_ms, updated_at_ms)

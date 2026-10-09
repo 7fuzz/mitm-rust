@@ -78,7 +78,6 @@ pub async fn connect_client_session(
     let event_bus_clone = event_bus.clone();
     let state_clone = Arc::clone(&state);
 
-    // Writer Task (outgoing to remote server)
     tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if let Err(e) = write_half.send(msg).await {
@@ -90,7 +89,6 @@ pub async fn connect_client_session(
 
     let conn_info_task = conn_info.clone();
 
-    // Reader Task (incoming from remote server)
     tokio::spawn(async move {
         tokio::select! {
             _ = async {
@@ -143,7 +141,6 @@ pub async fn connect_client_session(
             _ = &mut stop_rx => {}
         }
 
-        // Connection cleanup
         let close_time = chrono::Local::now().timestamp_millis();
         let _ = crate::db::ws_db::update_ws_connection_status(&db_path_clone, conn_id, "disconnected", Some(close_time));
 

@@ -3,6 +3,9 @@ use regex::Regex;
 use crate::db::InterceptRule;
 use crate::state::{AppState, InterceptPhase};
 
+/// With no enabled rules everything is intercepted. Otherwise a matching "pass" rule always lets the flow
+/// through; when "intercept" rules exist the flow must match one of them, and with only "pass" rules
+/// everything they don't match is intercepted.
 #[allow(clippy::too_many_arguments)]
 pub async fn should_intercept(
     state: &Arc<AppState>,
@@ -34,7 +37,6 @@ pub async fn should_intercept(
     let enabled_rules: Vec<&InterceptRule> = rules_guard.iter().filter(|r| r.is_enabled).collect();
 
     if enabled_rules.is_empty() {
-        // Default behavior: if intercept is ON and no active rules exist, intercept all
         return true;
     }
 
@@ -43,7 +45,6 @@ pub async fn should_intercept(
         rule_matches(rule, phase, method, url, host, &path, headers, request_headers)
     };
 
-    // 1. Blacklist check ("pass" rules): If traffic matches ANY enabled "pass" rule, DO NOT INTERCEPT
     let pass_rules: Vec<&&InterceptRule> = enabled_rules.iter().filter(|r| r.action.eq_ignore_ascii_case("pass") || r.action.eq_ignore_ascii_case("allow") || r.action.eq_ignore_ascii_case("block")).collect();
     for rule in &pass_rules {
         if rule_matches(rule) {
@@ -51,21 +52,17 @@ pub async fn should_intercept(
         }
     }
 
-    // 2. Whitelist check ("intercept" rules):
     let intercept_rules: Vec<&&InterceptRule> = enabled_rules.iter().filter(|r| r.action.eq_ignore_ascii_case("intercept")).collect();
 
     if !intercept_rules.is_empty() {
-        // If "intercept" rules exist, traffic MUST match AT LEAST ONE "intercept" rule
         for rule in &intercept_rules {
             if rule_matches(rule) {
                 return true;
             }
         }
-        // None of the whitelist rules matched -> pass through
         return false;
     }
 
-    // If there are only "pass" rules and none matched above -> intercept remaining traffic
     true
 }
 

@@ -58,7 +58,6 @@ pub async fn bridge_proxied_websocket<C, S>(
     let (mut client_write, mut client_read) = client_ws.split();
     let (mut server_write, mut server_read) = server_ws.split();
 
-    // Injection channels: (to_server_tx, to_client_tx)
     let (to_server_tx, mut to_server_rx) = mpsc::unbounded_channel::<Message>();
     let (to_client_tx, mut to_client_rx) = mpsc::unbounded_channel::<Message>();
 
@@ -67,18 +66,15 @@ pub async fn bridge_proxied_websocket<C, S>(
     let db_path_c2s = state.db_path.clone();
     let bus_c2s = event_bus.clone();
 
-    // Task 1: Client -> Server (with injected frames to server)
     let c2s_task = tokio::spawn(async move {
         loop {
             tokio::select! {
-                // Injected message from user interface to server
                 Some(injected_msg) = to_server_rx.recv() => {
                     if let Err(e) = server_write.send(injected_msg).await {
                         eprintln!("[WS Proxy {}] Failed to send injected frame to server: {}", conn_id, e);
                         break;
                     }
                 }
-                // Regular frame from downstream client to server
                 msg_opt = client_read.next() => {
                     match msg_opt {
                         Some(Ok(msg)) => {
@@ -129,18 +125,15 @@ pub async fn bridge_proxied_websocket<C, S>(
     let db_path_s2c = state.db_path.clone();
     let bus_s2c = event_bus.clone();
 
-    // Task 2: Server -> Client (with injected frames to client)
     let s2c_task = tokio::spawn(async move {
         loop {
             tokio::select! {
-                // Injected message from user interface to client
                 Some(injected_msg) = to_client_rx.recv() => {
                     if let Err(e) = client_write.send(injected_msg).await {
                         eprintln!("[WS Proxy {}] Failed to send injected frame to client: {}", conn_id, e);
                         break;
                     }
                 }
-                // Regular frame from upstream server to client
                 msg_opt = server_read.next() => {
                     match msg_opt {
                         Some(Ok(msg)) => {
@@ -190,7 +183,6 @@ pub async fn bridge_proxied_websocket<C, S>(
 
     let _ = tokio::join!(c2s_task, s2c_task);
 
-    // Stream finished / disconnected
     let close_time = chrono::Local::now().timestamp_millis();
     let _ = crate::db::ws_db::update_ws_connection_status(&state.db_path, conn_id, "disconnected", Some(close_time));
     state.ws_stream_senders.remove(&conn_id);

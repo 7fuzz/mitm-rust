@@ -176,7 +176,6 @@ fn flush_history_batch(db_path: &PathBuf, buffer: &mut Vec<HistoryEntry>) {
                 }
             }
 
-            // Check if history rotation limiter is enabled and prune excess rows directly on conn
             let limiter_enabled: bool = conn
                 .query_row(
                     "SELECT value FROM app_preferences WHERE key = 'history_limiter_enabled'",

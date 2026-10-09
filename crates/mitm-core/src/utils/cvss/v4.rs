@@ -617,24 +617,19 @@ mod tests {
 
     #[test]
     fn calculates_known_v4_vectors() {
-        // High vuln
         let v1 = CvssV4Base::from_vector("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N").unwrap();
         assert_eq!(v1.calculate().base_score, 9.3);
         assert_eq!(v1.calculate().severity, Severity::Critical);
 
-        // All High
         let v2 = CvssV4Base::from_vector("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H").unwrap();
         assert_eq!(v2.calculate().base_score, 10.0);
 
-        // All None
         let v3 = CvssV4Base::default();
         assert_eq!(v3.calculate().base_score, 0.0);
 
-        // Local Critical
         let v4 = CvssV4Base::from_vector("CVSS:4.0/AV:L/AC:L/AT:N/PR:H/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H").unwrap();
         assert_eq!(v4.calculate().base_score, 9.3);
 
-        // Low severity
         let v5 = CvssV4Base::from_vector("CVSS:4.0/AV:A/AC:H/AT:P/PR:L/UI:P/VC:L/VI:L/VA:L/SC:L/SI:L/SA:L").unwrap();
         assert_eq!(v5.calculate().base_score, 1.0);
         assert_eq!(v5.calculate().severity, Severity::Low);
