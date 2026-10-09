@@ -166,23 +166,37 @@ pub fn convert(from: &str, to: &str, content: &str) -> String {
         };
         return store_multipart(&fields);
     }
-    if is_urlencoded(from) {
-        let rows: Vec<_> = read_urlencoded(content).into_iter().filter(|r| r.enabled && !r.key.trim().is_empty()).collect();
+    if is_urlencoded(from) || is_multipart(from) {
+        let pairs = form_pairs(from, content);
         return if to == "json" {
             let object: serde_json::Map<String, serde_json::Value> =
-                rows.into_iter().map(|r| (r.key, serde_json::Value::String(r.value))).collect();
+                pairs.into_iter().map(|(k, v)| (k, serde_json::Value::String(v))).collect();
             serde_json::to_string_pretty(&object).unwrap_or_default()
         } else {
-            rows.iter().map(|r| format!("{}={}", r.key, r.value)).collect::<Vec<_>>().join("&")
+            pairs.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join("&")
         };
-    }
-    if is_multipart(from) {
-        return content.to_string();
     }
     if to == "json" {
         return pretty_json(content).unwrap_or_else(|| content.to_string());
     }
     content.to_string()
+}
+
+/// The enabled, named text entries of a url-encoded or multipart body; files have no text form.
+fn form_pairs(body_type: &str, content: &str) -> Vec<(String, String)> {
+    if is_urlencoded(body_type) {
+        read_urlencoded(content)
+            .into_iter()
+            .filter(|r| r.enabled && !r.key.trim().is_empty())
+            .map(|r| (r.key, r.value))
+            .collect()
+    } else {
+        read_multipart(content)
+            .into_iter()
+            .filter(|f| f.enabled && !f.key.trim().is_empty() && f.r#type == "text")
+            .map(|f| (f.key, f.value))
+            .collect()
+    }
 }
 
 fn json_object_pairs(content: &str) -> Option<Vec<(String, String)>> {
@@ -370,5 +384,16 @@ mod tests {
 
         let form = convert("urlencoded", "form", &rows);
         assert_eq!(read_multipart(&form).len(), 2);
+    }
+
+    #[test]
+    fn multipart_converts_to_its_text_fields_not_its_storage_format() {
+        let mut fields = vec![text_field("email".into(), "a@b.c".into()), text_field("off".into(), "x".into())];
+        fields[1].enabled = false;
+        let form = store_multipart(&fields);
+
+        let json = convert("form", "json", &form);
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&json).unwrap(), serde_json::json!({ "email": "a@b.c" }));
+        assert_eq!(convert("form", "raw", &form), "email=a@b.c");
     }
 }
