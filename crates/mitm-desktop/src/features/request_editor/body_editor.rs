@@ -4,7 +4,7 @@ use mitm_core::http::body::MultipartFieldSpec;
 use crate::util::format::format_bytes;
 use crate::ui::theme::{self, Tone};
 use crate::widgets::template;
-use super::body::{is_multipart, is_urlencoded, read_multipart, read_urlencoded, store_multipart, store_urlencoded, text_field};
+use super::body::{convert, is_multipart, is_urlencoded, read_multipart, read_urlencoded, store_multipart, store_urlencoded, text_field};
 use super::kv_table::{self, KvLabels};
 
 pub fn show(ui: &mut egui::Ui, id_salt: &str, body_type: &str, content: &mut String) -> bool {
@@ -39,6 +39,33 @@ fn structured(ui: &mut egui::Ui, id_salt: &str, body_type: &str, content: &mut S
         changed
     } else {
         binary(ui, id_salt, content)
+    }
+}
+
+/// Switches body type, converting the content only when asked. Otherwise each kind gets back the content it had
+/// last this session, so a misclick loses nothing; JSON and raw are both text and keep theirs.
+pub fn change_type(ctx: &egui::Context, owner: &str, from: &str, to: &str, content: &mut String, convert_content: bool) {
+    let converted = convert_content.then(|| convert(from, to, content));
+    let (from_kind, to_kind) = (content_kind(from), content_kind(to));
+    if from_kind != to_kind {
+        let stash = |kind: &str| egui::Id::new(("body_stash", owner, kind));
+        ctx.data_mut(|d| {
+            d.insert_temp(stash(from_kind), std::mem::take(content));
+            *content = d.remove_temp::<String>(stash(to_kind)).unwrap_or_default();
+        });
+    }
+    if let Some(converted) = converted {
+        *content = converted;
+    }
+}
+
+fn content_kind(body_type: &str) -> &'static str {
+    match body_type {
+        "json" | "raw" => "text",
+        t if is_multipart(t) => "multipart",
+        t if is_urlencoded(t) => "urlencoded",
+        "binary" => "binary",
+        _ => "none",
     }
 }
 
@@ -175,4 +202,34 @@ fn binary(ui: &mut egui::Ui, id_salt: &str, content: &mut String) -> bool {
         d.insert_temp(error_id, error);
     });
     changed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn switching_type_swaps_content_instead_of_converting() {
+        let ctx = egui::Context::default();
+        let mut content = "{\"a\": \"1\"}".to_string();
+
+        change_type(&ctx, "tab", "json", "form", &mut content, false);
+        assert_eq!(content, "");
+        change_type(&ctx, "tab", "form", "json", &mut content, false);
+        assert_eq!(content, "{\"a\": \"1\"}");
+
+        change_type(&ctx, "tab", "json", "raw", &mut content, false);
+        assert_eq!(content, "{\"a\": \"1\"}");
+    }
+
+    #[test]
+    fn converting_replaces_the_content_and_keeps_the_original_for_switching_back() {
+        let ctx = egui::Context::default();
+        let mut content = "{\"a\": \"1\"}".to_string();
+
+        change_type(&ctx, "tab", "json", "form", &mut content, true);
+        assert_eq!(read_multipart(&content).len(), 1);
+        change_type(&ctx, "tab", "form", "json", &mut content, false);
+        assert_eq!(content, "{\"a\": \"1\"}");
+    }
 }

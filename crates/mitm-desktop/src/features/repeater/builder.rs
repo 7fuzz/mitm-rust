@@ -2,7 +2,7 @@ use eframe::egui;
 use mitm_core::http::curl::{parse_curl, ParsedCurl};
 use mitm_core::repeater::{HeaderItem, RepeaterTab};
 use crate::app::command::{AppCommand, Commands};
-use crate::features::request_editor::body::{content_type_for, convert, REPEATER_BODY_TYPES};
+use crate::features::request_editor::body::{content_type_for, REPEATER_BODY_TYPES};
 use crate::features::request_editor::kv_table::{self, standard_headers, KvLabels};
 use crate::features::request_editor::steps::{self, StepOption};
 use crate::features::request_editor::request_bar;
@@ -73,7 +73,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
                 }
                 changed |= body_type_combo(ui, tab);
                 if let Some(next) = body_editor::convert_menu(ui, &tab.body_type, &REPEATER_BODY_TYPES) {
-                    set_body_type(tab, next);
+                    set_body_type(ui.ctx(), tab, next, true);
                     changed = true;
                 }
             });
@@ -142,14 +142,14 @@ fn body_type_combo(ui: &mut egui::Ui, tab: &mut RepeaterTab) -> bool {
         }
     });
     let Some(next) = picked else { return false };
-    set_body_type(tab, next);
+    set_body_type(ui.ctx(), tab, next, false);
     true
 }
 
-fn set_body_type(tab: &mut RepeaterTab, next: &str) {
+fn set_body_type(ctx: &egui::Context, tab: &mut RepeaterTab, next: &str, convert: bool) {
     set_content_type_header(&mut tab.headers, content_type_for(next));
-    let content = tab.body_content.take().unwrap_or_default();
-    tab.body_content = Some(convert(&tab.body_type, next, &content));
+    let content = tab.body_content.get_or_insert_with(String::new);
+    body_editor::change_type(ctx, &tab.id, &tab.body_type, next, content, convert);
     tab.body_type = next.to_string();
 }
 

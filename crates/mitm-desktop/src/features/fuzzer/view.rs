@@ -2,7 +2,7 @@ use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use mitm_core::repeater::HeaderItem;
 use crate::app::command::{AppCommand, Commands};
-use crate::features::request_editor::body::{content_type_for, convert, REPEATER_BODY_TYPES};
+use crate::features::request_editor::body::{content_type_for, REPEATER_BODY_TYPES};
 use crate::features::request_editor::body_editor;
 use crate::features::request_editor::kv_table::{self, standard_headers, KvLabels};
 use crate::features::request_editor::method::method_combo;
@@ -293,7 +293,7 @@ fn request_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
             if fuzzer.request_tab == RequestTab::Body {
                 body_type_combo(ui, fuzzer);
                 if let Some(next) = body_editor::convert_menu(ui, &fuzzer.body_type, &REPEATER_BODY_TYPES) {
-                    set_body_type(fuzzer, next);
+                    set_body_type(ui.ctx(), fuzzer, next, true);
                 }
             }
         });
@@ -337,13 +337,13 @@ fn body_type_combo(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
         }
     });
     if let Some(next) = picked {
-        set_body_type(fuzzer, next);
+        set_body_type(ui.ctx(), fuzzer, next, false);
     }
 }
 
-fn set_body_type(fuzzer: &mut FuzzerState, next: &str) {
+fn set_body_type(ctx: &egui::Context, fuzzer: &mut FuzzerState, next: &str, convert: bool) {
     set_content_type_header(&mut fuzzer.headers, content_type_for(next));
-    fuzzer.body_content = convert(&fuzzer.body_type, next, &fuzzer.body_content);
+    body_editor::change_type(ctx, "fuzzer", &fuzzer.body_type, next, &mut fuzzer.body_content, convert);
     fuzzer.body_type = next.to_string();
 }
 
