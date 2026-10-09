@@ -288,20 +288,17 @@ fn request_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
         ui.selectable_value(&mut fuzzer.request_tab, RequestTab::Params, format!("Params ({})", params));
         ui.selectable_value(&mut fuzzer.request_tab, RequestTab::Headers, format!("Headers ({})", headers));
         ui.selectable_value(&mut fuzzer.request_tab, RequestTab::Body, "Body");
-
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if fuzzer.request_tab == RequestTab::Body {
-                body_type_combo(ui, fuzzer);
-                if let Some(next) = body_editor::convert_menu(ui, &fuzzer.body_type, &REPEATER_BODY_TYPES) {
-                    set_body_type(ui.ctx(), fuzzer, next, true);
-                }
-            }
-        });
     });
     ui.separator();
 
     match fuzzer.request_tab {
         RequestTab::Body => {
+            ui.horizontal(|ui| {
+                body_type_combo(ui, fuzzer);
+                if let Some(next) = body_editor::convert_menu(ui, &fuzzer.body_type, &REPEATER_BODY_TYPES) {
+                    set_body_type(ui.ctx(), fuzzer, next, true);
+                }
+            });
             body_editor::show(ui, "fuzzer_body", &fuzzer.body_type, &mut fuzzer.body_content);
         }
         other => {

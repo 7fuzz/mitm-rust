@@ -62,27 +62,24 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
                 response.on_hover_text("A disabled Content-Type is detected from the body");
             }
         }
-
-        if state.editor_tab == EditorTab::Body {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if tab.body_type == "json" && ui.small_button("Format").on_hover_text("Pretty-print JSON").clicked() {
-                    if let Some(pretty) = tab.body_content.as_deref().and_then(pretty_json) {
-                        tab.body_content = Some(pretty);
-                        changed = true;
-                    }
-                }
-                changed |= body_type_combo(ui, tab);
-                if let Some(next) = body_editor::convert_menu(ui, &tab.body_type, &REPEATER_BODY_TYPES) {
-                    set_body_type(ui.ctx(), tab, next, true);
-                    changed = true;
-                }
-            });
-        }
     });
     ui.separator();
 
     match state.editor_tab {
         EditorTab::Body => {
+            ui.horizontal(|ui| {
+                changed |= body_type_combo(ui, tab);
+                if let Some(next) = body_editor::convert_menu(ui, &tab.body_type, &REPEATER_BODY_TYPES) {
+                    set_body_type(ui.ctx(), tab, next, true);
+                    changed = true;
+                }
+                if tab.body_type == "json" && ui.button("Format").on_hover_text("Pretty-print JSON").clicked() {
+                    if let Some(pretty) = tab.body_content.as_deref().and_then(pretty_json) {
+                        tab.body_content = Some(pretty);
+                        changed = true;
+                    }
+                }
+            });
             let content = tab.body_content.get_or_insert_with(String::new);
             changed |= body_editor::show(ui, "repeater_body", &tab.body_type, content);
         }
