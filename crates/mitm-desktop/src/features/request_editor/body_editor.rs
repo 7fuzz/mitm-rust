@@ -42,6 +42,24 @@ fn structured(ui: &mut egui::Ui, id_salt: &str, body_type: &str, content: &mut S
     }
 }
 
+/// The body type picked from the Convert menu; forms and text convert to each other, files and no body do not.
+pub fn convert_menu(ui: &mut egui::Ui, body_type: &str, types: &[(&'static str, &'static str)]) -> Option<&'static str> {
+    let convertible = |t: &str| matches!(t, "json" | "raw") || is_multipart(t) || is_urlencoded(t);
+    if !convertible(body_type) {
+        return None;
+    }
+    let mut picked = None;
+    ui.menu_button("Convert ⏷", |ui| {
+        for (id, label) in types {
+            if *id != body_type && convertible(id) && ui.button(format!("To {}", label)).clicked() {
+                picked = Some(*id);
+                ui.close();
+            }
+        }
+    });
+    picked
+}
+
 pub fn code_editor(ui: &mut egui::Ui, id_salt: &str, content: &mut String) -> bool {
     let visible = ui.available_size();
     egui::ScrollArea::vertical()

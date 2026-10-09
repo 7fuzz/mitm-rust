@@ -72,6 +72,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
                     }
                 }
                 changed |= body_type_combo(ui, tab);
+                if let Some(next) = body_editor::convert_menu(ui, &tab.body_type, &REPEATER_BODY_TYPES) {
+                    set_body_type(tab, next);
+                    changed = true;
+                }
             });
         }
     });
@@ -138,11 +142,15 @@ fn body_type_combo(ui: &mut egui::Ui, tab: &mut RepeaterTab) -> bool {
         }
     });
     let Some(next) = picked else { return false };
+    set_body_type(tab, next);
+    true
+}
+
+fn set_body_type(tab: &mut RepeaterTab, next: &str) {
     set_content_type_header(&mut tab.headers, content_type_for(next));
     let content = tab.body_content.take().unwrap_or_default();
     tab.body_content = Some(convert(&tab.body_type, next, &content));
     tab.body_type = next.to_string();
-    true
 }
 
 fn set_content_type_header(headers: &mut Vec<HeaderItem>, content_type: Option<&str>) {

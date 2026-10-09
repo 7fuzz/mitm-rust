@@ -292,6 +292,9 @@ fn request_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if fuzzer.request_tab == RequestTab::Body {
                 body_type_combo(ui, fuzzer);
+                if let Some(next) = body_editor::convert_menu(ui, &fuzzer.body_type, &REPEATER_BODY_TYPES) {
+                    set_body_type(fuzzer, next);
+                }
             }
         });
     });
@@ -333,7 +336,12 @@ fn body_type_combo(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
             }
         }
     });
-    let Some(next) = picked else { return };
+    if let Some(next) = picked {
+        set_body_type(fuzzer, next);
+    }
+}
+
+fn set_body_type(fuzzer: &mut FuzzerState, next: &str) {
     set_content_type_header(&mut fuzzer.headers, content_type_for(next));
     fuzzer.body_content = convert(&fuzzer.body_type, next, &fuzzer.body_content);
     fuzzer.body_type = next.to_string();
