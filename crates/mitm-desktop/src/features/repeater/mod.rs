@@ -6,7 +6,7 @@ mod view;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
-use mitm_core::curl::ParsedCurl;
+use mitm_core::http::curl::ParsedCurl;
 use mitm_core::repeater::{
     self as core_repeater, HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab,
 };

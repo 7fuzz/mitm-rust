@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-use crate::request_steps::{load_steps, load_workspace_steps, save_steps};
+use crate::http::steps::{load_steps, load_workspace_steps, save_steps};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

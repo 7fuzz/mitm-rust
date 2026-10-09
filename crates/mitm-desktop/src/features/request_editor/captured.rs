@@ -1,4 +1,4 @@
-use mitm_core::curl::ParsedCurl;
+use mitm_core::http::curl::ParsedCurl;
 use mitm_core::repeater::{HeaderItem, ParamItem};
 use mitm_core::state::{HistoryDetail, HistoryEntry};
 use super::body::structured_from_capture;
@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn curl_becomes_params_headers_and_typed_body() {
-        let curl = mitm_core::curl::parse_curl(
+        let curl = mitm_core::http::curl::parse_curl(
             "curl 'https://a.test/x?page=2' -H 'Content-Type: application/json' --data-raw '{\"a\":1}'",
         )
         .unwrap();

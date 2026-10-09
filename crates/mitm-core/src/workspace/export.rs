@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use rusqlite::{params, Connection};
 
 use crate::collections::{get_collections_db, CollectionTreeItem, RequestItem};
-use crate::encoding::{MultipartBodySpec, MultipartFieldSpec, UrlEncodedParamSpec};
+use crate::http::body::{MultipartBodySpec, MultipartFieldSpec, UrlEncodedParamSpec};
 use crate::repeater::{HeaderItem, ParamItem};
 use crate::workspace::get_workspace_environments_db;
 use super::file::{

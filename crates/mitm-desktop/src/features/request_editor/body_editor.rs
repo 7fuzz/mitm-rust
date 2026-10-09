@@ -1,6 +1,6 @@
 use base64::Engine;
 use eframe::egui::{self, RichText};
-use mitm_core::encoding::MultipartFieldSpec;
+use mitm_core::http::body::MultipartFieldSpec;
 use crate::util::format::format_bytes;
 use crate::ui::theme::{self, Tone};
 use crate::widgets::template;

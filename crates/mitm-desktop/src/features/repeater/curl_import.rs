@@ -1,5 +1,5 @@
 use eframe::egui::{self, RichText};
-use mitm_core::curl::{parse_curl, ParsedCurl};
+use mitm_core::http::curl::{parse_curl, ParsedCurl};
 use crate::app::command::{AppCommand, Commands};
 use crate::ui::theme::{self, Tone};
 

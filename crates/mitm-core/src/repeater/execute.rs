@@ -11,8 +11,8 @@ use super::{HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTa
 use crate::repeater::{get_repeater_tab_by_id, insert_repeater_history_db, REPEATER_WORKSPACE_ID};
 use crate::workspace::{get_workspace_environments_db, interpolate_dynamic_variables, interpolate_variables_with_env};
 use crate::collections::execute::perform_auto_extraction_db;
-use crate::encoding::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
-use crate::request_steps::{jar_cookie, pre_request_failure, request_steps};
+use crate::http::body::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
+use crate::http::steps::{jar_cookie, pre_request_failure, request_steps};
 
 pub async fn execute_tab_request(
     db_path: &PathBuf,

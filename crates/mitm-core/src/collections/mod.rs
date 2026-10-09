@@ -9,7 +9,7 @@ use uuid::Uuid;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::repeater::{HeaderItem, ParamItem, ExtractRuleItem};
-use crate::request_steps::{copy_steps, load_workspace_steps, save_steps};
+use crate::http::steps::{copy_steps, load_workspace_steps, save_steps};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

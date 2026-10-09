@@ -3,7 +3,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::encoding::{MultipartBodySpec, MultipartFieldSpec, UrlEncodedParamSpec};
+use crate::http::body::{MultipartBodySpec, MultipartFieldSpec, UrlEncodedParamSpec};
 use crate::repeater::{ExtractRuleItem, HeaderItem, ParamItem};
 use super::file::{self, Body, CollectionEntry, KeyValue, RequestEntry, WorkspaceFile};
 
@@ -366,7 +366,7 @@ fn import_workspace_file(
             continue;
         }
         let resolve = |refs: &[String]| -> Vec<String> { refs.iter().filter_map(|r| ids.get(r.as_str())).map(|id| id.to_string()).collect() };
-        crate::request_steps::save_steps(conn, id, &resolve(&entry.before), &resolve(&entry.after)).map_err(|e| e.to_string())?;
+        crate::http::steps::save_steps(conn, id, &resolve(&entry.before), &resolve(&entry.after)).map_err(|e| e.to_string())?;
     }
 
     Ok(ImportSummary {

@@ -115,7 +115,7 @@ mod tests {
         let path = std::env::temp_dir().join(format!("request-steps-test-{}.db", uuid::Uuid::new_v4()));
         let conn = Connection::open(&path).unwrap();
         conn.execute_batch("CREATE TABLE requests (id TEXT PRIMARY KEY)").unwrap();
-        conn.execute_batch(include_str!("../migrations/20261005_0019_request_steps.sql")).unwrap();
+        conn.execute_batch(include_str!("../../migrations/20261005_0019_request_steps.sql")).unwrap();
         for id in ids {
             conn.execute("INSERT INTO requests (id) VALUES (?)", params![id]).unwrap();
         }

@@ -1,4 +1,4 @@
-use mitm_core::curl::ParsedCurl;
+use mitm_core::http::curl::ParsedCurl;
 use mitm_core::db::InterceptRule;
 use mitm_core::fuzzer::FuzzConfig;
 use mitm_core::state::{HistorySettings, ListenerConfig, ProxyMode};

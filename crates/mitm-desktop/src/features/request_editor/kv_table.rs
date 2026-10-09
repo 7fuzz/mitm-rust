@@ -1,5 +1,5 @@
 use eframe::egui::{self, RichText};
-use mitm_core::encoding::UrlEncodedParamSpec;
+use mitm_core::http::body::UrlEncodedParamSpec;
 use mitm_core::repeater::{HeaderItem, ParamItem};
 use crate::ui::theme::{self, Tone};
 use crate::widgets::template;

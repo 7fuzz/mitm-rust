@@ -7,8 +7,8 @@ use reqwest::Method;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-use crate::encoding::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
-use crate::request_steps::{jar_cookie, pre_request_failure, request_steps};
+use crate::http::body::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
+use crate::http::steps::{jar_cookie, pre_request_failure, request_steps};
 use crate::repeater::HeaderItem;
 use crate::workspace::interpolate_variables;
 

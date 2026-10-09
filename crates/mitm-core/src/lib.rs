@@ -1,14 +1,12 @@
 pub mod ca;
 pub mod collections;
-pub mod curl;
 pub mod db;
-pub mod encoding;
 pub mod events;
 pub mod fuzzer;
+pub mod http;
 pub mod instance;
 pub mod proxy;
 pub mod repeater;
-pub mod request_steps;
 pub mod state;
 pub mod utils;
 pub mod webhook;

@@ -857,7 +857,7 @@ fn headers_to_vec(headers: &hyper::HeaderMap) -> Vec<(String, String)> {
     vec
 }
 
-use crate::encoding::{decompress_body, format_body_for_ui as encode_body_for_ui};
+use crate::http::body::{decompress_body, format_body_for_ui as encode_body_for_ui};
 
 pub(crate) fn parse_path_from_url(url_str: &str) -> String {
     if let Some(pos) = url_str.find("://") {
