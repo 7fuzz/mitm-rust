@@ -1,18 +1,15 @@
-use eframe::egui::{self, RichText};
+use eframe::egui;
 use mitm_core::http::curl::{parse_curl, ParsedCurl};
 use mitm_core::repeater::{HeaderItem, RepeaterTab};
 use crate::app::command::{AppCommand, Commands};
 use crate::features::request_editor::body::{content_type_for, convert, REPEATER_BODY_TYPES};
 use crate::features::request_editor::kv_table::{self, standard_headers, KvLabels};
-use crate::features::request_editor::method::method_combo;
 use crate::features::request_editor::steps::{self, StepOption};
-use crate::features::request_editor::url_field::url_field;
+use crate::features::request_editor::request_bar;
 use crate::features::request_editor::url_params::{build_url, new_id, parse_query};
 use crate::features::request_editor::{body_editor, extract_rules};
 use crate::util::format::pretty_json;
 use super::{EditorTab, RepeaterState};
-
-const MIN_URL_WIDTH: f32 = 160.0;
 
 pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, now: f64) {
     let Some(index) = state.active_id.as_ref().and_then(|id| state.tabs.iter().position(|t| &t.id == id)) else {
@@ -29,30 +26,20 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
     let mut changed = false;
     let mut send = false;
 
-    ui.horizontal_wrapped(|ui| {
-        ui.set_min_height(28.0);
-        changed |= method_combo(ui, "method", &mut tab.method);
-        let width = (ui.available_width() - 150.0).max(MIN_URL_WIDTH);
-        let url = url_field(ui, &mut tab.url, "https://api.example.com/v1/resource or {{BASE_URL}}/path", width);
-        if url.changed() {
-            if let Some(curl) = pasted_curl(ui) {
-                match curl {
-                    Ok(curl) => super::apply_captured(tab, curl.into()),
-                    Err(e) => crate::ui::top_bar::flash(ui, Err(format!("cURL: {e}"))),
-                }
+    let hint = "https://api.example.com/v1/resource or {{BASE_URL}}/path";
+    let bar = request_bar::show(ui, "method", &mut tab.method, &mut tab.url, hint, executing);
+    changed |= bar.method_changed;
+    send |= bar.send;
+    if bar.url.changed() {
+        if let Some(curl) = pasted_curl(ui) {
+            match curl {
+                Ok(curl) => super::apply_captured(tab, curl.into()),
+                Err(e) => crate::ui::top_bar::flash(ui, Err(format!("cURL: {e}"))),
             }
-            tab.params = parse_query(&tab.url, &tab.params);
-            changed = true;
         }
-        let label = if executing { "Sending..." } else { "▶ Send" };
-        let button = egui::Button::new(RichText::new(label).strong()).fill(ui.visuals().selection.bg_fill);
-        if ui.add_enabled(!executing, button).on_hover_text("Ctrl+Enter").clicked() {
-            send = true;
-        }
-        if ui.selectable_label(state.prefs.history_open, "🕘").on_hover_text("Execution history").clicked() {
-            state.prefs.history_open = !state.prefs.history_open;
-        }
-    });
+        tab.params = parse_query(&tab.url, &tab.params);
+        changed = true;
+    }
     let hotkey = ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Enter));
     if hotkey && !executing && ui.ui_contains_pointer() {
         send = true;

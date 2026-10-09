@@ -3,11 +3,10 @@ use mitm_core::collections::{CollectionTreeItem, RequestItem};
 use crate::app::command::{AppCommand, Commands};
 use crate::features::request_editor::body::{convert, is_multipart, is_urlencoded, COLLECTION_BODY_TYPES};
 use crate::features::request_editor::kv_table::{self, KvLabels};
-use crate::features::request_editor::method::method_combo;
 use crate::features::request_editor::steps::{self, StepOption};
 use crate::features::request_editor::{body_editor, extract_rules};
 use crate::ui::theme::{self, Tone};
-use crate::features::request_editor::url_field::url_field;
+use crate::features::request_editor::request_bar;
 use super::{docs, CollectionsCmd, CollectionsState, DocsMode, EditorTab, PreviewMode};
 
 
@@ -22,21 +21,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
     let mut changed = false;
     let mut send = false;
 
-    ui.horizontal_wrapped(|ui| {
-        ui.set_min_height(28.0);
-        changed |= method_combo(ui, "collection_method", &mut request.method);
-        let width = (ui.available_width() - 130.0).max(160.0);
-        let url = url_field(ui, &mut request.url, "https://api.example.com/v1/resource or {{BASE_URL}}/endpoint", width);
-        changed |= url.changed();
-        send |= url.has_focus() && ui.input(|i| i.modifiers.is_none() && i.key_pressed(egui::Key::Enter));
-        let label = if executing { "Sending..." } else { "▶ Send" };
-        let button = egui::Button::new(RichText::new(label).strong()).fill(ui.visuals().selection.bg_fill);
-        send |= ui.add_enabled(!executing, button).on_hover_text("Ctrl+Enter").clicked();
-        let history_hint = if state.prefs.history_open { "Hide run history" } else { "Show run history" };
-        if ui.selectable_label(state.prefs.history_open, "🕘").on_hover_text(history_hint).clicked() {
-            state.prefs.history_open = !state.prefs.history_open;
-        }
-    });
+    let hint = "https://api.example.com/v1/resource or {{BASE_URL}}/endpoint";
+    let bar = request_bar::show(ui, "collection_method", &mut request.method, &mut request.url, hint, executing);
+    changed |= bar.method_changed | bar.url.changed();
+    send |= bar.send || (bar.url.has_focus() && ui.input(|i| i.modifiers.is_none() && i.key_pressed(egui::Key::Enter)));
     let hotkey = ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Enter));
     send |= hotkey && ui.ui_contains_pointer();
     ui.separator();

@@ -122,7 +122,9 @@ fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str, c
     let older_run = run.filter(|_| run_index > 0).map(|r| (runs.len() - run_index, local_time(r.executed_at_ms)));
     let mut show_latest = false;
 
+    let mut history_open = state.prefs.history_open;
     let save = response_panel::show(ui, "collections_response", &mut state.response_pane, data, None, exchange.as_ref(), |ui| {
+        response_panel::history_toggle(ui, &mut history_open);
         if let Some((number, time)) = &older_run {
             if ui.small_button("Latest").on_hover_text("Show the latest run").clicked() {
                 show_latest = true;
@@ -130,6 +132,7 @@ fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str, c
             ui.label(RichText::new(format!("🕘 Run {} · {}", number, time)).color(theme::color(ui, Tone::Warn)).size(11.0));
         }
     });
+    state.prefs.history_open = history_open;
     if show_latest {
         state.selected_run.remove(request_id);
     }

@@ -72,11 +72,14 @@ fn response(ui: &mut egui::Ui, state: &mut RepeaterState, tab_id: &str, cmds: &m
     });
     let executing = state.executing.contains(tab_id);
 
+    let mut history_open = state.prefs.history_open;
     let save = response_panel::show(ui, "repeater_response", &mut state.response_pane, data, Some(&request), exchange.as_ref(), |ui| {
+        response_panel::history_toggle(ui, &mut history_open);
         if executing {
             ui.spinner();
         }
     });
+    state.prefs.history_open = history_open;
     if let Some(save) = save {
         cmds.push(AppCommand::SaveBody(save));
     }

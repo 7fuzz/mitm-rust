@@ -46,6 +46,14 @@ impl RequestCopy {
     }
 }
 
+/// Shows or hides the run history; sits in the response header's toolbar.
+pub fn history_toggle(ui: &mut egui::Ui, open: &mut bool) {
+    let hint = if *open { "Hide run history" } else { "Show run history" };
+    if ui.selectable_label(*open, "🕘").on_hover_text(hint).clicked() {
+        *open = !*open;
+    }
+}
+
 pub fn header_pairs(headers: &[HeaderItem]) -> Vec<(String, String)> {
     headers.iter().map(|h| (h.key.clone(), h.value.clone())).collect()
 }
