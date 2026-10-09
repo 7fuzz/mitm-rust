@@ -101,7 +101,7 @@ crates/
     ├── app/            # MitmApp: commands, state, prefs, background jobs
     ├── shell/          # Window lifecycle: startup, instance conflict, DB recovery
     ├── ui/             # App-wide chrome: dock, top bar, palette, shortcuts, theme
-    ├── features/       # One module per tab: state, view, prefs
+    ├── features/       # One module per tab: state, view, prefs (Utilities ▸ tools in utilities/)
     ├── widgets/        # Shared widgets (code view, diff, message pane, splits, …)
     └── util/           # File dialogs, copy-as formats
 ```

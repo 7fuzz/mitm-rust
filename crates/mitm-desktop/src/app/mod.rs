@@ -48,7 +48,7 @@ pub struct MitmApp {
     ws_actions: Jobs<Result<(), String>>,
     webhook_actions: Jobs<Result<(), String>>,
     webhook_replays: Jobs<(i64, Result<mitm_core::webhook::WebhookReplayResult, String>)>,
-    bcrypt_jobs: Jobs<crate::features::hashing::BcryptOutcome>,
+    bcrypt_jobs: Jobs<crate::features::utilities::hashing::BcryptOutcome>,
 }
 
 impl MitmApp {
@@ -548,7 +548,7 @@ impl MitmApp {
                 dock::open_tab(&mut self.dock, Tab::HmacTool);
             }
             AppCommand::GenerateBcrypt { password, cost } => {
-                use crate::features::hashing::BcryptOutcome;
+                use crate::features::utilities::hashing::BcryptOutcome;
                 self.bcrypt_jobs.spawn(&self.rt, ctx, async move {
                     let result = tokio::task::spawn_blocking(move || mitm_core::utils::hashing::bcrypt_hash(&password, cost))
                         .await
@@ -557,7 +557,7 @@ impl MitmApp {
                 });
             }
             AppCommand::VerifyBcrypt { password, hash } => {
-                use crate::features::hashing::BcryptOutcome;
+                use crate::features::utilities::hashing::BcryptOutcome;
                 self.bcrypt_jobs.spawn(&self.rt, ctx, async move {
                     let result = tokio::task::spawn_blocking(move || mitm_core::utils::hashing::bcrypt_verify(&password, &hash))
                         .await
