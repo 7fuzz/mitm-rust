@@ -85,19 +85,25 @@ These differences are intentional:
 
 ```text
 crates/
-├── mitm-core/       # Headless engine: no UI code
-│   ├── proxy/       # hyper + rustls proxy, TLS interception, intercept and rewrite
-│   ├── ca/          # Root CA and per-host certificates (rcgen)
-│   ├── db/          # SQLite (WAL) storage and migrations
-│   ├── repeater/  collections/  workspace/  request_steps.rs
-│   ├── fuzzer/  ws/  webhook/
-│   ├── utils/       # Encoding, hashing, JSON and CVSS helpers
-│   └── events.rs    # CoreEvent bus the UI subscribes to
-└── mitm-desktop/    # eframe app
-    ├── features/    # One module per tab: state, view, prefs
-    ├── widgets/     # Shared widgets (code view, diff, message pane, splits, …)
-    ├── dock.rs  prefs.rs  shortcuts.rs  palette.rs
-    └── app.rs       # Applies AppCommands and core events
+├── mitm-core/          # Headless engine: no UI code
+│   ├── lib.rs          # MitmCore, the API the app calls
+│   ├── state.rs        # Shared runtime state and types
+│   ├── events.rs       # CoreEvent bus the UI subscribes to
+│   ├── instance.rs     # Single-instance guard
+│   ├── proxy/          # hyper + rustls proxy, TLS interception, intercept and rewrite
+│   ├── ca/             # Root CA and per-host certificates (rcgen)
+│   ├── db/             # SQLite (WAL) storage and migrations
+│   ├── http/           # Request bodies, cURL parsing, pre/post request steps
+│   ├── repeater/  collections/  workspace/  fuzzer/  ws/  webhook/
+│   └── utils/          # Encoding, hashing, JSON and CVSS helpers
+└── mitm-desktop/       # eframe app
+    ├── main.rs
+    ├── app/            # MitmApp: commands, state, prefs, background jobs
+    ├── shell/          # Window lifecycle: startup, instance conflict, DB recovery
+    ├── ui/             # App-wide chrome: dock, top bar, palette, shortcuts, theme
+    ├── features/       # One module per tab: state, view, prefs
+    ├── widgets/        # Shared widgets (code view, diff, message pane, splits, …)
+    └── util/           # File dialogs, copy-as formats
 ```
 
 More docs: [WORKSPACE_FILE.md](WORKSPACE_FILE.md) (the import/export format), [API.md](API.md) (the `MitmCore` API), [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md).

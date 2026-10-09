@@ -125,8 +125,8 @@ Each method also exists as a `workspace::*_db(db_path, …)` function. The deskt
 | `db::get_history_page` / `db::get_history_detail` / `db::delete_history_entry` / `clear_all_traffic()` | Traffic history. Bodies load per flow, never in bulk. |
 | `repeater::execute::execute_repeater_tab` | Sends a Repeater request and stores its run. |
 | `collections::execute::execute_collection_request_db` | Sends a collection request with its pre/post requests and extract rules. |
-| `request_steps::*` | Pre/post request steps shared by Repeater and Collections. |
-| `curl::parse_curl` | cURL command to request. |
+| `http::steps::*` | Pre/post request steps shared by Repeater and Collections. |
+| `http::curl::parse_curl` | cURL command to request. |
 | `data_counts()` / `clear_data_category(category)` | Row counts and per-category cleanup for Settings ▸ Data. |
 | `list_db_tables()` / `query_db_table(…)` / `get_db_row(table, rowid)` / `run_db_query(sql)` | Database browser. |
 

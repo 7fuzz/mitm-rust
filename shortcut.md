@@ -1,6 +1,6 @@
 # Keyboard Shortcuts
 
-`Ctrl` is `Cmd` on macOS. The same list is in the app under **Settings ▸ Shortcuts**, generated from `crates/mitm-desktop/src/shortcuts.rs`.
+`Ctrl` is `Cmd` on macOS. The same list is in the app under **Settings ▸ Shortcuts**, generated from `crates/mitm-desktop/src/ui/shortcuts.rs`.
 
 Anything without a shortcut is in the command palette (`Ctrl + K`): every tab and utility, proxy modes, import and export.
 
