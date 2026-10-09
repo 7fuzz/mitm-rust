@@ -49,23 +49,41 @@ pub fn show<R: KeyValueRow>(
         ui.push_id((id_salt, index), |ui| {
             let dim = !*enabled;
             let is_cookie = key.trim().eq_ignore_ascii_case("cookie");
-            let expanded_id = ui.id().with("cookies_expanded");
-            let mut expanded = is_cookie && ui.data(|d| d.get_temp(expanded_id).unwrap_or(false));
-            ui.horizontal(|ui| {
+            let expanded_id = ui.id().with("expanded");
+            let mut expanded = ui.data(|d| d.get_temp(expanded_id).unwrap_or(false));
+            let top_aligned = expanded && !is_cookie;
+            let row = |ui: &mut egui::Ui| {
                 changed |= ui.checkbox(enabled, "").changed();
                 changed |= text_field(ui, key, labels.key, dim, key_width).changed();
-                let reserved = if is_cookie { 56.0 } else { 28.0 };
+                let long = !is_cookie && overflows(ui, value, (ui.available_width() - 28.0).max(80.0));
+                let toggle = is_cookie || long;
+                let reserved = if toggle { 56.0 } else { 28.0 };
                 let value_width = (ui.available_width() - reserved).max(80.0);
-                changed |= text_field(ui, value, labels.value, dim, value_width).changed();
-                if is_cookie && ui.small_button(if expanded { "⏷" } else { "⏵" }).on_hover_text("Edit cookies").clicked() {
+                let field = if long && expanded {
+                    wrapped_field(ui, value, labels.value, dim, value_width)
+                } else {
+                    text_field(ui, value, labels.value, dim, value_width)
+                };
+                changed |= field.changed();
+                let hover = match (is_cookie, expanded) {
+                    (true, _) => "Edit cookies",
+                    (false, false) => "Expand",
+                    (false, true) => "Collapse",
+                };
+                if toggle && ui.small_button(if expanded { "⏷" } else { "⏵" }).on_hover_text(hover).clicked() {
                     expanded = !expanded;
                     ui.data_mut(|d| d.insert_temp(expanded_id, expanded));
                 }
                 if ui.small_button(RichText::new("🗑").color(theme::color(ui, Tone::Danger))).on_hover_text("Delete row").clicked() {
                     remove = Some(index);
                 }
-            });
-            if expanded {
+            };
+            if top_aligned {
+                ui.horizontal_top(row);
+            } else {
+                ui.horizontal(row);
+            }
+            if expanded && is_cookie {
                 changed |= cookie_rows(ui, value, dim, key_width);
             }
         });
@@ -150,6 +168,34 @@ fn parse_cookies(header: &str) -> Vec<(String, String)> {
 
 fn join_cookies(cookies: &[(String, String)]) -> String {
     cookies.iter().map(|(name, value)| format!("{}={}", name, value)).collect::<Vec<_>>().join("; ")
+}
+
+/// Matches `TextEdit`'s default horizontal margin, which its desired width includes.
+const TEXT_EDIT_MARGIN_X: f32 = 8.0;
+
+fn overflows(ui: &egui::Ui, text: &str, field_width: f32) -> bool {
+    let font = egui::TextStyle::Monospace.resolve(ui.style());
+    let galley = ui.fonts_mut(|f| f.layout_no_wrap(text.to_owned(), font, egui::Color32::PLACEHOLDER));
+    galley.size().x > field_width - TEXT_EDIT_MARGIN_X
+}
+
+/// Header values are a single line, so Enter adds nothing and pasted line breaks are dropped.
+fn wrapped_field(ui: &mut egui::Ui, text: &mut String, hint: &str, dim: bool, width: f32) -> egui::Response {
+    let color = dim.then(|| ui.visuals().weak_text_color());
+    let mut layouter = template::layouter(egui::TextStyle::Monospace, color);
+    let response = template::show(ui, text, |text| {
+        egui::TextEdit::multiline(text)
+            .hint_text(hint)
+            .desired_width(width)
+            .desired_rows(1)
+            .return_key(None)
+            .font(egui::TextStyle::Monospace)
+            .layouter(&mut layouter)
+    });
+    if response.changed() && text.contains(['\n', '\r']) {
+        text.retain(|c| c != '\n' && c != '\r');
+    }
+    response
 }
 
 fn text_field(ui: &mut egui::Ui, text: &mut String, hint: &str, dim: bool, width: f32) -> egui::Response {
