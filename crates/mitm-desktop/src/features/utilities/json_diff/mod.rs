@@ -96,9 +96,11 @@ mod tests {
 
     #[test]
     fn detects_identical_and_differences() {
-        let mut state = JsonDiffState::default();
-        state.left = r#"{"a": 1, "b": [2, 3]}"#.to_string();
-        state.right = "{\n  \"b\": [\n    2,\n    3\n  ],\n  \"a\": 1\n}".to_string();
+        let mut state = JsonDiffState {
+            left: r#"{"a": 1, "b": [2, 3]}"#.to_string(),
+            right: "{\n  \"b\": [\n    2,\n    3\n  ],\n  \"a\": 1\n}".to_string(),
+            ..JsonDiffState::default()
+        };
         assert_eq!(*state.diff(), DiffStatus::Identical);
 
         state.right = r#"{"a": 2, "b": [2, 3]}"#.to_string();

@@ -766,11 +766,13 @@ mod tests {
 
     #[test]
     fn config_survives_a_save_and_restore() {
-        let mut state = FuzzerState::default();
-        state.url = "https://example.test/{{id}}".to_string();
+        let mut state = FuzzerState {
+            url: "https://example.test/{{id}}".to_string(),
+            attack_type: AttackType::ClusterBomb,
+            delay_ms: 250,
+            ..FuzzerState::default()
+        };
         state.payloads.insert("id".into(), PayloadConfig { kind: PayloadKind::Numbers, to: 99.0, ..PayloadConfig::default() });
-        state.attack_type = AttackType::ClusterBomb;
-        state.delay_ms = 250;
         let saved = serde_json::to_string(&state.snapshot()).unwrap();
 
         let mut restored = FuzzerState::default();
@@ -815,8 +817,10 @@ mod tests {
 
     #[test]
     fn empty_or_missing_payloads_estimate_zero() {
-        let mut state = FuzzerState::default();
-        state.url = "https://httpbin.org/status/{{missing}}".to_string();
+        let mut state = FuzzerState {
+            url: "https://httpbin.org/status/{{missing}}".to_string(),
+            ..FuzzerState::default()
+        };
         assert_eq!(state.request_estimate(), 0);
 
         state.payloads.insert("missing".to_string(), PayloadConfig::default());
@@ -828,9 +832,11 @@ mod tests {
 
     #[test]
     fn options_populate_config() {
-        let mut state = FuzzerState::default();
-        state.concurrency = 12;
-        state.delay_ms = 250;
+        let state = FuzzerState {
+            concurrency: 12,
+            delay_ms: 250,
+            ..FuzzerState::default()
+        };
         let cfg = state.config();
         assert_eq!(cfg.concurrency, 12);
         assert_eq!(cfg.delay_ms, 250);
@@ -925,23 +931,25 @@ mod tests {
 
     #[test]
     fn select_and_clear_result() {
-        let mut state = FuzzerState::default();
-        state.selected_idx = Some(5);
-        state.selected_result = Some(mitm_core::fuzzer::FuzzResult {
-            idx: 5,
-            payloads: vec!["foo".to_string()],
-            method: "GET".to_string(),
-            url: "https://example.com/foo".to_string(),
-            request_headers: vec![],
-            request_body: None,
-            status_code: 200,
-            response_headers: vec![],
-            response_body: Some("ok".to_string()),
-            response_size: 2,
-            duration_ms: 10,
-            error: None,
-            matches: vec![],
-        });
+        let mut state = FuzzerState {
+            selected_idx: Some(5),
+            selected_result: Some(mitm_core::fuzzer::FuzzResult {
+                idx: 5,
+                payloads: vec!["foo".to_string()],
+                method: "GET".to_string(),
+                url: "https://example.com/foo".to_string(),
+                request_headers: vec![],
+                request_body: None,
+                status_code: 200,
+                response_headers: vec![],
+                response_body: Some("ok".to_string()),
+                response_size: 2,
+                duration_ms: 10,
+                error: None,
+                matches: vec![],
+            }),
+            ..FuzzerState::default()
+        };
         assert_eq!(state.selected_idx, Some(5));
         assert!(state.selected_result.is_some());
 
@@ -952,37 +960,39 @@ mod tests {
 
     #[test]
     fn search_payload_and_response() {
-        let mut state = FuzzerState::default();
-        state.run_id = Some(42);
-        state.results = vec![
-            FuzzRow {
-                idx: 0,
-                payloads: vec!["apple".to_string()],
-                status_code: 200,
-                response_size: 100,
-                duration_ms: 10,
-                error: None,
-                matches: vec![],
-            },
-            FuzzRow {
-                idx: 1,
-                payloads: vec!["banana".to_string()],
-                status_code: 200,
-                response_size: 100,
-                duration_ms: 10,
-                error: None,
-                matches: vec![],
-            },
-            FuzzRow {
-                idx: 2,
-                payloads: vec!["cherry".to_string()],
-                status_code: 200,
-                response_size: 100,
-                duration_ms: 10,
-                error: None,
-                matches: vec![],
-            },
-        ];
+        let mut state = FuzzerState {
+            run_id: Some(42),
+            results: vec![
+                FuzzRow {
+                    idx: 0,
+                    payloads: vec!["apple".to_string()],
+                    status_code: 200,
+                    response_size: 100,
+                    duration_ms: 10,
+                    error: None,
+                    matches: vec![],
+                },
+                FuzzRow {
+                    idx: 1,
+                    payloads: vec!["banana".to_string()],
+                    status_code: 200,
+                    response_size: 100,
+                    duration_ms: 10,
+                    error: None,
+                    matches: vec![],
+                },
+                FuzzRow {
+                    idx: 2,
+                    payloads: vec!["cherry".to_string()],
+                    status_code: 200,
+                    response_size: 100,
+                    duration_ms: 10,
+                    error: None,
+                    matches: vec![],
+                },
+            ],
+            ..FuzzerState::default()
+        };
 
         state.search_scope = FuzzSearchScope::Payload;
         state.search_query = "nan".to_string();

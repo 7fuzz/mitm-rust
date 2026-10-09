@@ -101,8 +101,10 @@ mod tests {
 
     #[test]
     fn each_mode_and_parse_errors() {
-        let mut state = JsonToolsState::default();
-        state.input = "{\"b\":1,\"a\":2}".to_string();
+        let mut state = JsonToolsState {
+            input: "{\"b\":1,\"a\":2}".to_string(),
+            ..JsonToolsState::default()
+        };
         state.prefs.mode = Mode::Format;
         state.prefs.sort_keys = true;
         assert_eq!(state.output().as_ref().unwrap(), "{\n  \"a\": 2,\n  \"b\": 1\n}");
