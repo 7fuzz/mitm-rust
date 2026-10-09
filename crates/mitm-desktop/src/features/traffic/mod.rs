@@ -166,6 +166,13 @@ impl TrafficState {
         self.header_search_key = key;
     }
 
+    /// Default order, every column shown, default widths.
+    pub fn reset_columns(&mut self) {
+        self.prefs.columns = ColumnLayout::default();
+        self.prefs.widths.clear();
+        self.width_epoch += 1;
+    }
+
     pub fn set_history_limit(&mut self, settings: HistorySettings) {
         self.limit_draft = settings.clone();
         self.history_limit = settings;
@@ -425,6 +432,20 @@ mod tests {
             request_at: None,
             response_at: None,
         }
+    }
+
+    #[test]
+    fn reset_columns_restores_order_visibility_and_widths() {
+        let mut state = TrafficState::default();
+        state.prefs.columns.move_next_to(ColumnId::Path, ColumnId::Id, false);
+        state.prefs.columns.set_shown(ColumnId::Source, false);
+        state.prefs.widths.insert(ColumnId::Host, 512.0);
+        let epoch = state.width_epoch;
+
+        state.reset_columns();
+        assert_eq!(state.prefs.columns, ColumnLayout::default());
+        assert!(state.prefs.widths.is_empty());
+        assert_ne!(state.width_epoch, epoch);
     }
 
     #[test]

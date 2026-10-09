@@ -43,16 +43,20 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], fold
 
             let output = builder
                 .header(24.0, |mut header| {
+                    let mut reset = false;
                     for &col in &columns {
                         let mut rect = egui::Rect::NOTHING;
-                        header.col(|ui| rect = header_cell(ui, col, &mut state.prefs.columns));
+                        header.col(|ui| (rect, reset) = header_cell(ui, col, &mut state.prefs.columns, reset));
                         remember_width(&mut state.prefs.widths, col, rect.width());
                         if edge_double_clicked(&ctx, rect) {
                             state.prefs.widths.remove(&col);
                             state.width_epoch += 1;
                         }
                     }
-                    header.response().context_menu(|ui| column_menu(ui, &mut state.prefs.columns, None));
+                    header.response().context_menu(|ui| reset |= column_menu(ui, &mut state.prefs.columns, None));
+                    if reset {
+                        state.reset_columns();
+                    }
                 })
                 .body(|body| {
                     body.rows(ROW_HEIGHT, visible.len(), |mut row| {
@@ -235,8 +239,9 @@ fn remember_width(widths: &mut HashMap<ColumnId, f32>, col: ColumnId, width: f32
 }
 
 /// The whole cell is the drag handle and drop zone; dropping on its right half places the column after it.
-/// Returns the cell's rect: the column's real width, unlike the cell response, which grows with its content.
-fn header_cell(ui: &mut egui::Ui, col: ColumnId, layout: &mut ColumnLayout) -> egui::Rect {
+/// Returns the cell's rect (the column's real width, unlike the cell response, which grows with its content)
+/// and whether **Reset columns** was picked, carried along in `reset`.
+fn header_cell(ui: &mut egui::Ui, col: ColumnId, layout: &mut ColumnLayout, mut reset: bool) -> (egui::Rect, bool) {
     aligned(ui, col.align(), |ui| {
         ui.add(egui::Label::new(RichText::new(col.label()).strong().size(11.0)).selectable(false));
     });
@@ -252,11 +257,12 @@ fn header_cell(ui: &mut egui::Ui, col: ColumnId, layout: &mut ColumnLayout) -> e
     if let Some(dragged) = response.dnd_release_payload::<ColumnId>() {
         layout.move_next_to(*dragged, col, after);
     }
-    response.context_menu(|ui| column_menu(ui, layout, Some(col)));
-    rect
+    response.context_menu(|ui| reset |= column_menu(ui, layout, Some(col)));
+    (rect, reset)
 }
 
-fn column_menu(ui: &mut egui::Ui, layout: &mut ColumnLayout, clicked: Option<ColumnId>) {
+/// Returns true when **Reset columns** was picked; the caller resets order, visibility and widths.
+fn column_menu(ui: &mut egui::Ui, layout: &mut ColumnLayout, clicked: Option<ColumnId>) -> bool {
     if let Some(col) = clicked {
         let visible = layout.visible();
         let index = visible.iter().position(|&c| c == col).unwrap_or(0);
@@ -280,10 +286,11 @@ fn column_menu(ui: &mut egui::Ui, layout: &mut ColumnLayout, clicked: Option<Col
         }
     }
     ui.separator();
-    if ui.button("Reset columns").clicked() {
-        *layout = ColumnLayout::default();
+    let reset = ui.button("Reset columns").clicked();
+    if reset {
         ui.close();
     }
+    reset
 }
 
 fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, folders: &[CollectionTreeItem], cmds: &mut Commands) {
