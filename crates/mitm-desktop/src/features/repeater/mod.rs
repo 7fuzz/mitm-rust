@@ -73,11 +73,12 @@ impl ShownResponse {
 pub struct RepeaterPrefs {
     pub split: f32,
     pub history_open: bool,
+    pub stacked: bool,
 }
 
 impl Default for RepeaterPrefs {
     fn default() -> Self {
-        Self { split: 0.5, history_open: false }
+        Self { split: 0.5, history_open: false, stacked: false }
     }
 }
 

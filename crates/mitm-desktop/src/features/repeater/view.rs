@@ -37,7 +37,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
     }
 
     egui::CentralPanel::no_frame().show(ui, |ui| {
-        let [mut request_ui, mut response_ui] = split::side_by_side(ui, "repeater_split", &mut state.prefs.split);
+        let [mut request_ui, mut response_ui] = split::oriented(ui, "repeater_split", &mut state.prefs.split, state.prefs.stacked);
         builder::show(&mut request_ui, state, cmds, now);
         response(&mut response_ui, state, &active_id, cmds);
     });
@@ -73,13 +73,16 @@ fn response(ui: &mut egui::Ui, state: &mut RepeaterState, tab_id: &str, cmds: &m
     let executing = state.executing.contains(tab_id);
 
     let mut history_open = state.prefs.history_open;
+    let mut stacked = state.prefs.stacked;
     let save = response_panel::show(ui, "repeater_response", &mut state.response_pane, data, Some(&request), exchange.as_ref(), |ui| {
         response_panel::history_toggle(ui, &mut history_open);
+        response_panel::stack_toggle(ui, &mut stacked);
         if executing {
             ui.spinner();
         }
     });
     state.prefs.history_open = history_open;
+    state.prefs.stacked = stacked;
     if let Some(save) = save {
         cmds.push(AppCommand::SaveBody(save));
     }

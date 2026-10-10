@@ -54,6 +54,13 @@ pub fn history_toggle(ui: &mut egui::Ui, open: &mut bool) {
     }
 }
 
+pub fn stack_toggle(ui: &mut egui::Ui, stacked: &mut bool) {
+    let hint = if *stacked { "Put request beside response" } else { "Put request above response" };
+    if ui.selectable_label(*stacked, "↕").on_hover_text(hint).clicked() {
+        *stacked = !*stacked;
+    }
+}
+
 pub fn header_pairs(headers: &[HeaderItem]) -> Vec<(String, String)> {
     headers.iter().map(|h| (h.key.clone(), h.value.clone())).collect()
 }

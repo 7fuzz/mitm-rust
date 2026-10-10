@@ -11,6 +11,10 @@ pub fn stacked(ui: &mut egui::Ui, id_salt: impl AsIdSalt, fraction: &mut f32) ->
     regions(ui, id_salt, fraction, true)
 }
 
+pub fn oriented(ui: &mut egui::Ui, id_salt: impl AsIdSalt, fraction: &mut f32, stacked: bool) -> [egui::Ui; 2] {
+    regions(ui, id_salt, fraction, stacked)
+}
+
 fn regions(ui: &mut egui::Ui, id_salt: impl AsIdSalt, fraction: &mut f32, stacked: bool) -> [egui::Ui; 2] {
     let rect = ui.available_rect_before_wrap();
     let (start, length) = if stacked { (rect.top(), rect.height()) } else { (rect.left(), rect.width()) };

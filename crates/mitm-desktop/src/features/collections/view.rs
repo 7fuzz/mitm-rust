@@ -38,7 +38,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
         }
 
         egui::CentralPanel::no_frame().show(ui, |ui| {
-            let [mut request_ui, mut response_ui] = split::side_by_side(ui, "collections_split", &mut state.prefs.split);
+            let [mut request_ui, mut response_ui] = split::oriented(ui, "collections_split", &mut state.prefs.split, state.prefs.stacked);
             editor::show(&mut request_ui, state, cmds, now);
             response(&mut response_ui, state, &active_id, cmds);
         });
@@ -123,8 +123,10 @@ fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str, c
     let mut show_latest = false;
 
     let mut history_open = state.prefs.history_open;
+    let mut stacked = state.prefs.stacked;
     let save = response_panel::show(ui, "collections_response", &mut state.response_pane, data, None, exchange.as_ref(), |ui| {
         response_panel::history_toggle(ui, &mut history_open);
+        response_panel::stack_toggle(ui, &mut stacked);
         if let Some((number, time)) = &older_run {
             if ui.small_button("Latest").on_hover_text("Show the latest run").clicked() {
                 show_latest = true;
@@ -133,6 +135,7 @@ fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str, c
         }
     });
     state.prefs.history_open = history_open;
+    state.prefs.stacked = stacked;
     if show_latest {
         state.selected_run.remove(request_id);
     }

@@ -92,11 +92,12 @@ pub enum CollectionsCmd {
 pub struct CollectionsPrefs {
     pub split: f32,
     pub history_open: bool,
+    pub stacked: bool,
 }
 
 impl Default for CollectionsPrefs {
     fn default() -> Self {
-        Self { split: 0.5, history_open: false }
+        Self { split: 0.5, history_open: false, stacked: false }
     }
 }
 
