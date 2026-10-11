@@ -32,6 +32,8 @@ pub enum AppCommand {
     SaveFlowToCollection { flow_id: i64, target: SaveTarget },
     LoadOlderFlows,
     ClearTraffic,
+    OpenHarExport,
+    ExportHar(Vec<i64>),
     FocusSearch,
     DeleteFlow(i64),
     CopyFlow(i64, CopyFormat),

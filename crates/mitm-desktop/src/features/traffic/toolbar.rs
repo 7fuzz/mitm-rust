@@ -27,6 +27,9 @@ pub fn show(
             if confirm_button(ui, confirm_id, RichText::new("🗑"), "🗑 Clear all?", "Clear all traffic logs") {
                 cmds.push(AppCommand::ClearTraffic);
             }
+            if ui.button("📤").on_hover_text("Export as HAR").clicked() {
+                cmds.push(AppCommand::OpenHarExport);
+            }
             limit_menu(ui, state, cmds);
         });
     });

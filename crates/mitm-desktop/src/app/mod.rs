@@ -43,6 +43,7 @@ pub struct MitmApp {
     ca_jobs: Jobs<Option<Result<PathBuf, String>>>,
     import_files: Jobs<Option<Result<(String, String), String>>>,
     file_saves: Jobs<Option<Result<String, String>>>,
+    har_index: Jobs<Result<Vec<mitm_core::HistoryEntry>, String>>,
     fuzz_search: Jobs<(i64, String, Vec<u32>)>,
     ws_connects: Jobs<Result<mitm_core::state::WebSocketConn, String>>,
     ws_actions: Jobs<Result<(), String>>,
@@ -68,6 +69,7 @@ impl MitmApp {
             ca_jobs: Jobs::default(),
             import_files: Jobs::default(),
             file_saves: Jobs::default(),
+            har_index: Jobs::default(),
             fuzz_search: Jobs::default(),
             ws_connects: Jobs::default(),
             ws_actions: Jobs::default(),
@@ -237,6 +239,20 @@ impl MitmApp {
             AppCommand::ClearTraffic => {
                 let _ = self.core.clear_all_traffic();
                 self.state.traffic.clear();
+            }
+            AppCommand::OpenHarExport => {
+                self.state.traffic.har_export.open();
+                let db_path = db_path.clone();
+                self.har_index.spawn(&self.rt, ctx, async move { mitm_core::db::get_history_summaries(&db_path) });
+            }
+            AppCommand::ExportHar(ids) => {
+                let db_path = db_path.clone();
+                self.file_saves.spawn(&self.rt, ctx, async move {
+                    let path = crate::util::files::pick_save("traffic.har", &[("HAR", &["har"])]).await?;
+                    Some(write_har(&db_path, &ids, &path).map(|count| {
+                        format!("Exported {} requests to {}", count, crate::util::files::file_name(&path))
+                    }))
+                });
             }
             AppCommand::DeleteFlow(id) => {
                 let _ = mitm_core::db::delete_history_entry(db_path, id);
@@ -809,6 +825,9 @@ impl eframe::App for MitmApp {
         if let Some((name, json)) = dropped_json(ui.ctx()) {
             self.state.environments.import.open_with(Some(environments::file_label(&name, json.len())), json);
         }
+        for result in self.har_index.drain() {
+            self.state.traffic.har_export.loaded(result);
+        }
         for result in self.file_saves.drain().flatten() {
             top_bar::flash(ui, result);
         }
@@ -861,6 +880,7 @@ impl eframe::App for MitmApp {
         environments::show_quick_vars(ui.ctx(), &mut self.state.environments, now);
         let workspace = self.state.environments.active_workspace().map(|w| (w.id.clone(), w.name.clone())).unwrap_or_default();
         environments::show_export(ui.ctx(), &mut self.state.environments.export, &mut self.cmds);
+        crate::features::traffic::show_har_export(ui.ctx(), &mut self.state.traffic.har_export, &mut self.cmds);
         environments::show_import(
             ui.ctx(),
             &mut self.state.environments.import,
@@ -878,6 +898,15 @@ impl eframe::App for MitmApp {
             ctx.request_repaint();
         }
     }
+}
+
+fn write_har(db_path: &PathBuf, ids: &[i64], path: &std::path::Path) -> Result<usize, String> {
+    let flows = mitm_core::db::get_history_by_ids(db_path, ids)?;
+    let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
+    let mut writer = std::io::BufWriter::new(file);
+    serde_json::to_writer_pretty(&mut writer, &mitm_core::http::har::build_har(&flows)).map_err(|e| e.to_string())?;
+    std::io::Write::flush(&mut writer).map_err(|e| e.to_string())?;
+    Ok(flows.len())
 }
 
 fn dropped_json(ctx: &egui::Context) -> Option<(String, String)> {
