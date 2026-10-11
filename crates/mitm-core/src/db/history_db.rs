@@ -13,11 +13,7 @@ pub fn get_history_logs(
 ) -> Result<Vec<HistoryEntry>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
-    let select_fields = if include_bodies {
-        "id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at"
-    } else {
-        "id, method, url, host, path, content_type, response_size, status_code, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at"
-    };
+    let select_fields = if include_bodies { FULL_FIELDS } else { SUMMARY_FIELDS };
 
     let mut query = format!("SELECT {} FROM history WHERE 1=1", select_fields);
     let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -57,45 +53,11 @@ pub fn get_history_logs(
     let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
 
     if include_bodies {
-        let entries = stmt.query_map(&param_refs[..], |row| {
-            let req_headers_json: String = row.get(8).unwrap_or_else(|_| "[]".to_string());
-            let res_headers_json: String = row.get(9).unwrap_or_else(|_| "[]".to_string());
-            let request_headers: Vec<(String, String)> = serde_json::from_str(&req_headers_json).unwrap_or_default();
-            let response_headers: Vec<(String, String)> = serde_json::from_str(&res_headers_json).unwrap_or_default();
-            let request_body: String = row.get(10).unwrap_or_default();
-            let response_body: String = row.get(11).unwrap_or_default();
-            let is_intercepted_int: i32 = row.get(15)?;
-            let is_rewritten_int: i32 = row.get(16)?;
-            let is_failed_int: i32 = row.get(17)?;
-            let listener_label: String = row.get(18)?;
-
-            Ok(HistoryEntry {
-                id: row.get(0)?,
-                method: row.get(1)?,
-                url: row.get(2)?,
-                host: row.get(3)?,
-                path: row.get(4)?,
-                content_type: row.get(5)?,
-                response_size: row.get(6)?,
-                status_code: row.get(7)?,
-                request_headers,
-                response_headers,
-                request_body,
-                response_body,
-                phase: row.get(12)?,
-                duration_ms: row.get(13)?,
-                created_at: row.get(14)?,
-                is_intercepted: is_intercepted_int != 0,
-                is_rewritten: is_rewritten_int != 0,
-                is_failed: is_failed_int != 0,
-                listener_label,
-                request_at: row.get(19)?,
-                response_at: row.get(20)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
+        let entries = stmt
+            .query_map(&param_refs[..], full_from_row)
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
 
         Ok(entries)
     } else {
@@ -110,6 +72,38 @@ pub fn get_history_logs(
 }
 
 const SUMMARY_FIELDS: &str = "id, method, url, host, path, content_type, response_size, status_code, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at";
+
+const FULL_FIELDS: &str = "id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at";
+
+fn full_from_row(row: &rusqlite::Row) -> rusqlite::Result<HistoryEntry> {
+    let headers = |idx: usize| -> Vec<(String, String)> {
+        let json: String = row.get(idx).unwrap_or_else(|_| "[]".to_string());
+        serde_json::from_str(&json).unwrap_or_default()
+    };
+    Ok(HistoryEntry {
+        id: row.get(0)?,
+        method: row.get(1)?,
+        url: row.get(2)?,
+        host: row.get(3)?,
+        path: row.get(4)?,
+        content_type: row.get(5)?,
+        response_size: row.get(6)?,
+        status_code: row.get(7)?,
+        request_headers: headers(8),
+        response_headers: headers(9),
+        request_body: row.get(10).unwrap_or_default(),
+        response_body: row.get(11).unwrap_or_default(),
+        phase: row.get(12)?,
+        duration_ms: row.get(13)?,
+        created_at: row.get(14)?,
+        is_intercepted: row.get::<_, i32>(15)? != 0,
+        is_rewritten: row.get::<_, i32>(16)? != 0,
+        is_failed: row.get::<_, i32>(17)? != 0,
+        listener_label: row.get(18)?,
+        request_at: row.get(19)?,
+        response_at: row.get(20)?,
+    })
+}
 
 fn summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<HistoryEntry> {
     Ok(HistoryEntry {
@@ -180,6 +174,35 @@ pub fn get_history_count(db_path: &PathBuf, search: Option<&str>, include_header
         None => conn.query_row(&sql, [], |row| row.get(0)),
     };
     count.map_err(|e| e.to_string())
+}
+
+/// Every stored flow without headers or bodies, newest first.
+pub fn get_history_summaries(db_path: &PathBuf) -> Result<Vec<HistoryEntry>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(&format!("SELECT {SUMMARY_FIELDS} FROM history ORDER BY id DESC"))
+        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], summary_from_row).map_err(|e| e.to_string())?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+/// Full flows with headers and bodies, oldest first.
+pub fn get_history_by_ids(db_path: &PathBuf, ids: &[i64]) -> Result<Vec<HistoryEntry>, String> {
+    const CHUNK: usize = 500;
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut entries = Vec::with_capacity(ids.len());
+    for chunk in ids.chunks(CHUNK) {
+        let placeholders = vec!["?"; chunk.len()].join(",");
+        let mut stmt = conn
+            .prepare(&format!("SELECT {FULL_FIELDS} FROM history WHERE id IN ({placeholders})"))
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(chunk), full_from_row)
+            .map_err(|e| e.to_string())?;
+        entries.extend(rows.filter_map(|r| r.ok()));
+    }
+    entries.sort_by_key(|e| e.id);
+    Ok(entries)
 }
 
 pub fn get_history_detail(
@@ -265,6 +288,19 @@ mod tests {
         let next = get_history_page(&db, None, false, first.last().map(|e| e.id), 10).unwrap();
         assert_eq!(next.first().map(|e| e.id), Some(15));
         assert_eq!(get_history_count(&db, None, false).unwrap(), 25);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn summaries_cover_every_row_and_full_rows_load_by_id() {
+        let (db, dir) = db_with_flows(1203);
+        assert_eq!(get_history_summaries(&db).unwrap().len(), 1203);
+
+        let ids: Vec<i64> = (1..=1203).rev().filter(|id| id % 2 == 1).collect();
+        let full = get_history_by_ids(&db, &ids).unwrap();
+        assert_eq!(full.len(), 602);
+        assert_eq!(full.first().map(|e| e.id), Some(1));
+        assert_eq!(full.iter().find(|e| e.id == 3).unwrap().request_headers, vec![("X-Trace".into(), "needle".into())]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
