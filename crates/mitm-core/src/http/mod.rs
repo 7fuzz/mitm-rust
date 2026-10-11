@@ -2,4 +2,5 @@
 
 pub mod body;
 pub mod curl;
+pub mod har;
 pub mod steps;
