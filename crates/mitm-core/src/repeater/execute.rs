@@ -318,6 +318,7 @@ pub async fn execute_repeater_tab(
         let error = match run_repeater_tab(db_path, &pre_tab, &client, &jar).await {
             Ok(run) if run.status_code != 0 => continue,
             Ok(run) => run.response_body,
+            Err(e) if e == crate::credentials::LOCKED => return Err(e),
             Err(e) => e,
         };
         let message = pre_request_failure(db_path, pre_id, &error);
@@ -360,6 +361,14 @@ async fn run_repeater_tab(
 ) -> Result<RepeaterExecutionResult, String> {
     let mut record = Interpolation::default();
     let mut filled = interpolate_tab(db_path, tab, &mut record);
+    let locked_extract = || {
+        let env = active_environment_db(db_path, REPEATER_WORKSPACE_ID);
+        crate::collections::execute::extract_targets_credentials(env.as_ref(), &tab.extract_rules)
+            && crate::credentials::is_locked(db_path)
+    };
+    if record.locked || locked_extract() {
+        return Err(crate::credentials::LOCKED.to_string());
+    }
     let has_cookie = filled.headers.iter().any(|h| h.enabled && h.key.trim().eq_ignore_ascii_case("cookie"));
     if !has_cookie {
         if let Some(cookie) = jar_cookie(jar, &with_scheme(&filled.url)) {
@@ -621,5 +630,24 @@ mod tests {
         let logged = format!("{} {:?} {:?}", history[0].url, history[0].request_headers, history[0].request_body);
         assert!(!logged.contains("hunter2"), "{logged}");
         assert_eq!(history[0].request_body.as_deref(), Some("pw=••••"));
+    }
+
+    #[tokio::test]
+    async fn locked_credentials_abort_a_repeater_send() {
+        let db_path = crate::credentials::tests_support::temp_db();
+        let ws = crate::workspace::create_workspace_db(&db_path, "W".into(), None).unwrap().id;
+        crate::workspace::set_active_workspace_db(&db_path, &ws).unwrap();
+        crate::credentials::create_credential(&db_path, &ws, "dgAdmin").unwrap();
+        crate::credentials::set_master_password(&db_path, None, "pw").unwrap();
+        crate::credentials::lock(&db_path);
+
+        let signin = tab("signin", "http://127.0.0.1:9/{{$cred:dgAdmin.password}}".into());
+        create_repeater_tab_db(&db_path, &signin).unwrap();
+        let result = execute_repeater_tab(&db_path, &signin).await;
+        let history = crate::repeater::get_repeater_history_db(&db_path, "signin", 1, 10).unwrap();
+        let _ = std::fs::remove_file(&db_path);
+
+        assert_eq!(result.unwrap_err(), crate::credentials::LOCKED);
+        assert!(history.is_empty());
     }
 }

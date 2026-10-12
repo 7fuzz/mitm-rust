@@ -62,6 +62,9 @@ pub async fn execute_collection_request_db(
     let steps = request_steps(db_path, request_id)?;
     for pre_id in &steps.pre {
         if let Err(error) = send_collection_request(db_path, pre_id, &client, &jar).await {
+            if error == crate::credentials::LOCKED {
+                return Err(error);
+            }
             return record_unsent_run(db_path, request_id, pre_request_failure(db_path, pre_id, &error));
         }
     }
@@ -108,7 +111,7 @@ async fn send_collection_request(
     jar: &Jar,
 ) -> Result<ExecutionResult, String> {
     // Scoped so the Connection is dropped before the .await below.
-    let (id, workspace_id, raw_method, target_url, mut logged_req_headers, final_body, mut req_headers_map, body_type, extract_rules_json, record) = {
+    let (id, workspace_id, raw_method, target_url, mut logged_req_headers, final_body, mut req_headers_map, body_type, extract_rules_json, record, extract_needs_credentials) = {
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
         let mut stmt = conn
@@ -220,8 +223,16 @@ async fn send_collection_request(
         let final_body = if body_type != "none" { interpolated_body } else { None };
         let extract_rules_json = raw_extract_rules.unwrap_or_else(|| "[]".to_string());
 
-        (id, workspace_id, raw_method, url, logged_req_headers, final_body, req_headers_map, body_type, extract_rules_json, record)
+        let rules: Vec<crate::repeater::ExtractRuleItem> = serde_json::from_str(&extract_rules_json).unwrap_or_default();
+        let extract_needs_credentials = extract_targets_credentials(env.as_ref(), &rules);
+
+        (id, workspace_id, raw_method, url, logged_req_headers, final_body, req_headers_map, body_type, extract_rules_json, record, extract_needs_credentials)
     };
+
+    // Sending with a ref left unresolved, or dropping an extracted token, would both be silent failures.
+    if record.locked || (extract_needs_credentials && crate::credentials::is_locked(db_path)) {
+        return Err(crate::credentials::LOCKED.to_string());
+    }
 
     if !req_headers_map.contains_key(reqwest::header::COOKIE) {
         if let Some(cookie) = jar_cookie(jar, &target_url) {
@@ -492,6 +503,19 @@ pub fn evaluate_rust_extract_rule(
             None
         }
     }
+}
+
+/// Whether a run's extract rules write into credentials, directly or through a linked `(auto)` variant.
+pub(crate) fn extract_targets_credentials(env: Option<&crate::workspace::Environment>, rules: &[crate::repeater::ExtractRuleItem]) -> bool {
+    rules.iter().filter(|r| r.enabled).any(|rule| {
+        let target = rule.target_variable.trim().trim_start_matches("{{").trim_end_matches("}}").trim();
+        if crate::credentials::parse_ref(target).is_some() {
+            return true;
+        }
+        env.and_then(|env| env.variables.iter().find(|v| v.key.eq_ignore_ascii_case(target)))
+            .and_then(|var| var.variants.iter().find(|v| v.name.eq_ignore_ascii_case("(auto)")))
+            .is_some_and(|auto| crate::credentials::is_link(&auto.value))
+    })
 }
 
 /// Writes extracted values into `(auto)` variants of the env workspace's active environment. A target that is a
@@ -918,5 +942,33 @@ pub(crate) mod tests {
         assert!(result.response_body.contains("authorization: Bearer eyJtoken"), "{}", result.response_body);
         let auth = history[0].request_headers.iter().find(|h| h.key == "Authorization").unwrap();
         assert_eq!(auth.value, "Bearer ••••");
+    }
+
+    #[tokio::test]
+    async fn locked_credentials_abort_the_send_without_a_history_row() {
+        let (db, ws) = setup_extract();
+        crate::credentials::set_master_password(&db, None, "pw").unwrap();
+        crate::credentials::lock(&db);
+
+        let col = crate::collections::create_collection_db(&db, ws.clone(), None, "c".into()).unwrap();
+        let mut uses_ref = crate::collections::create_request_db(&db, col.id.clone(), "signin".into()).unwrap();
+        uses_ref.url = "http://127.0.0.1:9/{{$cred:dgAdmin.password}}".into();
+        crate::collections::update_request_db(&db, uses_ref.clone()).unwrap();
+        let mut extracts = crate::collections::create_request_db(&db, col.id.clone(), "token".into()).unwrap();
+        extracts.url = "http://127.0.0.1:9/token".into();
+        extracts.extract_rules = vec![rule("$cred:dgAdmin.accessToken")];
+        crate::collections::update_request_db(&db, extracts.clone()).unwrap();
+        let mut plain = crate::collections::create_request_db(&db, col.id, "plain".into()).unwrap();
+        plain.url = "http://127.0.0.1:9/plain".into();
+        plain.pre_requests = vec![uses_ref.id.clone()];
+        crate::collections::update_request_db(&db, plain.clone()).unwrap();
+
+        for id in [&uses_ref.id, &extracts.id, &plain.id] {
+            assert_eq!(execute_collection_request_db(&db, id).await.unwrap_err(), crate::credentials::LOCKED);
+            assert!(crate::collections::get_request_histories_db(&db, id).unwrap().is_empty());
+        }
+        crate::credentials::unlock(&db, "pw").unwrap();
+        assert!(execute_collection_request_db(&db, &extracts.id).await.unwrap_err() != crate::credentials::LOCKED);
+        let _ = std::fs::remove_file(&db);
     }
 }
