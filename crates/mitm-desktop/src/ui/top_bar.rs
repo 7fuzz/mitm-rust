@@ -5,21 +5,15 @@ use egui_dock::DockState;
 use crate::app::command::{AppCommand, Commands};
 use crate::ui::dock::{self, Tab};
 use crate::app::state::AppState;
-use crate::widgets::flash;
+use crate::widgets::toast;
 use crate::ui::icons;
 use crate::features::environments::EnvironmentsState;
 use crate::util::format::format_count;
 use crate::widgets::pills::badge;
 
-const FLASH_OK: &str = "top_bar_flash_ok";
-const FLASH_ERR: &str = "top_bar_flash_err";
-
-/// A short-lived message next to the workspace combos, for results of background saves.
+/// Reports a background result as a toast.
 pub fn flash(ui: &egui::Ui, result: Result<String, String>) {
-    match result {
-        Ok(message) => flash::set(ui, egui::Id::new(FLASH_OK), message),
-        Err(error) => flash::set(ui, egui::Id::new(FLASH_ERR), error),
-    }
+    toast::push(ui.ctx(), result);
 }
 
 const GROUP_GAP: f32 = 16.0;
@@ -30,12 +24,6 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, dock: &DockState<Tab>, cmds
         proxy_controls(ui, state, cmds);
         ui.add_space(GROUP_GAP);
         breadcrumb(ui, state, cmds);
-        for (id, tone) in [(FLASH_OK, Tone::Success), (FLASH_ERR, Tone::Danger)] {
-            if let Some(message) = flash::current(ui, egui::Id::new(id)) {
-                ui.add_space(GROUP_GAP);
-                ui.label(RichText::new(message).color(theme::color(ui, tone)));
-            }
-        }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             theme_toggle(ui);

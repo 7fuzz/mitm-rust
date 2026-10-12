@@ -1084,6 +1084,8 @@ impl eframe::App for MitmApp {
             self.cmds.push(retry);
         }
 
+        crate::widgets::toast::show(ui.ctx());
+
         let cmds = self.cmds.take();
         if !cmds.is_empty() {
             let ctx = ui.ctx().clone();
