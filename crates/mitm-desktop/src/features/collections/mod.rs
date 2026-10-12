@@ -11,6 +11,7 @@ use mitm_core::collections::execute::ExecutionResult;
 use mitm_core::collections::preview::{preview_request_db, RequestPreview};
 use mitm_core::collections::{self as core_collections, Collection, CollectionTreeItem, RequestHistoryItem, RequestItem};
 use mitm_core::repeater::ExtractRuleItem;
+use crate::util::save_queue::SaveQueue;
 use crate::features::request_editor::body::{is_multipart, is_urlencoded};
 use crate::features::request_editor::captured::CapturedRequest;
 use crate::features::request_editor::run_list::RunDetails;
@@ -18,7 +19,6 @@ use crate::widgets::message_pane::PaneState;
 
 pub use view::show;
 
-const SAVE_DELAY_SECS: f64 = 0.6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorTab {
@@ -123,8 +123,7 @@ pub struct CollectionsState {
     pub response_pane: PaneState,
     pub run_details: RunDetails,
     pub extract_modal: Option<ExtractModal>,
-    dirty: HashSet<String>,
-    last_edit: f64,
+    saves: SaveQueue,
 }
 
 impl Default for CollectionsState {
@@ -151,8 +150,7 @@ impl Default for CollectionsState {
             response_pane: PaneState::default(),
             run_details: RunDetails::default(),
             extract_modal: None,
-            dirty: HashSet::new(),
-            last_edit: 0.0,
+            saves: SaveQueue::default(),
         }
     }
 }
@@ -181,21 +179,29 @@ impl CollectionsState {
     }
 
     pub fn mark_dirty(&mut self, id: &str, now: f64) {
-        self.dirty.insert(id.to_string());
-        self.last_edit = now;
+        self.saves.edited(id, now);
     }
 
     pub fn flush_if_idle(&mut self, db_path: &PathBuf, now: f64) {
-        if !self.dirty.is_empty() && now - self.last_edit >= SAVE_DELAY_SECS {
+        if self.saves.is_due(now) {
             self.flush(db_path);
+            self.saves.retry_later(now);
         }
     }
 
+    pub fn take_save_errors(&mut self) -> Vec<String> {
+        self.saves.take_errors()
+    }
+
     pub fn flush(&mut self, db_path: &PathBuf) {
-        for id in std::mem::take(&mut self.dirty) {
+        for id in self.saves.take() {
             let Some(request) = self.open.iter().find(|r| r.id == id).cloned() else { continue };
-            if core_collections::update_request_db(db_path, request.clone()).is_ok() {
-                patch_tree(&mut self.trees, request);
+            match core_collections::update_request_db(db_path, request.clone()) {
+                Ok(_) => {
+                    self.saves.saved(&id);
+                    patch_tree(&mut self.trees, request);
+                }
+                Err(e) => self.saves.failed(id, format!("Couldn't save request: {e}")),
             }
         }
     }
@@ -254,7 +260,7 @@ impl CollectionsState {
                 self.reload_tree(db_path);
             }
             CollectionsCmd::DeleteRequest(id) => {
-                self.dirty.remove(&id);
+                self.saves.remove(&id);
                 let _ = core_collections::delete_request_db(db_path, &id);
                 self.reload_tree(db_path);
             }

@@ -2,17 +2,16 @@ mod export;
 mod import;
 mod quick;
 
-use std::collections::HashSet;
 use std::path::Path;
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use mitm_core::repeater::REPEATER_WORKSPACE_ID;
 use mitm_core::credentials::Credential;
 use mitm_core::workspace::{Environment, EnvironmentVariable, VariableVariant, Workspace};
+use crate::util::save_queue::SaveQueue;
 use crate::app::command::{AppCommand, Commands};
 use crate::widgets::split;
 
-const SAVE_DELAY_SECS: f64 = 0.6;
 
 pub use export::show as show_export;
 pub use import::{file_label, is_json_file, show as show_import};
@@ -59,8 +58,7 @@ pub struct EnvironmentsState {
     pub quick: quick::QuickVars,
     pub import: import::ImportState,
     pub export: export::ExportPrompt,
-    dirty: HashSet<String>,
-    last_edit: f64,
+    saves: SaveQueue,
 }
 
 impl Default for EnvironmentsState {
@@ -91,8 +89,7 @@ impl Default for EnvironmentsState {
             quick: quick::QuickVars::default(),
             import: import::ImportState::default(),
             export: export::ExportPrompt::default(),
-            dirty: HashSet::new(),
-            last_edit: 0.0,
+            saves: SaveQueue::default(),
         }
     }
 }
@@ -165,21 +162,27 @@ impl EnvironmentsState {
     }
 
     pub fn mark_dirty(&mut self, env_id: &str, now: f64) {
-        self.dirty.insert(env_id.to_string());
-        self.last_edit = now;
+        self.saves.edited(env_id, now);
     }
 
     pub fn flush_if_idle(&mut self, db_path: &Path, now: f64) {
-        if !self.dirty.is_empty() && now - self.last_edit >= SAVE_DELAY_SECS {
+        if self.saves.is_due(now) {
             self.flush(db_path);
+            self.saves.retry_later(now);
         }
+    }
+
+    pub fn take_save_errors(&mut self) -> Vec<String> {
+        self.saves.take_errors()
     }
 
     pub fn flush(&mut self, db_path: &Path) {
         let db_buf = db_path.to_path_buf();
-        for id in std::mem::take(&mut self.dirty) {
-            if let Some(env) = self.environments.iter().chain(&self.repeater_env).find(|e| e.id == id).cloned() {
-                let _ = mitm_core::workspace::save_workspace_environment_db(&db_buf, env);
+        for id in self.saves.take() {
+            let Some(env) = self.environments.iter().chain(&self.repeater_env).find(|e| e.id == id).cloned() else { continue };
+            match mitm_core::workspace::save_workspace_environment_db(&db_buf, env) {
+                Ok(_) => self.saves.saved(&id),
+                Err(e) => self.saves.failed(id, format!("Couldn't save environment: {e}")),
             }
         }
     }

@@ -2,7 +2,7 @@ mod json_import;
 mod lock;
 mod view;
 
-use std::collections::HashSet;
+use crate::util::save_queue::SaveQueue;
 use std::path::Path;
 use mitm_core::credentials::{self, Credential, CredentialSummary, Field, FieldKind};
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,6 @@ pub use json_import::show as show_json_import;
 pub use lock::{settings_section, show_unlock};
 pub use view::show;
 
-const SAVE_DELAY_SECS: f64 = 0.6;
 
 /// An entry name or field key being renamed; renames go through core so refs to them are rewritten.
 #[derive(Clone)]
@@ -59,8 +58,7 @@ pub struct CredentialsState {
     /// A `totp` field whose secret is being typed in; saved secrets are never shown again.
     totp_draft: Option<(String, String, String)>,
     error: Option<String>,
-    dirty: HashSet<String>,
-    last_edit: f64,
+    saves: SaveQueue,
 }
 
 impl Default for CredentialsState {
@@ -83,8 +81,7 @@ impl Default for CredentialsState {
             rename: None,
             totp_draft: None,
             error: None,
-            dirty: HashSet::new(),
-            last_edit: 0.0,
+            saves: SaveQueue::default(),
         }
     }
 }
@@ -198,23 +195,27 @@ impl CredentialsState {
     }
 
     fn mark_dirty(&mut self, id: &str, now: f64) {
-        self.dirty.insert(id.to_string());
-        self.last_edit = now;
+        self.saves.edited(id, now);
         self.publish();
     }
 
     pub fn flush_if_idle(&mut self, db_path: &Path, now: f64) {
-        if !self.dirty.is_empty() && now - self.last_edit >= SAVE_DELAY_SECS {
+        if self.saves.is_due(now) {
             self.flush(db_path);
+            self.saves.retry_later(now);
         }
     }
 
+    pub fn take_save_errors(&mut self) -> Vec<String> {
+        self.saves.take_errors()
+    }
+
     pub fn flush(&mut self, db_path: &Path) {
-        for id in std::mem::take(&mut self.dirty) {
-            if let Some(entry) = self.entries.iter().find(|e| e.id == id) {
-                if let Err(e) = credentials::save_credential(db_path, entry) {
-                    self.error = Some(e);
-                }
+        for id in self.saves.take() {
+            let Some(entry) = self.entries.iter().find(|e| e.id == id) else { continue };
+            match credentials::save_credential(db_path, entry) {
+                Ok(_) => self.saves.saved(&id),
+                Err(e) => self.saves.failed(id, format!("Couldn't save credential: {e}")),
             }
         }
     }
@@ -233,7 +234,7 @@ impl CredentialsState {
     }
 
     fn delete(&mut self, db_path: &Path, id: &str) {
-        self.dirty.remove(id);
+        self.saves.remove(id);
         if let Err(e) = credentials::delete_credential(db_path, id) {
             self.error = Some(e);
         }
@@ -244,7 +245,7 @@ impl CredentialsState {
         let Some(entry) = self.entries.iter_mut().find(|e| e.id == id) else { return };
         let key = free_name(entry.fields.iter().map(|f| f.key.as_str()), "field");
         entry.fields.push(Field { key: key.clone(), kind: FieldKind::Text, extracted: false, value: String::new() });
-        self.dirty.insert(id.to_string());
+        self.saves.insert(id);
         self.flush(db_path);
         self.rename = Some(Rename { id: id.to_string(), field: Some(key.clone()), text: key });
     }

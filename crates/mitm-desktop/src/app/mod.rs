@@ -896,6 +896,15 @@ impl eframe::App for MitmApp {
         self.state.collections.flush_if_idle(&self.core.db_path, now);
         self.state.environments.flush_if_idle(&self.core.db_path, now);
         self.state.credentials.flush_if_idle(&self.core.db_path, now);
+        let save_errors = [
+            self.state.repeater.take_save_errors(),
+            self.state.collections.take_save_errors(),
+            self.state.environments.take_save_errors(),
+            self.state.credentials.take_save_errors(),
+        ];
+        for error in save_errors.into_iter().flatten() {
+            top_bar::flash(ui, Err(error));
+        }
         self.save_rewrite_rules(now, false);
         self.state.traffic.sync_header_search(&self.core.db_path);
         for (run_id, query, matches) in self.fuzz_search.drain() {

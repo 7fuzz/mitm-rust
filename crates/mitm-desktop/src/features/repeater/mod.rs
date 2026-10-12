@@ -11,6 +11,7 @@ use mitm_core::repeater::{
     self as core_repeater, HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab,
 };
 use mitm_core::state::{HistoryDetail, HistoryEntry};
+use crate::util::save_queue::SaveQueue;
 use crate::features::request_editor::captured::{header_items, CapturedRequest};
 use crate::features::request_editor::run_list::Run;
 use crate::features::request_editor::url_params::{new_id, parse_query};
@@ -20,7 +21,6 @@ use crate::widgets::message_pane::PaneState;
 pub use curl_import::{show as show_curl_import, CurlImport};
 pub use view::show;
 
-const SAVE_DELAY_SECS: f64 = 0.6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorTab {
@@ -94,8 +94,7 @@ pub struct RepeaterState {
     pub responses: HashMap<String, ShownResponse>,
     pub executing: HashSet<String>,
     pub history: HashMap<String, Vec<RepeaterHistoryItem>>,
-    dirty: HashSet<String>,
-    last_edit: f64,
+    saves: SaveQueue,
 }
 
 impl Default for RepeaterState {
@@ -112,8 +111,7 @@ impl Default for RepeaterState {
             responses: HashMap::new(),
             executing: HashSet::new(),
             history: HashMap::new(),
-            dirty: HashSet::new(),
-            last_edit: 0.0,
+            saves: SaveQueue::default(),
         }
     }
 }
@@ -135,20 +133,26 @@ impl RepeaterState {
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
             tab.updated_at_ms = chrono::Utc::now().timestamp_millis();
         }
-        self.dirty.insert(id.to_string());
-        self.last_edit = now;
+        self.saves.edited(id, now);
     }
 
     pub fn flush_if_idle(&mut self, db_path: &PathBuf, now: f64) {
-        if !self.dirty.is_empty() && now - self.last_edit >= SAVE_DELAY_SECS {
+        if self.saves.is_due(now) {
             self.flush(db_path);
+            self.saves.retry_later(now);
         }
     }
 
+    pub fn take_save_errors(&mut self) -> Vec<String> {
+        self.saves.take_errors()
+    }
+
     pub fn flush(&mut self, db_path: &PathBuf) {
-        for id in std::mem::take(&mut self.dirty) {
-            if let Some(tab) = self.tabs.iter().find(|t| t.id == id) {
-                let _ = core_repeater::update_repeater_tab_db(db_path, tab);
+        for id in self.saves.take() {
+            let Some(tab) = self.tabs.iter().find(|t| t.id == id) else { continue };
+            match core_repeater::update_repeater_tab_db(db_path, tab) {
+                Ok(_) => self.saves.saved(&id),
+                Err(e) => self.saves.failed(id, format!("Couldn't save request: {e}")),
             }
         }
     }
@@ -253,12 +257,12 @@ impl RepeaterState {
             tab.pre_requests.retain(|step| step != id);
             tab.post_requests.retain(|step| step != id);
             if tab.pre_requests.len() + tab.post_requests.len() != before {
-                self.dirty.insert(tab.id.clone());
+                self.saves.insert(&tab.id);
             }
         }
         self.responses.remove(id);
         self.history.remove(id);
-        self.dirty.remove(id);
+        self.saves.remove(id);
         if self.active_id.as_deref() == Some(id) {
             self.active_id = None;
             if let Some(next) = self.tabs.first().map(|t| t.id.clone()) {
