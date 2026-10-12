@@ -11,10 +11,14 @@ use crate::widgets::pills::badge;
 use crate::widgets::split;
 use super::{EndpointDraft, EndpointFilter, WebhooksState};
 use crate::ui::icons;
+use crate::widgets::button::{icon_button, primary};
+use crate::widgets::card::card;
+use crate::widgets::search::search_field_sized;
+use crate::widgets::section::section_with;
 
 pub fn show(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
     toolbar(ui, state, cmds);
-    ui.separator();
+    ui.add_space(4.0);
 
     let mut fraction = state.prefs.list_split;
     let [mut left, mut right] = split::side_by_side(ui, "wh_list_split", &mut fraction);
@@ -25,17 +29,20 @@ pub fn show(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
 
 fn toolbar(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
     ui.horizontal(|ui| {
-        let toggle = ui
-            .add_enabled_ui(!state.switching, |ui| ui.toggle_value(&mut state.running, "Receiver"))
-            .inner
-            .on_hover_text("Accept incoming webhook deliveries");
-        if toggle.changed() {
-            cmds.push(if state.running {
-                Cmd::StartReceiver
-            } else {
-                Cmd::StopReceiver
-            });
-        }
+        let (tone, status) = if state.running { (Tone::Success, "Listening") } else { (Tone::Neutral, "Stopped") };
+        ui.label(RichText::new("●").color(theme::color(ui, tone)));
+        ui.label(status);
+        ui.add_enabled_ui(!state.switching, |ui| {
+            if state.running {
+                if ui.button("Stop").clicked() {
+                    cmds.push(Cmd::StopReceiver);
+                }
+            } else if ui.add(primary(ui, "Start")).on_hover_text("Accept incoming webhook deliveries").clicked() {
+                cmds.push(Cmd::StartReceiver);
+            }
+        });
+        ui.add_space(8.0);
+        ui.weak("Port");
 
         ui.add_enabled_ui(!state.running, |ui| {
             let port = ui
@@ -46,23 +53,20 @@ fn toolbar(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
             }
         });
 
-        ui.separator();
+        ui.add_space(8.0);
         let url = state.base_url();
-        ui.monospace(&url);
-        if ui.small_button(icons::COPY).on_hover_text("Copy base URL").clicked() {
+        ui.label(RichText::new(&url).monospace().weak());
+        if icon_button(ui, icons::COPY, "Copy base URL").clicked() {
             ui.ctx().copy_text(url);
         }
     });
 }
 
 fn endpoints_list(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
-    ui.horizontal(|ui| {
-        ui.heading("Endpoints");
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button(icons::PLUS).on_hover_text("Add endpoint").clicked() && state.draft.is_none() {
-                state.draft = Some(EndpointDraft { path: "/".to_string(), ..Default::default() });
-            }
-        });
+    section_with(ui, "Endpoints", |ui| {
+        if icon_button(ui, icons::PLUS, "Add endpoint").clicked() && state.draft.is_none() {
+            state.draft = Some(EndpointDraft { path: "/".to_string(), ..Default::default() });
+        }
     });
 
     let WebhooksState { endpoints, filter, draft, port, .. } = state;
@@ -70,7 +74,7 @@ fn endpoints_list(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comma
 
     ui.selectable_value(filter, EndpointFilter::All, "All");
     ui.selectable_value(filter, EndpointFilter::Unmatched, "Unmatched");
-    ui.separator();
+    ui.add_space(4.0);
 
     let mut action = None;
     for endpoint in endpoints.iter() {
@@ -107,14 +111,14 @@ fn endpoints_list(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comma
     let mut cancel = false;
     if let Some(draft) = draft.as_mut() {
         ui.add_space(4.0);
-        ui.group(|ui| {
-            ui.horizontal(|ui| {
+        card(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut draft.name).hint_text("Name").desired_width(110.0));
                 ui.add(egui::TextEdit::singleline(&mut draft.path).hint_text("/path").desired_width(110.0));
                 ui.add(egui::TextEdit::singleline(&mut draft.secret).hint_text("Secret").desired_width(140.0));
                 let valid = !draft.name.trim().is_empty() && draft.path.starts_with('/') && draft.path.len() > 1;
                 if ui
-                    .add_enabled(valid, egui::Button::new("Add"))
+                    .add_enabled(valid, primary(ui, "Add"))
                     .on_disabled_hover_text("Name and a /path are required")
                     .clicked()
                 {
@@ -124,7 +128,7 @@ fn endpoints_list(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comma
                         secret: draft.secret.clone(),
                     });
                 }
-                if ui.button(icons::X).on_hover_text("Cancel").clicked() {
+                if icon_button(ui, icons::X, "Cancel").clicked() {
                     cancel = true;
                 }
             });
@@ -136,25 +140,12 @@ fn endpoints_list(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comma
 }
 
 fn deliveries(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
-    ui.horizontal(|ui| {
-        ui.heading("Deliveries");
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if confirm_button(
-                ui,
-                ui.id().with("wh_clear"),
-                RichText::new("Clear"),
-                "Clear all?",
-                "Delete every delivery",
-            ) {
-                cmds.push(Cmd::ClearDeliveries);
-            }
-            if !state.search.is_empty() && ui.small_button(icons::X).on_hover_text("Clear search").clicked() {
-                state.search.clear();
-            }
-            crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut state.search).hint_text("Search").desired_width(140.0)));
-        });
+    section_with(ui, "Deliveries", |ui| {
+        if confirm_button(ui, ui.id().with("wh_clear"), RichText::new(icons::TRASH), "Clear all?", "Delete every delivery") {
+            cmds.push(Cmd::ClearDeliveries);
+        }
+        search_field_sized(ui, &mut state.search, "Search path or payload", 200.0);
     });
-    ui.add_space(2.0);
 
     let mut fraction = state.prefs.detail_split;
     let [mut top, mut bottom] = split::stacked(ui, "wh_detail_split", &mut fraction);
@@ -179,14 +170,14 @@ fn deliveries_table(ui: &mut egui::Ui, state: &mut WebhooksState) {
         .collect();
 
     if rows.is_empty() {
-        ui.weak("No deliveries");
+        ui.weak("No deliveries yet");
         return;
     }
 
     let row_height = egui::TextStyle::Body.resolve(ui.style()).size + 6.0;
     let mut new_selection = None;
     TableBuilder::new(ui)
-        .striped(true)
+        .striped(false)
         .resizable(true)
         .sense(egui::Sense::click())
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
@@ -195,18 +186,19 @@ fn deliveries_table(ui: &mut egui::Ui, state: &mut WebhooksState) {
         .column(Column::exact(70.0))
         .column(Column::exact(40.0))
         .header(22.0, |mut header| {
-            header.col(|ui| { ui.strong("Time"); });
-            header.col(|ui| { ui.strong("Path"); });
-            header.col(|ui| { ui.strong("Size"); });
-            header.col(|ui| { ui.strong("Sig"); });
+            for title in ["Time", "Path", "Size", "Sig"] {
+                header.col(|ui| {
+                    ui.label(RichText::new(title).small().weak());
+                });
+            }
         })
         .body(|body| {
             body.rows(row_height, rows.len(), |mut row| {
                 let delivery = &state.deliveries[rows[row.index()]];
                 row.set_selected(state.selected_delivery == Some(delivery.id));
-                row.col(|ui| { ui.label(clock(delivery.timestamp)); });
-                row.col(|ui| { ui.add(egui::Label::new(&delivery.endpoint_path).truncate()); });
-                row.col(|ui| { ui.label(format_bytes(delivery.payload.len() as u64)); });
+                row.col(|ui| { ui.label(RichText::new(clock(delivery.timestamp)).monospace().weak()); });
+                row.col(|ui| { ui.add(egui::Label::new(RichText::new(&delivery.endpoint_path).monospace()).truncate()); });
+                row.col(|ui| { ui.label(RichText::new(format_bytes(delivery.payload.len() as u64)).monospace().weak()); });
                 row.col(|ui| { signature_chip(ui, &delivery.signature_status); });
                 if row.response().clicked() {
                     new_selection = Some(delivery.id);
@@ -231,9 +223,8 @@ fn delivery_detail(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comm
     };
 
     ui.horizontal(|ui| {
-        ui.label(RichText::new(&delivery.endpoint_path).strong());
-        ui.weak(clock(delivery.timestamp));
-        ui.weak(format_bytes(delivery.payload.len() as u64));
+        ui.label(RichText::new(&delivery.endpoint_path).monospace().strong());
+        ui.label(RichText::new(format!("{} · {}", clock(delivery.timestamp), format_bytes(delivery.payload.len() as u64))).monospace().weak());
         if delivery.endpoint_id == "unmatched" {
             badge(ui, "UNMATCHED", Tone::Warn);
         }
@@ -260,7 +251,7 @@ fn delivery_detail(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comm
             match result {
                 Ok(res) => {
                     let tone = if res.success { Tone::Success } else { Tone::Danger };
-                    ui.label(RichText::new(format!("{} · {} ms", res.status_code, res.duration_ms)).color(theme::color(ui, tone)));
+                    ui.label(RichText::new(format!("{} · {} ms", res.status_code, res.duration_ms)).monospace().color(theme::color(ui, tone)));
                 }
                 Err(e) => {
                     ui.label(RichText::new(e).color(theme::color(ui, Tone::Danger)));
@@ -268,7 +259,7 @@ fn delivery_detail(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comm
             }
         }
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     let data = PaneData {
         cache_key: delivery.id as u64,
@@ -287,7 +278,7 @@ fn delivery_detail(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comm
 
 fn signature_view(ui: &mut egui::Ui, delivery: &WebhookDelivery) {
     ui.horizontal(|ui| {
-        ui.label("Signature:");
+        ui.weak("Signature");
         match delivery.signature_status.as_str() {
             "valid" => badge(ui, "VALID", Tone::Success),
             "invalid" => badge(ui, "INVALID", Tone::Danger),
