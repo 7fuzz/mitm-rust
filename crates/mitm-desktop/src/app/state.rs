@@ -7,6 +7,7 @@ use crate::features::utilities::hashing::HashingState;
 use crate::features::utilities::hmac_tool::HmacToolState;
 use crate::features::utilities::json_diff::JsonDiffState;
 use crate::features::utilities::json_tools::JsonToolsState;
+use crate::features::utilities::totp::TotpState;
 use crate::features::inspector::InspectorState;
 use crate::features::intercept::InterceptState;
 use crate::features::repeater::RepeaterState;
@@ -37,6 +38,7 @@ pub struct AppState {
     pub hmac_tool: HmacToolState,
     pub json_diff: JsonDiffState,
     pub json_tools: JsonToolsState,
+    pub totp: TotpState,
     pub database: crate::features::database::DatabaseState,
     pub environments: crate::features::environments::EnvironmentsState,
 }

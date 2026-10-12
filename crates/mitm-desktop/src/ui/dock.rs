@@ -24,10 +24,11 @@ pub enum Tab {
     JsonDiff,
     JsonTools,
     Cvss,
+    Totp,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 16] = [
+    pub const ALL: [Tab; 17] = [
         Tab::Traffic,
         Tab::Repeater,
         Tab::Fuzzer,
@@ -44,6 +45,7 @@ impl Tab {
         Tab::JsonDiff,
         Tab::JsonTools,
         Tab::Cvss,
+        Tab::Totp,
     ];
 
     pub fn name(&self) -> &'static str {
@@ -64,6 +66,7 @@ impl Tab {
             Tab::JsonDiff => "JSON Diff",
             Tab::JsonTools => "JSON Tools",
             Tab::Cvss => "CVSS",
+            Tab::Totp => "TOTP",
         }
     }
 
@@ -75,6 +78,7 @@ impl Tab {
         Tab::Encoding,
         Tab::Hashing,
         Tab::HmacTool,
+        Tab::Totp,
     ];
 
     pub fn is_utility(&self) -> bool {
@@ -199,6 +203,7 @@ impl TabViewer<'_> {
             Tab::JsonDiff => features::utilities::json_diff::show(ui, &mut state.json_diff),
             Tab::JsonTools => features::utilities::json_tools::show(ui, &mut state.json_tools),
             Tab::Cvss => features::utilities::cvss::show(ui, &mut state.cvss),
+            Tab::Totp => features::utilities::totp::show(ui, &mut state.totp),
             Tab::Environments => features::environments::show(ui, &mut state.environments, cmds),
             Tab::Settings => features::settings::show(
                 ui,
