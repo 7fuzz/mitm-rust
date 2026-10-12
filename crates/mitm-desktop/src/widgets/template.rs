@@ -39,7 +39,17 @@ fn is_secret(name: &str) -> bool {
     })
 }
 
+fn totp_params(name: &str) -> Option<mitm_core::utils::totp::TotpParams> {
+    ACTIVE_ENV.with(|cell| mitm_core::workspace::totp_params_in_env(cell.borrow().as_ref(), name))
+}
+
 fn hover_value(name: &str) -> String {
+    if let Some(params) = totp_params(name) {
+        use mitm_core::utils::totp;
+        let now = totp::now_unix();
+        let code = crate::features::utilities::totp::group_code(&totp::code_at(&params, now));
+        return format!("{code} · {}s", totp::remaining(params.period, now));
+    }
     match resolve_var(name) {
         Some(_) if is_secret(name) => "••••••".to_string(),
         Some(value) => value,
@@ -330,6 +340,9 @@ fn hover_tooltip(resp: Response, text: &str) -> Response {
     for v in &vars {
         lines.push(format!("{{{{{}}}}}: {}", v, hover_value(v)));
     }
+    if vars.iter().any(|v| totp_params(v).is_some()) {
+        resp.ctx.request_repaint_after(std::time::Duration::from_secs(1));
+    }
     resp.on_hover_text(lines.join("\n"))
 }
 
@@ -513,5 +526,31 @@ mod tests {
         set_active_env(Some(&env));
         assert_eq!(hover_value("TOKEN"), "hunter2");
         assert_eq!(hover_value("MISSING"), "undefined");
+    }
+
+    #[test]
+    fn totp_refs_hover_as_a_live_code() {
+        let env = Environment {
+            id: "e1".to_string(),
+            workspace_id: "w1".to_string(),
+            name: "Dev".to_string(),
+            is_active: true,
+            variables: vec![mitm_core::workspace::EnvironmentVariable {
+                key: "adminTotpSecret".to_string(),
+                value: "MZXW6".to_string(),
+                enabled: true,
+                r#type: "secret".to_string(),
+                active_index: 0,
+                variants: vec![],
+            }],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        };
+        set_active_env(Some(&env));
+        let hover = hover_value("$totp:adminTotpSecret");
+        assert!(hover.ends_with('s') && hover.contains(" · "), "{hover}");
+        assert_eq!(hover.split(" · ").next().unwrap().len(), 7);
+        assert_eq!(hover_value("adminTotpSecret"), "••••••");
+        assert_eq!(hover_value("$totp:missing"), "undefined");
     }
 }
