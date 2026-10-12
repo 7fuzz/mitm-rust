@@ -1,10 +1,11 @@
-use eframe::egui;
+use eframe::egui::{self, RichText};
 use mitm_core::state::HistoryEntry;
 use crate::app::command::{AppCommand, Commands};
 use crate::features::traffic::{FlowFlags, TrafficState};
 use crate::util::format::{format_bytes, format_duration};
-use crate::ui::theme::{self, Tone};
-use crate::widgets::pills::{method_text, status_text};
+use crate::ui::theme::Tone;
+use crate::widgets::button::icon_button;
+use crate::widgets::pills::{badge, render_method_pill, render_status_pill};
 use crate::widgets::split;
 use crate::widgets::message_pane::{self as pane, PaneData};
 use crate::features::request_editor::body::captured_form;
@@ -17,9 +18,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficStat
     let detail = traffic.selected_detail.as_ref().filter(|d| d.id == flow.id);
     let flags = FlowFlags::of(flow);
 
-    summary(ui, flow, &flags, &mut state.prefs);
+    summary(ui, flow, &flags, &mut state.prefs, cmds);
     url_bar(ui, &flow.url);
-    ui.separator();
+    ui.add_space(4.0);
 
     let request_headers = detail.map_or(&flow.request_headers, |d| &d.request_headers);
     let response_headers = detail.map_or(&flow.response_headers, |d| &d.response_headers);
@@ -71,51 +72,82 @@ pub fn show_window(ctx: &egui::Context, state: &mut InspectorState, traffic: &Tr
     });
 }
 
-fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, prefs: &mut InspectorPrefs) {
+fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, prefs: &mut InspectorPrefs, cmds: &mut Commands) {
     egui::Sides::new().shrink_left().truncate().show(
         ui,
         |ui| {
-            ui.label(method_text(ui.visuals(), &flow.method));
+            render_method_pill(ui, &flow.method);
             match (flags.pending_intercept, flags.pending_response) {
-                (true, _) => ui.colored_label(theme::color(ui, Tone::Warn), "Paused in interceptor"),
-                (_, true) => ui.colored_label(theme::color(ui, Tone::Danger), "Waiting for response…"),
-                _ => ui.label(status_text(ui.visuals(), flow.status_code)),
-            };
+                (true, _) => {
+                    badge(ui, "Paused in interceptor", Tone::Warn);
+                }
+                (_, true) => {
+                    badge(ui, "Waiting for response", Tone::Danger);
+                }
+                _ => render_status_pill(ui, flow.status_code),
+            }
             if flags.failed {
-                ui.colored_label(theme::color(ui, Tone::Danger), "Failed");
+                badge(ui, "Failed", Tone::Danger);
             }
             if flags.intercepted {
-                ui.colored_label(theme::color(ui, Tone::Warn), "Intercepted");
+                badge(ui, "Intercepted", Tone::Warn);
             }
             if flags.rewritten {
-                ui.colored_label(theme::color(ui, Tone::Info), "Rewritten");
+                badge(ui, "Rewritten", Tone::Info);
+            }
+            if !flags.is_pending() {
+                let stats = format!("{} · {}", format_duration(flow.duration_ms), format_bytes(flow.response_size));
+                ui.label(RichText::new(stats).small().family(egui::FontFamily::Monospace).weak());
             }
             if !flow.listener_label.is_empty() && flow.listener_label != "Default" {
                 ui.weak(format!("via {}", flow.listener_label));
             }
         },
         |ui| {
-            if !prefs.popped_out && ui.small_button(icons::X).on_hover_text("Hide inspector").clicked() {
+            if !prefs.popped_out && icon_button(ui, icons::X, "Hide inspector").clicked() {
                 prefs.open = false;
             }
-            let hint = if prefs.popped_out { "Dock back into the main window" } else { "Open in its own window" };
-            if ui.small_button(icons::ARROW_SQUARE_OUT).on_hover_text(hint).clicked() {
+            let (icon, hint) = if prefs.popped_out {
+                (icons::ARROW_SQUARE_IN, "Dock back into the main window")
+            } else {
+                (icons::ARROW_SQUARE_OUT, "Open in its own window")
+            };
+            if icon_button(ui, icon, hint).clicked() {
                 prefs.popped_out = !prefs.popped_out;
             }
-            if !flags.is_pending() {
-                ui.weak(format!("{} · {}", format_duration(flow.duration_ms), format_bytes(flow.response_size)));
+            if ui.button("Fuzzer").on_hover_text("Send to Fuzzer").clicked() {
+                cmds.push(AppCommand::SendFlowToFuzzer(flow.id));
+            }
+            if ui.button("Repeater").on_hover_text("Send to Repeater").clicked() {
+                cmds.push(AppCommand::SendFlowToRepeater(flow.id));
             }
         },
     );
 }
 
+/// The URL in a read-only `base` well, with a copy button inside it.
 fn url_bar(ui: &mut egui::Ui, url: &str) {
-    let mut display = url;
-    ui.add(
-        egui::TextEdit::singleline(&mut display)
-            .desired_width(f32::INFINITY)
-            .font(egui::TextStyle::Monospace),
-    );
+    let visuals = ui.visuals().clone();
+    egui::Frame::new()
+        .fill(visuals.extreme_bg_color)
+        .stroke(visuals.widgets.inactive.bg_stroke)
+        .corner_radius(visuals.widgets.inactive.corner_radius)
+        .inner_margin(egui::Margin::symmetric(8, 2))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                let side = ui.spacing().interact_size.y;
+                let mut display = url;
+                ui.add(
+                    egui::TextEdit::singleline(&mut display)
+                        .frame(egui::Frame::NONE)
+                        .desired_width(ui.available_width() - side - 4.0)
+                        .font(egui::TextStyle::Monospace),
+                );
+                if icon_button(ui, icons::COPY, "Copy URL").clicked() {
+                    ui.ctx().copy_text(url.to_string());
+                }
+            });
+        });
 }
 
 fn header_value<'a>(headers: &'a [(String, String)], name: &'a str) -> &'a str {

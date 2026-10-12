@@ -102,7 +102,11 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
     }
     ui.horizontal(|ui| {
         if !data.title.is_empty() {
-            ui.label(RichText::new(data.title).strong());
+            let title = RichText::new(data.title.to_uppercase())
+                .text_style(egui::TextStyle::Name("section".into()))
+                .extra_letter_spacing(0.6)
+                .color(ui.visuals().weak_text_color());
+            ui.add(egui::Label::new(title).selectable(false));
             ui.add_space(8.0);
         }
         let mut tabs = vec![(PaneTab::Body, "Body", None), (PaneTab::Headers, "Headers", Some(data.headers.len()))];

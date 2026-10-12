@@ -50,7 +50,7 @@ fn regions(ui: &mut egui::Ui, id_salt: impl AsIdSalt, fraction: &mut f32, stacke
         ui.ctx().set_cursor_icon(if stacked { CursorIcon::ResizeVertical } else { CursorIcon::ResizeHorizontal });
     }
     let stroke = if active {
-        Stroke::new(2.0, ui.visuals().selection.bg_fill)
+        Stroke::new(1.0, ui.visuals().selection.stroke.color)
     } else {
         ui.visuals().widgets.noninteractive.bg_stroke
     };
