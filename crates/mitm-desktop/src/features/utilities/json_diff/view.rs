@@ -14,7 +14,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut JsonDiffState) {
             state.clear();
         }
     });
-    ui.separator();
+    ui.add_space(6.0);
 
     let mut vert_fraction = state.prefs.split;
     let [mut top_ui, mut bottom_ui] = split::stacked(ui, "json_diff_vert_split", &mut vert_fraction);
@@ -69,7 +69,7 @@ fn diff_pane(ui: &mut egui::Ui, status: &DiffStatus) {
             _ => {}
         }
     });
-    ui.separator();
+    ui.add_space(6.0);
     if let DiffStatus::Diff { lines, .. } = status {
         diff::show_fill(ui, "json_diff_output", lines);
     }

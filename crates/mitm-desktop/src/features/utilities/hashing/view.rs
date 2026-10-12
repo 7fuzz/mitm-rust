@@ -4,18 +4,19 @@ use crate::app::command::Commands;
 use crate::ui::theme::{self, Tone};
 use super::{HashingState, Mode};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
+use crate::widgets::section::section;
+use crate::widgets::segmented::segmented;
 
 pub fn show(ui: &mut egui::Ui, state: &mut HashingState, cmds: &mut Commands) {
     ui.horizontal(|ui| {
-        ui.selectable_value(&mut state.prefs.mode, Mode::Digest, "Digest");
-        ui.selectable_value(&mut state.prefs.mode, Mode::Hmac, "HMAC");
-        ui.selectable_value(&mut state.prefs.mode, Mode::Bcrypt, "Bcrypt");
+        segmented(ui, &mut state.prefs.mode, &[(Mode::Digest, "Digest"), (Mode::Hmac, "HMAC"), (Mode::Bcrypt, "Bcrypt")]);
         if state.prefs.mode != Mode::Bcrypt {
-            ui.separator();
+            ui.add_space(8.0);
             ui.checkbox(&mut state.prefs.upper, "Upper");
         }
     });
-    ui.separator();
+    ui.add_space(6.0);
 
     match state.prefs.mode {
         Mode::Digest => digest(ui, state),
@@ -61,7 +62,7 @@ fn hash_row(ui: &mut egui::Ui, label: &str, mut value: String, upper: bool) {
     }
     ui.horizontal(|ui| {
         ui.add_sized([70.0, ui.spacing().interact_size.y], egui::Label::new(RichText::new(label).strong()));
-        if ui.small_button(icons::COPY).on_hover_text("Copy").clicked() {
+        if icon_button(ui, icons::COPY, "Copy").clicked() {
             ui.ctx().copy_text(value.clone());
         }
         ui.add(egui::Label::new(RichText::new(value).monospace()).truncate());
@@ -69,13 +70,13 @@ fn hash_row(ui: &mut egui::Ui, label: &str, mut value: String, upper: bool) {
 }
 
 fn bcrypt(ui: &mut egui::Ui, state: &mut HashingState, cmds: &mut Commands) {
-    ui.heading("Generate");
+    section(ui, "Generate");
     ui.horizontal(|ui| {
         ui.label("Password");
         ui.add(egui::TextEdit::singleline(&mut state.bcrypt_password).desired_width(220.0));
         ui.label("Cost");
         ui.add(egui::DragValue::new(&mut state.prefs.bcrypt_cost).range(4..=15));
-        if ui.button("Generate ⟳").on_hover_text("Each run uses a fresh random salt").clicked() {
+        if ui.button("Generate").on_hover_text("Each run uses a fresh random salt").clicked() {
             cmds.push(super::Cmd::GenerateBcrypt {
                 password: state.bcrypt_password.clone(),
                 cost: state.prefs.bcrypt_cost,
@@ -86,7 +87,7 @@ fn bcrypt(ui: &mut egui::Ui, state: &mut HashingState, cmds: &mut Commands) {
         match result {
             Ok(hash) => {
                 ui.horizontal(|ui| {
-                    if ui.small_button(icons::COPY).on_hover_text("Copy").clicked() {
+                    if icon_button(ui, icons::COPY, "Copy").clicked() {
                         ui.ctx().copy_text(hash.clone());
                     }
                     ui.add(egui::Label::new(RichText::new(hash).monospace()).truncate());
@@ -98,8 +99,8 @@ fn bcrypt(ui: &mut egui::Ui, state: &mut HashingState, cmds: &mut Commands) {
         }
     }
 
-    ui.separator();
-    ui.heading("Verify");
+    ui.add_space(8.0);
+    section(ui, "Verify");
     ui.horizontal(|ui| {
         ui.label("Password");
         ui.add(egui::TextEdit::singleline(&mut state.verify_password).desired_width(220.0));

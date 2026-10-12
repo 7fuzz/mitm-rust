@@ -4,15 +4,15 @@ use crate::widgets::code_view::{self, Lang};
 use crate::widgets::split;
 use super::{IndentOpt, JsonToolsState, Mode};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
+use crate::widgets::segmented::segmented;
 
 pub fn show(ui: &mut egui::Ui, state: &mut JsonToolsState) {
     ui.horizontal(|ui| {
-        ui.selectable_value(&mut state.prefs.mode, Mode::Format, "Format");
-        ui.selectable_value(&mut state.prefs.mode, Mode::Minify, "Minify");
-        ui.selectable_value(&mut state.prefs.mode, Mode::Escape, "Escape");
-        ui.selectable_value(&mut state.prefs.mode, Mode::Unescape, "Unescape");
+        let modes = [(Mode::Format, "Format"), (Mode::Minify, "Minify"), (Mode::Escape, "Escape"), (Mode::Unescape, "Unescape")];
+        segmented(ui, &mut state.prefs.mode, &modes);
         if state.prefs.mode == Mode::Format {
-            ui.separator();
+            ui.add_space(8.0);
             egui::ComboBox::from_id_salt("json_indent")
                 .selected_text(state.prefs.indent.label())
                 .show_ui(ui, |ui| {
@@ -23,7 +23,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut JsonToolsState) {
             ui.checkbox(&mut state.prefs.sort_keys, "Sort keys");
         }
     });
-    ui.separator();
+    ui.add_space(6.0);
 
     let mut fraction = state.prefs.split;
     let [mut left, mut right] = split::side_by_side(ui, "json_tools_split", &mut fraction);
@@ -46,7 +46,7 @@ fn output_pane(ui: &mut egui::Ui, out: &Result<String, String>) {
         Ok(text) => {
             ui.horizontal(|ui| {
                 ui.label("Output");
-                if ui.small_button(icons::COPY).on_hover_text("Copy output").clicked() {
+                if icon_button(ui, icons::COPY, "Copy output").clicked() {
                     ui.ctx().copy_text(text.clone());
                 }
             });

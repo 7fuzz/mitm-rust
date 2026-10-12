@@ -4,6 +4,7 @@ use mitm_core::utils::totp::{self, TotpParams};
 use crate::app::command::{AppCommand, Commands, QrTarget};
 use super::{group_code, TotpState};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
 
 const NEXT_HINT_SECS: u64 = 5;
 
@@ -59,7 +60,7 @@ pub fn show_code(ui: &mut egui::Ui, params: &TotpParams, size: f32) {
 
     ui.horizontal(|ui| {
         ui.label(RichText::new(group_code(&code)).monospace().size(size).strong());
-        if ui.small_button(icons::COPY).on_hover_text("Copy").clicked() {
+        if icon_button(ui, icons::COPY, "Copy").clicked() {
             crate::util::clipboard::copy_secret(ui.ctx(), &code);
         }
     });
@@ -78,11 +79,10 @@ pub fn show_code(ui: &mut egui::Ui, params: &TotpParams, size: f32) {
 /// Reads a QR code from an image file (picked asynchronously, delivered to `target`) or from the clipboard
 /// (returned right away).
 pub fn qr_buttons(ui: &mut egui::Ui, cmds: &mut Commands, target: QrTarget) -> Option<Result<String, String>> {
-    if ui.small_button(icons::IMAGE).on_hover_text("QR code from image…").clicked() {
+    if icon_button(ui, icons::IMAGE, "QR code from image…").clicked() {
         cmds.push(AppCommand::PickQrImage(target));
     }
-    ui.small_button(icons::QR_CODE)
-        .on_hover_text("QR code from clipboard image")
+    icon_button(ui, icons::QR_CODE, "QR code from clipboard image")
         .clicked()
         .then(crate::util::qr::decode_clipboard)
 }

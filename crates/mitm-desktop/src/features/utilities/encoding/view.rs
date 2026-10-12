@@ -4,10 +4,12 @@ use crate::widgets::code_view::{self, Lang};
 use crate::widgets::split;
 use super::{Algorithm, Computed, EncodingPrefs, EncodingState, HexFmt};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
+use crate::widgets::segmented::segmented;
 
 pub fn show(ui: &mut egui::Ui, state: &mut EncodingState) {
     let swap = toolbar(ui, &mut state.prefs);
-    ui.separator();
+    ui.add_space(6.0);
 
     let mut fraction = state.prefs.split;
     let [mut left, mut right] = split::side_by_side(ui, "enc_split", &mut fraction);
@@ -31,10 +33,9 @@ fn toolbar(ui: &mut egui::Ui, prefs: &mut EncodingPrefs) -> bool {
     let jwt = prefs.algorithm == Algorithm::Jwt;
     ui.horizontal_wrapped(|ui| {
         ui.add_enabled_ui(!jwt, |ui| {
-            ui.selectable_value(&mut prefs.decode, false, "Encode");
-            ui.selectable_value(&mut prefs.decode, true, "Decode");
+            segmented(ui, &mut prefs.decode, &[(false, "Encode"), (true, "Decode")]);
         });
-        ui.separator();
+        ui.add_space(8.0);
         egui::ComboBox::from_id_salt("enc_algo")
             .selected_text(prefs.algorithm.label())
             .show_ui(ui, |ui| {
@@ -106,7 +107,7 @@ fn output_pane(ui: &mut egui::Ui, out: &Computed) {
 fn output_header(ui: &mut egui::Ui, text: &str) {
     ui.horizontal(|ui| {
         ui.label("Output");
-        if ui.small_button(icons::COPY).on_hover_text("Copy output").clicked() {
+        if icon_button(ui, icons::COPY, "Copy output").clicked() {
             ui.ctx().copy_text(text.to_string());
         }
     });
@@ -114,8 +115,8 @@ fn output_header(ui: &mut egui::Ui, text: &str) {
 
 fn jwt_section(ui: &mut egui::Ui, label: &str, text: &str, lang: Lang) {
     ui.horizontal(|ui| {
-        ui.strong(label);
-        if ui.small_button(icons::COPY).clicked() {
+        ui.label(egui::RichText::new(label).weak());
+        if icon_button(ui, icons::COPY, "Copy").clicked() {
             ui.ctx().copy_text(text.to_string());
         }
     });

@@ -7,6 +7,7 @@ use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::badge;
 use super::CvssState;
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
 
 pub fn show(ui: &mut egui::Ui, state: &mut CvssState) {
     ui.horizontal(|ui| {
@@ -15,21 +16,21 @@ pub fn show(ui: &mut egui::Ui, state: &mut CvssState) {
                 state.set_version(version);
             }
         }
-        ui.separator();
+        ui.add_space(8.0);
 
         let mut text = state.draft.clone().unwrap_or_else(|| state.vector());
         let response = ui.add(egui::TextEdit::singleline(&mut text).code_editor().desired_width(450.0));
         if response.changed() {
             state.edit_vector(text);
         }
-        if ui.small_button(icons::COPY).on_hover_text("Copy vector").clicked() {
+        if icon_button(ui, icons::COPY, "Copy vector").clicked() {
             ui.ctx().copy_text(state.vector());
         }
     });
     if let Some(err) = &state.error {
         ui.colored_label(theme::color(ui, Tone::Danger), err);
     }
-    ui.separator();
+    ui.add_space(6.0);
 
     let score = state.score();
     ui.horizontal(|ui| {
@@ -39,7 +40,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut CvssState) {
             ui.label(RichText::new(format!("Impact {:.1} · Exploitability {:.1}", sub.impact, sub.exploitability)).weak());
         }
     });
-    ui.separator();
+    ui.add_space(6.0);
 
     let changed = egui::ScrollArea::vertical()
         .id_salt("cvss_metrics_scroll")
