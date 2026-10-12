@@ -10,7 +10,7 @@ pub enum CredentialError {
 impl fmt::Display for CredentialError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CredentialError::Locked => f.write_str(super::LOCKED),
+            CredentialError::Locked => f.write_str("Credentials are locked"),
             CredentialError::Failed(message) => f.write_str(message),
         }
     }

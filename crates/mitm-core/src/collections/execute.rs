@@ -11,6 +11,7 @@ use crate::http::steps::{jar_cookie, pre_request_failure, request_steps};
 use crate::repeater::HeaderItem;
 use crate::workspace::{active_environment_db, interpolate, CredentialScope, Interpolation};
 use crate::db::Db;
+use crate::http::RunError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,7 +51,7 @@ fn url_encode_str(s: &str) -> String {
 pub async fn execute_collection_request_db(
     db: &Db,
     request_id: &str,
-) -> Result<ExecutionResult, String> {
+) -> Result<ExecutionResult, RunError> {
     let jar = Arc::new(Jar::default());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
@@ -62,10 +63,10 @@ pub async fn execute_collection_request_db(
     let steps = request_steps(db, request_id)?;
     for pre_id in &steps.pre {
         if let Err(error) = send_collection_request(db, pre_id, &client, &jar).await {
-            if error == crate::credentials::LOCKED {
+            if error == RunError::Locked {
                 return Err(error);
             }
-            return record_unsent_run(db, request_id, pre_request_failure(db, pre_id, &error));
+            return Ok(record_unsent_run(db, request_id, pre_request_failure(db, pre_id, &error.to_string()))?);
         }
     }
 
@@ -109,7 +110,7 @@ async fn send_collection_request(
     request_id: &str,
     client: &reqwest::Client,
     jar: &Jar,
-) -> Result<ExecutionResult, String> {
+) -> Result<ExecutionResult, RunError> {
     // Scoped so the Connection is dropped before the .await below.
     let (id, workspace_id, raw_method, target_url, mut logged_req_headers, final_body, mut req_headers_map, body_type, extract_rules_json, record, extract_needs_credentials) = {
         let conn = db.conn().map_err(|e| e.to_string())?;
@@ -231,7 +232,7 @@ async fn send_collection_request(
 
     // Sending with a ref left unresolved, or dropping an extracted token, would both be silent failures.
     if record.locked || (extract_needs_credentials && crate::credentials::is_locked(db)) {
-        return Err(crate::credentials::LOCKED.to_string());
+        return Err(RunError::Locked);
     }
 
     if !req_headers_map.contains_key(reqwest::header::COOKIE) {
@@ -964,11 +965,11 @@ pub(crate) mod tests {
         crate::collections::update_request_db(&db, plain.clone()).unwrap();
 
         for id in [&uses_ref.id, &extracts.id, &plain.id] {
-            assert_eq!(execute_collection_request_db(&db, id).await.unwrap_err(), crate::credentials::LOCKED);
+            assert_eq!(execute_collection_request_db(&db, id).await.unwrap_err(), crate::http::RunError::Locked);
             assert!(crate::collections::get_request_histories_db(&db, id).unwrap().is_empty());
         }
         crate::credentials::unlock(&db, "pw").unwrap();
-        assert!(execute_collection_request_db(&db, &extracts.id).await.unwrap_err() != crate::credentials::LOCKED);
+        assert!(execute_collection_request_db(&db, &extracts.id).await.unwrap_err() != crate::http::RunError::Locked);
         let _ = std::fs::remove_file(&db);
     }
 }

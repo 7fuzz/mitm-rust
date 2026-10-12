@@ -137,7 +137,7 @@ pub fn reset_credentials(db: &Db) -> Result<(), CredentialError> {
     Ok(())
 }
 
-/// `Err(LOCKED)` when a master password is set and not entered this session.
+/// `Err(CredentialError::Locked)` when a master password is set and not entered this session.
 pub fn ensure_unlocked(db: &Db) -> Result<(), CredentialError> {
     if is_locked(db) {
         Err(CredentialError::Locked)

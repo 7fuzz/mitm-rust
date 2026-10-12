@@ -13,11 +13,12 @@ use crate::collections::execute::perform_auto_extraction_db;
 use crate::http::body::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
 use crate::http::steps::{jar_cookie, pre_request_failure, request_steps};
 use crate::db::Db;
+use crate::http::RunError;
 
 pub async fn execute_tab_request(
     db: &Db,
     tab_id: &str,
-) -> Result<RepeaterExecutionResult, String> {
+) -> Result<RepeaterExecutionResult, RunError> {
     let tab = get_repeater_tab_by_id(db, tab_id)?;
     execute_repeater_tab(db, &tab).await
 }
@@ -308,7 +309,7 @@ fn interpolate_tab(db: &Db, tab: &RepeaterTab, record: &mut Interpolation) -> Re
 pub async fn execute_repeater_tab(
     db: &Db,
     tab: &RepeaterTab,
-) -> Result<RepeaterExecutionResult, String> {
+) -> Result<RepeaterExecutionResult, RunError> {
     let jar = Arc::new(Jar::default());
     let client = http_client(Some(jar.clone()))?;
 
@@ -318,8 +319,8 @@ pub async fn execute_repeater_tab(
         let error = match run_repeater_tab(db, &pre_tab, &client, &jar).await {
             Ok(run) if run.status_code != 0 => continue,
             Ok(run) => run.response_body,
-            Err(e) if e == crate::credentials::LOCKED => return Err(e),
-            Err(e) => e,
+            Err(RunError::Locked) => return Err(RunError::Locked),
+            Err(e) => e.to_string(),
         };
         let message = pre_request_failure(db, pre_id, &error);
         return Ok(record_run(db, tab, unsent_request(&tab.url, message)));
@@ -358,7 +359,7 @@ async fn run_repeater_tab(
     tab: &RepeaterTab,
     client: &reqwest::Client,
     jar: &Jar,
-) -> Result<RepeaterExecutionResult, String> {
+) -> Result<RepeaterExecutionResult, RunError> {
     let mut record = Interpolation::default();
     let mut filled = interpolate_tab(db, tab, &mut record);
     let locked_extract = || {
@@ -367,7 +368,7 @@ async fn run_repeater_tab(
             && crate::credentials::is_locked(db)
     };
     if record.locked || locked_extract() {
-        return Err(crate::credentials::LOCKED.to_string());
+        return Err(RunError::Locked);
     }
     let has_cookie = filled.headers.iter().any(|h| h.enabled && h.key.trim().eq_ignore_ascii_case("cookie"));
     if !has_cookie {
@@ -647,7 +648,7 @@ mod tests {
         let history = crate::repeater::get_repeater_history_db(&db, "signin", 1, 10).unwrap();
         let _ = std::fs::remove_file(&db);
 
-        assert_eq!(result.unwrap_err(), crate::credentials::LOCKED);
+        assert_eq!(result.unwrap_err(), crate::http::RunError::Locked);
         assert!(history.is_empty());
     }
 }

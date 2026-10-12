@@ -1,5 +1,6 @@
 //! Workspace-level commands: they span environments, collections and credentials, so the app runs them.
 use eframe::egui;
+use mitm_core::credentials::CredentialError;
 use mitm_core::workspace::file::ExportOptions;
 use crate::features::collections::CollectionsCmd;
 use super::command::{AppCommand, QrTarget};
@@ -118,11 +119,11 @@ impl MitmApp {
                 self.state.environments.load(db);
                 self.run_command(ctx, AppCommand::SelectWorkspace(summary.workspace_id));
             }
-            Err(e) if e == mitm_core::credentials::LOCKED => {
+            Err(CredentialError::Locked) => {
                 let retry = AppCommand::ImportWorkspace { json, target, name, passphrase };
                 self.state.credentials.ask_unlock(Some(retry));
             }
-            Err(e) => self.state.environments.import.error = Some(e),
+            Err(e) => self.state.environments.import.error = Some(e.to_string()),
         }
     }
 

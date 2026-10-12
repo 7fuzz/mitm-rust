@@ -17,9 +17,6 @@ pub use store::*;
 pub use transfer::*;
 pub(crate) use session::data_key_or_create;
 
-/// How a locked data key reads as text, for callers that still pass errors around as strings.
-pub const LOCKED: &str = "Credentials are locked";
-
 #[cfg(test)]
 pub(crate) mod tests_support {
     pub(crate) use super::store::tests::temp_db;

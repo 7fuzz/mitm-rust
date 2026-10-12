@@ -6,6 +6,7 @@ use crate::http::body::{MultipartBodySpec, MultipartFieldSpec, UrlEncodedParamSp
 use crate::repeater::{ExtractRuleItem, HeaderItem, ParamItem};
 use super::file::{self, Body, CollectionEntry, KeyValue, RequestEntry, WorkspaceFile};
 use crate::db::Db;
+use crate::credentials::CredentialError;
 
 fn detect_and_assign_body(
     mode_hint: Option<&str>,
@@ -187,13 +188,14 @@ pub fn detect_import_format(parsed: &serde_json::Value) -> ImportFormat {
 }
 
 /// Without `credentials_passphrase`, credentials arrive as names and field keys with empty values.
+/// Fails with `CredentialError::Locked` when the file brings credentials and they're locked here.
 pub fn import_workspace_json_db(
     db: &Db,
     json_content: &str,
     target_workspace_id: Option<&str>,
     custom_workspace_name: Option<&str>,
     credentials_passphrase: Option<&str>,
-) -> Result<ImportSummary, String> {
+) -> Result<ImportSummary, CredentialError> {
     let credentials = credential_import(db, json_content, credentials_passphrase)?;
     let mut conn = db.conn().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
@@ -214,7 +216,7 @@ pub fn preview_workspace_import_db(db: &Db, json_content: &str) -> Result<Import
 }
 
 /// Fetched before the import transaction: creating the data key writes through its own connection.
-fn credential_import(db: &Db, json_content: &str, passphrase: Option<&str>) -> Result<Option<CredentialImport>, String> {
+fn credential_import(db: &Db, json_content: &str, passphrase: Option<&str>) -> Result<Option<CredentialImport>, CredentialError> {
     let Ok(file) = WorkspaceFile::parse(json_content) else { return Ok(None) };
     if file.credentials.is_empty() {
         return Ok(None);
@@ -765,7 +767,7 @@ mod tests {
         let (db, dir) = temp_db();
         let before = workspace_count(&db);
         let broken = EXAMPLE.replace("\"before\": [\"log-in\"]", "\"before\": [\"sign-in\"]");
-        assert!(import_workspace_json_db(&db, &broken, None, None, None).unwrap_err().contains("sign-in"));
+        assert!(import_workspace_json_db(&db, &broken, None, None, None).unwrap_err().to_string().contains("sign-in"));
         assert_eq!(workspace_count(&db), before);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -777,7 +779,7 @@ mod tests {
         assert_eq!(detect(r#"{"test_cases": [], "all_environments": []}"#), ImportFormat::Unknown);
 
         let (db, dir) = temp_db();
-        let err = import_workspace_json_db(&db, r#"{"name": "Old", "test_cases": []}"#, None, None, None).unwrap_err();
+        let err = import_workspace_json_db(&db, r#"{"name": "Old", "test_cases": []}"#, None, None, None).unwrap_err().to_string();
         assert!(err.contains("Unrecognized file"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }

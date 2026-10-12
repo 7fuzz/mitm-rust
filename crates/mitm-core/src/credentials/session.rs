@@ -41,7 +41,7 @@ pub(crate) fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
-/// The data key, `None` before the first credential is saved, or `Err(LOCKED)`.
+/// The data key, `None` before the first credential is saved, or `Err(CredentialError::Locked)`.
 pub(crate) fn data_key(db: &Db) -> Result<Option<DataKey>, CredentialError> {
     if let Some(key) = cached(db) {
         return Ok(Some(key));

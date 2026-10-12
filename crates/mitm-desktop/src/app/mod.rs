@@ -19,6 +19,7 @@ use startup::{forward_core_events, startup_state};
 use cx::Cx;
 use crate::ui::dock::{self, Tab, TabViewer};
 use mitm_core::collections::execute::ExecutionResult;
+use mitm_core::http::RunError;
 use mitm_core::repeater::RepeaterExecutionResult;
 use crate::features::collections::CollectionsCmd;
 use crate::features::request_editor::captured::CapturedRequest;
@@ -37,8 +38,8 @@ pub struct MitmApp {
     core: Arc<MitmCore>,
     rt: Arc<Runtime>,
     core_events: Receiver<CoreEvent>,
-    repeater_runs: Jobs<(String, Result<RepeaterExecutionResult, String>)>,
-    collection_runs: Jobs<(String, Result<ExecutionResult, String>)>,
+    repeater_runs: Jobs<(String, Result<RepeaterExecutionResult, RunError>)>,
+    collection_runs: Jobs<(String, Result<ExecutionResult, RunError>)>,
     import_files: Jobs<Option<Result<(String, String), String>>>,
     credential_files: Jobs<Option<Result<String, String>>>,
     qr_images: Jobs<Option<(crate::app::command::QrTarget, Result<String, String>)>>,
