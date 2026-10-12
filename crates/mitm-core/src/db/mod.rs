@@ -352,6 +352,36 @@ mod tests {
     }
 
     #[test]
+    fn deleting_a_workspace_cascades_on_opened_connections() {
+        let (db, dir) = temp_db();
+        let conn = open(&db).unwrap();
+        conn.execute_batch(
+            "INSERT INTO workspaces (id, name, created_at_ms, updated_at_ms) VALUES ('w', 'W', 0, 0);
+             INSERT INTO collections (id, workspace_id, name, created_at_ms, updated_at_ms) VALUES ('c', 'w', 'C', 0, 0);
+             INSERT INTO requests (id, collection_id, name, method, url, created_at_ms, updated_at_ms) VALUES ('r', 'c', 'R', 'GET', 'http://a', 0, 0);
+             INSERT INTO request_histories (request_id, method, url, request_headers_json, status_code, response_headers_json, duration_ms, executed_at_ms)
+                 VALUES ('r', 'GET', 'http://a', '[]', 200, '[]', 1, 0);",
+        )
+        .unwrap();
+
+        open(&db).unwrap().execute("DELETE FROM workspaces WHERE id = 'w'", []).unwrap();
+
+        let count = |table: &str| -> i64 { conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap() };
+        assert_eq!(count("collections WHERE id = 'c'"), 0);
+        assert_eq!(count("requests WHERE id = 'r'"), 0);
+        assert_eq!(count("request_histories WHERE request_id = 'r'"), 0);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn opened_connections_wait_for_busy_writers() {
+        let (db, dir) = temp_db();
+        let timeout: i64 = open(&db).unwrap().query_row("PRAGMA busy_timeout", [], |r| r.get(0)).unwrap();
+        assert!(timeout > 0);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn counts_and_clears_per_data_category() {
         let (db, dir) = temp_db();
         let counts = get_data_category_counts(&db).unwrap();
