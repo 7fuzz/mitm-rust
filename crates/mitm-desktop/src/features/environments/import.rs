@@ -47,7 +47,7 @@ pub fn show(ctx: &egui::Context, state: &mut ImportState, current_workspace: (&s
             }
             if let Some(label) = &state.file_label {
                 ui.label(RichText::new(label).monospace());
-                if ui.small_button(icons::X).on_hover_text("Clear").clicked() {
+                if crate::widgets::button::icon_button(ui, icons::X, "Clear").clicked() {
                     state.open_with(None, String::new());
                 }
             }

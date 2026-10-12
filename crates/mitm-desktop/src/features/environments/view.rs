@@ -5,13 +5,18 @@ use mitm_core::workspace::{EnvironmentVariable, VariableVariant};
 use crate::app::command::{AppCommand, Commands};
 use crate::widgets::split;
 use crate::ui::icons;
+use crate::ui::theme::{self, Tone};
+use crate::widgets::button::icon_button;
+use crate::widgets::list_row::list_row;
+use crate::widgets::pills::badge;
+use crate::widgets::search::search_field;
+use crate::widgets::section::section_with;
 use super::{Cmd, EnvironmentsState, MoveModal, VariantModal};
 
 pub fn show(ui: &mut egui::Ui, state: &mut EnvironmentsState, credentials: &[Credential], cmds: &mut Commands) {
     let now = ui.input(|i| i.time);
     workspace_header(ui, state, cmds);
-    ui.add_space(4.0);
-    ui.separator();
+    ui.add_space(8.0);
     let [mut list_ui, mut editor_ui] = split::side_by_side(ui, "environments_split", &mut state.split_fraction);
     environment_list(&mut list_ui, state, cmds);
     environment_editor(&mut editor_ui, state, credentials, cmds, now);
@@ -95,7 +100,7 @@ fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
         let desc_label = if has_desc {
             RichText::new(ws.description.as_deref().unwrap()).weak()
         } else {
-            RichText::new("Add a description…").weak().italics()
+            RichText::new("Add a description…").weak()
         };
         let resp = ui.add(egui::Label::new(desc_label).sense(egui::Sense::click()))
             .on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -128,18 +133,14 @@ fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
 }
 
 fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut Commands) {
-    ui.horizontal(|ui| {
-        ui.strong("Environments");
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button(icons::PLUS).on_hover_text("Add environment").clicked() {
-                cmds.push(Cmd::Create {
-                    workspace_id: state.active_workspace_id.clone(),
-                    name: "New Environment".to_string(),
-                });
-            }
-        });
+    section_with(ui, "Environments", |ui| {
+        if icon_button(ui, icons::PLUS, "Add environment").clicked() {
+            cmds.push(Cmd::Create {
+                workspace_id: state.active_workspace_id.clone(),
+                name: "New Environment".to_string(),
+            });
+        }
     });
-    ui.separator();
 
     egui::ScrollArea::vertical().id_salt("env_list_scroll").show(ui, |ui| {
         if state.environments.is_empty() {
@@ -173,9 +174,14 @@ fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
                     resp.request_focus();
                 }
             } else {
-                let bullet = if is_active { "● " } else { "○ " };
-                let label = format!("{}{}", bullet, env.name);
-                let resp = ui.selectable_label(is_selected, label);
+                let resp = list_row(ui, is_selected, |ui| {
+                    ui.label(&env.name);
+                    if is_active {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(RichText::new("●").color(theme::color(ui, Tone::Success))).on_hover_text("Active");
+                        });
+                    }
+                });
 
                 if resp.clicked() {
                     state.selected_environment_id = Some(env.id.clone());
@@ -234,23 +240,13 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
     ui.horizontal(|ui| {
         ui.heading(&env.name);
         if env.is_active {
-            ui.label(RichText::new("● Active").color(ui.visuals().selection.bg_fill).strong());
+            badge(ui, "Active", Tone::Success);
         }
     });
     ui.add_space(4.0);
 
-    ui.horizontal(|ui| {
-        let edit = ui.add(
-            egui::TextEdit::singleline(&mut state.variable_filter)
-                .hint_text("Filter variables…")
-                .desired_width((ui.available_width() - 80.0).max(80.0)),
-        );
-        crate::widgets::search::claim_focus(&edit);
-        if !state.variable_filter.is_empty() && ui.button("Clear").clicked() {
-            state.variable_filter.clear();
-        }
-    });
-    ui.separator();
+    search_field(ui, &mut state.variable_filter, "Filter variables");
+    ui.add_space(4.0);
 
     let filter = state.variable_filter.trim().to_lowercase();
     let mut changed = false;
@@ -275,7 +271,7 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
     let row_count = matching_indices.len() + if show_new_row { 1 } else { 0 };
 
     TableBuilder::new(ui)
-        .striped(true)
+        .striped(false)
         .resizable(true)
         .auto_shrink([false, false])
         .column(Column::exact(28.0))
@@ -284,11 +280,11 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
         .column(Column::remainder().at_least(120.0).clip(true))
         .column(Column::exact(28.0))
         .header(22.0, |mut header| {
-            header.col(|ui| { ui.strong(""); });
-            header.col(|ui| { ui.strong(""); });
-            header.col(|ui| { ui.strong("Key"); });
-            header.col(|ui| { ui.strong("Value"); });
-            header.col(|ui| { ui.strong(""); });
+            for title in ["", "", "Key", "Value", ""] {
+                header.col(|ui| {
+                    ui.label(RichText::new(title).small().weak());
+                });
+            }
         })
         .body(|body| {
             body.rows(26.0, row_count, |mut row| {
@@ -371,7 +367,7 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
                                 let label = ui
                                     .add(egui::Label::new(RichText::new(format!("{} {entry} · {field}", icons::LOCK)).monospace()).sense(egui::Sense::click()))
                                     .on_hover_text(&current);
-                                if ui.small_button(icons::X).on_hover_text("Unlink").clicked() {
+                                if icon_button(ui, icons::X, "Unlink").clicked() {
                                     set_active_value(var, String::new());
                                     changed = true;
                                 }
@@ -447,7 +443,7 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
                         });
                     });
                     row.col(|ui| {
-                        if ui.small_button(icons::X).on_hover_text("Delete variable").clicked() {
+                        if icon_button(ui, icons::X, "Delete variable").clicked() {
                             delete_idx = Some(var_idx);
                         }
                     });
