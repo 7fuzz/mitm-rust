@@ -109,7 +109,8 @@ fn set_text_styles(style: &mut egui::Style) {
         (TextStyle::Body, FontId::new(13.0, FontFamily::Proportional)),
         (TextStyle::Button, FontId::new(13.0, FontFamily::Proportional)),
         (TextStyle::Monospace, FontId::new(12.5, FontFamily::Monospace)),
-        (TextStyle::Heading, FontId::new(15.0, FontFamily::Proportional)),
+        (TextStyle::Heading, FontId::new(15.0, strong_family())),
+        (TextStyle::Name("section".into()), FontId::new(11.0, strong_family())),
     ]
     .into();
 }
@@ -192,11 +193,46 @@ pub fn status_tone(code: u16) -> Tone {
     }
 }
 
-/// Buttons use the proportional fonts, which lack arrows, triangles and dots like `⇩ ▾ ●`; Hack has them.
+pub const STRONG_FAMILY: &str = "strong";
+
+pub fn strong_family() -> egui::FontFamily {
+    egui::FontFamily::Name(STRONG_FAMILY.into())
+}
+
 pub fn install_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
-    if let Some(proportional) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
-        proportional.push("Hack".to_string());
+    let embedded: [(&str, &'static [u8]); 3] = [
+        ("Inter", include_bytes!("../../assets/fonts/Inter-Regular.ttf")),
+        ("Inter-SemiBold", include_bytes!("../../assets/fonts/Inter-SemiBold.ttf")),
+        ("JetBrainsMono", include_bytes!("../../assets/fonts/JetBrainsMono-Regular.ttf")),
+    ];
+    for (name, bytes) in embedded {
+        fonts.font_data.insert(name.to_string(), std::sync::Arc::new(egui::FontData::from_static(bytes)));
     }
+    // Hack covers arrows, triangles and dots the text fonts lack; the emoji fonts cover user data.
+    let fallback = ["Hack", "NotoEmoji-Regular", "emoji-icon-font"];
+    let chain = |first: &[&str]| first.iter().chain(&fallback).map(|s| s.to_string()).collect::<Vec<_>>();
+    fonts.families.insert(egui::FontFamily::Proportional, chain(&["Inter"]));
+    fonts.families.insert(egui::FontFamily::Monospace, chain(&["JetBrainsMono"]));
+    fonts.families.insert(strong_family(), chain(&["Inter-SemiBold", "Inter"]));
     ctx.set_fonts(fonts);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn embedded_fonts_lay_out_text() {
+        let ctx = egui::Context::default();
+        install_fonts(&ctx);
+        apply_style(&ctx);
+        let mut output = ctx.run_ui(Default::default(), |ui| {
+            ui.heading("Traffic");
+            ui.label(egui::RichText::new("GET /v1/users").monospace());
+            ui.label(egui::RichText::new("PROXY").text_style(egui::TextStyle::Name("section".into())));
+        });
+        assert!(!output.textures_delta.set.is_empty());
+        output.textures_delta.clear();
+    }
 }
