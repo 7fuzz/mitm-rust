@@ -1,4 +1,4 @@
-use eframe::egui::{Color32, Ui, Visuals};
+use eframe::egui::{self, Color32, CornerRadius, Shadow, Stroke, Ui, Visuals};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tone {
@@ -30,6 +30,112 @@ impl Tone {
     pub fn tint(self, visuals: &Visuals, alpha: u8) -> Color32 {
         let c = self.color(visuals);
         Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), alpha)
+    }
+}
+
+/// Surface and text colours; `Tone` covers the semantic ones.
+#[derive(Debug, Clone, Copy)]
+pub struct Palette {
+    pub base: Color32,
+    pub panel: Color32,
+    pub raised: Color32,
+    pub hover: Color32,
+    pub border: Color32,
+    pub border_strong: Color32,
+    pub text: Color32,
+    pub text_strong: Color32,
+    pub text_weak: Color32,
+    pub accent: Color32,
+}
+
+impl Palette {
+    pub fn dark() -> Self {
+        Self {
+            base: Color32::from_rgb(0x0F, 0x11, 0x15),
+            panel: Color32::from_rgb(0x15, 0x18, 0x1D),
+            raised: Color32::from_rgb(0x1C, 0x20, 0x27),
+            hover: Color32::from_rgb(0x25, 0x2A, 0x32),
+            border: Color32::from_rgb(0x27, 0x2C, 0x35),
+            border_strong: Color32::from_rgb(0x3A, 0x40, 0x4B),
+            text: Color32::from_rgb(0xD7, 0xDA, 0xE0),
+            text_strong: Color32::from_rgb(0xF3, 0xF4, 0xF7),
+            text_weak: Color32::from_rgb(0x8A, 0x90, 0x9B),
+            accent: Color32::from_rgb(0x6E, 0x8B, 0xFF),
+        }
+    }
+
+    pub fn light() -> Self {
+        Self {
+            base: Color32::from_rgb(0xF4, 0xF5, 0xF7),
+            panel: Color32::from_rgb(0xFF, 0xFF, 0xFF),
+            raised: Color32::from_rgb(0xF0, 0xF2, 0xF5),
+            hover: Color32::from_rgb(0xE6, 0xE9, 0xEE),
+            border: Color32::from_rgb(0xDD, 0xE1, 0xE7),
+            border_strong: Color32::from_rgb(0xC5, 0xCB, 0xD4),
+            text: Color32::from_rgb(0x1E, 0x22, 0x28),
+            text_strong: Color32::from_rgb(0x0B, 0x0D, 0x10),
+            text_weak: Color32::from_rgb(0x69, 0x70, 0x7C),
+            accent: Color32::from_rgb(0x3B, 0x5B, 0xDB),
+        }
+    }
+}
+
+/// Styles both themes up front, so the System/Light/Dark switch needs no extra plumbing.
+pub fn apply_style(ctx: &egui::Context) {
+    ctx.style_mut_of(egui::Theme::Dark, |s| set_visuals(&mut s.visuals, &Palette::dark()));
+    ctx.style_mut_of(egui::Theme::Light, |s| set_visuals(&mut s.visuals, &Palette::light()));
+}
+
+fn set_visuals(v: &mut Visuals, p: &Palette) {
+    let shadow_alpha = if v.dark_mode { 110 } else { 30 };
+    let shadow = Shadow { offset: [0, 4], blur: 16, spread: 0, color: Color32::from_black_alpha(shadow_alpha) };
+
+    v.panel_fill = p.panel;
+    v.window_fill = p.raised;
+    v.faint_bg_color = p.raised;
+    v.extreme_bg_color = p.base;
+    v.text_edit_bg_color = Some(p.base);
+    v.code_bg_color = p.base;
+    v.window_stroke = Stroke::new(1.0, p.border);
+    v.window_corner_radius = CornerRadius::same(8);
+    v.menu_corner_radius = CornerRadius::same(6);
+    v.window_shadow = shadow;
+    v.popup_shadow = shadow;
+    v.selection.bg_fill = p.accent.gamma_multiply(0.35);
+    v.selection.stroke = Stroke::new(1.0, p.accent);
+    v.hyperlink_color = p.accent;
+    v.text_cursor.stroke = Stroke::new(2.0, p.accent);
+    v.weak_text_color = Some(p.text_weak);
+    v.warn_fg_color = Tone::Warn.color(v);
+    v.error_fg_color = Tone::Danger.color(v);
+    v.striped = false;
+
+    let radius = CornerRadius::same(4);
+    let w = &mut v.widgets;
+    w.noninteractive.bg_fill = p.panel;
+    w.noninteractive.weak_bg_fill = p.panel;
+    w.noninteractive.bg_stroke = Stroke::new(1.0, p.border);
+    w.noninteractive.fg_stroke = Stroke::new(1.0, p.text);
+    // Outlined rather than frameless, so buttons still read as buttons at rest.
+    w.inactive.weak_bg_fill = Color32::TRANSPARENT;
+    w.inactive.bg_fill = p.raised;
+    w.inactive.bg_stroke = Stroke::new(1.0, p.border);
+    w.inactive.fg_stroke = Stroke::new(1.0, p.text);
+    w.hovered.weak_bg_fill = p.hover;
+    w.hovered.bg_fill = p.hover;
+    w.hovered.bg_stroke = Stroke::new(1.0, p.border_strong);
+    w.hovered.fg_stroke = Stroke::new(1.0, p.text_strong);
+    w.active.weak_bg_fill = p.hover;
+    w.active.bg_fill = p.hover;
+    w.active.bg_stroke = Stroke::new(1.0, p.accent);
+    w.active.fg_stroke = Stroke::new(1.0, p.text_strong);
+    w.open.weak_bg_fill = p.raised;
+    w.open.bg_fill = p.raised;
+    w.open.bg_stroke = Stroke::new(1.0, p.border);
+    w.open.fg_stroke = Stroke::new(1.0, p.text);
+    for state in [&mut w.noninteractive, &mut w.inactive, &mut w.hovered, &mut w.active, &mut w.open] {
+        state.corner_radius = radius;
+        state.expansion = 0.0;
     }
 }
 
