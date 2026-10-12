@@ -73,6 +73,15 @@ impl Tab {
         }
     }
 
+    /// The non-utility tabs as menus list them, a separator between groups.
+    pub const GROUPS: &'static [&'static [Tab]] = &[
+        &[Tab::Traffic, Tab::Intercept, Tab::Rewrite],
+        &[Tab::Repeater, Tab::Collections, Tab::Fuzzer],
+        &[Tab::WebSockets, Tab::Webhooks],
+        &[Tab::Environments, Tab::Credentials],
+        &[Tab::Settings],
+    ];
+
     /// Utility tabs, in the order they appear under the **Utilities ▸** submenu.
     pub const UTILITIES: &'static [Tab] = &[
         Tab::JsonDiff,
@@ -116,13 +125,15 @@ pub fn tab_bar_menus(ui: &mut egui::Ui, dock: &DockState<Tab>) -> Option<(NodePa
         }
         let response = ui.interact(bar, ui.id().with(("tab_bar_menu", path)), egui::Sense::click());
         response.context_menu(|ui| {
-            for tab in Tab::ALL.into_iter().filter(|t| !t.is_utility()) {
-                if ui.selectable_label(leaf.tabs.contains(&tab), tab.name()).clicked() {
-                    picked = Some((path, tab));
-                    ui.close();
+            for group in Tab::GROUPS {
+                for &tab in *group {
+                    if ui.selectable_label(leaf.tabs.contains(&tab), tab.name()).clicked() {
+                        picked = Some((path, tab));
+                        ui.close();
+                    }
                 }
+                ui.separator();
             }
-            ui.separator();
             ui.menu_button("Utilities ▸", |ui| {
                 for &tab in Tab::UTILITIES {
                     if ui.selectable_label(leaf.tabs.contains(&tab), tab.name()).clicked() {
@@ -266,6 +277,14 @@ impl egui_dock::TabViewer for TabViewer<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn groups_list_every_non_utility_tab_once() {
+        let grouped: Vec<Tab> = Tab::GROUPS.iter().flat_map(|g| g.iter().copied()).collect();
+        let expected: Vec<Tab> = Tab::ALL.into_iter().filter(|t| !t.is_utility()).collect();
+        assert_eq!(grouped.len(), expected.len());
+        assert!(expected.iter().all(|t| grouped.contains(t)));
+    }
     use egui_dock::{NodeIndex, SurfaceIndex};
 
     fn leaf_of(dock: &DockState<Tab>, tab: Tab) -> NodePath {
