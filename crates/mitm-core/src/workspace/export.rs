@@ -11,8 +11,13 @@ use super::file::{
     RequestEntry, VariableEntry, WorkspaceFile, WorkspaceInfo,
 };
 
-/// The workspace as a `mitm-workspace` file.
-pub fn export_workspace_json_db(db_path: &PathBuf, workspace_id: &str, options: ExportOptions) -> Result<String, String> {
+/// The workspace as a `mitm-workspace` file. Credential values go in only when sealed with `credentials_passphrase`.
+pub fn export_workspace_json_db(
+    db_path: &PathBuf,
+    workspace_id: &str,
+    options: ExportOptions,
+    credentials_passphrase: Option<&str>,
+) -> Result<String, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let (name, description): (String, Option<String>) = conn
         .query_row("SELECT name, description FROM workspaces WHERE id = ?", params![workspace_id], |row| {
@@ -33,6 +38,8 @@ pub fn export_workspace_json_db(db_path: &PathBuf, workspace_id: &str, options: 
     let tree = get_collections_db(db_path, workspace_id)?;
     let refs = step_refs(&tree);
     file.collections = tree.iter().map(|node| collection_entry(node, &refs)).collect();
+    (file.credentials, file.credentials_sealed) =
+        crate::credentials::export_credentials(db_path, workspace_id, credentials_passphrase, options.include_auto)?;
 
     serde_json::to_string_pretty(&file).map_err(|e| format!("Failed to serialize workspace: {}", e))
 }
@@ -42,8 +49,9 @@ pub fn export_workspace_file_db(
     workspace_id: &str,
     destination_path: &str,
     options: ExportOptions,
+    credentials_passphrase: Option<&str>,
 ) -> Result<(), String> {
-    let json = export_workspace_json_db(db_path, workspace_id, options)?;
+    let json = export_workspace_json_db(db_path, workspace_id, options, credentials_passphrase)?;
     let target = std::path::Path::new(destination_path);
     if let Some(parent) = target.parent().filter(|p| !p.exists()) {
         std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create destination directory: {}", e))?;
@@ -184,8 +192,8 @@ mod tests {
     #[test]
     fn importing_the_example_and_exporting_it_gives_the_same_collections() {
         let (db, dir) = temp_db();
-        let summary = import_workspace_json_db(&db, EXAMPLE, None, None).unwrap();
-        let exported = WorkspaceFile::parse(&export_workspace_json_db(&db, &summary.workspace_id, ExportOptions { include_secrets: true, include_auto: true }).unwrap()).unwrap();
+        let summary = import_workspace_json_db(&db, EXAMPLE, None, None, None).unwrap();
+        let exported = WorkspaceFile::parse(&export_workspace_json_db(&db, &summary.workspace_id, ExportOptions { include_secrets: true, include_auto: true }, None).unwrap()).unwrap();
         let original = WorkspaceFile::parse(EXAMPLE).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
 
@@ -204,13 +212,109 @@ mod tests {
     #[test]
     fn exporting_twice_gives_the_same_file_and_secrets_stay_blank() {
         let (db, dir) = temp_db();
-        let summary = import_workspace_json_db(&db, EXAMPLE, None, None).unwrap();
-        let first = export_workspace_json_db(&db, &summary.workspace_id, ExportOptions::default()).unwrap();
-        let second = export_workspace_json_db(&db, &summary.workspace_id, ExportOptions::default()).unwrap();
+        let summary = import_workspace_json_db(&db, EXAMPLE, None, None, None).unwrap();
+        let first = export_workspace_json_db(&db, &summary.workspace_id, ExportOptions::default(), None).unwrap();
+        let second = export_workspace_json_db(&db, &summary.workspace_id, ExportOptions::default(), None).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
 
         assert_eq!(first, second);
         assert!(!first.contains("local-only-password"));
         assert!(!first.contains("\"id\""));
+    }
+
+    fn workspace_with_credentials(db: &PathBuf) -> String {
+        use crate::credentials::{create_credential, save_credential, Field, FieldKind};
+        use crate::workspace::{save_workspace_environment_db, Environment, EnvironmentVariable, VariableVariant};
+        let ws = crate::workspace::create_workspace_db(db, "W".into(), None).unwrap().id;
+        let mut cred = create_credential(db, &ws, "dgAdmin").unwrap();
+        let field = |key: &str, kind, extracted, value: &str| Field { key: key.into(), kind, extracted, value: value.into() };
+        cred.fields = vec![
+            field("password", FieldKind::Secret, false, "hunter2"),
+            field("accessToken", FieldKind::Secret, true, "eyJtoken"),
+        ];
+        cred.notes = "rotate monthly".into();
+        save_credential(db, &cred).unwrap();
+        let link = |value: &str| VariableVariant { name: "dev".into(), value: value.into() };
+        save_workspace_environment_db(db, Environment {
+            id: uuid::Uuid::new_v4().to_string(),
+            workspace_id: ws.clone(),
+            name: "dev".into(),
+            is_active: true,
+            variables: vec![
+                EnvironmentVariable {
+                    key: "adminPassword".into(),
+                    value: String::new(),
+                    enabled: true,
+                    r#type: "secret".into(),
+                    active_index: 0,
+                    variants: vec![link("{{$cred:dgAdmin.password}}")],
+                },
+                EnvironmentVariable {
+                    key: "accessToken".into(),
+                    value: String::new(),
+                    enabled: true,
+                    r#type: "default".into(),
+                    active_index: 0,
+                    variants: vec![VariableVariant { name: "(auto)".into(), value: "{{$cred:dgAdmin.accessToken}}".into() }],
+                },
+            ],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        })
+        .unwrap();
+        ws
+    }
+
+    #[test]
+    fn credentials_export_without_values_unless_sealed() {
+        let (db, dir) = temp_db();
+        let ws = workspace_with_credentials(&db);
+
+        let plain = export_workspace_json_db(&db, &ws, ExportOptions::default(), None).unwrap();
+        assert!(!plain.contains("hunter2") && !plain.contains("eyJtoken") && !plain.contains("rotate"));
+        let file = WorkspaceFile::parse(&plain).unwrap();
+        assert_eq!(file.credentials[0].name, "dgAdmin");
+        assert_eq!(file.credentials[0].fields.len(), 2);
+        assert!(file.credentials_sealed.is_none());
+        assert!(plain.contains("{{$cred:dgAdmin.password}}"), "links survive even on secret variables");
+        assert!(plain.contains("{{$cred:dgAdmin.accessToken}}"), "an (auto) link survives");
+
+        let sealed = export_workspace_json_db(&db, &ws, ExportOptions::default(), Some("pw")).unwrap();
+        assert!(!sealed.contains("hunter2"));
+        let entries = crate::credentials::open_sealed(&WorkspaceFile::parse(&sealed).unwrap().credentials_sealed.unwrap(), "pw").unwrap();
+        assert_eq!(entries[0].values.get("password").map(String::as_str), Some("hunter2"));
+        assert!(!entries[0].values.contains_key("accessToken"), "extracted values need include_auto");
+
+        let with_auto = ExportOptions { include_auto: true, ..Default::default() };
+        let sealed = export_workspace_json_db(&db, &ws, with_auto, Some("pw")).unwrap();
+        let entries = crate::credentials::open_sealed(&WorkspaceFile::parse(&sealed).unwrap().credentials_sealed.unwrap(), "pw").unwrap();
+        assert_eq!(entries[0].values.get("accessToken").map(String::as_str), Some("eyJtoken"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sealed_credentials_import_with_the_passphrase_and_links_resolve() {
+        let (db, dir) = temp_db();
+        let ws = workspace_with_credentials(&db);
+        let json = export_workspace_json_db(&db, &ws, ExportOptions::default(), Some("pw")).unwrap();
+
+        assert!(import_workspace_json_db(&db, &json, None, Some("Wrong"), Some("nope")).is_err());
+        let preview = crate::workspace::import::preview_workspace_import_db(&db, &json).unwrap();
+        assert!(preview.credentials_sealed);
+        assert_eq!(preview.summary.credentials_imported, 1);
+
+        let summary = import_workspace_json_db(&db, &json, None, Some("Copy"), Some("pw")).unwrap();
+        assert_eq!(summary.credentials_imported, 1);
+        let copy = crate::credentials::find_credential(&db, &summary.workspace_id, "dgAdmin").unwrap().unwrap();
+        assert_eq!(copy.field("password").unwrap().value, "hunter2");
+        assert_eq!(copy.notes, "rotate monthly");
+        let resolved = crate::workspace::interpolate_variables(&db, &summary.workspace_id, "{{adminPassword}}");
+        assert_eq!(resolved, "hunter2");
+
+        let skipped = import_workspace_json_db(&db, &json, None, Some("Names only"), None).unwrap();
+        let names_only = crate::credentials::find_credential(&db, &skipped.workspace_id, "dgAdmin").unwrap().unwrap();
+        assert_eq!(names_only.fields.len(), 2);
+        assert!(names_only.fields.iter().all(|f| f.value.is_empty()));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

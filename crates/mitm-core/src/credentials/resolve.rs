@@ -21,6 +21,16 @@ pub fn parse_ref(key: &str) -> Option<(&str, &str)> {
     (validate_name(entry).is_ok() && validate_name(field).is_ok()).then_some((entry, field))
 }
 
+/// `(entry, field)` when `value` is exactly one `{{$cred:entry.field}}` ref, padded or not.
+pub fn link_target(value: &str) -> Option<(&str, &str)> {
+    let inner = value.trim().strip_prefix("{{")?.strip_suffix("}}")?;
+    parse_ref(inner)
+}
+
+pub fn is_link(value: &str) -> bool {
+    link_target(value).is_some()
+}
+
 pub fn format_ref(entry: &str, field: &str) -> String {
     format!("{{{{$cred:{entry}.{field}}}}}")
 }
@@ -57,6 +67,9 @@ mod tests {
         assert_eq!(parse_ref("$cred:a.b.c"), None);
         assert_eq!(parse_ref("cred:a.b"), None);
         assert_eq!(format_ref("dgAdmin", "password"), "{{$cred:dgAdmin.password}}");
+        assert_eq!(link_target(" {{ $cred:dgAdmin.password }} "), Some(("dgAdmin", "password")));
+        assert_eq!(link_target("x{{$cred:dgAdmin.password}}"), None);
+        assert_eq!(link_target("{{adminPassword}}"), None);
     }
 
     #[test]

@@ -673,12 +673,13 @@ impl MitmApp {
                         &workspace.id,
                         &path.to_string_lossy(),
                         options,
+                        None,
                     );
                     Some(result.map(|_| format!("Exported {}", crate::util::files::file_name(&path))))
                 });
             }
             AppCommand::ImportWorkspace { json, target, name } => {
-                match mitm_core::workspace::import::import_workspace_json_db(db_path, &json, target.as_deref(), name.as_deref()) {
+                match mitm_core::workspace::import::import_workspace_json_db(db_path, &json, target.as_deref(), name.as_deref(), None) {
                     Ok(_) if target.is_some() => {
                         self.state.environments.import = Default::default();
                         self.state.environments.refresh(db_path);

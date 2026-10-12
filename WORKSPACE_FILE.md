@@ -80,7 +80,22 @@ How a variable is imported:
 - **`(auto)` starts empty**, unless `variants` lists one named `(auto)`; then its value is used.
 - **A variant already named `default`:** the `value` goes to `default1`, or `default2` if that's taken too.
 
+A variant whose value is exactly a credential ref, like `{{$cred:dgAdmin.password}}`, is a link to that credential field. Export always keeps links, even on secret variables and `(auto)` variants, since they hold no secret themselves.
+
 Export reverses this. A variable without variants is written as `value`. A variable with variants is written as its `variants` list, plus `activeVariant` when the active one isn't the first. `(auto)` is only in the list when it has a value and **Include (auto) values** is on. If `(auto)` was active, `activeVariant` still says so.
+
+## `credentials`
+
+Credential entries, without values. Importing them lets linked variables and `{{$cred:entry.field}}` refs resolve once the values are filled in.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `name` | text | Required. Letters, digits, `-` and `_`. |
+| `fields` | list | `{ "key", "kind", "extracted" }`. `kind` is `text` (default), `secret` or `totp`. `extracted` marks a field an extract rule writes (a token). |
+
+## `credentialsSealed`
+
+Present only when the export included credential values. It holds every entry's values and notes, encrypted with AES-256-GCM under a key derived from the export passphrase with argon2id. `salt`, `nonce` and `ciphertext` are base64.
 
 ## `collections`
 
@@ -159,6 +174,8 @@ Use **⇩ Import…** in the top bar's workspace menu, or **Import workspace…*
 - **New workspace:** named after `workspace.name`, unless you type a name.
 - **Into the current workspace:** its environments and collections are added next to the existing ones.
 
+Credentials are added by name. An entry that already exists in the workspace keeps its fields and gains the ones it lacks. When the file has `credentialsSealed`, the dialog asks for the export passphrase. Skipping it imports names and field keys with empty values.
+
 An import either fully succeeds or changes nothing.
 
 The same dialog also reads **Postman v2.1 collections**: folders, requests, headers, raw bodies, and collection variables (as one environment).
@@ -170,4 +187,5 @@ Use **⇧ Export…** in the workspace menu, or **Export workspace…** in the c
 If there's something to decide, a prompt asks first. Both options are off by default:
 
 - **Include secret values**: shown when the workspace has secret variables. Without it, their values are blank.
-- **Include (auto) values**: shown when some `(auto)` variant has a value. Without it, `(auto)` variants are left out.
+- **Include (auto) values**: shown when some `(auto)` variant has a value. Without it, `(auto)` variants are left out. It also covers credential fields written by extract rules.
+- **Include credentials**: shown when the workspace has credentials. Asks for a passphrase and writes the values into `credentialsSealed`. Without it, only names and field keys are exported.

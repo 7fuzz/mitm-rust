@@ -58,6 +58,8 @@ pub struct ImportSummary {
     pub environments_imported: usize,
     pub collections_imported: usize,
     pub requests_imported: usize,
+    #[serde(default)]
+    pub credentials_imported: usize,
 }
 
 #[allow(dead_code)]
@@ -163,6 +165,14 @@ impl ImportFormat {
 pub struct ImportPreview {
     pub format: ImportFormat,
     pub summary: ImportSummary,
+    /// The file carries credential values; importing them needs the export passphrase.
+    pub credentials_sealed: bool,
+}
+
+/// What import needs to write credentials: the local data key, and the file's values once unsealed.
+struct CredentialImport {
+    key: crate::credentials::crypto::DataKey,
+    sealed: Vec<crate::credentials::SealedEntry>,
 }
 
 pub fn detect_import_format(parsed: &serde_json::Value) -> ImportFormat {
@@ -176,15 +186,18 @@ pub fn detect_import_format(parsed: &serde_json::Value) -> ImportFormat {
     ImportFormat::Unknown
 }
 
+/// Without `credentials_passphrase`, credentials arrive as names and field keys with empty values.
 pub fn import_workspace_json_db(
     db_path: &PathBuf,
     json_content: &str,
     target_workspace_id: Option<&str>,
     custom_workspace_name: Option<&str>,
+    credentials_passphrase: Option<&str>,
 ) -> Result<ImportSummary, String> {
+    let credentials = credential_import(db_path, json_content, credentials_passphrase)?;
     let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    let summary = import_into(&tx, json_content, target_workspace_id, custom_workspace_name)?;
+    let summary = import_into(&tx, json_content, target_workspace_id, custom_workspace_name, credentials.as_ref())?;
     tx.commit().map_err(|e| e.to_string())?;
     Ok(summary)
 }
@@ -193,10 +206,25 @@ pub fn import_workspace_json_db(
 pub fn preview_workspace_import_db(db_path: &PathBuf, json_content: &str) -> Result<ImportPreview, String> {
     let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    let summary = import_into(&tx, json_content, None, None)?;
+    let summary = import_into(&tx, json_content, None, None, None)?;
     tx.rollback().map_err(|e| e.to_string())?;
     let parsed: serde_json::Value = serde_json::from_str(json_content).map_err(|e| e.to_string())?;
-    Ok(ImportPreview { format: detect_import_format(&parsed), summary })
+    let credentials_sealed = parsed.get("credentialsSealed").is_some_and(|v| !v.is_null());
+    Ok(ImportPreview { format: detect_import_format(&parsed), summary, credentials_sealed })
+}
+
+/// Fetched before the import transaction: creating the data key writes through its own connection.
+fn credential_import(db_path: &PathBuf, json_content: &str, passphrase: Option<&str>) -> Result<Option<CredentialImport>, String> {
+    let Ok(file) = WorkspaceFile::parse(json_content) else { return Ok(None) };
+    if file.credentials.is_empty() {
+        return Ok(None);
+    }
+    let sealed = match (&file.credentials_sealed, passphrase) {
+        (Some(block), Some(passphrase)) => crate::credentials::open_sealed(block, passphrase)?,
+        _ => Vec::new(),
+    };
+    let key = crate::credentials::data_key_or_create(db_path)?;
+    Ok(Some(CredentialImport { key, sealed }))
 }
 
 fn import_into(
@@ -204,12 +232,17 @@ fn import_into(
     json_content: &str,
     target_workspace_id: Option<&str>,
     custom_workspace_name: Option<&str>,
+    credentials: Option<&CredentialImport>,
 ) -> Result<ImportSummary, String> {
     let parsed: serde_json::Value = serde_json::from_str(json_content).map_err(|e| format!("Invalid JSON: {}", e))?;
     match detect_import_format(&parsed) {
-        ImportFormat::Workspace => {
-            import_workspace_file(conn, WorkspaceFile::parse(json_content)?, target_workspace_id, custom_workspace_name)
-        }
+        ImportFormat::Workspace => import_workspace_file(
+            conn,
+            WorkspaceFile::parse(json_content)?,
+            target_workspace_id,
+            custom_workspace_name,
+            credentials,
+        ),
         ImportFormat::Postman => {
             let collection: PostmanCollection =
                 serde_json::from_str(json_content).map_err(|e| format!("Invalid Postman collection: {}", e))?;
@@ -283,6 +316,7 @@ fn import_postman(
         environments_imported: env_count,
         collections_imported: col_count,
         requests_imported: req_count,
+        credentials_imported: 0,
     })
 }
 
@@ -315,6 +349,7 @@ fn import_workspace_file(
     file: WorkspaceFile,
     target_workspace_id: Option<&str>,
     custom_workspace_name: Option<&str>,
+    credentials: Option<&CredentialImport>,
 ) -> Result<ImportSummary, String> {
     let ts = now_ms();
     let name = custom_workspace_name
@@ -349,6 +384,11 @@ fn import_workspace_file(
             .map_err(|e| e.to_string())?;
     }
 
+    let credentials_imported = match credentials {
+        Some(c) => crate::credentials::import_credentials(conn, &c.key, &workspace_id, &file.credentials, &c.sealed)?,
+        None => file.credentials.len(),
+    };
+
     let mut ctx = FileImport { conn, workspace_id: &workspace_id, ts, collections: 0, requests: Vec::new() };
     for (index, collection) in file.collections.iter().enumerate() {
         ctx.collection(collection, None, index)?;
@@ -372,6 +412,7 @@ fn import_workspace_file(
         environments_imported: file.environments.len(),
         collections_imported: ctx.collections,
         requests_imported: ctx.requests.len(),
+        credentials_imported,
     })
 }
 
@@ -650,7 +691,7 @@ mod tests {
         assert_eq!(preview.summary.workspace_name, "Sample API");
         assert_eq!(workspace_count(&db), before);
 
-        let summary = import_workspace_json_db(&db, POSTMAN, None, None).unwrap();
+        let summary = import_workspace_json_db(&db, POSTMAN, None, None, None).unwrap();
         assert_eq!(summary.environments_imported, preview.summary.environments_imported);
         assert_eq!(summary.collections_imported, preview.summary.collections_imported);
         assert_eq!(summary.requests_imported, preview.summary.requests_imported);
@@ -664,7 +705,7 @@ mod tests {
     #[test]
     fn workspace_file_imports_environments_requests_and_steps() {
         let (db, dir) = temp_db();
-        let summary = import_workspace_json_db(&db, EXAMPLE, None, None).unwrap();
+        let summary = import_workspace_json_db(&db, EXAMPLE, None, None, None).unwrap();
         assert_eq!(summary.workspace_name, "Online Store");
         assert_eq!(
             (summary.environments_imported, summary.collections_imported, summary.requests_imported),
@@ -708,12 +749,12 @@ mod tests {
     #[test]
     fn importing_into_a_workspace_keeps_its_active_environment() {
         let (db, dir) = temp_db();
-        let first = import_workspace_json_db(&db, EXAMPLE, None, None).unwrap();
+        let first = import_workspace_json_db(&db, EXAMPLE, None, None, None).unwrap();
         let envs = || super::super::get_workspace_environments_db(&db, &first.workspace_id).unwrap();
         let staging = envs().into_iter().find(|e| e.name == "Staging").unwrap();
         super::super::set_active_environment_db(&db, &first.workspace_id, Some(&staging.id)).unwrap();
 
-        import_workspace_json_db(&db, EXAMPLE, Some(&first.workspace_id), None).unwrap();
+        import_workspace_json_db(&db, EXAMPLE, Some(&first.workspace_id), None, None).unwrap();
         let active: Vec<String> = envs().into_iter().filter(|e| e.is_active).map(|e| e.id).collect();
         assert_eq!(active, [staging.id]);
         let _ = std::fs::remove_dir_all(&dir);
@@ -724,7 +765,7 @@ mod tests {
         let (db, dir) = temp_db();
         let before = workspace_count(&db);
         let broken = EXAMPLE.replace("\"before\": [\"log-in\"]", "\"before\": [\"sign-in\"]");
-        assert!(import_workspace_json_db(&db, &broken, None, None).unwrap_err().contains("sign-in"));
+        assert!(import_workspace_json_db(&db, &broken, None, None, None).unwrap_err().contains("sign-in"));
         assert_eq!(workspace_count(&db), before);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -736,7 +777,7 @@ mod tests {
         assert_eq!(detect(r#"{"test_cases": [], "all_environments": []}"#), ImportFormat::Unknown);
 
         let (db, dir) = temp_db();
-        let err = import_workspace_json_db(&db, r#"{"name": "Old", "test_cases": []}"#, None, None).unwrap_err();
+        let err = import_workspace_json_db(&db, r#"{"name": "Old", "test_cases": []}"#, None, None, None).unwrap_err();
         assert!(err.contains("Unrecognized file"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }

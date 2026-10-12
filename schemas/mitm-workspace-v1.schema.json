@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "MITM workspace file, version 1",
-  "description": "A workspace's environments and collections. See WORKSPACE_FILE.md.",
+  "description": "A workspace's environments, collections and credentials. See WORKSPACE_FILE.md.",
   "type": "object",
   "required": ["format", "version", "workspace"],
   "additionalProperties": false,
@@ -19,9 +19,54 @@
       }
     },
     "environments": { "type": "array", "items": { "$ref": "#/$defs/environment" } },
-    "collections": { "type": "array", "items": { "$ref": "#/$defs/collection" } }
+    "collections": { "type": "array", "items": { "$ref": "#/$defs/collection" } },
+    "credentials": { "type": "array", "items": { "$ref": "#/$defs/credential" } },
+    "credentialsSealed": { "$ref": "#/$defs/credentialsSealed" }
   },
   "$defs": {
+    "credential": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key"],
+            "additionalProperties": false,
+            "properties": {
+              "key": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+              "kind": { "enum": ["text", "secret", "totp"], "default": "text" },
+              "extracted": { "type": "boolean", "default": false, "description": "Written by an extract rule." }
+            }
+          }
+        }
+      }
+    },
+    "credentialsSealed": {
+      "type": "object",
+      "description": "Credential values and notes, AES-256-GCM encrypted with an argon2id key from the export passphrase.",
+      "required": ["kdf", "params", "salt", "nonce", "ciphertext"],
+      "additionalProperties": false,
+      "properties": {
+        "kdf": { "const": "argon2id" },
+        "params": {
+          "type": "object",
+          "required": ["memoryKib", "iterations", "parallelism"],
+          "additionalProperties": false,
+          "properties": {
+            "memoryKib": { "type": "integer", "minimum": 8 },
+            "iterations": { "type": "integer", "minimum": 1 },
+            "parallelism": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "salt": { "type": "string", "contentEncoding": "base64" },
+        "nonce": { "type": "string", "contentEncoding": "base64" },
+        "ciphertext": { "type": "string", "contentEncoding": "base64" }
+      }
+    },
     "environment": {
       "type": "object",
       "required": ["name"],

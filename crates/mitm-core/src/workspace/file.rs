@@ -25,6 +25,32 @@ pub struct WorkspaceFile {
     pub environments: Vec<EnvironmentEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub collections: Vec<CollectionEntry>,
+    /// Credential entries without values, so variables linked to them re-link on import.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub credentials: Vec<CredentialEntry>,
+    /// Credential values and notes, encrypted with a passphrase chosen at export.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credentials_sealed: Option<SealedCredentials>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CredentialEntry {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<crate::credentials::FieldMeta>,
+}
+
+/// `ciphertext` is AES-256-GCM over the JSON of `[{name, values: {key: value}, notes}]`, keyed by argon2id of the
+/// passphrase. Binary parts are base64.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SealedCredentials {
+    pub kdf: String,
+    pub params: crate::credentials::crypto::KdfParams,
+    pub salt: String,
+    pub nonce: String,
+    pub ciphertext: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -233,6 +259,8 @@ impl WorkspaceFile {
             workspace,
             environments: Vec::new(),
             collections: Vec::new(),
+            credentials: Vec::new(),
+            credentials_sealed: None,
         }
     }
 
@@ -343,7 +371,11 @@ impl VariableEntry {
     /// The reverse of `to_variable`, leaving out what `options` excludes.
     pub fn from_variable(var: &EnvironmentVariable, options: ExportOptions) -> Self {
         let secret = var.r#type == "secret";
-        let shown = |value: &str| if secret && !options.include_secrets { String::new() } else { value.to_string() };
+        // A credential link holds no secret itself; keeping it lets the variable re-link on import.
+        let is_link = |value: &str| crate::credentials::is_link(value);
+        let shown = |value: &str| {
+            if secret && !options.include_secrets && !is_link(value) { String::new() } else { value.to_string() }
+        };
         let mut entry = Self {
             key: var.key.clone(),
             value: String::new(),
@@ -360,7 +392,7 @@ impl VariableEntry {
             .variants
             .iter()
             .map(|v| VariantEntry { name: v.name.clone(), value: shown(&v.value) })
-            .filter(|v| v.name != AUTO_VARIANT || (options.include_auto && !v.value.is_empty()))
+            .filter(|v| v.name != AUTO_VARIANT || is_link(&v.value) || (options.include_auto && !v.value.is_empty()))
             .collect();
         let active = var.variants.get(var.active_index).map_or(AUTO_VARIANT, |v| v.name.as_str());
         let implied = entry.variants.iter().map(|v| v.name.as_str()).find(|n| *n != AUTO_VARIANT).unwrap_or(AUTO_VARIANT);

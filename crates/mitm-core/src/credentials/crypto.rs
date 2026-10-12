@@ -52,9 +52,50 @@ pub fn open(key: &[u8; KEY_LEN], aad: &[u8], nonce: &[u8], ciphertext: &[u8]) ->
     Ok(buffer)
 }
 
+/// argon2id cost. Read back from files, so it is capped to keep a crafted file from exhausting memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KdfParams {
+    pub memory_kib: u32,
+    pub iterations: u32,
+    pub parallelism: u32,
+}
+
+impl Default for KdfParams {
+    fn default() -> Self {
+        Self { memory_kib: 19 * 1024, iterations: 2, parallelism: 1 }
+    }
+}
+
+pub const KDF: &str = "argon2id";
+pub const SALT_LEN: usize = 16;
+
+pub fn derive_key(passphrase: &str, salt: &[u8], params: KdfParams) -> Result<DataKey, String> {
+    if params.memory_kib > 1024 * 1024 || params.iterations > 64 || params.parallelism > 16 {
+        return Err("key derivation parameters are too large".to_string());
+    }
+    let params = argon2::Params::new(params.memory_kib, params.iterations, params.parallelism, Some(KEY_LEN))
+        .map_err(|e| e.to_string())?;
+    let argon = argon2::Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
+    let mut out = Zeroizing::new([0u8; KEY_LEN]);
+    argon.hash_password_into(passphrase.as_bytes(), salt, out.as_mut()).map_err(|e| e.to_string())?;
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn derived_keys_depend_on_passphrase_and_salt() {
+        let params = KdfParams { memory_kib: 64, iterations: 1, parallelism: 1 };
+        let salt = [7u8; SALT_LEN];
+        let key = derive_key("correct horse", &salt, params).unwrap();
+        assert_eq!(derive_key("correct horse", &salt, params).unwrap(), key);
+        assert_ne!(derive_key("wrong horse", &salt, params).unwrap(), key);
+        assert_ne!(derive_key("correct horse", &[8u8; SALT_LEN], params).unwrap(), key);
+        assert!(derive_key("x", &salt, KdfParams { memory_kib: u32::MAX, ..params }).is_err());
+    }
 
     #[test]
     fn seal_then_open_round_trips() {

@@ -30,6 +30,7 @@ impl FieldKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FieldMeta {
     pub key: String,
+    #[serde(default)]
     pub kind: FieldKind,
     /// Written by auto-extract (tokens); only affects export.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -157,10 +158,9 @@ pub fn list_credentials(db_path: &Path, workspace_id: &str) -> Result<Vec<Creden
 
 type Row = (String, String, String, String, Vec<u8>, Vec<u8>, i64, i64, i64);
 
-fn decrypt_row(db_path: &Path, row: Row) -> Result<Credential, String> {
+fn decrypt_row(key: &crypto::DataKey, row: Row) -> Result<Credential, String> {
     let (id, workspace_id, name, fields_json, nonce, ciphertext, order_index, created_at_ms, updated_at_ms) = row;
-    let key = session::data_key(db_path)?.ok_or("credentials have no data key")?;
-    let plain = crypto::open(&key, id.as_bytes(), &nonce, &ciphertext)?;
+    let plain = crypto::open(key, id.as_bytes(), &nonce, &ciphertext)?;
     let payload: Payload = serde_json::from_slice(&plain).map_err(|e| e.to_string())?;
     let metas: Vec<FieldMeta> = serde_json::from_str(&fields_json).unwrap_or_default();
     let fields = metas
@@ -175,6 +175,10 @@ fn decrypt_row(db_path: &Path, row: Row) -> Result<Credential, String> {
     Ok(Credential { id, workspace_id, name, fields, notes: payload.notes, order_index, created_at_ms, updated_at_ms })
 }
 
+fn existing_key(db_path: &Path) -> Result<crypto::DataKey, String> {
+    session::data_key(db_path)?.ok_or_else(|| "credentials have no data key".to_string())
+}
+
 const COLUMNS: &str = "id, workspace_id, name, fields_json, nonce, ciphertext, order_index, created_at_ms, updated_at_ms";
 
 fn read_row(r: &rusqlite::Row) -> rusqlite::Result<Row> {
@@ -185,33 +189,46 @@ pub fn load_credential(db_path: &Path, id: &str) -> Result<Credential, String> {
     let row = open(db_path)?
         .query_row(&format!("SELECT {COLUMNS} FROM credentials WHERE id = ?"), [id], read_row)
         .map_err(|e| e.to_string())?;
-    decrypt_row(db_path, row)
+    decrypt_row(&existing_key(db_path)?, row)
 }
 
 /// Looks an entry up by name, ignoring case.
 pub fn find_credential(db_path: &Path, workspace_id: &str, name: &str) -> Result<Option<Credential>, String> {
-    let row = open(db_path)?
-        .query_row(
-            &format!("SELECT {COLUMNS} FROM credentials WHERE workspace_id = ? AND name = ? COLLATE NOCASE"),
-            params![workspace_id, name],
-            read_row,
-        )
-        .optional()
-        .map_err(|e| e.to_string())?;
-    row.map(|row| decrypt_row(db_path, row)).transpose()
+    let conn = open(db_path)?;
+    let Some(row) = find_row(&conn, workspace_id, name)? else { return Ok(None) };
+    decrypt_row(&existing_key(db_path)?, row).map(Some)
 }
 
-pub fn create_credential(db_path: &Path, workspace_id: &str, name: &str) -> Result<Credential, String> {
+fn find_row(conn: &Connection, workspace_id: &str, name: &str) -> Result<Option<Row>, String> {
+    conn.query_row(
+        &format!("SELECT {COLUMNS} FROM credentials WHERE workspace_id = ? AND name = ? COLLATE NOCASE"),
+        params![workspace_id, name],
+        read_row,
+    )
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
+pub(crate) fn find_credential_conn(
+    conn: &Connection,
+    key: &crypto::DataKey,
+    workspace_id: &str,
+    name: &str,
+) -> Result<Option<Credential>, String> {
+    find_row(conn, workspace_id, name)?.map(|row| decrypt_row(key, row)).transpose()
+}
+
+/// A new, empty entry that `insert_credential_conn` can store.
+pub(crate) fn new_credential(conn: &Connection, workspace_id: &str, name: &str) -> Result<Credential, String> {
     validate_name(name)?;
-    let conn = open(db_path)?;
-    if name_taken(&conn, workspace_id, name, "")? {
+    if name_taken(conn, workspace_id, name, "")? {
         return Err(format!("A credential named \"{name}\" already exists"));
     }
     let order_index: i64 = conn
         .query_row("SELECT COALESCE(MAX(order_index) + 1, 0) FROM credentials WHERE workspace_id = ?", [workspace_id], |r| r.get(0))
         .map_err(|e| e.to_string())?;
     let now = now_ms();
-    let credential = Credential {
+    Ok(Credential {
         id: uuid::Uuid::new_v4().to_string(),
         workspace_id: workspace_id.to_string(),
         name: name.to_string(),
@@ -220,25 +237,39 @@ pub fn create_credential(db_path: &Path, workspace_id: &str, name: &str) -> Resu
         order_index,
         created_at_ms: now,
         updated_at_ms: now,
-    };
-    write(&conn, db_path, &credential, true)?;
+    })
+}
+
+pub fn create_credential(db_path: &Path, workspace_id: &str, name: &str) -> Result<Credential, String> {
+    let conn = open(db_path)?;
+    let credential = new_credential(&conn, workspace_id, name)?;
+    write(&conn, &session::data_key_or_create(db_path)?, &credential, true)?;
     Ok(credential)
 }
 
 /// Saves fields, values and notes. The name only changes through `rename_credential`, which keeps refs intact.
 pub fn save_credential(db_path: &Path, credential: &Credential) -> Result<(), String> {
     validate_fields(&credential.fields)?;
-    write(&open(db_path)?, db_path, credential, false)
+    write(&open(db_path)?, &session::data_key_or_create(db_path)?, credential, false)
 }
 
-fn write(conn: &Connection, db_path: &Path, credential: &Credential, insert: bool) -> Result<(), String> {
-    let key = session::data_key_or_create(db_path)?;
+pub(crate) fn insert_credential_conn(conn: &Connection, key: &crypto::DataKey, credential: &Credential) -> Result<(), String> {
+    validate_fields(&credential.fields)?;
+    write(conn, key, credential, true)
+}
+
+pub(crate) fn update_credential_conn(conn: &Connection, key: &crypto::DataKey, credential: &Credential) -> Result<(), String> {
+    validate_fields(&credential.fields)?;
+    write(conn, key, credential, false)
+}
+
+fn write(conn: &Connection, key: &crypto::DataKey, credential: &Credential, insert: bool) -> Result<(), String> {
     let payload = Payload {
         values: credential.fields.iter().map(|f| (f.key.clone(), f.value.clone())).collect(),
         notes: credential.notes.clone(),
     };
     let plain = Zeroizing::new(serde_json::to_vec(&payload).map_err(|e| e.to_string())?);
-    let sealed = crypto::seal(&key, credential.id.as_bytes(), &plain);
+    let sealed = crypto::seal(key, credential.id.as_bytes(), &plain);
     let metas: Vec<FieldMeta> = credential.fields.iter().map(Field::meta).collect();
     let fields_json = serde_json::to_string(&metas).map_err(|e| e.to_string())?;
     let changed = if insert {
