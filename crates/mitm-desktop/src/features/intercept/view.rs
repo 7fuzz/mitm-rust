@@ -1,7 +1,11 @@
 use eframe::egui::{self, RichText};
 use crate::ui::theme::{self, Tone};
 use crate::app::command::Commands;
-use crate::widgets::pills::{badge, render_method_pill};
+use crate::widgets::button::{icon_button, primary};
+use crate::widgets::list_row::list_row;
+use crate::widgets::pills::{badge, method_text, render_method_pill};
+use crate::widgets::section::section;
+use crate::widgets::toggle::labelled_toggle;
 use crate::widgets::{source_scope, split};
 use mitm_core::state::ListenerConfig;
 use crate::features::request_editor::kv_table::{self, KvLabels};
@@ -10,35 +14,21 @@ use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[ListenerConfig], cmds: &mut Commands) {
     ui.horizontal(|ui| {
-        ui.heading("Interception & Breakpoints");
-        ui.separator();
-
-        let mut enabled = state.enabled;
-        let toggle_label = if enabled {
-            RichText::new("● Interceptor ON").color(theme::color(ui, Tone::Danger)).strong()
-        } else {
-            RichText::new("○ Interceptor OFF").weak()
-        };
-
-        if ui.selectable_label(enabled, toggle_label).clicked() {
-            enabled = !enabled;
-            state.enabled = enabled;
-            cmds.push(Cmd::Configure {
-                enabled,
-                mode: state.mode.clone(),
-            });
+        if labelled_toggle(ui, &mut state.enabled, "Intercept").changed() {
+            cmds.push(Cmd::Configure { enabled: state.enabled, mode: state.mode.clone() });
         }
+        ui.add_space(12.0);
 
-        ui.separator();
-
-        ui.label("Mode:");
+        ui.weak("Pause");
+        let modes = [("request", "Requests"), ("response", "Responses"), ("both", "Requests and responses")];
         let mut mode = state.mode.clone();
+        let selected = modes.iter().find(|(key, _)| *key == mode).map_or(mode.as_str(), |(_, label)| *label).to_string();
         egui::ComboBox::from_id_salt("intercept_mode_combo")
-            .selected_text(&mode)
+            .selected_text(selected)
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut mode, "request".to_string(), "Requests only");
-                ui.selectable_value(&mut mode, "response".to_string(), "Responses only");
-                ui.selectable_value(&mut mode, "both".to_string(), "Both Requests & Responses");
+                for (key, label) in modes {
+                    ui.selectable_value(&mut mode, key.to_string(), label);
+                }
             });
 
         if mode != state.mode {
@@ -49,31 +39,33 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[Listener
             });
         }
 
-        let rules_label = format!("Rules ({}) {}", state.rules.len(), if state.prefs.rules_open { icons::CARET_RIGHT } else { icons::CARET_LEFT });
-        ui.toggle_value(&mut state.prefs.rules_open, rules_label).on_hover_text("Show or hide the rules panel");
-        ui.toggle_value(&mut state.prefs.raise_window, icons::BELL).on_hover_text("Bring the window forward when a flow pauses");
-        ui.separator();
+        ui.add_space(12.0);
         if source_scope::chips(ui, &mut state.source_scope, listeners) {
             cmds.push(Cmd::SetScope(state.source_scope.clone()));
         }
-        ui.separator();
 
-        let count = state.pending.len();
-        if count > 0 {
-            let badge = RichText::new(format!("{} {} Paused Flow(s)", icons::WARNING, count))
-                .color(theme::color(ui, Tone::Warn))
-                .strong();
-            ui.label(badge);
-            if ui.button("Forward all").clicked() {
-                cmds.push(Cmd::ForwardAll);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let rules = egui::Button::new(("Rules", RichText::new(state.rules.len().to_string()).monospace().weak()))
+                .selected(state.prefs.rules_open);
+            if ui.add(rules).on_hover_text("Show or hide the rules panel").clicked() {
+                state.prefs.rules_open = !state.prefs.rules_open;
             }
-            if ui.button(RichText::new("Drop all").color(theme::color(ui, Tone::Danger))).clicked() {
-                cmds.push(Cmd::DropAll);
+            ui.toggle_value(&mut state.prefs.raise_window, icons::BELL).on_hover_text("Bring the window forward when a flow pauses");
+
+            let count = state.pending.len();
+            if count > 0 {
+                ui.add_space(12.0);
+                if ui.button(RichText::new("Drop all").color(theme::color(ui, Tone::Danger))).clicked() {
+                    cmds.push(Cmd::DropAll);
+                }
+                if ui.button("Forward all").clicked() {
+                    cmds.push(Cmd::ForwardAll);
+                }
+                badge(ui, &format!("{count} paused"), Tone::Warn);
             }
-        }
+        });
     });
-
-    ui.separator();
+    ui.add_space(4.0);
 
     if !state.prefs.rules_open {
         paused_area(ui, state, cmds);
@@ -89,7 +81,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[Listener
 }
 
 fn paused_area(work_ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) {
-    if !state.pending.is_empty() {
+    if state.pending.is_empty() {
+        let hint = if state.enabled { "Nothing paused" } else { "Interception is off" };
+        work_ui.weak(hint);
+    } else {
         let mut queue_fraction = state.prefs.queue_fraction;
         let [mut queue_ui, mut editor_ui] = split::side_by_side(work_ui, "intercept_queue_split", &mut queue_fraction);
         state.prefs.queue_fraction = queue_fraction;
@@ -103,24 +98,17 @@ fn paused_area(work_ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Co
 fn queue(ui: &mut egui::Ui, state: &mut InterceptState) {
     let mut selected = None;
     egui::ScrollArea::vertical().id_salt("intercept_queue").auto_shrink([false, false]).show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = 2.0;
         for flow in &state.pending {
             let is_active = state.active_id.as_deref() == Some(&flow.flow_id);
             let (host, path) = host_and_path(&flow.url);
-            let highlight = ui.painter().add(egui::Shape::Noop);
-            let response = ui
-                .horizontal(|ui| {
-                    render_method_pill(ui, &flow.method);
-                    let tone = if flow.phase == "response" { Tone::Info } else { Tone::Warn };
-                    badge(ui, &flow.phase.to_uppercase(), tone);
-                    ui.add(egui::Label::new(RichText::new(host).strong()).truncate());
-                    ui.add(egui::Label::new(RichText::new(path).weak()).truncate());
-                })
-                .response;
-            let row = ui.interact(response.rect, ui.id().with(&flow.flow_id), egui::Sense::click());
-            if is_active {
-                let fill = ui.visuals().selection.bg_fill.gamma_multiply(0.35);
-                ui.painter().set(highlight, egui::epaint::RectShape::filled(response.rect, 2.0, fill));
-            }
+            let row = list_row(ui, is_active, |ui| {
+                ui.label(method_text(ui.visuals(), &flow.method));
+                let tone = if flow.phase == "response" { Tone::Info } else { Tone::Warn };
+                badge(ui, &flow.phase, tone);
+                ui.add(egui::Label::new(RichText::new(host).monospace().weak()).truncate().selectable(false));
+                ui.add(egui::Label::new(RichText::new(path).monospace()).truncate().selectable(false));
+            });
             if row.clicked() {
                 selected = Some(flow.flow_id.clone());
             }
@@ -151,27 +139,26 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
     };
 
     ui.horizontal(|ui| {
-        if ui.button(RichText::new("Forward (with changes)").color(theme::color(ui, Tone::Success)).strong()).clicked() {
+        if ui.add(primary(ui, "Forward")).on_hover_text("Forward with your edits").clicked() {
             cmds.push(Cmd::ForwardActive { modified: true });
         }
-        if ui.button("Forward Unmodified").clicked() {
+        if ui.button("Forward unmodified").clicked() {
             cmds.push(Cmd::ForwardActive { modified: false });
         }
-        if ui.button(RichText::new("Drop Flow").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
+        if ui.button(RichText::new("Drop").color(theme::color(ui, Tone::Danger))).clicked() {
             cmds.push(Cmd::DropActive);
         }
-
-        ui.separator();
-        ui.label(RichText::new(format!("Phase: {}", active_flow.phase)).weak());
+        ui.add_space(8.0);
+        let tone = if active_flow.phase == "response" { Tone::Info } else { Tone::Warn };
+        badge(ui, &active_flow.phase, tone);
     });
-
-    ui.separator();
+    ui.add_space(6.0);
 
     egui::Grid::new("intercept_editor_grid")
         .num_columns(2)
         .spacing([12.0, 8.0])
         .show(ui, |ui| {
-            ui.strong("Method:");
+            ui.label(RichText::new("Method").weak());
             ui.horizontal(|ui| {
                 render_method_pill(ui, &state.edit.method);
                 egui::ComboBox::from_id_salt("edit_intercept_method_combo")
@@ -184,7 +171,7 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
             });
             ui.end_row();
 
-            ui.strong("URL:");
+            ui.label(RichText::new("URL").weak());
             let mut url_layouter = crate::widgets::template::singleline_layouter(egui::TextStyle::Monospace, None);
             crate::widgets::template::show(ui, &mut state.edit.url, |text| {
                 egui::TextEdit::singleline(text)
@@ -194,14 +181,14 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
             });
             ui.end_row();
 
-            ui.strong("Headers:");
+            ui.label(RichText::new("Headers").weak());
             ui.vertical(|ui| {
                 let labels = KvLabels { key: "Header Name", value: "Header Value" };
                 kv_table::show(ui, "intercept_headers", &mut state.edit.headers, labels, &[]);
             });
             ui.end_row();
 
-            ui.strong("Body:");
+            ui.label(RichText::new("Body").weak());
             ui.add(
                 egui::TextEdit::multiline(&mut state.edit.body)
                     .font(egui::TextStyle::Monospace)
@@ -217,8 +204,7 @@ const FIELDS: [(&str, &str); 5] = [("url", "URL"), ("host", "Host"), ("path", "P
 const OPERATORS: [(&str, &str); 3] = [("contains", "contains"), ("equals", "equals"), ("regex", "regex")];
 
 fn render_rules_manager(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) {
-    ui.strong("Rules");
-    ui.add_space(4.0);
+    section(ui, "Rules");
 
     let rules = &mut state.rules;
     let mut modified = false;
@@ -226,7 +212,7 @@ fn render_rules_manager(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mu
     let mut swap = None;
     let count = rules.len();
 
-    egui::Grid::new("rules_table_grid").striped(true).num_columns(7).spacing([8.0, 6.0]).show(ui, |ui| {
+    egui::Grid::new("rules_table_grid").striped(false).num_columns(7).spacing([8.0, 6.0]).show(ui, |ui| {
         for (index, rule) in rules.iter_mut().enumerate() {
             ui.push_id(&rule.id, |ui| {
                 modified |= ui.checkbox(&mut rule.is_enabled, "").changed();
@@ -239,7 +225,7 @@ fn render_rules_manager(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mu
                 if ui.add_enabled(index + 1 < count, egui::Button::new(icons::CARET_DOWN).small()).clicked() {
                     swap = Some((index, index + 1));
                 }
-                if ui.small_button(icons::TRASH).clicked() {
+                if icon_button(ui, icons::TRASH, "Delete rule").clicked() {
                     delete = Some(index);
                 }
             });
