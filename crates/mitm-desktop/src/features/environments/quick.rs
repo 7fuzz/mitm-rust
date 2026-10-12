@@ -1,6 +1,8 @@
 use eframe::egui::{self, Align2, Key, Modifiers, RichText};
 use mitm_core::workspace::EnvironmentVariable;
 use super::EnvironmentsState;
+use crate::widgets::list_row::list_row;
+use crate::widgets::search::search_field;
 
 #[derive(Default, Clone, Copy, PartialEq)]
 pub enum Scope {
@@ -17,6 +19,8 @@ pub struct QuickVars {
     selected: usize,
     editing: Option<usize>,
     edit_text: String,
+    /// Set when the keyboard moves the selection; scrolling every frame would undo mouse-wheel scrolling.
+    scroll_to_selected: bool,
 }
 
 impl QuickVars {
@@ -68,9 +72,11 @@ pub fn show(ctx: &egui::Context, state: &mut EnvironmentsState, now: f64) {
         if quick.editing.is_none() {
             if keys.down {
                 quick.selected = (quick.selected + 1).min(matches.len().saturating_sub(1));
+                quick.scroll_to_selected = true;
             }
             if keys.up {
                 quick.selected = quick.selected.saturating_sub(1);
+                quick.scroll_to_selected = true;
             }
             if let Some(&var_idx) = matches.get(quick.selected) {
                 if keys.left || keys.right {
@@ -89,27 +95,29 @@ pub fn show(ctx: &egui::Context, state: &mut EnvironmentsState, now: f64) {
                 changed = true;
                 quick.query.clear();
                 quick.selected = variables.len() - 1;
+                quick.scroll_to_selected = true;
                 start_edit(quick, variables.len() - 1, &variables[variables.len() - 1]);
             }
         } else if keys.escape {
             quick.editing = None;
         }
 
-        let search = ui.add(
-            egui::TextEdit::singleline(&mut quick.query)
-                .hint_text(hint)
-                .desired_width(f32::INFINITY),
-        );
+        let search = search_field(ui, &mut quick.query, hint);
         if quick.editing.is_none() {
             search.request_focus();
         }
         if search.changed() {
             quick.selected = 0;
+            quick.scroll_to_selected = true;
         }
-        ui.separator();
+        ui.add_space(4.0);
 
         let matches = matching(variables, &quick.query);
-        egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+        if matches.is_empty() {
+            ui.weak("No variables match");
+        }
+        egui::ScrollArea::vertical().max_height(320.0).auto_shrink([false, true]).show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
             for (row, &var_idx) in matches.iter().enumerate() {
                 let var = &mut variables[var_idx];
                 if quick.editing == Some(var_idx) {
@@ -117,18 +125,14 @@ pub fn show(ctx: &egui::Context, state: &mut EnvironmentsState, now: f64) {
                     continue;
                 }
                 let selected = row == quick.selected;
-                let (key, _) = egui::Sides::new().show(
-                    ui,
-                    |ui| ui.add(egui::Button::selectable(selected, RichText::new(&var.key).monospace()).frame_when_inactive(false)),
-                    |ui| value_label(ui, var),
-                );
-                if selected {
-                    key.scroll_to_me(None);
+                let response = list_row(ui, selected, |ui| variable_row(ui, var));
+                if selected && std::mem::take(&mut quick.scroll_to_selected) {
+                    response.scroll_to_me(None);
                 }
-                if key.clicked() {
+                if response.clicked() {
                     quick.selected = row;
                 }
-                if key.double_clicked() {
+                if response.double_clicked() {
                     start_edit(quick, var_idx, var);
                 }
             }
@@ -162,11 +166,12 @@ fn consume_keys(ui: &mut egui::Ui, editing: bool) -> Keys {
 }
 
 fn edit_row(ui: &mut egui::Ui, quick: &mut QuickVars, var: &mut EnvironmentVariable) -> bool {
-    let (_, edit) = egui::Sides::new().show(
-        ui,
-        |ui| ui.label(RichText::new(&var.key).monospace().strong()),
-        |ui| ui.add(egui::TextEdit::singleline(&mut quick.edit_text).desired_width(260.0)),
-    );
+    let edit = ui
+        .horizontal(|ui| {
+            key_cell(ui, &var.key);
+            ui.add(egui::TextEdit::singleline(&mut quick.edit_text).font(egui::TextStyle::Monospace).desired_width(f32::INFINITY))
+        })
+        .inner;
     if !edit.lost_focus() {
         edit.request_focus();
         return false;
@@ -176,13 +181,24 @@ fn edit_row(ui: &mut egui::Ui, quick: &mut QuickVars, var: &mut EnvironmentVaria
     true
 }
 
-fn value_label(ui: &mut egui::Ui, var: &EnvironmentVariable) {
-    let value = if var.r#type == "secret" { "••••••" } else { var.current_value() };
-    ui.add(egui::Label::new(RichText::new(value).monospace().weak()).truncate());
+/// Name, active variant and value in fixed columns, so a long value truncates instead of overlapping the name.
+fn variable_row(ui: &mut egui::Ui, var: &EnvironmentVariable) {
+    key_cell(ui, &var.key);
     if var.variants.len() > 1 {
         let name = &var.variants[var.active_index.min(var.variants.len() - 1)].name;
-        ui.label(RichText::new(format!("‹ {name} ›")).small());
+        ui.label(RichText::new(name).small().weak()).on_hover_text("Variant; ← → to switch");
     }
+    let value = if var.r#type == "secret" { "••••••" } else { var.current_value() };
+    ui.add(egui::Label::new(RichText::new(value).monospace().weak()).truncate().selectable(false));
+}
+
+fn key_cell(ui: &mut egui::Ui, key: &str) {
+    let width = (ui.available_width() * 0.36).min(180.0);
+    let size = egui::vec2(width, ui.spacing().interact_size.y);
+    ui.allocate_ui_with_layout(size, egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.set_width(width);
+        ui.add(egui::Label::new(RichText::new(key).monospace()).truncate().selectable(false));
+    });
 }
 
 fn start_edit(quick: &mut QuickVars, var_idx: usize, var: &EnvironmentVariable) {
