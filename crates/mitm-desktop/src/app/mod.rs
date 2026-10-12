@@ -56,6 +56,7 @@ pub struct MitmApp {
 
 impl MitmApp {
     pub fn new(ctx: &egui::Context, storage: Option<&dyn eframe::Storage>, rt: Arc<Runtime>, core: Arc<MitmCore>) -> Self {
+        crate::ui::theme::install_fonts(ctx);
         let mut state = startup_state(&rt, &core);
         Self {
             dock: prefs::restore(storage, &mut state),

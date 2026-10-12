@@ -57,3 +57,12 @@ pub fn status_tone(code: u16) -> Tone {
         _ => Tone::Neutral,
     }
 }
+
+/// Buttons use the proportional fonts, which lack arrows, triangles and dots like `⇩ ▾ ●`; Hack has them.
+pub fn install_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    if let Some(proportional) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+        proportional.push("Hack".to_string());
+    }
+    ctx.set_fonts(fonts);
+}
