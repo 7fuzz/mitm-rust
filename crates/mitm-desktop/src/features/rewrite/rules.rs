@@ -1,6 +1,6 @@
 use eframe::egui::{self, RichText};
 use mitm_core::state::{ListenerConfig, RewriteRule};
-use crate::app::command::{AppCommand, Commands};
+use crate::app::command::Commands;
 use crate::ui::theme;
 use crate::widgets::{source_scope, split};
 use std::path::Path;
@@ -56,11 +56,11 @@ fn toolbar(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerCon
     ui.horizontal(|ui| {
         let label = if state.enabled { "● Rewrite ON" } else { "○ Rewrite OFF" };
         if ui.toggle_value(&mut state.enabled, label).changed() {
-            cmds.push(AppCommand::SetRewriteEnabled(state.enabled));
+            cmds.push(super::Cmd::SetEnabled(state.enabled));
         }
         ui.separator();
         if source_scope::chips(ui, &mut state.scope, listeners) {
-            cmds.push(AppCommand::SetRewriteScope(state.scope.clone()));
+            cmds.push(super::Cmd::SetScope(state.scope.clone()));
         }
         ui.separator();
         ui.selectable_value(&mut state.prefs.view, RewriteView::Rules, "Rules");

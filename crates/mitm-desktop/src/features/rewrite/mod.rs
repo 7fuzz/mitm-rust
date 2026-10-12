@@ -1,3 +1,4 @@
+mod commands;
 mod editor;
 mod log;
 mod rules;
@@ -8,6 +9,7 @@ use std::path::Path;
 use mitm_core::state::{HistoryEntry, RewriteHistoryEntry, RewriteRule, SourceScope};
 use crate::ui::theme::Tone;
 
+pub use commands::{handle, poll, Cmd};
 pub use rules::show;
 
 const SAVE_DELAY_SECS: f64 = 0.6;
@@ -69,6 +71,7 @@ pub struct RewriteState {
     pub selected_log: Option<i64>,
     log_diff: Option<log::EntryDiff>,
     dirty_since: Option<f64>,
+    jobs: crate::app::jobs::Jobs<Result<(), String>>,
 }
 
 impl RewriteState {

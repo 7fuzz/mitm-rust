@@ -2,7 +2,7 @@ use std::path::Path;
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use mitm_core::state::RewriteHistoryEntry;
-use crate::app::command::{AppCommand, Commands};
+use crate::app::command::Commands;
 use crate::util::format::headers_to_text;
 use crate::ui::theme;
 use crate::widgets::confirm::confirm_button;
@@ -35,7 +35,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, db_path: &Path, cmds: &
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if confirm_button(ui, ui.id().with("clear_rewrite_log"), RichText::new(icons::TRASH), "Clear log?", "Clear the rewrite log") {
-                cmds.push(AppCommand::ClearRewriteHistory);
+                cmds.push(super::Cmd::ClearHistory);
             }
         });
     });

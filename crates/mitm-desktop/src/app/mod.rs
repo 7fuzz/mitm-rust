@@ -386,8 +386,9 @@ impl MitmApp {
                     let _ = core.toggle_interceptor(enabled, mode).await;
                 });
             }
-            AppCommand::SetRewriteEnabled(enabled) => {
-                let _ = self.core.set_rewrite_enabled(enabled);
+            AppCommand::Rewrite(cmd) => {
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                crate::features::rewrite::handle(&mut self.state.rewrite, &cx, cmd);
             }
             AppCommand::ShowRewriteFor(flow_id) => {
                 if let Some(flow) = self.state.traffic.flow(flow_id).cloned() {
@@ -395,14 +396,6 @@ impl MitmApp {
                     rewrite.show_log_entry_for(&flow, db_path);
                     dock::open_tab(&mut self.dock, Tab::Rewrite);
                 }
-            }
-            AppCommand::ClearRewriteHistory => {
-                if self.core.clear_rewrite_history().is_ok() {
-                    self.state.rewrite.clear_log();
-                }
-            }
-            AppCommand::SetRewriteScope(scope) => {
-                let _ = self.rt.block_on(self.core.set_rewrite_source_scope(scope));
             }
             AppCommand::SetInterceptScope(scope) => {
                 let core = Arc::clone(&self.core);
@@ -656,8 +649,8 @@ impl MitmApp {
         self.state.data.status = Some(("Factory reset complete".to_string(), Tone::Success));
     }
 
-    fn save_rewrite_rules(&mut self, now: f64, force: bool) {
-        if let Some(rules) = self.state.rewrite.take_save(now, force) {
+    fn save_rewrite_rules_now(&mut self) {
+        if let Some(rules) = self.state.rewrite.take_save(0.0, true) {
             let _ = self.rt.block_on(self.core.save_rewrite_rules(rules));
         }
     }
@@ -674,7 +667,7 @@ impl eframe::App for MitmApp {
         self.state.collections.flush(&self.core.db_path);
         self.state.environments.flush(&self.core.db_path);
         self.state.credentials.flush(&self.core.db_path);
-        self.save_rewrite_rules(0.0, true);
+        self.save_rewrite_rules_now();
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -720,7 +713,6 @@ impl eframe::App for MitmApp {
         for error in save_errors.into_iter().flatten() {
             top_bar::flash(ui, Err(error));
         }
-        self.save_rewrite_rules(now, false);
         self.state.traffic.sync_header_search(&self.core.db_path);
         for (run_id, query, matches) in self.fuzz_search.drain() {
             self.state.fuzzer.set_response_search_results(run_id, &query, matches);
@@ -779,6 +771,7 @@ impl eframe::App for MitmApp {
             crate::features::webhooks::poll(&mut self.state.webhooks, &cx);
             crate::features::websockets::poll(&mut self.state.websockets, &cx);
             crate::features::settings::poll(self.state.settings(), &cx);
+            crate::features::rewrite::poll(&mut self.state.rewrite, &cx, now);
         }
         crate::features::utilities::hashing::poll(&mut self.state.hashing);
         let palette = crate::ui::theme::Palette::of(ui.visuals());
