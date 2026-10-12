@@ -4,6 +4,7 @@ use mitm_core::repeater::{HeaderItem, ParamItem};
 use crate::ui::theme::{self, Tone};
 use crate::widgets::template;
 use super::url_params::new_id;
+use crate::ui::icons;
 
 pub trait KeyValueRow {
     fn fields(&mut self) -> (&mut bool, &mut String, &mut String);
@@ -70,11 +71,11 @@ pub fn show<R: KeyValueRow>(
                     (false, false) => "Expand",
                     (false, true) => "Collapse",
                 };
-                if toggle && ui.small_button(if expanded { "⏷" } else { "⏵" }).on_hover_text(hover).clicked() {
+                if toggle && ui.small_button(if expanded { icons::CARET_DOWN } else { icons::CARET_RIGHT }).on_hover_text(hover).clicked() {
                     expanded = !expanded;
                     ui.data_mut(|d| d.insert_temp(expanded_id, expanded));
                 }
-                if ui.small_button(RichText::new("🗑").color(theme::color(ui, Tone::Danger))).on_hover_text("Delete row").clicked() {
+                if ui.small_button(RichText::new(icons::TRASH).color(theme::color(ui, Tone::Danger))).on_hover_text("Delete row").clicked() {
                     remove = Some(index);
                 }
             };
@@ -95,12 +96,12 @@ pub fn show<R: KeyValueRow>(
     }
 
     ui.horizontal(|ui| {
-        if ui.button("➕ Add Row").clicked() {
+        if ui.button("Add Row").clicked() {
             rows.push(R::create(String::new(), String::new()));
             changed = true;
         }
         if !suggestions.is_empty() {
-            ui.menu_button("Add Standard Header ⏷", |ui| {
+            ui.menu_button(format!("Add Standard Header {}", icons::CARET_DOWN), |ui| {
                 let existing: Vec<String> = rows.iter_mut().map(|r| r.fields().1.to_lowercase()).collect();
                 egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
                     for (key, value) in suggestions {
@@ -131,7 +132,7 @@ fn cookie_rows(ui: &mut egui::Ui, header: &mut String, dim: bool, key_width: f32
                 changed |= text_field(ui, name, "Name", dim, key_width - indent).changed();
                 let value_width = (ui.available_width() - 56.0).max(80.0);
                 changed |= text_field(ui, value, "Value", dim, value_width).changed();
-                if ui.small_button(RichText::new("🗑").color(theme::color(ui, Tone::Danger))).on_hover_text("Delete cookie").clicked() {
+                if ui.small_button(RichText::new(icons::TRASH).color(theme::color(ui, Tone::Danger))).on_hover_text("Delete cookie").clicked() {
                     remove = Some(index);
                 }
             });
@@ -139,7 +140,7 @@ fn cookie_rows(ui: &mut egui::Ui, header: &mut String, dim: bool, key_width: f32
     }
     ui.horizontal(|ui| {
         ui.add_space(indent);
-        if ui.small_button("➕ Cookie").clicked() {
+        if ui.small_button("Add Cookie").clicked() {
             cookies.push((String::new(), String::new()));
             changed = true;
         }

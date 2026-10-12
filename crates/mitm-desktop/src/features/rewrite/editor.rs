@@ -7,6 +7,7 @@ use crate::features::request_editor::kv_table::{self, KvLabels};
 use mitm_core::proxy::rewrite::preview_rewrite;
 use crate::ui::theme::{self, Tone};
 use super::ACTIONS;
+use crate::ui::icons;
 
 const MATCH_FIELDS: [(&str, &str); 6] =
     [("all", "All traffic"), ("url", "URL"), ("host", "Host"), ("path", "Path"), ("method", "Method"), ("header", "Header")];
@@ -192,7 +193,7 @@ pub fn preview(ui: &mut egui::Ui, rule: &RewriteRule, sample: &mut String) {
             .desired_rows(3)
             .desired_width(f32::INFINITY),
     );
-    ui.label(RichText::new("⏷").weak());
+    ui.label(RichText::new(icons::CARET_DOWN).weak());
     match preview_rewrite(rule, sample) {
         Ok(result) => {
             let mut output = result.output.as_str();

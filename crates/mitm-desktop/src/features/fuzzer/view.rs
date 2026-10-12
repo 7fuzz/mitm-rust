@@ -13,6 +13,7 @@ use crate::widgets::pills::render_status_pill;
 use crate::widgets::tri_state::tri_state_button;
 use crate::widgets::{split, template};
 use super::{AttackType, ConfigTab, FuzzSearchScope, FuzzSortColumn, FuzzerState, MatchRule, PayloadConfig, PayloadKind, RequestTab, RunStatus};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     toolbar(ui, fuzzer, cmds);
@@ -28,12 +29,12 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     ui.horizontal(|ui| {
         ui.set_min_height(28.0);
         if fuzzer.status == RunStatus::Running {
-            if ui.button(RichText::new("⏹ Stop").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
+            if ui.button(RichText::new("Stop").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
                 cmds.push(AppCommand::StopFuzzer);
             }
             ui.spinner();
         } else {
-            let start = RichText::new("▶ Start").color(theme::color(ui, Tone::Success)).strong();
+            let start = RichText::new("Start").color(theme::color(ui, Tone::Success)).strong();
             if ui.button(start).clicked() {
                 cmds.push(AppCommand::StartFuzzer(fuzzer.config()));
             }
@@ -80,7 +81,7 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
                         cmds.push(AppCommand::SaveFuzzRun { run_id, name });
                         fuzzer.saving_run = false;
                     }
-                    if ui.button("✖").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    if ui.button(icons::X).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                         fuzzer.saving_run = false;
                     }
                 } else if ui.button("Save run…").clicked() {
@@ -104,14 +105,14 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
         }
 
         let finished = matches!(fuzzer.status, RunStatus::Stopped | RunStatus::Done);
-        if finished && ui.button("🗑 Clear").clicked() {
+        if finished && ui.button("Clear").clicked() {
             fuzzer.clear();
         }
     });
 }
 
 fn runs_popover(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
-    let menu = ui.menu_button("🕘", |ui| {
+    let menu = ui.menu_button(icons::CLOCK_COUNTER_CLOCKWISE, |ui| {
         ui.set_min_width(300.0);
         if fuzzer.saved_runs.is_empty() {
             ui.weak("No saved runs");
@@ -130,7 +131,7 @@ fn runs_popover(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands
                         ui.weak(format!("{} · {} reqs · {}", run.attack_type, run.total, date));
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("🗑").on_hover_text("Delete run").clicked() {
+                        if ui.small_button(icons::TRASH).on_hover_text("Delete run").clicked() {
                             to_delete = Some(run.id);
                         }
                         if ui.button("Open").clicked() {
@@ -177,7 +178,7 @@ fn config(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
 
 fn match_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
     ui.horizontal(|ui| {
-        if ui.button("➕ Add rule").clicked() {
+        if ui.button("Add rule").clicked() {
             let next_idx = fuzzer.match_rules.len() + 1;
             fuzzer.match_rules.push(MatchRule {
                 name: format!("match{}", next_idx),
@@ -232,7 +233,7 @@ fn match_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
                         ui.add(egui::TextEdit::singleline(&mut rule.pattern).hint_text(hint).desired_width(f32::INFINITY));
                     });
                     row.col(|ui| {
-                        if ui.small_button("🗑").on_hover_text("Remove rule").clicked() {
+                        if ui.small_button(icons::TRASH).on_hover_text("Remove rule").clicked() {
                             remove_idx = Some(idx);
                         }
                     });
@@ -465,7 +466,7 @@ fn results_toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
         crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut fuzzer.search_query).hint_text("Search…").desired_width(110.0)));
         ui.selectable_value(&mut fuzzer.search_scope, FuzzSearchScope::Payload, "Payload");
         ui.selectable_value(&mut fuzzer.search_scope, FuzzSearchScope::Response, "Response");
-        if !fuzzer.search_query.is_empty() && ui.small_button("✖").on_hover_text("Clear search").clicked() {
+        if !fuzzer.search_query.is_empty() && ui.small_button(icons::X).on_hover_text("Clear search").clicked() {
             fuzzer.search_query.clear();
         }
 
@@ -577,12 +578,12 @@ fn results_table(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Command
                 }
                 response.context_menu(|ui| {
                     if let Some(run_id) = fuzzer.run_id {
-                        if ui.button("🔁 Send to Repeater").clicked() {
+                        if ui.button("Send to Repeater").clicked() {
                             cmds.push(AppCommand::SendFuzzResultToRepeater { run_id, idx: r.idx });
                             ui.close();
                         }
                     }
-                    if ui.button("📋 Copy payload").clicked() {
+                    if ui.button("Copy payload").clicked() {
                         let text = if r.payloads.len() == 1 {
                             r.payloads[0].clone()
                         } else {
@@ -592,7 +593,7 @@ fn results_table(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Command
                         ui.close();
                     }
                     if let Some(run_id) = fuzzer.run_id {
-                        if ui.button("📋 Copy cURL").clicked() {
+                        if ui.button("Copy cURL").clicked() {
                             cmds.push(AppCommand::CopyFuzzCurl { run_id, idx: r.idx });
                             ui.close();
                         }
@@ -623,7 +624,7 @@ fn response_pane(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Command
             ui.label(RichText::new(err).color(theme::color(ui, Tone::Danger)));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("✖").on_hover_text("Close response").clicked() {
+            if ui.small_button(icons::X).on_hover_text("Close response").clicked() {
                 close = true;
             }
             ui.add(egui::Label::new(RichText::new(&result.url).monospace()).truncate());
@@ -693,11 +694,11 @@ fn sort_header(
 ) {
     let is_active = current_col == Some(&col);
     let arrow = if is_active {
-        if desc { " ▾" } else { " ▴" }
+        if desc { icons::CARET_DOWN } else { icons::CARET_UP }
     } else {
         ""
     };
-    if ui.selectable_label(is_active, RichText::new(format!("{title}{arrow}")).strong()).clicked() {
+    if ui.selectable_label(is_active, RichText::new(format!("{title} {arrow}").trim_end()).strong()).clicked() {
         *next_sort = Some(col);
     }
 }

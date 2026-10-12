@@ -15,7 +15,7 @@ pub struct RequestBar {
 /// as it grows.
 pub fn show(ui: &mut egui::Ui, id_salt: &str, method: &mut String, url: &mut String, hint: &str, executing: bool) -> RequestBar {
     ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
-        let label = if executing { "Sending..." } else { "▶ Send" };
+        let label = if executing { "Sending..." } else { "Send" };
         let button = egui::Button::new(RichText::new(label).strong()).fill(ui.visuals().selection.bg_fill);
         let send = ui.add_enabled(!executing, button).on_hover_text("Ctrl+Enter").clicked();
         let (method_changed, url) = ui

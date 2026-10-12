@@ -174,10 +174,10 @@ fn details_window<R: Run>(ctx: &egui::Context, id_salt: &str, runs: &[R], can_lo
         .default_size([960.0, 620.0])
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.add_enabled(index + 1 < runs.len(), egui::Button::new("◀ Older")).clicked() {
+                if ui.add_enabled(index + 1 < runs.len(), egui::Button::new("Older")).clicked() {
                     step = Some(index + 1);
                 }
-                if ui.add_enabled(index > 0, egui::Button::new("Newer ▶")).clicked() {
+                if ui.add_enabled(index > 0, egui::Button::new("Newer")).clicked() {
                     step = index.checked_sub(1);
                 }
                 ui.label(status_text(ui.visuals(), run.status_code()));

@@ -9,6 +9,7 @@ use crate::widgets::confirm::confirm_button;
 use crate::widgets::diff::{self, DiffLine};
 use crate::widgets::split;
 use super::{action_tone, RewriteState};
+use crate::ui::icons;
 
 const LOG_LIMIT: u32 = 2000;
 
@@ -33,7 +34,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, db_path: &Path, cmds: &
             reload(state, db_path);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if confirm_button(ui, ui.id().with("clear_rewrite_log"), RichText::new("🗑"), "🗑 Clear log?", "Clear the rewrite log") {
+            if confirm_button(ui, ui.id().with("clear_rewrite_log"), RichText::new(icons::TRASH), "Clear log?", "Clear the rewrite log") {
                 cmds.push(AppCommand::ClearRewriteHistory);
             }
         });

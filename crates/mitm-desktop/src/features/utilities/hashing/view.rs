@@ -3,6 +3,7 @@ use mitm_core::utils::hashing::{self, HmacAlgo};
 use crate::app::command::{AppCommand, Commands};
 use crate::ui::theme::{self, Tone};
 use super::{HashingState, Mode};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut HashingState, cmds: &mut Commands) {
     ui.horizontal(|ui| {
@@ -60,7 +61,7 @@ fn hash_row(ui: &mut egui::Ui, label: &str, mut value: String, upper: bool) {
     }
     ui.horizontal(|ui| {
         ui.add_sized([70.0, ui.spacing().interact_size.y], egui::Label::new(RichText::new(label).strong()));
-        if ui.small_button("📋").on_hover_text("Copy").clicked() {
+        if ui.small_button(icons::COPY).on_hover_text("Copy").clicked() {
             ui.ctx().copy_text(value.clone());
         }
         ui.add(egui::Label::new(RichText::new(value).monospace()).truncate());
@@ -85,7 +86,7 @@ fn bcrypt(ui: &mut egui::Ui, state: &mut HashingState, cmds: &mut Commands) {
         match result {
             Ok(hash) => {
                 ui.horizontal(|ui| {
-                    if ui.small_button("📋").on_hover_text("Copy").clicked() {
+                    if ui.small_button(icons::COPY).on_hover_text("Copy").clicked() {
                         ui.ctx().copy_text(hash.clone());
                     }
                     ui.add(egui::Label::new(RichText::new(hash).monospace()).truncate());
@@ -116,8 +117,8 @@ fn bcrypt(ui: &mut egui::Ui, state: &mut HashingState, cmds: &mut Commands) {
         }
         if let Some(result) = &state.verify_result {
             match result {
-                Ok(true) => ui.colored_label(theme::color(ui, Tone::Success), "✔"),
-                Ok(false) => ui.colored_label(theme::color(ui, Tone::Danger), "✖"),
+                Ok(true) => ui.colored_label(theme::color(ui, Tone::Success), icons::CHECK),
+                Ok(false) => ui.colored_label(theme::color(ui, Tone::Danger), icons::X),
                 Err(e) => ui.colored_label(theme::color(ui, Tone::Danger), e),
             };
         }

@@ -5,6 +5,7 @@ use crate::features::request_editor::run_list::{self, Run, RunAction};
 use crate::features::request_editor::url_params::build_url;
 use crate::widgets::split;
 use super::{builder, sidebar, RepeaterState};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
     let now = ui.input(|i| i.time);
@@ -20,7 +21,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
             ui.vertical_centered(|ui| {
                 ui.add_space(60.0);
                 ui.label(RichText::new("No repeater request selected").weak().italics());
-                if ui.button("➕ Create New Request").clicked() {
+                if ui.button("Create New Request").clicked() {
                     cmds.push(AppCommand::RepeaterNew);
                 }
             });
@@ -91,9 +92,9 @@ fn response(ui: &mut egui::Ui, state: &mut RepeaterState, tab_id: &str, cmds: &m
 fn history_drawer(ui: &mut egui::Ui, state: &mut RepeaterState, tab_id: &str, now: f64) {
     let runs = state.history.get(tab_id).map(Vec::as_slice).unwrap_or_default();
     ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("🕘 Execution History ({})", runs.len())).strong());
+        ui.label(RichText::new(format!("Execution History ({})", runs.len())).strong());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("✖").on_hover_text("Close").clicked() {
+            if ui.small_button(icons::X).on_hover_text("Close").clicked() {
                 state.prefs.history_open = false;
             }
         });

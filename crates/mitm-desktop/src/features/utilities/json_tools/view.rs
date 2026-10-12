@@ -3,6 +3,7 @@ use crate::ui::theme::{self, Tone};
 use crate::widgets::code_view::{self, Lang};
 use crate::widgets::split;
 use super::{IndentOpt, JsonToolsState, Mode};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut JsonToolsState) {
     ui.horizontal(|ui| {
@@ -45,7 +46,7 @@ fn output_pane(ui: &mut egui::Ui, out: &Result<String, String>) {
         Ok(text) => {
             ui.horizontal(|ui| {
                 ui.label("Output");
-                if ui.small_button("📋").on_hover_text("Copy output").clicked() {
+                if ui.small_button(icons::COPY).on_hover_text("Copy output").clicked() {
                     ui.ctx().copy_text(text.clone());
                 }
             });

@@ -119,7 +119,7 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
                     if ui.small_button("Save…").clicked() {
                         save = Some(SaveBody { file_name: format!("body.{ext}"), bytes: body_bytes(data.body) });
                     }
-                    if ui.small_button("Open ↗").on_hover_text("Open in the default app").clicked() {
+                    if ui.small_button("Open").on_hover_text("Open in the default app").clicked() {
                         open_externally(data, id_salt, ext);
                     }
                     ui.separator();

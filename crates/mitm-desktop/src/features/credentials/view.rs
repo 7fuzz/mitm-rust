@@ -7,6 +7,7 @@ use crate::features::utilities::totp::{group_code, qr_buttons, show_code};
 use crate::widgets::{confirm, split};
 use super::lock::unlock_form;
 use super::{CredentialsState, Rename};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut CredentialsState, workspace_id: &str, db_path: &Path, cmds: &mut Commands) {
     state.sync(db_path, workspace_id);
@@ -24,10 +25,10 @@ fn entry_list(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path) {
                 .desired_width((ui.available_width() - 64.0).max(60.0)),
         );
         crate::widgets::search::claim_focus(&search);
-        if ui.add_enabled(!state.locked, egui::Button::new("➕")).on_hover_text("Add credential").clicked() {
+        if ui.add_enabled(!state.locked, egui::Button::new(icons::PLUS)).on_hover_text("Add credential").clicked() {
             state.create(db_path);
         }
-        if ui.add_enabled(!state.locked, egui::Button::new("⇩")).on_hover_text("Import from JSON…").clicked() {
+        if ui.add_enabled(!state.locked, egui::Button::new(icons::DOWNLOAD_SIMPLE)).on_hover_text("Import from JSON…").clicked() {
             state.json_import.start();
         }
     });
@@ -83,7 +84,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
     }
     if state.has_password {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-            if ui.small_button("🔒 Lock").clicked() {
+            if ui.small_button("Lock").clicked() {
                 state.lock(db_path);
             }
         });
@@ -98,7 +99,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let armed_id = ui.id().with(("delete_credential", &id));
-            if confirm::confirm_button(ui, armed_id, RichText::new("🗑"), "Delete?", "Delete credential") {
+            if confirm::confirm_button(ui, armed_id, RichText::new(icons::TRASH), "Delete?", "Delete credential") {
                 state.delete(db_path, &id);
             }
         });
@@ -106,7 +107,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
     if let Some(error) = state.error.clone() {
         ui.horizontal(|ui| {
             ui.colored_label(ui.visuals().error_fg_color, error);
-            if ui.small_button("✖").clicked() {
+            if ui.small_button(icons::X).clicked() {
                 state.error = None;
             }
         });
@@ -137,18 +138,18 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                 FieldKind::Text => {
                     ui.horizontal(|ui| {
                         changed |= ui.add(egui::TextEdit::singleline(&mut field.value).desired_width(260.0)).changed();
-                        if ui.small_button("📋").on_hover_text("Copy").clicked() {
+                        if ui.small_button(icons::COPY).on_hover_text("Copy").clicked() {
                             ui.ctx().copy_text(field.value.clone());
                         }
                     });
                 }
                 FieldKind::Secret => {
                     ui.horizontal(|ui| {
-                        let eye = ui.add(egui::Button::new("👁").sense(egui::Sense::drag())).on_hover_text("Hold to reveal");
+                        let eye = ui.add(egui::Button::new(icons::EYE).sense(egui::Sense::drag())).on_hover_text("Hold to reveal");
                         let revealed = eye.is_pointer_button_down_on();
                         let edit = egui::TextEdit::singleline(&mut field.value).password(!revealed).desired_width(230.0);
                         changed |= ui.add(edit).changed();
-                        if ui.small_button("📋").on_hover_text("Copy").clicked() {
+                        if ui.small_button(icons::COPY).on_hover_text("Copy").clicked() {
                             crate::util::clipboard::copy_secret(ui.ctx(), &field.value);
                         }
                     });
@@ -159,7 +160,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                         (None, Some(params)) => {
                             ui.horizontal(|ui| {
                                 ui.vertical(|ui| show_code(ui, &params, 16.0));
-                                if ui.small_button("✏").on_hover_text("Edit secret").clicked() {
+                                if ui.small_button(icons::PENCIL_SIMPLE).on_hover_text("Edit secret").clicked() {
                                     state.totp_draft = Some((id.clone(), key.clone(), field.value.clone()));
                                 }
                             });
@@ -168,7 +169,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                             let mut text = draft.unwrap_or_default();
                             let (edit, scanned) = ui
                                 .horizontal(|ui| {
-                                    let eye = ui.add(egui::Button::new("👁").sense(egui::Sense::drag())).on_hover_text("Hold to reveal");
+                                    let eye = ui.add(egui::Button::new(icons::EYE).sense(egui::Sense::drag())).on_hover_text("Hold to reveal");
                                     let edit = ui.add(
                                         egui::TextEdit::singleline(&mut text)
                                             .password(!eye.is_pointer_button_down_on())
@@ -209,7 +210,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                     }
                 }
             }
-            if ui.small_button("✖").on_hover_text("Remove field").clicked() {
+            if ui.small_button(icons::X).on_hover_text("Remove field").clicked() {
                 remove = Some(i);
             }
             ui.end_row();
@@ -222,7 +223,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
             changed = true;
         }
     }
-    if ui.button("➕ field").clicked() {
+    if ui.button("Add field").clicked() {
         state.add_field(db_path, &id);
     }
     ui.add_space(8.0);

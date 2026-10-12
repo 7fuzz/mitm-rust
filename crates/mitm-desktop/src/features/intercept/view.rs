@@ -6,6 +6,7 @@ use crate::widgets::{source_scope, split};
 use mitm_core::state::ListenerConfig;
 use crate::features::request_editor::kv_table::{self, KvLabels};
 use super::InterceptState;
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[ListenerConfig], cmds: &mut Commands) {
     ui.horizontal(|ui| {
@@ -48,9 +49,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[Listener
             });
         }
 
-        let rules_label = format!("Rules ({}) {}", state.rules.len(), if state.prefs.rules_open { "⏵" } else { "⏴" });
+        let rules_label = format!("Rules ({}) {}", state.rules.len(), if state.prefs.rules_open { icons::CARET_RIGHT } else { icons::CARET_LEFT });
         ui.toggle_value(&mut state.prefs.rules_open, rules_label).on_hover_text("Show or hide the rules panel");
-        ui.toggle_value(&mut state.prefs.raise_window, "🔔").on_hover_text("Bring the window forward when a flow pauses");
+        ui.toggle_value(&mut state.prefs.raise_window, icons::BELL).on_hover_text("Bring the window forward when a flow pauses");
         ui.separator();
         if source_scope::chips(ui, &mut state.source_scope, listeners) {
             cmds.push(AppCommand::SetInterceptScope(state.source_scope.clone()));
@@ -59,14 +60,14 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[Listener
 
         let count = state.pending.len();
         if count > 0 {
-            let badge = RichText::new(format!("⚠️ {} Paused Flow(s)", count))
+            let badge = RichText::new(format!("{} {} Paused Flow(s)", icons::WARNING, count))
                 .color(theme::color(ui, Tone::Warn))
                 .strong();
             ui.label(badge);
-            if ui.button("▶ Forward all").clicked() {
+            if ui.button("Forward all").clicked() {
                 cmds.push(AppCommand::ForwardAllIntercepts);
             }
-            if ui.button(RichText::new("⏹ Drop all").color(theme::color(ui, Tone::Danger))).clicked() {
+            if ui.button(RichText::new("Drop all").color(theme::color(ui, Tone::Danger))).clicked() {
                 cmds.push(AppCommand::DropAllIntercepts);
             }
         }
@@ -150,13 +151,13 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
     };
 
     ui.horizontal(|ui| {
-        if ui.button(RichText::new("▶ Forward (with changes)").color(theme::color(ui, Tone::Success)).strong()).clicked() {
+        if ui.button(RichText::new("Forward (with changes)").color(theme::color(ui, Tone::Success)).strong()).clicked() {
             cmds.push(AppCommand::ForwardActiveIntercept { modified: true });
         }
-        if ui.button("▶ Forward Unmodified").clicked() {
+        if ui.button("Forward Unmodified").clicked() {
             cmds.push(AppCommand::ForwardActiveIntercept { modified: false });
         }
-        if ui.button(RichText::new("⏹ Drop Flow").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
+        if ui.button(RichText::new("Drop Flow").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
             cmds.push(AppCommand::DropActiveIntercept);
         }
 
@@ -232,13 +233,13 @@ fn render_rules_manager(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mu
             });
             modified |= rule_cells(ui, &rule.id, &mut rule.target_phase, &mut rule.match_field, &mut rule.operator, &mut rule.match_value, &mut rule.action);
             ui.horizontal(|ui| {
-                if ui.add_enabled(index > 0, egui::Button::new("⏶").small()).clicked() {
+                if ui.add_enabled(index > 0, egui::Button::new(icons::CARET_UP).small()).clicked() {
                     swap = Some((index, index - 1));
                 }
-                if ui.add_enabled(index + 1 < count, egui::Button::new("⏷").small()).clicked() {
+                if ui.add_enabled(index + 1 < count, egui::Button::new(icons::CARET_DOWN).small()).clicked() {
                     swap = Some((index, index + 1));
                 }
-                if ui.small_button("🗑").clicked() {
+                if ui.small_button(icons::TRASH).clicked() {
                     delete = Some(index);
                 }
             });

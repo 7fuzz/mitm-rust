@@ -10,7 +10,7 @@ pub fn show(ctx: &egui::Context, state: &mut CollectionsState, cmds: &mut Comman
 
     let response = egui::Modal::new(egui::Id::new("collections_extract_modal")).show(ctx, |ui| {
         ui.set_width(640.0);
-        ui.heading("⚡ Auto-Extract Rules");
+        ui.heading("Auto-Extract Rules");
         ui.separator();
 
         if modal.request_ids.len() > 1 {

@@ -8,6 +8,7 @@ use crate::features::request_editor::{body_editor, extract_rules};
 use crate::ui::theme::{self, Tone};
 use crate::features::request_editor::request_bar;
 use super::{docs, CollectionsCmd, CollectionsState, DocsMode, EditorTab, PreviewMode};
+use crate::ui::icons;
 
 
 pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands, now: f64) {
@@ -106,7 +107,7 @@ fn docs_tab(ui: &mut egui::Ui, request: &mut RequestItem, mode: &mut DocsMode) -
         }
         if !description.is_empty() {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("📋 Copy MD").clicked() {
+                if ui.small_button("Copy MD").clicked() {
                     ui.ctx().copy_text(description.clone());
                 }
             });
@@ -199,7 +200,7 @@ fn convert_menu(ui: &mut egui::Ui, request: &mut RequestItem) -> bool {
     }
 
     let mut picked = None;
-    ui.menu_button("Convert ⏷", |ui| {
+    ui.menu_button(format!("Convert {}", icons::CARET_DOWN), |ui| {
         for (to, label) in targets {
             if ui.button(*label).clicked() {
                 picked = Some(*to);
@@ -232,7 +233,7 @@ fn interpolation_tab(ui: &mut egui::Ui, state: &mut CollectionsState, id: &str, 
                     PreviewMode::FullUrl => &preview.full_url_request,
                     PreviewMode::Curl => &preview.curl_command,
                 };
-                if ui.small_button("📋 Copy").clicked() {
+                if ui.small_button("Copy").clicked() {
                     ui.ctx().copy_text(text.clone());
                 }
             }

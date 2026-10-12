@@ -3,10 +3,11 @@ use crate::ui::theme::{self, Tone};
 use crate::widgets::diff;
 use crate::widgets::split;
 use super::{DiffStatus, JsonDiffState};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut JsonDiffState) {
     ui.horizontal(|ui| {
-        if ui.button("⇄ Swap").clicked() {
+        if ui.button("Swap").clicked() {
             state.swap();
         }
         if ui.button("Clear").clicked() {
@@ -60,7 +61,7 @@ fn diff_pane(ui: &mut egui::Ui, status: &DiffStatus) {
         ui.label("Diff");
         match status {
             DiffStatus::Identical => {
-                ui.label(RichText::new("✔").color(theme::color(ui, Tone::Success)).strong());
+                ui.label(RichText::new(icons::CHECK).color(theme::color(ui, Tone::Success)).strong());
             }
             DiffStatus::Diff { added, removed, .. } => {
                 ui.label(RichText::new(format!("+{added} -{removed}")).weak());

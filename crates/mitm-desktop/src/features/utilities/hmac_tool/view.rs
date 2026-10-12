@@ -1,5 +1,6 @@
 use eframe::egui::{self, RichText};
 use super::{HmacToolState, Provider};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut HmacToolState) {
     ui.horizontal(|ui| {
@@ -23,7 +24,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut HmacToolState) {
     let (name, value) = state.signature().clone();
     ui.horizontal(|ui| {
         ui.label(RichText::new(&name).strong());
-        if ui.small_button("📋").on_hover_text("Copy").clicked() {
+        if ui.small_button(icons::COPY).on_hover_text("Copy").clicked() {
             ui.ctx().copy_text(value.clone());
         }
     });

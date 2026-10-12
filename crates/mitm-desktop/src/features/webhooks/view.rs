@@ -9,6 +9,7 @@ use crate::widgets::message_pane::{self, PaneData};
 use crate::widgets::pills::badge;
 use crate::widgets::split;
 use super::{EndpointDraft, EndpointFilter, WebhooksState};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
     toolbar(ui, state, cmds);
@@ -47,7 +48,7 @@ fn toolbar(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
         ui.separator();
         let url = state.base_url();
         ui.monospace(&url);
-        if ui.small_button("📋").on_hover_text("Copy base URL").clicked() {
+        if ui.small_button(icons::COPY).on_hover_text("Copy base URL").clicked() {
             ui.ctx().copy_text(url);
         }
     });
@@ -57,7 +58,7 @@ fn endpoints_list(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comma
     ui.horizontal(|ui| {
         ui.heading("Endpoints");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("➕").on_hover_text("Add endpoint").clicked() && state.draft.is_none() {
+            if ui.button(icons::PLUS).on_hover_text("Add endpoint").clicked() && state.draft.is_none() {
                 state.draft = Some(EndpointDraft { path: "/".to_string(), ..Default::default() });
             }
         });
@@ -91,7 +92,7 @@ fn endpoints_list(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comma
                 ui.close();
             }
             ui.separator();
-            if ui.button(RichText::new("🗑 Delete").color(theme::color(ui, Tone::Danger))).clicked() {
+            if ui.button(RichText::new("Delete").color(theme::color(ui, Tone::Danger))).clicked() {
                 action = Some(AppCommand::DeleteWebhookEndpoint(endpoint.id.clone()));
                 ui.close();
             }
@@ -122,7 +123,7 @@ fn endpoints_list(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comma
                         secret: draft.secret.clone(),
                     });
                 }
-                if ui.button("✖").on_hover_text("Cancel").clicked() {
+                if ui.button(icons::X).on_hover_text("Cancel").clicked() {
                     cancel = true;
                 }
             });
@@ -146,7 +147,7 @@ fn deliveries(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands)
             ) {
                 cmds.push(AppCommand::ClearWebhookDeliveries);
             }
-            if !state.search.is_empty() && ui.small_button("✖").on_hover_text("Clear search").clicked() {
+            if !state.search.is_empty() && ui.small_button(icons::X).on_hover_text("Clear search").clicked() {
                 state.search.clear();
             }
             crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut state.search).hint_text("Search").desired_width(140.0)));
@@ -331,8 +332,8 @@ fn endpoint_matches(filter: &EndpointFilter, delivery: &WebhookDelivery) -> bool
 
 fn signature_chip(ui: &mut egui::Ui, status: &str) {
     let (text, tone) = match status {
-        "valid" => ("✔", Tone::Success),
-        "invalid" => ("✖", Tone::Danger),
+        "valid" => (icons::CHECK, Tone::Success),
+        "invalid" => (icons::X, Tone::Danger),
         _ => ("–", Tone::Neutral),
     };
     ui.label(RichText::new(text).color(theme::color(ui, tone)));

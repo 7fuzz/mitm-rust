@@ -7,6 +7,7 @@ use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::method_text;
 use crate::widgets::search::search_field;
 use super::{all_requests, CollectionsCmd, CollectionsState, TreeEdit};
+use crate::ui::icons;
 
 #[derive(Clone)]
 enum DragItem {
@@ -87,7 +88,7 @@ fn header(ui: &mut egui::Ui, state: &mut CollectionsState) {
             ui.strong("Collections");
         },
         |ui| {
-            if ui.button("➕").on_hover_text("New folder").clicked() {
+            if ui.button(icons::PLUS).on_hover_text("New folder").clicked() {
                 state.start_edit(TreeEdit::NewFolder { parent: None }, String::new());
             }
         },
@@ -132,7 +133,7 @@ impl TreeUi<'_> {
             if matches!(self.edit, Some(TreeEdit::RenameFolder { id }) if *id == folder.id) {
                 self.inline_rename(ui);
             } else {
-                let text = RichText::new(format!("📁 {}", folder.name));
+                let text = RichText::new(format!("{} {}", icons::FOLDER, folder.name));
                 label = Some(ui.add(egui::Label::new(text).truncate().selectable(false).sense(Sense::click_and_drag())));
             }
         });

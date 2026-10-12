@@ -5,6 +5,7 @@ use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::{method_text, status_text};
 use crate::widgets::search::search_field;
 use super::RepeaterState;
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
     egui::Sides::new().show(
@@ -14,7 +15,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
             ui.weak(state.tabs.len().to_string());
         },
         |ui| {
-            if ui.button("➕").on_hover_text("New request").clicked() {
+            if ui.button(icons::PLUS).on_hover_text("New request").clicked() {
                 cmds.push(AppCommand::RepeaterNew);
             }
         },

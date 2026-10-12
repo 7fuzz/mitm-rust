@@ -2,6 +2,7 @@ use eframe::egui::{self, RichText};
 use crate::util::format::format_bytes;
 use crate::ui::theme::{self, Tone};
 use super::message_pane::SaveBody;
+use crate::ui::icons;
 
 pub struct FormField {
     pub key: String,
@@ -83,7 +84,7 @@ fn row(ui: &mut egui::Ui, name: &str, value: &FormValue, save: &mut Option<SaveB
                 ui.label(RichText::new(text).monospace());
             }
             FormValue::File { name, content_type, bytes } => {
-                ui.label(RichText::new(format!("📎 {name}")).monospace());
+                ui.label(RichText::new(format!("{} {name}", icons::PAPERCLIP)).monospace());
                 ui.weak(format!("{} · {content_type}", format_bytes(bytes.len() as u64)));
                 if ui.small_button("Save…").clicked() {
                     *save = Some(SaveBody { file_name: name.clone(), bytes: bytes.clone() });

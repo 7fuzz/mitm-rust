@@ -11,6 +11,7 @@ use mitm_core::workspace::{Environment, EnvironmentVariable, VariableVariant, Wo
 use crate::util::save_queue::SaveQueue;
 use crate::app::command::{AppCommand, Commands};
 use crate::widgets::split;
+use crate::ui::icons;
 
 
 pub use export::show as show_export;
@@ -237,7 +238,7 @@ fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let can_delete = state.workspaces.len() > 1;
-            let del_btn = egui::Button::new("🗑 Delete workspace");
+            let del_btn = egui::Button::new("Delete workspace");
             if ui.add_enabled(can_delete, del_btn)
                 .on_hover_text(if can_delete { "Delete this workspace" } else { "Cannot delete the only workspace" })
                 .clicked()
@@ -312,7 +313,7 @@ fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
     ui.horizontal(|ui| {
         ui.strong("Environments");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("➕").on_hover_text("Add environment").clicked() {
+            if ui.button(icons::PLUS).on_hover_text("Add environment").clicked() {
                 cmds.push(AppCommand::CreateEnvironment {
                     workspace_id: state.active_workspace_id.clone(),
                     name: "New Environment".to_string(),
@@ -483,7 +484,7 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
                     });
                     row.col(|ui| {
                         let is_secret = var.r#type == "secret";
-                        let icon = if is_secret { "🔒" } else { "🔓" };
+                        let icon = if is_secret { icons::LOCK } else { icons::LOCK_OPEN };
                         let tip = if is_secret {
                             "Secret variable (masked)\nClick to change to plain"
                         } else {
@@ -529,15 +530,15 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
                                         }
                                     }
                                     ui.separator();
-                                    if ui.button("➕ Add variant…").clicked() {
+                                    if ui.button("Add variant…").clicked() {
                                         open_variant_modal = Some((var_idx, false));
                                         ui.close();
                                     }
-                                    if ui.button("✏ Rename variant…").clicked() {
+                                    if ui.button("Rename variant…").clicked() {
                                         open_variant_modal = Some((var_idx, true));
                                         ui.close();
                                     }
-                                    if ui.button("🗑 Delete variant").clicked() {
+                                    if ui.button("Delete variant").clicked() {
                                         delete_variant_idx = Some((var_idx, active_idx));
                                         ui.close();
                                     }
@@ -550,9 +551,9 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
                                 .map(|(entry, field)| (entry.to_string(), field.to_string()));
                             let resp = if let Some((entry, field)) = &link {
                                 let label = ui
-                                    .add(egui::Label::new(RichText::new(format!("🔒 {entry} · {field}")).monospace()).sense(egui::Sense::click()))
+                                    .add(egui::Label::new(RichText::new(format!("{} {entry} · {field}", icons::LOCK)).monospace()).sense(egui::Sense::click()))
                                     .on_hover_text(&current);
-                                if ui.small_button("✖").on_hover_text("Unlink").clicked() {
+                                if ui.small_button(icons::X).on_hover_text("Unlink").clicked() {
                                     set_active_value(var, String::new());
                                     changed = true;
                                 }
@@ -564,7 +565,7 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
                                 }
                                 let mut revealed = false;
                                 if is_secret {
-                                    let eye = ui.add(egui::Button::new("👁").sense(egui::Sense::drag()))
+                                    let eye = ui.add(egui::Button::new(icons::EYE).sense(egui::Sense::drag()))
                                         .on_hover_text("Hold to reveal secret");
                                     revealed = eye.is_pointer_button_down_on()
                                         || (eye.hovered() && ui.input(|i| i.pointer.primary_down()));
@@ -605,21 +606,21 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
                                     }
                                     ui.separator();
                                 }
-                                if is_secret && link.is_none() && !current.is_empty() && ui.button("🔒 Move to credentials…").clicked() {
+                                if is_secret && link.is_none() && !current.is_empty() && ui.button("Move to credentials…").clicked() {
                                     open_move = Some(var_idx);
                                     ui.close();
                                 }
-                                if ui.button("➕ Add variant…").clicked() {
+                                if ui.button("Add variant…").clicked() {
                                     open_variant_modal = Some((var_idx, false));
                                     ui.close();
                                 }
                                 if !var.variants.is_empty() {
                                     let active_idx = var.active_index.min(var.variants.len() - 1);
-                                    if ui.button("✏ Rename variant…").clicked() {
+                                    if ui.button("Rename variant…").clicked() {
                                         open_variant_modal = Some((var_idx, true));
                                         ui.close();
                                     }
-                                    if ui.button("🗑 Delete variant").clicked() {
+                                    if ui.button("Delete variant").clicked() {
                                         delete_variant_idx = Some((var_idx, active_idx));
                                         ui.close();
                                     }
@@ -628,7 +629,7 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
                         });
                     });
                     row.col(|ui| {
-                        if ui.small_button("✖").on_hover_text("Delete variable").clicked() {
+                        if ui.small_button(icons::X).on_hover_text("Delete variable").clicked() {
                             delete_idx = Some(var_idx);
                         }
                     });
@@ -747,7 +748,7 @@ fn link_menu(ui: &mut egui::Ui, credentials: &[Credential]) -> Option<String> {
         return None;
     }
     let mut picked = None;
-    ui.menu_button("🔗", |ui| {
+    ui.menu_button(icons::LINK, |ui| {
         for credential in credentials.iter().filter(|c| !c.fields.is_empty()) {
             ui.menu_button(&credential.name, |ui| {
                 for field in &credential.fields {
@@ -787,7 +788,7 @@ fn move_modal(ctx: &egui::Context, state: &mut EnvironmentsState, credentials: &
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut modal.entry).desired_width(160.0));
                 if !credentials.is_empty() {
-                    ui.menu_button("▾", |ui| {
+                    ui.menu_button(icons::CARET_DOWN, |ui| {
                         for credential in credentials {
                             if ui.button(&credential.name).clicked() {
                                 modal.entry = credential.name.clone();

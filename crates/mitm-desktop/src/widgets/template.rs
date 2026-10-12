@@ -9,6 +9,7 @@ use eframe::egui::{self, Color32, Galley, Id, Key, Modifiers, Response, RichText
 use mitm_core::credentials::{Credential, FieldKind};
 use mitm_core::workspace::Environment;
 use crate::ui::theme::Tone;
+use crate::ui::icons;
 
 const MAX_HIGHLIGHT_BYTES: usize = 256 * 1024;
 
@@ -87,7 +88,7 @@ fn hover_value(name: &str) -> String {
         return live_code(&params);
     }
     match cred_field(name) {
-        Some(_) if CREDENTIALS_LOCKED.with(|c| c.get()) => return "🔒 locked".to_string(),
+        Some(_) if CREDENTIALS_LOCKED.with(|c| c.get()) => return format!("{} locked", icons::LOCK),
         Some((FieldKind::Secret, _)) => return "••••••".to_string(),
         Some((_, value)) => return value,
         None if mitm_core::credentials::parse_ref(name).is_some() => return "undefined".to_string(),

@@ -5,6 +5,7 @@ use crate::widgets::flash;
 use crate::widgets::copy_custom;
 use crate::widgets::message_pane::{self, PaneData, PaneState, SaveBody};
 use crate::widgets::pills::status_text;
+use crate::ui::icons;
 
 pub struct ResponseData<'a> {
     pub cache_key: u64,
@@ -49,14 +50,14 @@ impl RequestCopy {
 /// Shows or hides the run history; sits in the response header's toolbar.
 pub fn history_toggle(ui: &mut egui::Ui, open: &mut bool) {
     let hint = if *open { "Hide run history" } else { "Show run history" };
-    if ui.selectable_label(*open, "🕘").on_hover_text(hint).clicked() {
+    if ui.selectable_label(*open, icons::CLOCK_COUNTER_CLOCKWISE).on_hover_text(hint).clicked() {
         *open = !*open;
     }
 }
 
 pub fn stack_toggle(ui: &mut egui::Ui, stacked: &mut bool) {
     let hint = if *stacked { "Put request beside response" } else { "Put request above response" };
-    if ui.selectable_label(*stacked, "↕").on_hover_text(hint).clicked() {
+    if ui.selectable_label(*stacked, icons::ROWS).on_hover_text(hint).clicked() {
         *stacked = !*stacked;
     }
 }
@@ -131,8 +132,8 @@ fn copy_menu(
 ) {
     let flash_id = ui.id().with((id_salt, "copied"));
     let title = match flash::current(ui, flash_id) {
-        Some(message) => format!("✔ {}", message),
-        None => "📋 Copy ⏷".to_string(),
+        Some(message) => format!("{} {}", icons::CHECK, message),
+        None => format!("Copy {}", icons::CARET_DOWN),
     };
 
     let mut copied: Option<(&str, String)> = None;

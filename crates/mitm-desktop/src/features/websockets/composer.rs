@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::app::command::{AppCommand, Commands};
 use crate::ui::theme::{self, Tone};
 use crate::widgets::code_view::{self, Lang};
+use crate::ui::icons;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum FrameMode {
@@ -129,7 +130,7 @@ pub fn show(
 }
 
 fn templates_menu(ui: &mut egui::Ui, composer: &mut Composer, templates: &mut Vec<FrameTemplate>) {
-    ui.menu_button("Templates ▾", |ui| {
+    ui.menu_button(format!("Templates {}", icons::CARET_DOWN), |ui| {
         let current = FrameTemplate { mode: composer.mode, payload: composer.text.clone() };
         let can_save = !current.payload.trim().is_empty() && !templates.contains(&current);
         if ui.add_enabled(can_save, egui::Button::new("Save current")).clicked() {
@@ -150,7 +151,7 @@ fn templates_menu(ui: &mut egui::Ui, composer: &mut Composer, templates: &mut Ve
                         composer.text = template.payload.clone();
                         ui.close();
                     }
-                    if ui.small_button(RichText::new("🗑").color(theme::color(ui, Tone::Danger))).on_hover_text("Delete template").clicked() {
+                    if ui.small_button(RichText::new(icons::TRASH).color(theme::color(ui, Tone::Danger))).on_hover_text("Delete template").clicked() {
                         remove = Some(index);
                     }
                 });

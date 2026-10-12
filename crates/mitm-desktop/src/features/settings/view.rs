@@ -5,6 +5,7 @@ use crate::app::command::{AppCommand, Commands};
 use crate::features::traffic::TrafficState;
 use crate::widgets::split;
 use super::{CertificateState, DataSectionState, ListenerForm, ProxyState, SettingsPrefs, SettingsSection};
+use crate::ui::icons;
 
 #[allow(clippy::too_many_arguments)]
 pub fn show(
@@ -183,7 +184,7 @@ fn certificate_section(
     ui.add_space(8.0);
 
     ui.horizontal(|ui| {
-        ui.menu_button("Save certificate… ▾", |ui| {
+        ui.menu_button(format!("Save certificate… {}", icons::CARET_DOWN), |ui| {
             if ui.button("PEM format (.crt)…").clicked() {
                 cmds.push(AppCommand::ExportCa(mitm_core::CaFormat::Pem));
                 ui.close();
@@ -263,7 +264,7 @@ fn certificate_section(
                 ui.strong("SHA-256 Fingerprint:");
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(&info.fingerprint).monospace());
-                    if ui.small_button("📋").on_hover_text("Copy fingerprint").clicked() {
+                    if ui.small_button(icons::COPY).on_hover_text("Copy fingerprint").clicked() {
                         ui.ctx().copy_text(info.fingerprint.clone());
                     }
                 });
@@ -272,7 +273,7 @@ fn certificate_section(
                 ui.strong("File Path:");
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(&info.cert_path).monospace());
-                    if ui.small_button("📋").on_hover_text("Copy path").clicked() {
+                    if ui.small_button(icons::COPY).on_hover_text("Copy path").clicked() {
                         ui.ctx().copy_text(info.cert_path.clone());
                     }
                 });
@@ -343,7 +344,7 @@ fn copyable_command(ui: &mut egui::Ui, id_salt: &str, label: &str, cmd: &str) {
         let width = (ui.available_width() - 40.0).max(100.0);
         ui.add(egui::TextEdit::singleline(&mut cmd.to_string()).desired_width(width));
         let flash_id = ui.id().with(id_salt);
-        if ui.small_button("📋").on_hover_text("Copy command").clicked() {
+        if ui.small_button(icons::COPY).on_hover_text("Copy command").clicked() {
             ui.ctx().copy_text(cmd.to_string());
             crate::widgets::flash::set(ui, flash_id, "Copied");
         }
@@ -415,7 +416,7 @@ fn proxy_section(
                 ui.label(listener.id.to_string());
 
                 if listener.id != 0 {
-                    if ui.small_button("🗑").clicked() {
+                    if ui.small_button(icons::TRASH).clicked() {
                         to_remove = Some(idx);
                     }
                 } else {
@@ -462,7 +463,7 @@ fn proxy_section(
         }
 
         let can_add = !form.label.trim().is_empty() && port_num.is_some() && overlap.is_none();
-        if ui.add_enabled(can_add, egui::Button::new("➕ Add Listener")).clicked() {
+        if ui.add_enabled(can_add, egui::Button::new("Add Listener")).clicked() {
             let port = port_num.unwrap();
             let effective_host = match form.host.trim() {
                 "" => "0.0.0.0",

@@ -3,6 +3,7 @@ use crate::ui::theme::{self, Tone};
 use crate::widgets::code_view::{self, Lang};
 use crate::widgets::split;
 use super::{Algorithm, Computed, EncodingPrefs, EncodingState, HexFmt};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut EncodingState) {
     let swap = toolbar(ui, &mut state.prefs);
@@ -61,7 +62,7 @@ fn toolbar(ui: &mut egui::Ui, prefs: &mut EncodingPrefs) -> bool {
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
-                .add_enabled(!jwt, egui::Button::new("⇄ Swap"))
+                .add_enabled(!jwt, egui::Button::new("Swap"))
                 .on_hover_text("Feed the output back in and flip direction")
                 .clicked()
             {
@@ -105,7 +106,7 @@ fn output_pane(ui: &mut egui::Ui, out: &Computed) {
 fn output_header(ui: &mut egui::Ui, text: &str) {
     ui.horizontal(|ui| {
         ui.label("Output");
-        if ui.small_button("📋").on_hover_text("Copy output").clicked() {
+        if ui.small_button(icons::COPY).on_hover_text("Copy output").clicked() {
             ui.ctx().copy_text(text.to_string());
         }
     });
@@ -114,7 +115,7 @@ fn output_header(ui: &mut egui::Ui, text: &str) {
 fn jwt_section(ui: &mut egui::Ui, label: &str, text: &str, lang: Lang) {
     ui.horizontal(|ui| {
         ui.strong(label);
-        if ui.small_button("📋").clicked() {
+        if ui.small_button(icons::COPY).clicked() {
             ui.ctx().copy_text(text.to_string());
         }
     });

@@ -7,6 +7,7 @@ use crate::widgets::confirm::confirm_button;
 use crate::widgets::pills::method_text;
 use crate::widgets::split;
 use super::{editor, extract_modal, tree, CollectionsCmd, CollectionsState};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands) {
     let now = ui.input(|i| i.time);
@@ -67,7 +68,7 @@ fn tab_strip(ui: &mut egui::Ui, state: &CollectionsState, cmds: &mut Commands) {
                     if response.clicked() {
                         cmds.push(AppCommand::Collections(CollectionsCmd::Activate(request.id.clone())));
                     }
-                    let close = ui.small_button("✖").on_hover_text("Close tab").clicked();
+                    let close = ui.small_button(icons::X).on_hover_text("Close tab").clicked();
                     if close || response.middle_clicked() {
                         cmds.push(AppCommand::Collections(CollectionsCmd::Close(request.id.clone())));
                     }
@@ -131,7 +132,7 @@ fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str, c
             if ui.small_button("Latest").on_hover_text("Show the latest run").clicked() {
                 show_latest = true;
             }
-            ui.label(RichText::new(format!("🕘 Run {} · {}", number, time)).color(theme::color(ui, Tone::Warn)).small());
+            ui.label(RichText::new(format!("Run {} · {}", number, time)).color(theme::color(ui, Tone::Warn)).small());
         }
     });
     state.prefs.history_open = history_open;
@@ -148,14 +149,14 @@ fn history_drawer(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &
     let runs = state.runs.get(request_id).map(Vec::as_slice).unwrap_or_default();
 
     ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("🕘 Run History ({})", runs.len())).strong());
+        ui.label(RichText::new(format!("Run History ({})", runs.len())).strong());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("✖").on_hover_text("Close run history").clicked() {
+            if ui.small_button(icons::X).on_hover_text("Close run history").clicked() {
                 state.prefs.history_open = false;
             }
             let confirm_id = ui.id().with(("clear_runs", request_id));
             let hover = "Delete all recorded runs of this request";
-            if !runs.is_empty() && confirm_button(ui, confirm_id, RichText::new("🗑"), "🗑 Clear all?", hover) {
+            if !runs.is_empty() && confirm_button(ui, confirm_id, RichText::new(icons::TRASH), "Clear all?", hover) {
                 cmds.push(AppCommand::Collections(CollectionsCmd::ClearRuns(request_id.to_string())));
             }
         });

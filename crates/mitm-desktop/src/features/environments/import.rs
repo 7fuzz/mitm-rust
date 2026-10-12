@@ -3,6 +3,7 @@ use eframe::egui::{self, RichText};
 use mitm_core::workspace::import::{preview_workspace_import_db, ImportPreview};
 use crate::app::command::{AppCommand, Commands};
 use crate::ui::theme::{self, Tone};
+use crate::ui::icons;
 
 #[derive(Default)]
 pub struct ImportState {
@@ -46,7 +47,7 @@ pub fn show(ctx: &egui::Context, state: &mut ImportState, current_workspace: (&s
             }
             if let Some(label) = &state.file_label {
                 ui.label(RichText::new(label).monospace());
-                if ui.small_button("✖").on_hover_text("Clear").clicked() {
+                if ui.small_button(icons::X).on_hover_text("Clear").clicked() {
                     state.open_with(None, String::new());
                 }
             }

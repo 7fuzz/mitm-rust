@@ -5,6 +5,7 @@ use crate::app::command::{AppCommand, Commands};
 use crate::widgets::confirm::confirm_button;
 use crate::widgets::tri_state::tri_state_button;
 use super::{TrafficState, FLAGS, METHODS, STATUS_GROUPS};
+use crate::ui::icons;
 
 const LIMIT_PRESETS: [u32; 7] = [100, 250, 500, 1000, 2500, 5000, 10000];
 
@@ -24,10 +25,10 @@ pub fn show(
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let confirm_id = ui.id().with("clear_traffic");
-            if confirm_button(ui, confirm_id, RichText::new("🗑"), "🗑 Clear all?", "Clear all traffic logs") {
+            if confirm_button(ui, confirm_id, RichText::new(icons::TRASH), "Clear all?", "Clear all traffic logs") {
                 cmds.push(AppCommand::ClearTraffic);
             }
-            if ui.button("📤").on_hover_text("Export as HAR").clicked() {
+            if ui.button(icons::EXPORT).on_hover_text("Export as HAR").clicked() {
                 cmds.push(AppCommand::OpenHarExport);
             }
             limit_menu(ui, state, cmds);
@@ -42,18 +43,18 @@ pub fn show(
 fn search_box(ui: &mut egui::Ui, query: &mut String) {
     let edit = ui.add(
         egui::TextEdit::singleline(query)
-            .hint_text("🔍 Search host, path, status...")
+            .hint_text(format!("{} Search host, path, status...", icons::MAGNIFYING_GLASS))
             .desired_width(280.0),
     );
     crate::widgets::search::claim_focus(&edit);
-    if !query.is_empty() && ui.small_button("✖").clicked() {
+    if !query.is_empty() && ui.small_button(icons::X).clicked() {
         query.clear();
     }
 }
 
 fn filters_toggle(ui: &mut egui::Ui, state: &mut TrafficState) {
     let active = state.active_filter_count();
-    let arrow = if state.prefs.filters_open { "⏶" } else { "⏷" };
+    let arrow = if state.prefs.filters_open { icons::CARET_UP } else { icons::CARET_DOWN };
     let label = match active {
         0 => format!("Filters {}", arrow),
         n => format!("Filters ({}) {}", n, arrow),
@@ -77,9 +78,9 @@ fn request_count(ui: &mut egui::Ui, state: &TrafficState, visible_count: usize) 
 fn limit_menu(ui: &mut egui::Ui, state: &mut TrafficState, cmds: &mut Commands) {
     let current = &state.history_limit;
     let title = if current.limiter_enabled {
-        format!("Limit: {} logs ⏷", current.max_rows)
+        format!("Limit: {} logs {}", current.max_rows, icons::CARET_DOWN)
     } else {
-        "Limit: Off ⏷".to_string()
+        format!("Limit: Off {}", icons::CARET_DOWN)
     };
 
     // Plain menus close on any click inside, which would shut this one when toggling the checkbox.

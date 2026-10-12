@@ -5,6 +5,7 @@ use crate::ui::theme;
 use crate::widgets::{source_scope, split};
 use std::path::Path;
 use super::{action_label, action_tone, editor, log, RewriteState, RewriteView};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerConfig], db_path: &Path, cmds: &mut Commands) {
     let now = ui.input(|i| i.time);
@@ -26,7 +27,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerCo
         ui.horizontal(|ui| {
             ui.strong("Rule");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("✖").on_hover_text("Close editor").clicked() {
+                if ui.small_button(icons::X).on_hover_text("Close editor").clicked() {
                     state.selected = None;
                 }
             });
@@ -65,9 +66,9 @@ fn toolbar(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerCon
         ui.selectable_value(&mut state.prefs.view, RewriteView::Rules, "Rules");
         ui.selectable_value(&mut state.prefs.view, RewriteView::Log, "Log");
         if state.prefs.view == RewriteView::Rules {
-            crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut state.search).hint_text("🔍 Search rules").desired_width(180.0)));
+            crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut state.search).hint_text(format!("{} Search rules", icons::MAGNIFYING_GLASS)).desired_width(180.0)));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("➕").on_hover_text("Add rule").clicked() {
+                if ui.button(icons::PLUS).on_hover_text("Add rule").clicked() {
                     state.add_rule(now);
                 }
             });
@@ -86,10 +87,10 @@ fn rules_table(ui: &mut egui::Ui, state: &mut RewriteState, now: f64) {
                 continue;
             }
             ui.horizontal(|ui| {
-                if ui.add_enabled(index > 0, egui::Button::new("⏶").small()).clicked() {
+                if ui.add_enabled(index > 0, egui::Button::new(icons::CARET_UP).small()).clicked() {
                     action = Some(RowAction::Swap(index, index - 1));
                 }
-                if ui.add_enabled(index + 1 < count, egui::Button::new("⏷").small()).clicked() {
+                if ui.add_enabled(index + 1 < count, egui::Button::new(icons::CARET_DOWN).small()).clicked() {
                     action = Some(RowAction::Swap(index, index + 1));
                 }
             });

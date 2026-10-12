@@ -6,6 +6,7 @@ use mitm_core::utils::cvss::{
 use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::badge;
 use super::CvssState;
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut CvssState) {
     ui.horizontal(|ui| {
@@ -21,7 +22,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut CvssState) {
         if response.changed() {
             state.edit_vector(text);
         }
-        if ui.small_button("📋").on_hover_text("Copy vector").clicked() {
+        if ui.small_button(icons::COPY).on_hover_text("Copy vector").clicked() {
             ui.ctx().copy_text(state.vector());
         }
     });

@@ -4,6 +4,7 @@ use crate::app::command::{AppCommand, Commands};
 use crate::ui::theme::{self, Tone};
 use crate::widgets::tri_state::{tri_state_button, TriState};
 use super::HarExport;
+use crate::ui::icons;
 
 pub fn show(ctx: &egui::Context, export: &mut HarExport, cmds: &mut Commands) {
     if !export.open {
@@ -69,7 +70,7 @@ fn filters(ui: &mut egui::Ui, export: &mut HarExport) {
 fn hosts(ui: &mut egui::Ui, export: &mut HarExport) {
     let mut bulk = None;
     ui.horizontal(|ui| {
-        ui.add(egui::TextEdit::singleline(&mut export.host_search).hint_text("🔍 Search hosts...").desired_width(240.0));
+        ui.add(egui::TextEdit::singleline(&mut export.host_search).hint_text(format!("{} Search hosts...", icons::MAGNIFYING_GLASS)).desired_width(240.0));
         if ui.small_button("Include all").clicked() {
             bulk = Some(TriState::Include);
         }

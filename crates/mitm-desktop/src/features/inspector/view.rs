@@ -9,6 +9,7 @@ use crate::widgets::split;
 use crate::widgets::message_pane::{self as pane, PaneData};
 use crate::features::request_editor::body::captured_form;
 use super::{header_values, query_params, request_cookies, response_cookies, InspectorPrefs, InspectorState};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficState, cmds: &mut Commands) {
     let Some(flow) = traffic.selected_flow() else { return };
@@ -94,11 +95,11 @@ fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, prefs: &mu
             }
         },
         |ui| {
-            if !prefs.popped_out && ui.small_button("✖").on_hover_text("Hide inspector").clicked() {
+            if !prefs.popped_out && ui.small_button(icons::X).on_hover_text("Hide inspector").clicked() {
                 prefs.open = false;
             }
             let hint = if prefs.popped_out { "Dock back into the main window" } else { "Open in its own window" };
-            if ui.small_button("🗗").on_hover_text(hint).clicked() {
+            if ui.small_button(icons::ARROW_SQUARE_OUT).on_hover_text(hint).clicked() {
                 prefs.popped_out = !prefs.popped_out;
             }
             if !flags.is_pending() {

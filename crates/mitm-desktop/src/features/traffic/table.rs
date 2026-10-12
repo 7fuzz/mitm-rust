@@ -296,13 +296,13 @@ fn column_menu(ui: &mut egui::Ui, layout: &mut ColumnLayout, clicked: Option<Col
 }
 
 fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, folders: &[CollectionTreeItem], cmds: &mut Commands) {
-    menu_item(ui, "🔁 Send to Repeater", AppCommand::SendFlowToRepeater(flow.id), cmds);
-    menu_item(ui, "⚡ Send to Fuzzer", AppCommand::SendFlowToFuzzer(flow.id), cmds);
-    menu_item(ui, "🛡 Add to Intercept Rules", AppCommand::AddInterceptRuleForHost(flow.host.clone()), cmds);
+    menu_item(ui, "Send to Repeater", AppCommand::SendFlowToRepeater(flow.id), cmds);
+    menu_item(ui, "Send to Fuzzer", AppCommand::SendFlowToFuzzer(flow.id), cmds);
+    menu_item(ui, "Add to Intercept Rules", AppCommand::AddInterceptRuleForHost(flow.host.clone()), cmds);
     if flow.is_rewritten {
-        menu_item(ui, "✏ Show rewrite", AppCommand::ShowRewriteFor(flow.id), cmds);
+        menu_item(ui, "Show rewrite", AppCommand::ShowRewriteFor(flow.id), cmds);
     }
-    ui.menu_button("📁 Save to Collection", |ui| {
+    ui.menu_button("Save to Collection", |ui| {
         for folder in folders {
             folder_entry(ui, flow.id, folder, cmds);
         }
@@ -311,7 +311,7 @@ fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, folders: &[CollectionTreeIt
         }
         new_folder_entry(ui, flow.id, cmds);
     });
-    ui.menu_button("📋 Copy", |ui| {
+    ui.menu_button("Copy", |ui| {
         if ui.button("Copy URL").clicked() {
             ui.ctx().copy_text(flow.url.clone());
             ui.close();
@@ -324,7 +324,7 @@ fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, folders: &[CollectionTreeIt
         }
     });
     ui.separator();
-    if ui.button(RichText::new("🗑 Delete Item").color(theme::color(ui, Tone::Danger))).clicked() {
+    if ui.button(RichText::new("Delete Item").color(theme::color(ui, Tone::Danger))).clicked() {
         cmds.push(AppCommand::DeleteFlow(flow.id));
         ui.close();
     }

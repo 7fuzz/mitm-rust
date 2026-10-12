@@ -7,6 +7,7 @@ use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::badge;
 use crate::widgets::split;
 use super::WebSocketsState;
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
     super::connect::show(ui.ctx(), &mut state.connect, cmds);
@@ -19,7 +20,7 @@ fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comm
     ui.horizontal(|ui| {
         ui.heading(format!("Sessions ({})", state.connections.len()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("➕").on_hover_text("Connect a WebSocket").clicked() {
+            if ui.button(icons::PLUS).on_hover_text("Connect a WebSocket").clicked() {
                 state.connect.open();
             }
             let mitm = ui
@@ -103,11 +104,11 @@ fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comm
 fn session_menu(ui: &mut egui::Ui, conn: &WebSocketConn, action: &mut Option<AppCommand>) {
     let id = conn.connection_id;
     let open = is_open(&conn.status);
-    if ui.button("📋 Copy URL").clicked() {
+    if ui.button("Copy URL").clicked() {
         ui.ctx().copy_text(conn.url.clone());
         ui.close();
     }
-    if conn.is_client_session && open && ui.button("⏹ Disconnect").clicked() {
+    if conn.is_client_session && open && ui.button("Disconnect").clicked() {
         *action = Some(AppCommand::DisconnectWs(id));
         ui.close();
     }
@@ -117,7 +118,7 @@ fn session_menu(ui: &mut egui::Ui, conn: &WebSocketConn, action: &mut Option<App
         ui.close();
     }
     let delete = ui
-        .add_enabled(!open, egui::Button::new(RichText::new("🗑 Delete").color(theme::color(ui, Tone::Danger))))
+        .add_enabled(!open, egui::Button::new(RichText::new("Delete").color(theme::color(ui, Tone::Danger))))
         .on_disabled_hover_text("Session is still open");
     if delete.clicked() {
         *action = Some(AppCommand::DeleteWsSession(id));
@@ -154,7 +155,7 @@ fn frames_table(ui: &mut egui::Ui, state: &mut WebSocketsState) {
         ui.selectable_value(&mut state.direction_filter, "OUT".to_string(), "▲ Client");
         ui.separator();
         crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut state.frame_search).hint_text("Search frames").desired_width(140.0)));
-        if !state.frame_search.is_empty() && ui.small_button("✖").on_hover_text("Clear search").clicked() {
+        if !state.frame_search.is_empty() && ui.small_button(icons::X).on_hover_text("Clear search").clicked() {
             state.frame_search.clear();
         }
     });

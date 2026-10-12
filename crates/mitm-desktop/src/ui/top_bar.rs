@@ -6,6 +6,7 @@ use crate::app::command::{AppCommand, Commands};
 use crate::ui::dock::{self, Tab};
 use crate::app::state::AppState;
 use crate::widgets::flash;
+use crate::ui::icons;
 
 const FLASH_OK: &str = "top_bar_flash_ok";
 const FLASH_ERR: &str = "top_bar_flash_err";
@@ -24,7 +25,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState, dock: &DockState<Tab>, cmds
 
         let paused = state.intercept.pending.len();
         if paused > 0 {
-            let badge = RichText::new(format!("⚠️ {} Paused Flow(s)", paused))
+            let badge = RichText::new(format!("{} {} Paused Flow(s)", icons::WARNING, paused))
                 .color(theme::color(ui, Tone::Warn))
                 .strong();
             ui.label(badge);
@@ -75,20 +76,20 @@ fn workspace_and_env_combos(ui: &mut egui::Ui, state: &mut AppState, cmds: &mut 
                 }
             }
             ui.separator();
-            if ui.button("➕ New…").clicked() {
+            if ui.button("New…").clicked() {
                 ws_state.new_workspace_modal = true;
                 ws_state.new_workspace_name.clear();
                 ui.close();
             }
-            if ui.button("⇩ Import…").clicked() {
+            if ui.button("Import…").clicked() {
                 cmds.push(AppCommand::OpenImport);
                 ui.close();
             }
-            if ui.button("⇧ Export…").clicked() {
+            if ui.button("Export…").clicked() {
                 cmds.push(AppCommand::ExportWorkspace);
                 ui.close();
             }
-            if ui.button("⚙ Manage").clicked() {
+            if ui.button("Manage").clicked() {
                 cmds.push(AppCommand::OpenTab(Tab::Environments));
                 ui.close();
             }
@@ -166,7 +167,7 @@ fn proxy_controls(ui: &mut egui::Ui, state: &AppState, cmds: &mut Commands) {
         if ui.button(mode_text(ui, proxy.mode).strong()).on_hover_text(toggle_hint).clicked() {
             cmds.push(AppCommand::ToggleProxy);
         }
-        ui.menu_button("⏷", |ui| {
+        ui.menu_button(icons::CARET_DOWN, |ui| {
             for mode in ProxyMode::ALL {
                 if ui.selectable_label(proxy.mode == mode, mode_text(ui, mode)).clicked() {
                     cmds.push(AppCommand::SetProxyMode(mode));
@@ -177,7 +178,7 @@ fn proxy_controls(ui: &mut egui::Ui, state: &AppState, cmds: &mut Commands) {
     });
     let problems = proxy.problems();
     if !problems.is_empty() {
-        let warning = egui::Label::new(RichText::new("⚠").color(theme::color(ui, Tone::Danger)).strong()).sense(egui::Sense::click());
+        let warning = egui::Label::new(RichText::new(icons::WARNING).color(theme::color(ui, Tone::Danger)).strong()).sense(egui::Sense::click());
         if ui.add(warning).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(problems.join("\n")).clicked() {
             cmds.push(AppCommand::OpenSettings(crate::features::settings::SettingsSection::Proxy));
         }
@@ -210,7 +211,7 @@ fn mode_text(ui: &egui::Ui, mode: ProxyMode) -> RichText {
 }
 
 fn add_panel_menu(ui: &mut egui::Ui, dock: &DockState<Tab>, cmds: &mut Commands) {
-    ui.menu_button("➕ Add Panel ▾", |ui| {
+    ui.menu_button(format!("Add Panel {}", icons::CARET_DOWN), |ui| {
         if let Some(tab) = dock::panel_menu(ui, |tab| dock.find_tab(&tab).is_some()) {
             cmds.push(AppCommand::OpenTab(tab));
         }

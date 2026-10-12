@@ -7,6 +7,7 @@ use crate::util::format::{decode_base64, hex_dump, looks_like_base64};
 use crate::ui::theme::Tone;
 use crate::widgets::flash;
 use crate::widgets::search::search_field;
+use crate::ui::icons;
 
 const ROOT: &str = "$";
 const ICON_WIDTH: f32 = 14.0;
@@ -254,7 +255,7 @@ impl View<'_> {
         let mut hide = false;
         ui.indent((path, "decoded"), |ui| {
             ui.horizontal_top(|ui| {
-                hide = ui.small_button("✖").on_hover_text("Hide").clicked();
+                hide = ui.small_button(icons::X).on_hover_text("Hide").clicked();
                 match decoded {
                     Decoded::Text(text) => ui.label(RichText::new(text).monospace()),
                     Decoded::Image { uri, bytes } => {
@@ -362,7 +363,7 @@ fn row(ui: &mut egui::Ui, arrow: Option<bool>, job: egui::text::LayoutJob) -> eg
         let (rect, icon) = ui.allocate_exact_size(egui::vec2(ICON_WIDTH, height), egui::Sense::click());
         if let Some(open) = arrow {
             let font = egui::TextStyle::Monospace.resolve(ui.style());
-            let glyph = if open { "⏷" } else { "⏵" };
+            let glyph = if open { icons::CARET_DOWN } else { icons::CARET_RIGHT };
             ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, glyph, font, ui.visuals().weak_text_color());
         }
         icon | ui.add(egui::Label::new(job).sense(egui::Sense::click()))

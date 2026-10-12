@@ -5,6 +5,7 @@ use crate::ui::theme::{self, Tone};
 use crate::widgets::split;
 use mitm_core::db::browser::DbColumn;
 use super::{DatabaseState, DatabaseTab};
+use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
     state.ensure_loaded(db_path);
@@ -97,20 +98,20 @@ fn table_content(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
         let total = state.current_rows.as_ref().map(|r| r.total).unwrap_or(0);
         let total_pages = ((total + state.page_size - 1) / state.page_size).max(1);
 
-        if ui.add_enabled(state.page > 0, egui::Button::new("⏮")).clicked() {
+        if ui.add_enabled(state.page > 0, egui::Button::new(icons::CARET_DOUBLE_LEFT)).clicked() {
             state.page = 0;
             state.load_current_page(db_path);
         }
-        if ui.add_enabled(state.page > 0, egui::Button::new("◀")).clicked() {
+        if ui.add_enabled(state.page > 0, egui::Button::new(icons::CARET_LEFT)).clicked() {
             state.page -= 1;
             state.load_current_page(db_path);
         }
         ui.label(format!("Page {} / {} ({} rows)", state.page + 1, total_pages, total));
-        if ui.add_enabled(state.page + 1 < total_pages, egui::Button::new("▶")).clicked() {
+        if ui.add_enabled(state.page + 1 < total_pages, egui::Button::new(icons::CARET_RIGHT)).clicked() {
             state.page += 1;
             state.load_current_page(db_path);
         }
-        if ui.add_enabled(state.page + 1 < total_pages, egui::Button::new("⏭")).clicked() {
+        if ui.add_enabled(state.page + 1 < total_pages, egui::Button::new(icons::CARET_DOUBLE_RIGHT)).clicked() {
             state.page = total_pages - 1;
             state.load_current_page(db_path);
         }
@@ -197,11 +198,11 @@ fn grid(
                             };
                             let direction = sort.filter(|(col, _)| col == name).map(|(_, desc)| desc);
                             let arrow = match direction {
-                                Some(true) => " ▼",
-                                Some(false) => " ▲",
+                                Some(true) => icons::CARET_DOWN,
+                                Some(false) => icons::CARET_UP,
                                 None => "",
                             };
-                            let resp = ui.selectable_label(direction.is_some(), RichText::new(format!("{name}{arrow}")).strong().small());
+                            let resp = ui.selectable_label(direction.is_some(), RichText::new(format!("{name} {arrow}").trim_end()).strong().small());
                             if resp.clicked() {
                                 click = Some(GridClick::Sort(name.clone()));
                             }
@@ -253,7 +254,7 @@ fn render_detail(ui: &mut egui::Ui, state: &mut DatabaseState) {
     ui.horizontal(|ui| {
         ui.strong("Row Details");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            close = ui.small_button("✖").clicked();
+            close = ui.small_button(icons::X).clicked();
             if ui.button("Copy row as JSON").clicked() {
                 let obj: serde_json::Map<_, _> = columns.iter().cloned().zip(values.iter().cloned()).collect();
                 if let Ok(json) = serde_json::to_string_pretty(&serde_json::Value::Object(obj)) {
@@ -276,7 +277,7 @@ fn render_detail(ui: &mut egui::Ui, state: &mut DatabaseState) {
                         ui.label(RichText::new(&col_info.decl_type).weak().small());
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("📋").on_hover_text("Copy value").clicked() {
+                        if ui.small_button(icons::COPY).on_hover_text("Copy value").clicked() {
                             let text = match val {
                                 serde_json::Value::Null => "NULL".to_string(),
                                 serde_json::Value::String(s) => s.clone(),
