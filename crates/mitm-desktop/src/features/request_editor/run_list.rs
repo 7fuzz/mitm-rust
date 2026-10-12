@@ -188,7 +188,7 @@ fn details_window<R: Run>(ctx: &egui::Context, id_salt: &str, runs: &[R], can_lo
                     }
                 });
             });
-            ui.separator();
+            ui.add_space(4.0);
             let request_headers = pairs(run.request_headers());
             let response_headers = pairs(run.response_headers());
             let request = PaneData {

@@ -10,6 +10,7 @@ use crate::features::request_editor::url_params::{build_url, new_id, parse_query
 use crate::features::request_editor::{body_editor, extract_rules};
 use crate::util::format::pretty_json;
 use super::{EditorTab, RepeaterState};
+use crate::widgets::subtabs::subtabs;
 
 pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, now: f64) {
     let Some(index) = state.active_id.as_ref().and_then(|id| state.tabs.iter().position(|t| &t.id == id)) else {
@@ -44,26 +45,21 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands, n
     if hotkey && !executing && ui.ui_contains_pointer() {
         send = true;
     }
-    ui.separator();
+    ui.add_space(4.0);
 
     ui.horizontal_wrapped(|ui| {
         let params = tab.params.iter().filter(|p| p.enabled && !p.key.trim().is_empty()).count();
         let headers = tab.headers.iter().filter(|h| h.enabled && !h.key.trim().is_empty()).count();
         let tabs = [
-            (EditorTab::Params, format!("Params ({})", params)),
-            (EditorTab::Headers, format!("Headers ({})", headers)),
-            (EditorTab::Body, "Body".to_string()),
-            (EditorTab::Extract, format!("Auto-Extract ({})", tab.extract_rules.len())),
-            (EditorTab::Steps, format!("Pre/Post ({})", tab.pre_requests.len() + tab.post_requests.len())),
+            (EditorTab::Params, "Params", Some(params)),
+            (EditorTab::Headers, "Headers", Some(headers)),
+            (EditorTab::Body, "Body", None),
+            (EditorTab::Extract, "Extract", Some(tab.extract_rules.len())),
+            (EditorTab::Steps, "Pre/Post", Some(tab.pre_requests.len() + tab.post_requests.len())),
         ];
-        for (value, label) in tabs {
-            let response = ui.selectable_value(&mut state.editor_tab, value, label);
-            if value == EditorTab::Headers {
-                response.on_hover_text("A disabled Content-Type is detected from the body");
-            }
-        }
+        subtabs(ui, &mut state.editor_tab, &tabs);
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     match state.editor_tab {
         EditorTab::Body => {

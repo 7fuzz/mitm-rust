@@ -7,6 +7,7 @@ use crate::widgets::template;
 use super::body::{convert, is_multipart, is_urlencoded, read_multipart, read_urlencoded, store_multipart, store_urlencoded, text_field};
 use super::kv_table::{self, KvLabels};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
 
 pub fn show(ui: &mut egui::Ui, id_salt: &str, body_type: &str, content: &mut String) -> bool {
     match body_type {
@@ -144,7 +145,7 @@ fn multipart_table(ui: &mut egui::Ui, id_salt: &str, fields: &mut Vec<MultipartF
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button(RichText::new(icons::TRASH).color(theme::color(ui, Tone::Danger))).clicked() {
+                    if icon_button(ui, icons::TRASH, "Remove").clicked() {
                         remove = Some(index);
                     }
                 });
@@ -170,7 +171,7 @@ fn binary(ui: &mut egui::Ui, id_salt: &str, content: &mut String) -> bool {
         .map(|bytes| bytes.len());
     match size {
         Some(n) => ui.label(format!("Binary body: {}", format_bytes(n as u64))),
-        None => ui.label(RichText::new("No file loaded").weak().italics()),
+        None => ui.label(RichText::new("No file loaded").weak()),
     };
 
     let path_id = ui.id().with((id_salt, "binary_path"));

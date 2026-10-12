@@ -94,12 +94,12 @@ pub fn show(
             toolbar(ui);
         });
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     let Some(r) = response else {
         ui.vertical_centered(|ui| {
             ui.add_space(40.0);
-            ui.label(RichText::new("Send the request to see the response").weak().italics());
+            ui.label(RichText::new("Send the request to see the response").weak());
         });
         return None;
     };

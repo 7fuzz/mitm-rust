@@ -1,8 +1,8 @@
 use eframe::egui::{self, RichText};
 use mitm_core::repeater::ExtractRuleItem;
-use crate::ui::theme::{self, Tone};
 use super::url_params::new_id;
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
 
 const MODES: [(&str, &str, &str); 6] = [
     ("json", "JSON Path", "data.token"),
@@ -33,7 +33,7 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, rules: &mut Vec<ExtractRuleItem>) 
                     ui.label(RichText::new("← extract from").weak());
                     changed |= mode_combo(ui, rule);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button(RichText::new(icons::TRASH).color(theme::color(ui, Tone::Danger))).on_hover_text("Delete rule").clicked() {
+                        if icon_button(ui, icons::TRASH, "Delete rule").clicked() {
                             remove = Some(index);
                         }
                     });

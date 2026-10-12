@@ -1,10 +1,10 @@
-use eframe::egui::{self, RichText};
+use eframe::egui;
 use mitm_core::http::body::UrlEncodedParamSpec;
 use mitm_core::repeater::{HeaderItem, ParamItem};
-use crate::ui::theme::{self, Tone};
 use crate::widgets::template;
 use super::url_params::new_id;
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
 
 pub trait KeyValueRow {
     fn fields(&mut self) -> (&mut bool, &mut String, &mut String);
@@ -75,7 +75,7 @@ pub fn show<R: KeyValueRow>(
                     expanded = !expanded;
                     ui.data_mut(|d| d.insert_temp(expanded_id, expanded));
                 }
-                if ui.small_button(RichText::new(icons::TRASH).color(theme::color(ui, Tone::Danger))).on_hover_text("Delete row").clicked() {
+                if icon_button(ui, icons::TRASH, "Delete row").clicked() {
                     remove = Some(index);
                 }
             };
@@ -132,7 +132,7 @@ fn cookie_rows(ui: &mut egui::Ui, header: &mut String, dim: bool, key_width: f32
                 changed |= text_field(ui, name, "Name", dim, key_width - indent).changed();
                 let value_width = (ui.available_width() - 56.0).max(80.0);
                 changed |= text_field(ui, value, "Value", dim, value_width).changed();
-                if ui.small_button(RichText::new(icons::TRASH).color(theme::color(ui, Tone::Danger))).on_hover_text("Delete cookie").clicked() {
+                if icon_button(ui, icons::TRASH, "Delete cookie").clicked() {
                     remove = Some(index);
                 }
             });

@@ -6,22 +6,17 @@ use crate::widgets::pills::{method_text, status_text};
 use crate::widgets::search::search_field;
 use super::RepeaterState;
 use crate::ui::icons;
+use crate::widgets::section::section_with;
+use crate::widgets::button::icon_button;
 
 pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
-    egui::Sides::new().show(
-        ui,
-        |ui| {
-            ui.strong("Requests");
-            ui.weak(state.tabs.len().to_string());
-        },
-        |ui| {
-            if ui.button(icons::PLUS).on_hover_text("New request").clicked() {
-                cmds.push(super::Cmd::New);
-            }
-        },
-    );
+    section_with(ui, &format!("Requests · {}", state.tabs.len()), |ui| {
+        if icon_button(ui, icons::PLUS, "New request").clicked() {
+            cmds.push(super::Cmd::New);
+        }
+    });
     search_field(ui, &mut state.search, "Filter");
-    ui.separator();
+    ui.add_space(4.0);
 
     let term = state.search.trim().to_lowercase();
     let visible: Vec<&RepeaterTab> = state
