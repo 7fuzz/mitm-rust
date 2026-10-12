@@ -8,6 +8,9 @@ use crate::widgets::pills::badge;
 use crate::widgets::split;
 use super::{Cmd, WebSocketsState};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
+use crate::widgets::search::search_field_sized;
+use crate::widgets::section::section_with;
 
 pub fn show(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
     super::connect::show(ui.ctx(), &mut state.connect, cmds);
@@ -17,19 +20,16 @@ pub fn show(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands)
 }
 
 fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
-    ui.horizontal(|ui| {
-        ui.heading(format!("Sessions ({})", state.connections.len()));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button(icons::PLUS).on_hover_text("Connect a WebSocket").clicked() {
-                state.connect.open();
-            }
-            let mitm = ui
-                .toggle_value(&mut state.mitm_enabled, "MITM")
-                .on_hover_text("Capture proxied WebSocket frames (new connections)");
-            if mitm.changed() {
-                cmds.push(Cmd::SetMitm(state.mitm_enabled));
-            }
-        });
+    section_with(ui, "Sessions", |ui| {
+        if icon_button(ui, icons::PLUS, "Connect a WebSocket").clicked() {
+            state.connect.open();
+        }
+        let mitm = ui
+            .toggle_value(&mut state.mitm_enabled, "MITM")
+            .on_hover_text("Capture proxied WebSocket frames (new connections)");
+        if mitm.changed() {
+            cmds.push(Cmd::SetMitm(state.mitm_enabled));
+        }
     });
 
     if state.connections.is_empty() {
@@ -62,7 +62,7 @@ fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comm
     let mut action = None;
 
     TableBuilder::new(ui)
-        .striped(true)
+        .striped(false)
         .resizable(true)
         .sense(egui::Sense::click())
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
@@ -71,20 +71,19 @@ fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comm
         .column(Column::exact(70.0))
         .column(Column::exact(50.0))
         .header(22.0, |mut header| {
-            header.col(|ui| { ui.strong("#"); });
-            header.col(|ui| { ui.strong("URL"); });
-            header.col(|ui| { ui.strong("Status"); });
-            header.col(|ui| { ui.strong("Msgs"); });
+            for title in ["#", "URL", "Status", "Frames"] {
+                header.col(|ui| header_label(ui, title));
+            }
         })
         .body(|body| {
             body.rows(row_height, rows.len(), |mut row| {
                 let conn = &state.connections[rows[row.index()]];
                 let is_selected = state.selected_id == Some(conn.connection_id);
                 row.set_selected(is_selected);
-                row.col(|ui| { ui.label(conn.connection_id.to_string()); });
-                row.col(|ui| { ui.add(egui::Label::new(&conn.url).truncate()); });
+                row.col(|ui| { ui.label(RichText::new(conn.connection_id.to_string()).monospace().weak()); });
+                row.col(|ui| { ui.add(egui::Label::new(RichText::new(&conn.url).monospace()).truncate()); });
                 row.col(|ui| { status_badge(ui, &conn.status); });
-                row.col(|ui| { ui.label(conn.message_count.to_string()); });
+                row.col(|ui| { ui.label(RichText::new(conn.message_count.to_string()).monospace().weak()); });
                 let response = row.response();
                 if response.clicked() {
                     new_selection = Some(conn.connection_id);
@@ -151,13 +150,10 @@ fn frames_with_detail(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut
 fn frames_table(ui: &mut egui::Ui, state: &mut WebSocketsState) {
     ui.horizontal(|ui| {
         ui.selectable_value(&mut state.direction_filter, "ALL".to_string(), "All");
-        ui.selectable_value(&mut state.direction_filter, "IN".to_string(), "▼ Server");
-        ui.selectable_value(&mut state.direction_filter, "OUT".to_string(), "▲ Client");
-        ui.separator();
-        crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut state.frame_search).hint_text("Search frames").desired_width(140.0)));
-        if !state.frame_search.is_empty() && ui.small_button(icons::X).on_hover_text("Clear search").clicked() {
-            state.frame_search.clear();
-        }
+        ui.selectable_value(&mut state.direction_filter, "IN".to_string(), "From server");
+        ui.selectable_value(&mut state.direction_filter, "OUT".to_string(), "From client");
+        ui.add_space(8.0);
+        search_field_sized(ui, &mut state.frame_search, "Search frames", 200.0);
     });
     ui.add_space(2.0);
 
@@ -180,21 +176,19 @@ fn frames_table(ui: &mut egui::Ui, state: &mut WebSocketsState) {
     let mut new_selection = None;
 
     TableBuilder::new(ui)
-        .striped(true)
+        .striped(false)
         .resizable(true)
         .sense(egui::Sense::click())
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::exact(60.0))
+        .column(Column::exact(28.0))
         .column(Column::exact(55.0))
         .column(Column::exact(55.0))
         .column(Column::exact(75.0))
         .column(Column::remainder())
         .header(22.0, |mut header| {
-            header.col(|ui| { ui.strong("Dir"); });
-            header.col(|ui| { ui.strong("Type"); });
-            header.col(|ui| { ui.strong("Size"); });
-            header.col(|ui| { ui.strong("Time"); });
-            header.col(|ui| { ui.strong("Payload"); });
+            for title in ["", "Type", "Size", "Time", "Payload"] {
+                header.col(|ui| header_label(ui, title));
+            }
         })
         .body(|body| {
             body.rows(row_height, rows.len(), |mut row| {
@@ -202,9 +196,9 @@ fn frames_table(ui: &mut egui::Ui, state: &mut WebSocketsState) {
                 let is_selected = state.selected_msg == Some(msg.id);
                 row.set_selected(is_selected);
                 row.col(|ui| { direction_badge(ui, &msg.direction); });
-                row.col(|ui| { ui.label(msg.msg_type.to_uppercase()); });
-                row.col(|ui| { ui.label(format_bytes(msg.length as u64)); });
-                row.col(|ui| { ui.label(clock(msg.timestamp)); });
+                row.col(|ui| { ui.label(RichText::new(msg.msg_type.to_uppercase()).small().weak()); });
+                row.col(|ui| { ui.label(RichText::new(format_bytes(msg.length as u64)).monospace().weak()); });
+                row.col(|ui| { ui.label(RichText::new(clock(msg.timestamp)).monospace().weak()); });
                 row.col(|ui| {
                     ui.add(egui::Label::new(RichText::new(preview(&msg.payload)).monospace()).truncate());
                 });
@@ -230,16 +224,15 @@ fn frame_detail(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comma
     };
 
     ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("#{}", msg.id)).strong());
         direction_badge(ui, &msg.direction);
-        ui.weak(clock(msg.timestamp));
-        ui.weak(format_bytes(msg.length as u64));
-        ui.weak(msg.msg_type.to_uppercase());
+        ui.label(RichText::new(format!("#{}", msg.id)).monospace().strong());
+        let stats = format!("{} · {} · {}", clock(msg.timestamp), format_bytes(msg.length as u64), msg.msg_type.to_uppercase());
+        ui.label(RichText::new(stats).monospace().weak());
         if msg.is_injected {
             badge(ui, "INJECTED", Tone::Warn);
         }
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     let data = crate::widgets::message_pane::PaneData {
         cache_key: msg.id as u64,
@@ -303,9 +296,14 @@ fn status_badge(ui: &mut egui::Ui, status: &str) {
 }
 
 fn direction_badge(ui: &mut egui::Ui, direction: &str) {
-    if is_incoming(direction) {
-        badge(ui, "▼ SVR", Tone::Success);
+    let (icon, tone, hover) = if is_incoming(direction) {
+        (icons::ARROW_DOWN_LEFT, Tone::Success, "From server")
     } else {
-        badge(ui, "▲ CLI", Tone::Info);
-    }
+        (icons::ARROW_UP_RIGHT, Tone::Info, "From client")
+    };
+    ui.label(RichText::new(icon).color(theme::color(ui, tone))).on_hover_text(hover);
+}
+
+fn header_label(ui: &mut egui::Ui, title: &str) {
+    ui.label(RichText::new(title).small().weak());
 }

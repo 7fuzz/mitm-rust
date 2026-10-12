@@ -85,12 +85,12 @@ pub fn show(
             ui.selectable_value(&mut composer.mode, mode, mode.label());
         }
         if !conn.is_client_session {
-            ui.separator();
+            ui.add_space(8.0);
             ui.selectable_value(&mut composer.to_server, true, "→ Server");
             ui.selectable_value(&mut composer.to_server, false, "→ Client");
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let button = ui.add_enabled(can_send, egui::Button::new("Send")).on_hover_text("Ctrl+Enter");
+            let button = ui.add_enabled(can_send, crate::widgets::button::primary(ui, "Send")).on_hover_text("Ctrl+Enter");
             let button = match (&check, composer.text.trim().is_empty()) {
                 (Err(e), false) => button.on_disabled_hover_text(e),
                 _ => button,
