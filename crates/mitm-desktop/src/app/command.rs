@@ -114,6 +114,7 @@ pub enum AppCommand {
     RenameEnvironment { id: String, name: String },
     DuplicateEnvironment(String),
     DeleteEnvironment(String),
+    MoveToCredentials { env_id: String, var_idx: usize, entry: String, field: String },
 
     OpenImport,
     ExportWorkspace,

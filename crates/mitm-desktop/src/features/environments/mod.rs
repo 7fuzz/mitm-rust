@@ -7,6 +7,7 @@ use std::path::Path;
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use mitm_core::repeater::REPEATER_WORKSPACE_ID;
+use mitm_core::credentials::Credential;
 use mitm_core::workspace::{Environment, EnvironmentVariable, VariableVariant, Workspace};
 use crate::app::command::{AppCommand, Commands};
 use crate::widgets::split;
@@ -21,6 +22,14 @@ pub struct VariantModal {
     pub var_idx: usize,
     pub is_rename: bool,
     pub name: String,
+}
+
+pub struct MoveModal {
+    pub env_id: String,
+    pub var_idx: usize,
+    pub entry: String,
+    pub field: String,
+    pub error: Option<String>,
 }
 
 pub struct EnvironmentsState {
@@ -41,6 +50,7 @@ pub struct EnvironmentsState {
     pub new_var_key: String,
     pub new_var_value: String,
     pub variant_modal: Option<VariantModal>,
+    pub move_modal: Option<MoveModal>,
     pub renaming_workspace: bool,
     pub rename_workspace_name: String,
     pub editing_description: bool,
@@ -72,6 +82,7 @@ impl Default for EnvironmentsState {
             new_var_key: String::new(),
             new_var_value: String::new(),
             variant_modal: None,
+            move_modal: None,
             renaming_workspace: false,
             rename_workspace_name: String::new(),
             editing_description: false,
@@ -174,14 +185,14 @@ impl EnvironmentsState {
     }
 }
 
-pub fn show(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut Commands) {
+pub fn show(ui: &mut egui::Ui, state: &mut EnvironmentsState, credentials: &[Credential], cmds: &mut Commands) {
     let now = ui.input(|i| i.time);
     workspace_header(ui, state, cmds);
     ui.add_space(4.0);
     ui.separator();
     let [mut list_ui, mut editor_ui] = split::side_by_side(ui, "environments_split", &mut state.split_fraction);
     environment_list(&mut list_ui, state, cmds);
-    environment_editor(&mut editor_ui, state, now);
+    environment_editor(&mut editor_ui, state, credentials, cmds, now);
 }
 
 fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut Commands) {
@@ -392,7 +403,7 @@ fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
     });
 }
 
-fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, now: f64) {
+fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credentials: &[Credential], cmds: &mut Commands, now: f64) {
     let Some(selected_id) = state.selected_environment_id.clone() else { return };
     let Some(env_idx) = state.environments.iter().position(|e| e.id == selected_id) else { return };
 
@@ -424,6 +435,7 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, now: f64
     let mut delete_idx = None;
     let mut open_variant_modal = None;
     let mut delete_variant_idx = None;
+    let mut open_move = None;
 
     let total_vars = env.variables.len();
     let matching_indices: Vec<usize> = (0..total_vars)
@@ -530,33 +542,52 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, now: f64
                             }
 
                             let is_secret = var.r#type == "secret";
-                            let mut revealed = false;
-                            if is_secret {
-                                let eye = ui.add(egui::Button::new("👁").sense(egui::Sense::drag()))
-                                    .on_hover_text("Hold to reveal secret");
-                                revealed = eye.is_pointer_button_down_on()
-                                    || (eye.hovered() && ui.input(|i| i.pointer.primary_down()));
-                            }
-
-                            let val_mut = if !var.variants.is_empty() {
-                                let idx = var.active_index.min(var.variants.len() - 1);
-                                &mut var.variants[idx].value
+                            let current = var.current_value().to_string();
+                            let link = mitm_core::credentials::link_target(&current)
+                                .map(|(entry, field)| (entry.to_string(), field.to_string()));
+                            let resp = if let Some((entry, field)) = &link {
+                                let label = ui
+                                    .add(egui::Label::new(RichText::new(format!("🔒 {entry} · {field}")).monospace()).sense(egui::Sense::click()))
+                                    .on_hover_text(&current);
+                                if ui.small_button("✕").on_hover_text("Unlink").clicked() {
+                                    set_active_value(var, String::new());
+                                    changed = true;
+                                }
+                                label
                             } else {
-                                &mut var.value
+                                if let Some(target) = link_menu(ui, credentials) {
+                                    set_active_value(var, target);
+                                    changed = true;
+                                }
+                                let mut revealed = false;
+                                if is_secret {
+                                    let eye = ui.add(egui::Button::new("👁").sense(egui::Sense::drag()))
+                                        .on_hover_text("Hold to reveal secret");
+                                    revealed = eye.is_pointer_button_down_on()
+                                        || (eye.hovered() && ui.input(|i| i.pointer.primary_down()));
+                                }
+
+                                let val_mut = if !var.variants.is_empty() {
+                                    let idx = var.active_index.min(var.variants.len() - 1);
+                                    &mut var.variants[idx].value
+                                } else {
+                                    &mut var.value
+                                };
+
+                                let mut edit = egui::TextEdit::singleline(val_mut)
+                                    .hint_text("Value")
+                                    .desired_width(ui.available_width());
+                                if is_secret && !revealed {
+                                    edit = edit.password(true);
+                                }
+
+                                let resp = ui.add(edit);
+                                if resp.changed() {
+                                    var.value = val_mut.clone();
+                                    changed = true;
+                                }
+                                resp
                             };
-
-                            let mut edit = egui::TextEdit::singleline(val_mut)
-                                .hint_text("Value")
-                                .desired_width(ui.available_width());
-                            if is_secret && !revealed {
-                                edit = edit.password(true);
-                            }
-
-                            let resp = ui.add(edit);
-                            if resp.changed() {
-                                var.value = val_mut.clone();
-                                changed = true;
-                            }
 
                             resp.context_menu(|ui| {
                                 if !var.variants.is_empty() {
@@ -570,6 +601,10 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, now: f64
                                         }
                                     }
                                     ui.separator();
+                                }
+                                if is_secret && link.is_none() && !current.is_empty() && ui.button("🔒 Move to credentials…").clicked() {
+                                    open_move = Some(var_idx);
+                                    ui.close();
                                 }
                                 if ui.button("➕ Add variant…").clicked() {
                                     open_variant_modal = Some((var_idx, false));
@@ -680,7 +715,111 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, now: f64
         state.mark_dirty(&selected_id, now);
     }
 
+    if let Some(var_idx) = open_move {
+        let key = &state.environments[env_idx].variables[var_idx].key;
+        state.move_modal = Some(MoveModal {
+            env_id: selected_id.clone(),
+            var_idx,
+            entry: credentials.first().map(|c| c.name.clone()).unwrap_or_default(),
+            field: field_key_from(key),
+            error: None,
+        });
+    }
+
     variant_modal(ui.ctx(), state, env_idx, now);
+    move_modal(ui.ctx(), state, credentials, cmds);
+}
+
+fn set_active_value(var: &mut EnvironmentVariable, value: String) {
+    if !var.variants.is_empty() {
+        let idx = var.active_index.min(var.variants.len() - 1);
+        var.variants[idx].value = value.clone();
+    }
+    var.value = value;
+}
+
+/// Picks a credential field to link the variant to; returns the ref to store as its value.
+fn link_menu(ui: &mut egui::Ui, credentials: &[Credential]) -> Option<String> {
+    if credentials.iter().all(|c| c.fields.is_empty()) {
+        return None;
+    }
+    let mut picked = None;
+    ui.menu_button("🔗", |ui| {
+        for credential in credentials.iter().filter(|c| !c.fields.is_empty()) {
+            ui.menu_button(&credential.name, |ui| {
+                for field in &credential.fields {
+                    if ui.button(&field.key).clicked() {
+                        picked = Some(mitm_core::credentials::format_ref(&credential.name, &field.key));
+                        ui.close();
+                    }
+                }
+            });
+        }
+    })
+    .response
+    .on_hover_text("Link to a credential");
+    picked
+}
+
+/// A variable key as a credential field key: characters a ref can't hold become `_`.
+fn field_key_from(key: &str) -> String {
+    let cleaned: String = key
+        .trim()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .take(64)
+        .collect();
+    if cleaned.is_empty() { "value".to_string() } else { cleaned }
+}
+
+fn move_modal(ctx: &egui::Context, state: &mut EnvironmentsState, credentials: &[Credential], cmds: &mut Commands) {
+    let Some(modal) = &mut state.move_modal else { return };
+    let mut close = false;
+    egui::Modal::new(egui::Id::new("move_to_credentials")).show(ctx, |ui| {
+        ui.set_width(300.0);
+        ui.heading("Move to credentials");
+        ui.add_space(6.0);
+        egui::Grid::new("move_to_credentials_grid").num_columns(2).show(ui, |ui| {
+            ui.label("Entry");
+            ui.horizontal(|ui| {
+                ui.add(egui::TextEdit::singleline(&mut modal.entry).desired_width(160.0));
+                if !credentials.is_empty() {
+                    ui.menu_button("▾", |ui| {
+                        for credential in credentials {
+                            if ui.button(&credential.name).clicked() {
+                                modal.entry = credential.name.clone();
+                                ui.close();
+                            }
+                        }
+                    });
+                }
+            });
+            ui.end_row();
+            ui.label("Field");
+            ui.add(egui::TextEdit::singleline(&mut modal.field).desired_width(160.0));
+            ui.end_row();
+        });
+        if let Some(error) = &modal.error {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            if ui.button("Move").clicked() {
+                cmds.push(AppCommand::MoveToCredentials {
+                    env_id: modal.env_id.clone(),
+                    var_idx: modal.var_idx,
+                    entry: modal.entry.trim().to_string(),
+                    field: modal.field.trim().to_string(),
+                });
+            }
+            if ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                close = true;
+            }
+        });
+    });
+    if close {
+        state.move_modal = None;
+    }
 }
 
 fn variant_modal(ctx: &egui::Context, state: &mut EnvironmentsState, env_idx: usize, now: f64) {
@@ -762,6 +901,13 @@ fn variant_modal(ctx: &egui::Context, state: &mut EnvironmentsState, env_idx: us
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn variable_keys_become_valid_field_keys() {
+        assert_eq!(field_key_from("adminPassword"), "adminPassword");
+        assert_eq!(field_key_from(" admin.pass word "), "admin_pass_word");
+        assert_eq!(field_key_from(""), "value");
+    }
 
     #[test]
     fn repeater_gets_one_default_environment_apart_from_workspaces() {

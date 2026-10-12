@@ -207,7 +207,7 @@ impl TabViewer<'_> {
             Tab::JsonTools => features::utilities::json_tools::show(ui, &mut state.json_tools),
             Tab::Cvss => features::utilities::cvss::show(ui, &mut state.cvss),
             Tab::Totp => features::utilities::totp::show(ui, &mut state.totp),
-            Tab::Environments => features::environments::show(ui, &mut state.environments, cmds),
+            Tab::Environments => features::environments::show(ui, &mut state.environments, &state.credentials.entries, cmds),
             Tab::Credentials => {
                 features::credentials::show(ui, &mut state.credentials, &state.environments.active_workspace_id, self.db_path)
             }

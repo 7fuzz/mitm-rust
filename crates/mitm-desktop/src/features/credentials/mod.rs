@@ -152,6 +152,22 @@ impl CredentialsState {
     }
 }
 
+/// Moves a variable's value into `entry.field` (created as needed) and returns the ref to leave behind.
+pub fn move_value(db_path: &Path, workspace_id: &str, entry: &str, field: &str, value: String) -> Result<String, String> {
+    credentials::validate_name(entry)?;
+    credentials::validate_name(field)?;
+    let mut credential = match credentials::find_credential(db_path, workspace_id, entry)? {
+        Some(existing) => existing,
+        None => credentials::create_credential(db_path, workspace_id, entry)?,
+    };
+    if credential.field(field).is_some() {
+        return Err(format!("{} already has a field \"{field}\"", credential.name));
+    }
+    credential.fields.push(Field { key: field.to_string(), kind: FieldKind::Secret, extracted: false, value });
+    credentials::save_credential(db_path, &credential)?;
+    Ok(credentials::format_ref(&credential.name, field))
+}
+
 /// `base`, or `base2`, `base3`… when taken (case-insensitive, like credential names).
 fn free_name<'a>(taken: impl Iterator<Item = &'a str> + Clone, base: &str) -> String {
     let is_taken = |name: &str| taken.clone().any(|t| t.eq_ignore_ascii_case(name));
@@ -169,5 +185,22 @@ mod tests {
     fn free_names_skip_taken_ones_ignoring_case() {
         assert_eq!(free_name(["a"].into_iter(), "field"), "field");
         assert_eq!(free_name(["Field", "field2"].into_iter(), "field"), "field3");
+    }
+
+    #[test]
+    fn move_value_creates_or_extends_an_entry_and_returns_its_link() {
+        let db = std::env::temp_dir().join(format!("mitm-desktop-creds-{}.db", uuid::Uuid::new_v4()));
+        mitm_core::db::init_database(&db, None).unwrap();
+        let ws = mitm_core::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
+
+        assert_eq!(move_value(&db, &ws, "dgAdmin", "password", "hunter2".into()).unwrap(), "{{$cred:dgAdmin.password}}");
+        assert_eq!(move_value(&db, &ws, "DGADMIN", "pin", "1234".into()).unwrap(), "{{$cred:dgAdmin.pin}}");
+        assert!(move_value(&db, &ws, "dgAdmin", "password", "again".into()).is_err());
+        assert!(move_value(&db, &ws, "dg admin", "x", String::new()).is_err());
+
+        let entry = credentials::find_credential(&db, &ws, "dgAdmin").unwrap().unwrap();
+        assert_eq!(entry.field("password").map(|f| (f.kind, f.value.as_str())), Some((FieldKind::Secret, "hunter2")));
+        assert_eq!(entry.fields.len(), 2);
+        let _ = std::fs::remove_file(&db);
     }
 }

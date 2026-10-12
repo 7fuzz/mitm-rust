@@ -695,6 +695,32 @@ impl MitmApp {
                     Err(e) => self.state.environments.import.error = Some(e),
                 }
             }
+            AppCommand::MoveToCredentials { env_id, var_idx, entry, field } => {
+                let workspace_id = self.state.environments.active_workspace_id.clone();
+                let environments = &mut self.state.environments;
+                let Some(env) = environments.environments.iter_mut().find(|e| e.id == env_id) else { return };
+                let Some(var) = env.variables.get_mut(var_idx) else { return };
+                match crate::features::credentials::move_value(db_path, &workspace_id, &entry, &field, var.current_value().to_string()) {
+                    Ok(link) => {
+                        if var.variants.is_empty() {
+                            var.value = link;
+                        } else {
+                            let idx = var.active_index.min(var.variants.len() - 1);
+                            var.variants[idx].value = link.clone();
+                            var.value = link;
+                        }
+                        environments.move_modal = None;
+                        environments.mark_dirty(&env_id, ctx.input(|i| i.time));
+                        environments.flush(db_path);
+                        self.state.credentials.mark_stale();
+                    }
+                    Err(e) => {
+                        if let Some(modal) = environments.move_modal.as_mut() {
+                            modal.error = Some(e);
+                        }
+                    }
+                }
+            }
             AppCommand::CreateEnvironment { workspace_id, name } => {
                 let now = chrono::Utc::now().timestamp_millis();
                 let new_env = mitm_core::workspace::Environment {
