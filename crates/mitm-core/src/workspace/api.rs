@@ -2,59 +2,59 @@ use crate::{workspace, MitmCore};
 
 impl MitmCore {
     pub fn get_workspaces(&self) -> Result<Vec<workspace::Workspace>, String> {
-        workspace::get_workspaces_db(&self.db_path)
+        workspace::get_workspaces_db(&self.db)
     }
 
     pub fn get_workspace(&self, id: &str) -> Result<Option<workspace::Workspace>, String> {
-        workspace::get_workspace_db(&self.db_path, id)
+        workspace::get_workspace_db(&self.db, id)
     }
 
     pub fn get_active_workspace(&self) -> Result<Option<workspace::Workspace>, String> {
-        workspace::get_active_workspace_db(&self.db_path)
+        workspace::get_active_workspace_db(&self.db)
     }
 
     pub fn set_active_workspace(&self, id: &str) -> Result<(), String> {
-        workspace::set_active_workspace_db(&self.db_path, id)
+        workspace::set_active_workspace_db(&self.db, id)
     }
 
     pub fn create_workspace(&self, name: &str, description: Option<&str>) -> Result<workspace::Workspace, String> {
-        workspace::create_workspace_db(&self.db_path, name.to_string(), description.map(|s| s.to_string()))
+        workspace::create_workspace_db(&self.db, name.to_string(), description.map(|s| s.to_string()))
     }
 
     pub fn rename_workspace(&self, id: &str, new_name: &str) -> Result<(), String> {
-        workspace::rename_workspace_db(&self.db_path, id, new_name)
+        workspace::rename_workspace_db(&self.db, id, new_name)
     }
 
     pub fn update_workspace_description(&self, id: &str, description: Option<&str>) -> Result<(), String> {
-        workspace::update_workspace_description_db(&self.db_path, id, description)
+        workspace::update_workspace_description_db(&self.db, id, description)
     }
 
     pub fn delete_workspace(&self, id: &str) -> Result<(), String> {
-        workspace::delete_workspace_db(&self.db_path, id)
+        workspace::delete_workspace_db(&self.db, id)
     }
 
     pub fn get_workspace_environments(&self, workspace_id: &str) -> Result<Vec<workspace::Environment>, String> {
-        workspace::get_workspace_environments_db(&self.db_path, workspace_id)
+        workspace::get_workspace_environments_db(&self.db, workspace_id)
     }
 
     pub fn get_workspace_environment(&self, id: &str) -> Result<Option<workspace::Environment>, String> {
-        workspace::get_workspace_environment_db(&self.db_path, id)
+        workspace::get_workspace_environment_db(&self.db, id)
     }
 
     pub fn save_workspace_environment(&self, env: workspace::Environment) -> Result<(), String> {
-        workspace::save_workspace_environment_db(&self.db_path, env)
+        workspace::save_workspace_environment_db(&self.db, env)
     }
 
     pub fn delete_workspace_environment(&self, id: &str) -> Result<(), String> {
-        workspace::delete_workspace_environment_db(&self.db_path, id)
+        workspace::delete_workspace_environment_db(&self.db, id)
     }
 
     pub fn duplicate_workspace_environment(&self, id: &str, new_name: Option<&str>) -> Result<workspace::Environment, String> {
-        workspace::duplicate_workspace_environment_db(&self.db_path, id, new_name)
+        workspace::duplicate_workspace_environment_db(&self.db, id, new_name)
     }
 
     pub fn set_active_environment(&self, workspace_id: &str, env_id: Option<&str>) -> Result<(), String> {
-        workspace::set_active_environment_db(&self.db_path, workspace_id, env_id)
+        workspace::set_active_environment_db(&self.db, workspace_id, env_id)
     }
 
     pub fn get_active_environment(&self) -> Result<Option<workspace::Environment>, String> {
@@ -77,7 +77,7 @@ impl MitmCore {
         let workspace_id = self.get_active_workspace().ok().flatten().map(|w| w.id);
         let scope = workspace_id
             .as_deref()
-            .map(|workspace_id| workspace::CredentialScope { db_path: &self.db_path, workspace_id });
+            .map(|workspace_id| workspace::CredentialScope { db: &self.db, workspace_id });
         let resolved = workspace::interpolate(active_env.as_ref(), scope, text, &mut Default::default());
         let unresolved = workspace::find_unresolved_variables(&resolved);
         (resolved, unresolved)

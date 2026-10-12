@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use reqwest::header::{HeaderName, HeaderValue};
@@ -13,13 +12,14 @@ use crate::workspace::{active_environment_db, interpolate, CredentialScope, Inte
 use crate::collections::execute::perform_auto_extraction_db;
 use crate::http::body::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
 use crate::http::steps::{jar_cookie, pre_request_failure, request_steps};
+use crate::db::Db;
 
 pub async fn execute_tab_request(
-    db_path: &PathBuf,
+    db: &Db,
     tab_id: &str,
 ) -> Result<RepeaterExecutionResult, String> {
-    let tab = get_repeater_tab_by_id(db_path, tab_id)?;
-    execute_repeater_tab(db_path, &tab).await
+    let tab = get_repeater_tab_by_id(db, tab_id)?;
+    execute_repeater_tab(db, &tab).await
 }
 
 fn detect_body_content_type(body_type: &str, body: &str) -> Option<String> {
@@ -271,8 +271,8 @@ pub(crate) async fn send_tab_request_with(client: &reqwest::Client, tab: &Repeat
 }
 
 /// The Repeater has no credentials of its own; it uses the active workspace's.
-pub(crate) fn credential_workspace_id(db_path: &PathBuf) -> Option<String> {
-    crate::workspace::get_active_workspace_db(db_path).ok().flatten().map(|w| w.id)
+pub(crate) fn credential_workspace_id(db: &Db) -> Option<String> {
+    crate::workspace::get_active_workspace_db(db).ok().flatten().map(|w| w.id)
 }
 
 fn with_scheme(url: &str) -> String {
@@ -285,10 +285,10 @@ fn with_scheme(url: &str) -> String {
 }
 
 /// Fills `{{vars}}` from the Repeater workspace's active environment and credentials from the active workspace.
-fn interpolate_tab(db_path: &PathBuf, tab: &RepeaterTab, record: &mut Interpolation) -> RepeaterTab {
-    let env = active_environment_db(db_path, REPEATER_WORKSPACE_ID);
-    let workspace_id = credential_workspace_id(db_path);
-    let scope = workspace_id.as_deref().map(|workspace_id| CredentialScope { db_path, workspace_id });
+fn interpolate_tab(db: &Db, tab: &RepeaterTab, record: &mut Interpolation) -> RepeaterTab {
+    let env = active_environment_db(db, REPEATER_WORKSPACE_ID);
+    let workspace_id = credential_workspace_id(db);
+    let scope = workspace_id.as_deref().map(|workspace_id| CredentialScope { db, workspace_id });
     let mut fill = |s: &str| interpolate(env.as_ref(), scope, s, record);
 
     let mut out = tab.clone();
@@ -306,34 +306,34 @@ fn interpolate_tab(db_path: &PathBuf, tab: &RepeaterTab, record: &mut Interpolat
 }
 
 pub async fn execute_repeater_tab(
-    db_path: &PathBuf,
+    db: &Db,
     tab: &RepeaterTab,
 ) -> Result<RepeaterExecutionResult, String> {
     let jar = Arc::new(Jar::default());
     let client = http_client(Some(jar.clone()))?;
 
-    let steps = request_steps(db_path, &tab.id)?;
+    let steps = request_steps(db, &tab.id)?;
     for pre_id in &steps.pre {
-        let pre_tab = get_repeater_tab_by_id(db_path, pre_id)?;
-        let error = match run_repeater_tab(db_path, &pre_tab, &client, &jar).await {
+        let pre_tab = get_repeater_tab_by_id(db, pre_id)?;
+        let error = match run_repeater_tab(db, &pre_tab, &client, &jar).await {
             Ok(run) if run.status_code != 0 => continue,
             Ok(run) => run.response_body,
             Err(e) if e == crate::credentials::LOCKED => return Err(e),
             Err(e) => e,
         };
-        let message = pre_request_failure(db_path, pre_id, &error);
-        return Ok(record_run(db_path, tab, unsent_request(&tab.url, message)));
+        let message = pre_request_failure(db, pre_id, &error);
+        return Ok(record_run(db, tab, unsent_request(&tab.url, message)));
     }
 
-    let result = run_repeater_tab(db_path, tab, &client, &jar).await?;
+    let result = run_repeater_tab(db, tab, &client, &jar).await?;
     if result.status_code == 0 {
         return Ok(result);
     }
 
     // The main response is what the user asked for; a failing post-request only shows in its own history
     for post_id in &steps.post {
-        if let Ok(post_tab) = get_repeater_tab_by_id(db_path, post_id) {
-            let _ = run_repeater_tab(db_path, &post_tab, &client, &jar).await;
+        if let Ok(post_tab) = get_repeater_tab_by_id(db, post_id) {
+            let _ = run_repeater_tab(db, &post_tab, &client, &jar).await;
         }
     }
     Ok(result)
@@ -354,17 +354,17 @@ fn unsent_request(url: &str, error: String) -> SentRequest {
 }
 
 async fn run_repeater_tab(
-    db_path: &PathBuf,
+    db: &Db,
     tab: &RepeaterTab,
     client: &reqwest::Client,
     jar: &Jar,
 ) -> Result<RepeaterExecutionResult, String> {
     let mut record = Interpolation::default();
-    let mut filled = interpolate_tab(db_path, tab, &mut record);
+    let mut filled = interpolate_tab(db, tab, &mut record);
     let locked_extract = || {
-        let env = active_environment_db(db_path, REPEATER_WORKSPACE_ID);
+        let env = active_environment_db(db, REPEATER_WORKSPACE_ID);
         crate::collections::execute::extract_targets_credentials(env.as_ref(), &tab.extract_rules)
-            && crate::credentials::is_locked(db_path)
+            && crate::credentials::is_locked(db)
     };
     if record.locked || locked_extract() {
         return Err(crate::credentials::LOCKED.to_string());
@@ -383,9 +383,9 @@ async fn run_repeater_tab(
 
     let mut sent = send_tab_request_with(client, &filled).await?;
     let extract_rules_json = serde_json::to_string(&tab.extract_rules).unwrap_or_default();
-    let credentials_workspace_id = credential_workspace_id(db_path);
+    let credentials_workspace_id = credential_workspace_id(db);
     perform_auto_extraction_db(
-        db_path,
+        db,
         REPEATER_WORKSPACE_ID,
         credentials_workspace_id.as_deref(),
         &extract_rules_json,
@@ -393,7 +393,7 @@ async fn run_repeater_tab(
         &sent.response_headers,
     );
     mask_sent(&mut sent, &record);
-    Ok(record_run(db_path, tab, sent))
+    Ok(record_run(db, tab, sent))
 }
 
 /// The logged copy never holds credential secrets; the response is left as the server sent it.
@@ -406,7 +406,7 @@ fn mask_sent(sent: &mut SentRequest, record: &Interpolation) {
     sent.request_body = sent.request_body.as_deref().map(|b| record.mask(b));
 }
 
-fn record_run(db_path: &PathBuf, tab: &RepeaterTab, sent: SentRequest) -> RepeaterExecutionResult {
+fn record_run(db: &Db, tab: &RepeaterTab, sent: SentRequest) -> RepeaterExecutionResult {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
@@ -425,7 +425,7 @@ fn record_run(db_path: &PathBuf, tab: &RepeaterTab, sent: SentRequest) -> Repeat
         duration_ms: sent.duration_ms,
         executed_at_ms: now_ms,
     };
-    let history_id = insert_repeater_history_db(db_path, &history_entry).unwrap_or(0);
+    let history_id = insert_repeater_history_db(db, &history_entry).unwrap_or(0);
 
     RepeaterExecutionResult {
         history_id,
@@ -491,16 +491,16 @@ mod tests {
 
     #[tokio::test]
     async fn pre_request_supplies_token_and_session_cookie() {
-        let db_path = std::env::temp_dir().join(format!("pre-request-e2e-{}.db", Uuid::new_v4()));
+        let db = crate::db::Db::new(std::env::temp_dir().join(format!("pre-request-e2e-{}.db", Uuid::new_v4())));
         {
-            let conn = crate::db::open(&db_path).unwrap();
+            let conn = crate::db::open(&db).unwrap();
             for m in crate::db::migrations::MIGRATIONS {
                 for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
                     let _ = conn.execute(statement, []);
                 }
             }
         }
-        save_workspace_environment_db(&db_path, Environment {
+        save_workspace_environment_db(&db, Environment {
             id: "env".into(),
             workspace_id: REPEATER_WORKSPACE_ID.into(),
             name: "Default".into(),
@@ -528,11 +528,11 @@ mod tests {
             enabled: true,
         }];
         submit.pre_requests = vec!["fetch".into()];
-        create_repeater_tab_db(&db_path, &fetch).unwrap();
-        create_repeater_tab_db(&db_path, &submit).unwrap();
+        create_repeater_tab_db(&db, &fetch).unwrap();
+        create_repeater_tab_db(&db, &submit).unwrap();
 
-        let result = execute_repeater_tab(&db_path, &submit).await.unwrap();
-        let _ = std::fs::remove_file(&db_path);
+        let result = execute_repeater_tab(&db, &submit).await.unwrap();
+        let _ = std::fs::remove_file(&db);
 
         let echoed = result.response_body.to_lowercase();
         assert!(echoed.contains("x-csrf-token: tok123"), "{}", echoed);
@@ -541,9 +541,9 @@ mod tests {
 
     #[tokio::test]
     async fn unreachable_pre_request_stops_the_main_request() {
-        let db_path = std::env::temp_dir().join(format!("pre-request-fail-{}.db", Uuid::new_v4()));
+        let db = crate::db::Db::new(std::env::temp_dir().join(format!("pre-request-fail-{}.db", Uuid::new_v4())));
         {
-            let conn = crate::db::open(&db_path).unwrap();
+            let conn = crate::db::open(&db).unwrap();
             for m in crate::db::migrations::MIGRATIONS {
                 for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
                     let _ = conn.execute(statement, []);
@@ -558,12 +558,12 @@ mod tests {
         let fetch = tab("fetch", format!("http://127.0.0.1:{}/form", closed_port));
         let mut submit = tab("submit", format!("{}/submit", base));
         submit.pre_requests = vec!["fetch".into()];
-        create_repeater_tab_db(&db_path, &fetch).unwrap();
-        create_repeater_tab_db(&db_path, &submit).unwrap();
+        create_repeater_tab_db(&db, &fetch).unwrap();
+        create_repeater_tab_db(&db, &submit).unwrap();
 
-        let result = execute_repeater_tab(&db_path, &submit).await.unwrap();
-        let history = crate::repeater::get_repeater_history_db(&db_path, "submit", 1, 10).unwrap();
-        let _ = std::fs::remove_file(&db_path);
+        let result = execute_repeater_tab(&db, &submit).await.unwrap();
+        let history = crate::repeater::get_repeater_history_db(&db, "submit", 1, 10).unwrap();
+        let _ = std::fs::remove_file(&db);
 
         assert_eq!(result.status_code, 0);
         assert!(result.response_body.starts_with("Pre-request \"GET http://127.0.0.1:"), "{}", result.response_body);
@@ -574,9 +574,9 @@ mod tests {
 
     #[tokio::test]
     async fn post_requests_run_after_the_main_request_with_its_cookies() {
-        let db_path = std::env::temp_dir().join(format!("post-request-{}.db", Uuid::new_v4()));
+        let db = crate::db::Db::new(std::env::temp_dir().join(format!("post-request-{}.db", Uuid::new_v4())));
         {
-            let conn = crate::db::open(&db_path).unwrap();
+            let conn = crate::db::open(&db).unwrap();
             for m in crate::db::migrations::MIGRATIONS {
                 for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
                     let _ = conn.execute(statement, []);
@@ -590,13 +590,13 @@ mod tests {
         };
         let mut main = tab("main", format!("{}/form", base));
         main.post_requests = vec!["unreachable".into(), "logout".into()];
-        create_repeater_tab_db(&db_path, &tab("unreachable", format!("http://127.0.0.1:{}/", closed_port))).unwrap();
-        create_repeater_tab_db(&db_path, &tab("logout", format!("{}/logout", base))).unwrap();
-        create_repeater_tab_db(&db_path, &main).unwrap();
+        create_repeater_tab_db(&db, &tab("unreachable", format!("http://127.0.0.1:{}/", closed_port))).unwrap();
+        create_repeater_tab_db(&db, &tab("logout", format!("{}/logout", base))).unwrap();
+        create_repeater_tab_db(&db, &main).unwrap();
 
-        let result = execute_repeater_tab(&db_path, &main).await.unwrap();
-        let logout_runs = crate::repeater::get_repeater_history_db(&db_path, "logout", 1, 10).unwrap();
-        let _ = std::fs::remove_file(&db_path);
+        let result = execute_repeater_tab(&db, &main).await.unwrap();
+        let logout_runs = crate::repeater::get_repeater_history_db(&db, "logout", 1, 10).unwrap();
+        let _ = std::fs::remove_file(&db);
 
         assert_eq!(result.status_code, 200);
         assert_eq!(logout_runs.len(), 1);
@@ -607,12 +607,12 @@ mod tests {
     #[tokio::test]
     async fn history_masks_secrets_from_the_active_workspace_credentials() {
         use crate::credentials::{create_credential, save_credential, Field, FieldKind};
-        let db_path = crate::credentials::tests_support::temp_db();
-        let ws = crate::workspace::create_workspace_db(&db_path, "W".into(), None).unwrap().id;
-        crate::workspace::set_active_workspace_db(&db_path, &ws).unwrap();
-        let mut cred = create_credential(&db_path, &ws, "dgAdmin").unwrap();
+        let db = crate::credentials::tests_support::temp_db();
+        let ws = crate::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
+        crate::workspace::set_active_workspace_db(&db, &ws).unwrap();
+        let mut cred = create_credential(&db, &ws, "dgAdmin").unwrap();
         cred.fields = vec![Field { key: "password".into(), kind: FieldKind::Secret, extracted: false, value: "hunter2".into() }];
-        save_credential(&db_path, &cred).unwrap();
+        save_credential(&db, &cred).unwrap();
 
         let base = crate::collections::execute::tests::serve_echo().await;
         let mut signin = tab("signin", format!("{base}/signin?pw={{{{$cred:dgAdmin.password}}}}"));
@@ -620,11 +620,11 @@ mod tests {
         signin.headers = vec![HeaderItem { id: "h".into(), key: "X-Pass".into(), value: "{{$cred:dgAdmin.password}}".into(), enabled: true }];
         signin.body_type = "raw".into();
         signin.body_content = Some("pw={{$cred:dgAdmin.password}}".into());
-        create_repeater_tab_db(&db_path, &signin).unwrap();
+        create_repeater_tab_db(&db, &signin).unwrap();
 
-        let result = execute_repeater_tab(&db_path, &signin).await.unwrap();
-        let history = crate::repeater::get_repeater_history_db(&db_path, "signin", 1, 10).unwrap();
-        let _ = std::fs::remove_file(&db_path);
+        let result = execute_repeater_tab(&db, &signin).await.unwrap();
+        let history = crate::repeater::get_repeater_history_db(&db, "signin", 1, 10).unwrap();
+        let _ = std::fs::remove_file(&db);
 
         assert!(result.response_body.contains("x-pass: hunter2"), "{}", result.response_body);
         let logged = format!("{} {:?} {:?}", history[0].url, history[0].request_headers, history[0].request_body);
@@ -634,18 +634,18 @@ mod tests {
 
     #[tokio::test]
     async fn locked_credentials_abort_a_repeater_send() {
-        let db_path = crate::credentials::tests_support::temp_db();
-        let ws = crate::workspace::create_workspace_db(&db_path, "W".into(), None).unwrap().id;
-        crate::workspace::set_active_workspace_db(&db_path, &ws).unwrap();
-        crate::credentials::create_credential(&db_path, &ws, "dgAdmin").unwrap();
-        crate::credentials::set_master_password(&db_path, None, "pw").unwrap();
-        crate::credentials::lock(&db_path);
+        let db = crate::credentials::tests_support::temp_db();
+        let ws = crate::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
+        crate::workspace::set_active_workspace_db(&db, &ws).unwrap();
+        crate::credentials::create_credential(&db, &ws, "dgAdmin").unwrap();
+        crate::credentials::set_master_password(&db, None, "pw").unwrap();
+        crate::credentials::lock(&db);
 
         let signin = tab("signin", "http://127.0.0.1:9/{{$cred:dgAdmin.password}}".into());
-        create_repeater_tab_db(&db_path, &signin).unwrap();
-        let result = execute_repeater_tab(&db_path, &signin).await;
-        let history = crate::repeater::get_repeater_history_db(&db_path, "signin", 1, 10).unwrap();
-        let _ = std::fs::remove_file(&db_path);
+        create_repeater_tab_db(&db, &signin).unwrap();
+        let result = execute_repeater_tab(&db, &signin).await;
+        let history = crate::repeater::get_repeater_history_db(&db, "signin", 1, 10).unwrap();
+        let _ = std::fs::remove_file(&db);
 
         assert_eq!(result.unwrap_err(), crate::credentials::LOCKED);
         assert!(history.is_empty());

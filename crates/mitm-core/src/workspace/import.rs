@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -6,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::http::body::{MultipartBodySpec, MultipartFieldSpec, UrlEncodedParamSpec};
 use crate::repeater::{ExtractRuleItem, HeaderItem, ParamItem};
 use super::file::{self, Body, CollectionEntry, KeyValue, RequestEntry, WorkspaceFile};
+use crate::db::Db;
 
 fn detect_and_assign_body(
     mode_hint: Option<&str>,
@@ -188,14 +188,14 @@ pub fn detect_import_format(parsed: &serde_json::Value) -> ImportFormat {
 
 /// Without `credentials_passphrase`, credentials arrive as names and field keys with empty values.
 pub fn import_workspace_json_db(
-    db_path: &PathBuf,
+    db: &Db,
     json_content: &str,
     target_workspace_id: Option<&str>,
     custom_workspace_name: Option<&str>,
     credentials_passphrase: Option<&str>,
 ) -> Result<ImportSummary, String> {
-    let credentials = credential_import(db_path, json_content, credentials_passphrase)?;
-    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let credentials = credential_import(db, json_content, credentials_passphrase)?;
+    let mut conn = db.conn().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     let summary = import_into(&tx, json_content, target_workspace_id, custom_workspace_name, credentials.as_ref())?;
     tx.commit().map_err(|e| e.to_string())?;
@@ -203,8 +203,8 @@ pub fn import_workspace_json_db(
 }
 
 /// Runs the real import as a new workspace and rolls it back, so the counts match what an import would do.
-pub fn preview_workspace_import_db(db_path: &PathBuf, json_content: &str) -> Result<ImportPreview, String> {
-    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn preview_workspace_import_db(db: &Db, json_content: &str) -> Result<ImportPreview, String> {
+    let mut conn = db.conn().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     let summary = import_into(&tx, json_content, None, None, None)?;
     tx.rollback().map_err(|e| e.to_string())?;
@@ -214,7 +214,7 @@ pub fn preview_workspace_import_db(db_path: &PathBuf, json_content: &str) -> Res
 }
 
 /// Fetched before the import transaction: creating the data key writes through its own connection.
-fn credential_import(db_path: &std::path::Path, json_content: &str, passphrase: Option<&str>) -> Result<Option<CredentialImport>, String> {
+fn credential_import(db: &Db, json_content: &str, passphrase: Option<&str>) -> Result<Option<CredentialImport>, String> {
     let Ok(file) = WorkspaceFile::parse(json_content) else { return Ok(None) };
     if file.credentials.is_empty() {
         return Ok(None);
@@ -223,7 +223,7 @@ fn credential_import(db_path: &std::path::Path, json_content: &str, passphrase: 
         (Some(block), Some(passphrase)) => crate::credentials::open_sealed(block, passphrase)?,
         _ => Vec::new(),
     };
-    let key = crate::credentials::data_key_or_create(db_path)?;
+    let key = crate::credentials::data_key_or_create(db)?;
     Ok(Some(CredentialImport { key, sealed }))
 }
 
@@ -669,15 +669,15 @@ mod tests {
         ]
     }"#;
 
-    fn temp_db() -> (PathBuf, PathBuf) {
+    fn temp_db() -> (crate::db::Db, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!("mitm-import-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db = dir.join("test.db");
+        let db = crate::db::Db::new(dir.join("test.db"));
         crate::db::init_database(&db, None).unwrap();
         (db, dir)
     }
 
-    fn workspace_count(db: &PathBuf) -> i64 {
+    fn workspace_count(db: &crate::db::Db) -> i64 {
         crate::db::open(db).unwrap().query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0)).unwrap()
     }
 

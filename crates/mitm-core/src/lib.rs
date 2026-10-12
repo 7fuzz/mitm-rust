@@ -14,9 +14,9 @@ pub mod webhook;
 pub mod workspace;
 pub mod ws;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use crate::db::Db;
 pub use ca::{CaFormat, CaInfo};
 pub use db::{DataCategory, DataCategoryCounts};
 pub use events::{CoreEvent, EventBus};
@@ -28,7 +28,7 @@ pub use workspace::{Environment, EnvironmentVariable, Unresolved, VariableVarian
 pub struct MitmCore {
     pub state: Arc<AppState>,
     pub event_bus: EventBus,
-    pub db_path: PathBuf,
+    pub db: Db,
 }
 
 impl MitmCore {
@@ -40,24 +40,24 @@ impl MitmCore {
     pub fn init_with_events(event_bus: EventBus) -> Result<Self, db::InitError> {
         let _ = rustls::crypto::ring::default_provider().install_default();
 
-        let db_path = db::get_default_db_path();
+        let db = db::Db::new(db::get_default_db_path());
 
-        db::init_database(&db_path, Some(&event_bus))?;
-        let _ = fuzzer::discard_unsaved_runs_db(&db_path);
-        let _ = db::ws_db::close_stale_ws_connections(&db_path, chrono::Local::now().timestamp_millis());
+        db::init_database(&db, Some(&event_bus))?;
+        let _ = fuzzer::discard_unsaved_runs_db(&db);
+        let _ = db::ws_db::close_stale_ws_connections(&db, chrono::Local::now().timestamp_millis());
 
         let (history_tx, history_rx) = mpsc::channel::<HistoryEntry>(2000);
         let (rewrite_tx, rewrite_rx) = mpsc::channel::<RewriteHistoryEntry>(2000);
 
-        db::actor::start_history_actor(db_path.clone(), history_rx);
-        db::actor::start_rewrite_history_actor(db_path.clone(), rewrite_rx);
+        db::actor::start_history_actor(db.clone(), history_rx);
+        db::actor::start_rewrite_history_actor(db.clone(), rewrite_rx);
 
-        let state = Arc::new(AppState::new(db_path.clone(), history_tx, rewrite_tx));
+        let state = Arc::new(AppState::new(db.clone(), history_tx, rewrite_tx));
 
         Ok(Self {
             state,
             event_bus,
-            db_path,
+            db,
         })
     }
 }
@@ -65,17 +65,18 @@ impl MitmCore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use tokio::sync::oneshot;
 
     fn test_core() -> (MitmCore, PathBuf) {
         let dir = std::env::temp_dir().join(format!("mitm-core-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db_path = dir.join("test.db");
-        db::init_database(&db_path, None).unwrap();
+        let db = crate::db::Db::new(dir.join("test.db"));
+        db::init_database(&db, None).unwrap();
         let (history_tx, _) = mpsc::channel(1);
         let (rewrite_tx, _) = mpsc::channel(1);
-        let state = Arc::new(AppState::new(db_path.clone(), history_tx, rewrite_tx));
-        (MitmCore { state, event_bus: EventBus::default(), db_path }, dir)
+        let state = Arc::new(AppState::new(db.clone(), history_tx, rewrite_tx));
+        (MitmCore { state, event_bus: EventBus::default(), db }, dir)
     }
 
     fn pause(core: &MitmCore, id: &str) -> oneshot::Receiver<crate::proxy::intercept::InterceptAction> {
@@ -106,9 +107,9 @@ mod tests {
         let (history_tx, _) = mpsc::channel(1);
         let (rewrite_tx, _) = mpsc::channel(1);
         let reopened = MitmCore {
-            state: Arc::new(AppState::new(core.db_path.clone(), history_tx, rewrite_tx)),
+            state: Arc::new(AppState::new(core.db.clone(), history_tx, rewrite_tx)),
             event_bus: EventBus::default(),
-            db_path: core.db_path.clone(),
+            db: core.db.clone(),
         };
         let (enabled, mode, scope) = rt.block_on(reopened.intercept_config());
         assert!(enabled);
@@ -146,9 +147,9 @@ mod tests {
         });
         core.set_rewrite_enabled(false).unwrap();
 
-        let loaded = db::load_rewrite_rules(&core.db_path).unwrap();
+        let loaded = db::load_rewrite_rules(&core.db).unwrap();
         assert_eq!(loaded.iter().map(|r| (r.id.as_str(), r.order_index)).collect::<Vec<_>>(), [("b", 0), ("a", 1)]);
-        assert_eq!(db::get_preference(&core.db_path, "rewrite_enabled").as_deref(), Some("false"));
+        assert_eq!(db::get_preference(&core.db, "rewrite_enabled").as_deref(), Some("false"));
         assert!(!rt.block_on(core.rewrite_source_scope()).all);
         let _ = std::fs::remove_dir_all(&dir);
     }

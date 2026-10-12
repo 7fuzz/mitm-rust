@@ -1,7 +1,7 @@
 mod view;
 
-use std::path::Path;
 use mitm_core::db::browser::{DbColumn, DbQueryResult, DbRows, DbTable};
+use mitm_core::db::Db;
 
 pub use view::show;
 
@@ -68,20 +68,20 @@ impl Default for DatabaseState {
 }
 
 impl DatabaseState {
-    pub fn ensure_loaded(&mut self, db_path: &Path) {
+    pub fn ensure_loaded(&mut self, db: &Db) {
         if self.tables.is_empty() {
-            self.load_tables(db_path);
+            self.load_tables(db);
         }
     }
 
-    pub fn load_tables(&mut self, db_path: &Path) {
-        match mitm_core::db::browser::list_db_tables(db_path) {
+    pub fn load_tables(&mut self, db: &Db) {
+        match mitm_core::db::browser::list_db_tables(db) {
             Ok(tables) => {
                 self.tables = tables;
                 self.error = None;
                 if self.selected_table.is_none() && !self.tables.is_empty() {
                     let first = self.tables[0].name.clone();
-                    self.select_table(db_path, first);
+                    self.select_table(db, first);
                 }
             }
             Err(e) => {
@@ -90,7 +90,7 @@ impl DatabaseState {
         }
     }
 
-    pub fn select_table(&mut self, db_path: &Path, table: String) {
+    pub fn select_table(&mut self, db: &Db, table: String) {
         self.selected_table = Some(table.clone());
         self.table_columns = self
             .tables
@@ -104,10 +104,10 @@ impl DatabaseState {
         self.sort_desc = false;
         self.selected_row_index = None;
         self.detail_row_values = None;
-        self.load_current_page(db_path);
+        self.load_current_page(db);
     }
 
-    pub fn load_current_page(&mut self, db_path: &Path) {
+    pub fn load_current_page(&mut self, db: &Db) {
         let Some(table) = self.selected_table.clone() else { return };
         let offset = self.page * self.page_size;
         let search = if self.search_query.trim().is_empty() {
@@ -116,7 +116,7 @@ impl DatabaseState {
             Some(self.search_query.trim())
         };
         match mitm_core::db::browser::query_db_table(
-            db_path,
+            db,
             &table,
             offset,
             self.page_size,
@@ -134,12 +134,12 @@ impl DatabaseState {
         }
     }
 
-    pub fn select_row(&mut self, db_path: &Path, index: usize) {
+    pub fn select_row(&mut self, db: &Db, index: usize) {
         self.selected_row_index = Some(index);
         let Some(table) = self.selected_table.as_deref() else { return };
         let rowid = self.current_rows.as_ref().and_then(|r| r.rowids.as_ref()).and_then(|ids| ids.get(index)).copied();
         if let Some(rowid) = rowid {
-            if let Ok(full_values) = mitm_core::db::browser::get_db_row(db_path, table, rowid) {
+            if let Ok(full_values) = mitm_core::db::browser::get_db_row(db, table, rowid) {
                 self.detail_row_values = Some(full_values);
                 return;
             }
@@ -151,7 +151,7 @@ impl DatabaseState {
         }
     }
 
-    pub fn toggle_sort(&mut self, db_path: &Path, column: &str) {
+    pub fn toggle_sort(&mut self, db: &Db, column: &str) {
         if self.sort_column.as_deref() == Some(column) {
             if !self.sort_desc {
                 self.sort_desc = true;
@@ -164,15 +164,15 @@ impl DatabaseState {
             self.sort_desc = false;
         }
         self.page = 0;
-        self.load_current_page(db_path);
+        self.load_current_page(db);
     }
 
-    pub fn run_query(&mut self, db_path: &Path) {
+    pub fn run_query(&mut self, db: &Db) {
         let sql = self.sql_query.trim();
         if sql.is_empty() {
             return;
         }
-        match mitm_core::db::browser::run_db_query(db_path, sql) {
+        match mitm_core::db::browser::run_db_query(db, sql) {
             Ok(result) => {
                 self.query_result = Some(result);
                 self.query_error = None;

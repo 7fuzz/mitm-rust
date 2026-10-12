@@ -5,11 +5,11 @@ mod table;
 mod toolbar;
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use mitm_core::proxy::history::{HistoryDetail, HistoryEntry, HistorySettings};
 use crate::features::inspector::InspectorState;
 use crate::widgets::tri_state::TriState;
+use mitm_core::db::Db;
 
 pub use columns::{ColumnId, ColumnLayout};
 pub use commands::{handle, poll, Cmd};
@@ -138,33 +138,33 @@ impl Default for TrafficState {
 }
 
 impl TrafficState {
-    pub fn load_from_db(&mut self, db_path: &PathBuf) {
-        self.stored_count = mitm_core::db::get_history_count(db_path, None, false).unwrap_or(0);
+    pub fn load_from_db(&mut self, db: &Db) {
+        self.stored_count = mitm_core::db::get_history_count(db, None, false).unwrap_or(0);
         self.flows.clear();
         self.has_older = true;
-        self.load_older(db_path);
+        self.load_older(db);
     }
 
-    pub fn load_older(&mut self, db_path: &PathBuf) {
+    pub fn load_older(&mut self, db: &Db) {
         let room = self.max_flows.saturating_sub(self.flows.len()).min(PAGE_SIZE);
         if !self.has_older || room == 0 {
             return;
         }
         let before = self.flows.back().map(|f| f.id);
-        let page = mitm_core::db::get_history_page(db_path, None, false, before, room as u32).unwrap_or_default();
+        let page = mitm_core::db::get_history_page(db, None, false, before, room as u32).unwrap_or_default();
         self.has_older = page.len() == room;
         self.flows.extend(page);
     }
 
     /// Re-runs the header search in the database when the query or the toggle changed.
-    pub fn sync_header_search(&mut self, db_path: &PathBuf) {
+    pub fn sync_header_search(&mut self, db: &Db) {
         let query = self.prefs.search_query.trim();
         let key = (self.prefs.search_headers && !query.is_empty()).then(|| query.to_string());
         if key == self.header_search_key {
             return;
         }
         self.header_matches = match &key {
-            Some(query) => mitm_core::db::get_history_page(db_path, Some(query), true, None, self.max_flows as u32)
+            Some(query) => mitm_core::db::get_history_page(db, Some(query), true, None, self.max_flows as u32)
                 .unwrap_or_default()
                 .into_iter()
                 .map(|f| f.id)
@@ -249,14 +249,14 @@ impl TrafficState {
         self.selected_detail = None;
     }
 
-    pub fn select(&mut self, id: i64, db_path: &PathBuf) {
+    pub fn select(&mut self, id: i64, db: &Db) {
         self.selected_id = Some(id);
-        self.selected_detail = load_detail(db_path, id);
+        self.selected_detail = load_detail(db, id);
     }
 
-    pub fn refresh_detail_if_selected(&mut self, id: i64, db_path: &PathBuf) {
+    pub fn refresh_detail_if_selected(&mut self, id: i64, db: &Db) {
         if self.selected_id == Some(id) {
-            self.selected_detail = load_detail(db_path, id);
+            self.selected_detail = load_detail(db, id);
         }
     }
 
@@ -357,8 +357,8 @@ fn neutral_filters<const N: usize>(keys: [&str; N]) -> HashMap<String, TriState>
     keys.iter().map(|k| (k.to_string(), TriState::Neutral)).collect()
 }
 
-fn load_detail(db_path: &PathBuf, id: i64) -> Option<HistoryDetail> {
-    mitm_core::db::get_history_detail(db_path, id).ok().flatten()
+fn load_detail(db: &Db, id: i64) -> Option<HistoryDetail> {
+    mitm_core::db::get_history_detail(db, id).ok().flatten()
 }
 
 fn status_group(code: u16) -> Option<&'static str> {

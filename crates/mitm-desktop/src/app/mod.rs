@@ -69,7 +69,7 @@ impl MitmApp {
     }
 
     fn apply_core_event(&mut self, ctx: &egui::Context, event: CoreEvent) {
-        let db_path = &self.core.db_path;
+        let db = &self.core.db;
         let traffic = &mut self.state.traffic;
         match event {
             CoreEvent::FuzzResult { run_id, row } => self.state.fuzzer.push_row(run_id, row),
@@ -80,11 +80,11 @@ impl MitmApp {
             CoreEvent::TrafficCaptured(ev) => {
                 let id = ev.entry.id;
                 traffic.upsert(ev.entry);
-                traffic.refresh_detail_if_selected(id, db_path);
+                traffic.refresh_detail_if_selected(id, db);
             }
             CoreEvent::TrafficUpdated { id, status, size, duration_ms } => {
                 traffic.update_response(id, status, size, duration_ms);
-                traffic.refresh_detail_if_selected(id, db_path);
+                traffic.refresh_detail_if_selected(id, db);
             }
             CoreEvent::TrafficCleared => traffic.clear(),
             CoreEvent::InterceptPrompt(payload) => {
@@ -103,11 +103,11 @@ impl MitmApp {
     }
 
     fn run_command(&mut self, ctx: &egui::Context, cmd: AppCommand) {
-        let db_path = &self.core.db_path;
+        let db = &self.core.db;
         // These reload environments from the DB, and a later flush of a stale copy would undo the switch.
         if cmd.touches_environments() {
-            self.state.environments.flush(db_path);
-            self.state.credentials.flush(db_path);
+            self.state.environments.flush(db);
+            self.state.credentials.flush(db);
             self.state.credentials.mark_stale();
         }
         match cmd {
@@ -153,10 +153,10 @@ impl MitmApp {
             }
             AppCommand::SaveFlowToCollection { flow_id, target } => {
                 if let Some(flow) = self.state.traffic.flow(flow_id) {
-                    let detail = mitm_core::db::get_history_detail(db_path, flow_id).ok().flatten();
+                    let detail = mitm_core::db::get_history_detail(db, flow_id).ok().flatten();
                     let captured = CapturedRequest::from_flow(flow, detail.as_ref());
                     let name = format!("{} {}", flow.method, if flow.path.is_empty() { &flow.url } else { &flow.path });
-                    let saved = self.state.collections.save_captured(db_path, target, name, captured);
+                    let saved = self.state.collections.save_captured(db, target, name, captured);
                     crate::widgets::toast::push(ctx, saved.map(|_| "Saved to collection".to_string()));
                 }
             }
@@ -174,14 +174,14 @@ impl MitmApp {
             }
             AppCommand::SendFlowToRepeater(id) => {
                 if let Some(flow) = self.state.traffic.flow(id).cloned() {
-                    let detail = mitm_core::db::get_history_detail(db_path, id).ok().flatten();
-                    self.state.repeater.create_from_flow(&flow, detail.as_ref(), db_path);
+                    let detail = mitm_core::db::get_history_detail(db, id).ok().flatten();
+                    self.state.repeater.create_from_flow(&flow, detail.as_ref(), db);
                     dock::open_tab(&mut self.dock, Tab::Repeater);
                 }
             }
             AppCommand::SendFlowToFuzzer(id) => {
                 if let Some(flow) = self.state.traffic.flow(id).cloned() {
-                    let detail = mitm_core::db::get_history_detail(db_path, id).ok().flatten();
+                    let detail = mitm_core::db::get_history_detail(db, id).ok().flatten();
                     let captured = CapturedRequest::from_flow(&flow, detail.as_ref());
                     self.state.fuzzer.load_capture(captured);
                     dock::open_tab(&mut self.dock, Tab::Fuzzer);
@@ -190,7 +190,7 @@ impl MitmApp {
 
             AppCommand::OpenCurlImport => self.state.repeater.curl_import.open(),
             AppCommand::RepeaterImportCurl(curl) => {
-                self.state.repeater.create_from_curl(curl, db_path);
+                self.state.repeater.create_from_curl(curl, db);
                 dock::open_tab(&mut self.dock, Tab::Repeater);
             }
             AppCommand::Repeater(cmd) => {
@@ -204,12 +204,12 @@ impl MitmApp {
             AppCommand::RepeaterSend(id) => {
                 self.state.credentials.touch(ctx.input(|i| i.time));
                 let repeater = &mut self.state.repeater;
-                repeater.flush(db_path);
+                repeater.flush(db);
                 if let Some(tab) = repeater.tabs.iter().find(|t| t.id == id).cloned() {
                     repeater.executing.insert(id);
-                    let db_path = db_path.clone();
+                    let db = db.clone();
                     self.repeater_runs.spawn(&self.rt, ctx, async move {
-                        let result = mitm_core::repeater::execute::execute_repeater_tab(&db_path, &tab).await;
+                        let result = mitm_core::repeater::execute::execute_repeater_tab(&db, &tab).await;
                         (tab.id, result)
                     });
                 }
@@ -219,8 +219,8 @@ impl MitmApp {
                 crate::features::fuzzer::handle(&mut self.state.fuzzer, &cx, cmd);
             }
             AppCommand::SendFuzzResultToRepeater { run_id, idx } => {
-                if let Some(result) = self.state.fuzzer.result(run_id, idx, db_path) {
-                    self.state.repeater.create_from_fuzz_result(&result, db_path);
+                if let Some(result) = self.state.fuzzer.result(run_id, idx, db) {
+                    self.state.repeater.create_from_fuzz_result(&result, db);
                     dock::open_tab(&mut self.dock, Tab::Repeater);
                 }
             }
@@ -236,17 +236,17 @@ impl MitmApp {
             AppCommand::ShowRewriteFor(flow_id) => {
                 if let Some(flow) = self.state.traffic.flow(flow_id).cloned() {
                     let rewrite = &mut self.state.rewrite;
-                    rewrite.show_log_entry_for(&flow, db_path);
+                    rewrite.show_log_entry_for(&flow, db);
                     dock::open_tab(&mut self.dock, Tab::Rewrite);
                 }
             }
 
             AppCommand::Collections(CollectionsCmd::Execute(id)) => {
                 self.state.credentials.touch(ctx.input(|i| i.time));
-                if self.state.collections.start_run(&id, db_path) {
-                    let db_path = db_path.clone();
+                if self.state.collections.start_run(&id, db) {
+                    let db = db.clone();
                     self.collection_runs.spawn(&self.rt, ctx, async move {
-                        let result = mitm_core::collections::execute::execute_collection_request_db(&db_path, &id).await;
+                        let result = mitm_core::collections::execute::execute_collection_request_db(&db, &id).await;
                         (id, result)
                     });
                 }
@@ -307,18 +307,18 @@ impl eframe::App for MitmApp {
     }
 
     fn on_exit(&mut self) {
-        self.state.repeater.flush(&self.core.db_path);
-        self.state.collections.flush(&self.core.db_path);
-        self.state.environments.flush(&self.core.db_path);
-        self.state.credentials.flush(&self.core.db_path);
+        self.state.repeater.flush(&self.core.db);
+        self.state.collections.flush(&self.core.db);
+        self.state.environments.flush(&self.core.db);
+        self.state.credentials.flush(&self.core.db);
         self.save_rewrite_rules_now();
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         crate::widgets::template::set_active_env(self.state.environments.active_environment());
-        self.state.credentials.sync(&self.core.db_path, &self.state.environments.active_workspace_id);
+        self.state.credentials.sync(&self.core.db, &self.state.environments.active_workspace_id);
         let now = ui.input(|i| i.time);
-        self.state.credentials.tick(ui.ctx(), &self.core.db_path, now);
+        self.state.credentials.tick(ui.ctx(), &self.core.db, now);
         while let Ok(event) = self.core_events.try_recv() {
             self.apply_core_event(ui.ctx(), event);
         }
@@ -342,7 +342,7 @@ impl eframe::App for MitmApp {
         let mut viewer = TabViewer {
             state: &mut self.state,
             cmds: &mut self.cmds,
-            db_path: &self.core.db_path,
+            db: &self.core.db,
             focus_search: self.focus_search.take(),
             focused: focused_tab,
             visuals: ui.visuals().clone(),
@@ -363,12 +363,12 @@ impl eframe::App for MitmApp {
             ui.ctx(),
             &mut self.state.environments.import,
             (&workspace.0, &workspace.1),
-            &self.core.db_path,
+            &self.core.db,
             &mut self.cmds,
         );
-        crate::features::credentials::show_json_import(ui.ctx(), &mut self.state.credentials, &self.core.db_path, &mut self.cmds);
+        crate::features::credentials::show_json_import(ui.ctx(), &mut self.state.credentials, &self.core.db, &mut self.cmds);
         // Last, so it sits above the dialog whose action asked for it.
-        if let Some(retry) = crate::features::credentials::show_unlock(ui.ctx(), &mut self.state.credentials, &self.core.db_path) {
+        if let Some(retry) = crate::features::credentials::show_unlock(ui.ctx(), &mut self.state.credentials, &self.core.db) {
             self.cmds.push(retry);
         }
 

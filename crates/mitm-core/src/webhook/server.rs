@@ -98,7 +98,7 @@ async fn handle_webhook_request(
     let payload_str = String::from_utf8(body_bytes.clone())
         .unwrap_or_else(|_| format!("<binary data {} bytes>", body_bytes.len()));
 
-    let matched_endpoint = crate::db::webhook_db::get_webhook_endpoint_by_path(&state.db_path, &path).ok().flatten();
+    let matched_endpoint = crate::db::webhook_db::get_webhook_endpoint_by_path(&state.db, &path).ok().flatten();
 
     let (endpoint_id, endpoint_path, secret_key, is_matched) = match &matched_endpoint {
         Some(ep) => (ep.id.clone(), ep.path.clone(), ep.secret_key.clone(), true),
@@ -121,13 +121,13 @@ async fn handle_webhook_request(
         provided_hmac,
     };
 
-    match crate::db::webhook_db::save_webhook_delivery(&state.db_path, &delivery) {
+    match crate::db::webhook_db::save_webhook_delivery(&state.db, &delivery) {
         Ok(id) => delivery.id = id,
         Err(e) => eprintln!("[Webhook] Failed to save delivery: {}", e),
     }
 
     let endpoint_hit_count = if is_matched {
-        crate::db::webhook_db::increment_webhook_endpoint_hits(&state.db_path, &endpoint_id).unwrap_or(0)
+        crate::db::webhook_db::increment_webhook_endpoint_hits(&state.db, &endpoint_id).unwrap_or(0)
     } else {
         0
     };

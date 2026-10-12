@@ -1,4 +1,3 @@
-use std::path::Path;
 use eframe::egui::{self, RichText};
 use mitm_core::credentials::{Credential, FieldKind};
 use mitm_core::utils::totp;
@@ -12,23 +11,24 @@ use crate::widgets::button::icon_button;
 use crate::widgets::list_row::list_row;
 use crate::widgets::search::search_field;
 use crate::widgets::section::section_with;
+use mitm_core::db::Db;
 
-pub fn show(ui: &mut egui::Ui, state: &mut CredentialsState, workspace_id: &str, db_path: &Path, cmds: &mut Commands) {
-    state.sync(db_path, workspace_id);
+pub fn show(ui: &mut egui::Ui, state: &mut CredentialsState, workspace_id: &str, db: &Db, cmds: &mut Commands) {
+    state.sync(db, workspace_id);
     let now = ui.input(|i| i.time);
     let [mut list_ui, mut detail_ui] = split::side_by_side(ui, "credentials_split", &mut state.split_fraction);
-    entry_list(&mut list_ui, state, db_path);
-    entry_detail(&mut detail_ui, state, db_path, now, cmds);
+    entry_list(&mut list_ui, state, db);
+    entry_detail(&mut detail_ui, state, db, now, cmds);
 }
 
-fn entry_list(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path) {
+fn entry_list(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db) {
     section_with(ui, "Credentials", |ui| {
         ui.add_enabled_ui(!state.locked, |ui| {
             if icon_button(ui, icons::DOWNLOAD_SIMPLE, "Import from JSON…").clicked() {
                 state.json_import.start();
             }
             if icon_button(ui, icons::PLUS, "Add credential").clicked() {
-                state.create(db_path);
+                state.create(db);
             }
         });
     });
@@ -65,7 +65,7 @@ fn entry_list(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path) {
         }
     });
     if let Some(id) = delete {
-        state.delete(db_path, &id);
+        state.delete(db, &id);
     }
 }
 
@@ -75,16 +75,16 @@ fn first_code(entry: &Credential) -> Option<String> {
     Some(totp::code_at(&params, totp::now_unix()))
 }
 
-fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path, now: f64, cmds: &mut Commands) {
+fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, now: f64, cmds: &mut Commands) {
     if state.locked {
         ui.add_space(8.0);
-        unlock_form(ui, state, db_path);
+        unlock_form(ui, state, db);
         return;
     }
     if state.has_password {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
             if icon_button(ui, icons::LOCK, "Lock credentials").clicked() {
-                state.lock(db_path);
+                state.lock(db);
             }
         });
     }
@@ -93,13 +93,13 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
 
     ui.horizontal(|ui| {
         let name = state.entries[index].name.clone();
-        if rename_field(ui, state, db_path, &id, None, &name, RichText::new(&name).heading().strong()) {
+        if rename_field(ui, state, db, &id, None, &name, RichText::new(&name).heading().strong()) {
             return;
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let armed_id = ui.id().with(("delete_credential", &id));
             if confirm::confirm_button(ui, armed_id, RichText::new(icons::TRASH), "Delete?", "Delete credential") {
-                state.delete(db_path, &id);
+                state.delete(db, &id);
             }
         });
     });
@@ -121,7 +121,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
     egui::Grid::new(("credential_fields", &id)).num_columns(4).spacing([8.0, 6.0]).show(ui, |ui| {
         let keys: Vec<String> = state.entries[index].fields.iter().map(|f| f.key.clone()).collect();
         for (i, key) in keys.iter().enumerate() {
-            rename_field(ui, state, db_path, &id, Some(key), key, RichText::new(key).strong());
+            rename_field(ui, state, db, &id, Some(key), key, RichText::new(key).strong());
             let Some(entry) = state.entries.iter_mut().find(|e| e.id == id) else { return };
             let field = &mut entry.fields[i];
             egui::ComboBox::from_id_salt(("credential_kind", &id, i))
@@ -223,7 +223,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
         }
     }
     if ui.button("Add field").clicked() {
-        state.add_field(db_path, &id);
+        state.add_field(db, &id);
     }
     ui.add_space(8.0);
     if let Some(entry) = state.entries.iter_mut().find(|e| e.id == id) {
@@ -240,7 +240,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
 fn rename_field(
     ui: &mut egui::Ui,
     state: &mut CredentialsState,
-    db_path: &Path,
+    db: &Db,
     id: &str,
     field: Option<&String>,
     current: &str,
@@ -261,7 +261,7 @@ fn rename_field(
     if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         state.rename = None;
     } else if edit.lost_focus() {
-        state.commit_rename(db_path);
+        state.commit_rename(db);
     } else {
         edit.request_focus();
     }

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use mitm_core::fuzzer::FuzzRow;
 use crate::widgets::tri_state::TriState;
 use super::FuzzerState;
+use mitm_core::db::Db;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FuzzSortColumn {
@@ -174,12 +175,12 @@ impl FuzzerState {
         indices
     }
 
-    pub fn select_result(&mut self, run_id: i64, idx: u32, db_path: &std::path::PathBuf) {
+    pub fn select_result(&mut self, run_id: i64, idx: u32, db: &Db) {
         if self.selected_idx == Some(idx) && self.selected_result.is_some() {
             return;
         }
         self.selected_idx = Some(idx);
-        self.selected_result = mitm_core::fuzzer::get_result_db(db_path, run_id, idx).ok().flatten();
+        self.selected_result = mitm_core::fuzzer::get_result_db(db, run_id, idx).ok().flatten();
     }
 
     pub fn sync_response_search(&mut self, cx: &crate::app::cx::Cx) {

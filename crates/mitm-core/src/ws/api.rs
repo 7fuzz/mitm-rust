@@ -3,7 +3,7 @@ use crate::{db, ws, MitmCore};
 
 impl MitmCore {
     pub fn clear_ws_messages(&self) -> Result<(), String> {
-        db::ws_db::clear_ws_messages(&self.db_path, None)
+        db::ws_db::clear_ws_messages(&self.db, None)
     }
 
     pub async fn connect_ws_client(
@@ -29,11 +29,11 @@ impl MitmCore {
     }
 
     pub fn delete_ws_connection(&self, connection_id: i64) -> Result<(), String> {
-        db::ws_db::delete_ws_connection(&self.db_path, connection_id)
+        db::ws_db::delete_ws_connection(&self.db, connection_id)
     }
 
     pub fn clear_ws_session(&self, connection_id: i64) -> Result<(), String> {
-        db::ws_db::clear_ws_messages(&self.db_path, Some(connection_id))
+        db::ws_db::clear_ws_messages(&self.db, Some(connection_id))
     }
 
     pub async fn ws_mitm_enabled(&self) -> bool {
@@ -42,7 +42,7 @@ impl MitmCore {
 
     pub async fn set_ws_mitm_enabled(&self, enabled: bool) -> Result<(), String> {
         self.state.proxy_config.write().await.ws_mitm_enabled = enabled;
-        db::set_preference(&self.db_path, "ws_mitm_enabled", if enabled { "true" } else { "false" })?;
+        db::set_preference(&self.db, "ws_mitm_enabled", if enabled { "true" } else { "false" })?;
         Ok(())
     }
 }

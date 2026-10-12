@@ -1,8 +1,8 @@
-use std::path::Path;
 use rusqlite::types::ValueRef;
 use rusqlite::{params_from_iter, Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use crate::db::Db;
 
 const GRID_CELL_MAX_CHARS: usize = 1000;
 const MAX_PAGE_SIZE: i64 = 500;
@@ -66,8 +66,8 @@ fn cell_to_json(value: ValueRef<'_>, max_chars: Option<usize>) -> Value {
     }
 }
 
-fn open_read_only(db_path: &Path) -> Result<Connection, String> {
-    Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)
+fn open_read_only(db: &Db) -> Result<Connection, String> {
+    Connection::open_with_flags(db, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)
         .map_err(|e| e.to_string())
 }
 
@@ -105,8 +105,8 @@ fn table_has_rowid(conn: &Connection, table: &str) -> bool {
     .unwrap_or(false)
 }
 
-pub fn list_db_tables(db_path: &Path) -> Result<Vec<DbTable>, String> {
-    let conn = open_read_only(db_path)?;
+pub fn list_db_tables(db: &Db) -> Result<Vec<DbTable>, String> {
+    let conn = open_read_only(db)?;
     let mut stmt = conn
         .prepare("SELECT name, COALESCE(sql, '') FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
         .map_err(|e| e.to_string())?;
@@ -128,7 +128,7 @@ pub fn list_db_tables(db_path: &Path) -> Result<Vec<DbTable>, String> {
 }
 
 pub fn query_db_table(
-    db_path: &Path,
+    db: &Db,
     table: &str,
     offset: i64,
     limit: i64,
@@ -136,7 +136,7 @@ pub fn query_db_table(
     order_desc: Option<bool>,
     search: Option<&str>,
 ) -> Result<DbRows, String> {
-    let conn = open_read_only(db_path)?;
+    let conn = open_read_only(db)?;
     let columns = table_columns(&conn, table)?;
     let has_rowid = table_has_rowid(&conn, table);
 
@@ -210,8 +210,8 @@ pub fn query_db_table(
     })
 }
 
-pub fn get_db_row(db_path: &Path, table: &str, rowid: i64) -> Result<Vec<Value>, String> {
-    let conn = open_read_only(db_path)?;
+pub fn get_db_row(db: &Db, table: &str, rowid: i64) -> Result<Vec<Value>, String> {
+    let conn = open_read_only(db)?;
     let columns = table_columns(&conn, table)?;
     let column_list = columns.iter().map(|c| quote_ident(&c.name)).collect::<Vec<_>>().join(", ");
     conn.query_row(
@@ -226,9 +226,9 @@ pub fn get_db_row(db_path: &Path, table: &str, rowid: i64) -> Result<Vec<Value>,
     .map_err(|e| e.to_string())
 }
 
-pub fn run_db_query(db_path: &Path, sql: &str) -> Result<DbQueryResult, String> {
+pub fn run_db_query(db: &Db, sql: &str) -> Result<DbQueryResult, String> {
     let started = std::time::Instant::now();
-    let conn = open_read_only(db_path)?;
+    let conn = open_read_only(db)?;
     let mut stmt = conn.prepare(sql.trim()).map_err(|e| e.to_string())?;
     let columns: Vec<String> = stmt.column_names().into_iter().map(String::from).collect();
     let column_count = columns.len();
@@ -260,10 +260,10 @@ pub fn run_db_query(db_path: &Path, sql: &str) -> Result<DbQueryResult, String> 
 mod tests {
     use super::*;
 
-    fn setup_test_db() -> (std::path::PathBuf, std::path::PathBuf) {
+    fn setup_test_db() -> (crate::db::Db, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!("mitm-browser-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db = dir.join("browser.db");
+        let db = crate::db::Db::new(dir.join("browser.db"));
         crate::db::init_database(&db, None).unwrap();
         (db, dir)
     }

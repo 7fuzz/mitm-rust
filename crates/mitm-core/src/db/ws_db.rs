@@ -1,9 +1,9 @@
-use std::path::PathBuf;
 use rusqlite::params;
 use crate::ws::types::{WebSocketConn, WebSocketMessage};
+use crate::db::Db;
 
-pub fn load_ws_connections(db_path: &PathBuf) -> Result<Vec<WebSocketConn>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn load_ws_connections(db: &Db) -> Result<Vec<WebSocketConn>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
             "SELECT id, url, status, handshake_time, closed_at, protocol, client_addr, is_client_session, message_count, COALESCE(listener_label, '')
@@ -33,8 +33,8 @@ pub fn load_ws_connections(db_path: &PathBuf) -> Result<Vec<WebSocketConn>, Stri
     Ok(rows.flatten().collect())
 }
 
-pub fn insert_ws_connection(db_path: &PathBuf, conn_info: &WebSocketConn) -> Result<i64, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn insert_ws_connection(db: &Db, conn_info: &WebSocketConn) -> Result<i64, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT INTO ws_connections (url, status, handshake_time, closed_at, protocol, client_addr, is_client_session, message_count, listener_label)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -54,12 +54,12 @@ pub fn insert_ws_connection(db_path: &PathBuf, conn_info: &WebSocketConn) -> Res
 }
 
 pub fn update_ws_connection_status(
-    db_path: &PathBuf,
+    db: &Db,
     connection_id: i64,
     status: &str,
     closed_at: Option<i64>,
 ) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute(
         "UPDATE ws_connections SET status = ?, closed_at = ? WHERE id = ?",
         params![status, closed_at, connection_id],
@@ -68,8 +68,8 @@ pub fn update_ws_connection_status(
 }
 
 /// No socket outlives the process, so any session still marked connected was cut off by an exit or crash.
-pub fn close_stale_ws_connections(db_path: &PathBuf, now: i64) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn close_stale_ws_connections(db: &Db, now: i64) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute(
         "UPDATE ws_connections SET status = 'disconnected', closed_at = COALESCE(closed_at, ?) WHERE status != 'disconnected'",
         params![now],
@@ -77,8 +77,8 @@ pub fn close_stale_ws_connections(db_path: &PathBuf, now: i64) -> Result<(), Str
     Ok(())
 }
 
-pub fn increment_ws_message_count(db_path: &PathBuf, connection_id: i64) -> Result<u64, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn increment_ws_message_count(db: &Db, connection_id: i64) -> Result<u64, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute(
         "UPDATE ws_connections SET message_count = message_count + 1 WHERE id = ?",
         params![connection_id],
@@ -93,8 +93,8 @@ pub fn increment_ws_message_count(db_path: &PathBuf, connection_id: i64) -> Resu
     Ok(count)
 }
 
-pub fn delete_ws_connection(db_path: &PathBuf, id: i64) -> Result<(), String> {
-    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn delete_ws_connection(db: &Db, id: i64) -> Result<(), String> {
+    let mut conn = db.conn().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     tx.execute("DELETE FROM ws_messages WHERE connection_id = ?", params![id])
         .map_err(|e| e.to_string())?;
@@ -105,8 +105,8 @@ pub fn delete_ws_connection(db_path: &PathBuf, id: i64) -> Result<(), String> {
 }
 
 /// Inserts the message and sets its id to the new row's id
-pub fn save_ws_message(db_path: &PathBuf, msg: &mut WebSocketMessage) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn save_ws_message(db: &Db, msg: &mut WebSocketMessage) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT INTO ws_messages (connection_id, direction, msg_type, payload, timestamp, length, is_injected)
          VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -125,11 +125,11 @@ pub fn save_ws_message(db_path: &PathBuf, msg: &mut WebSocketMessage) -> Result<
 }
 
 pub fn load_ws_messages(
-    db_path: &PathBuf,
+    db: &Db,
     connection_id: i64,
     limit: Option<u32>,
 ) -> Result<Vec<WebSocketMessage>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let limit_val = limit.unwrap_or(1000);
     let mut stmt = conn
         .prepare(
@@ -160,8 +160,8 @@ pub fn load_ws_messages(
     Ok(rows.flatten().collect())
 }
 
-pub fn clear_ws_messages(db_path: &PathBuf, connection_id: Option<i64>) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn clear_ws_messages(db: &Db, connection_id: Option<i64>) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     if let Some(cid) = connection_id {
         conn.execute("DELETE FROM ws_messages WHERE connection_id = ?", params![cid])
             .map_err(|e| e.to_string())?;
@@ -214,30 +214,30 @@ mod tests {
     fn clear_resets_count_and_delete_removes_messages() {
         let dir = std::env::temp_dir().join(format!("mitm-ws-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db_path = dir.join("test.db");
-        crate::db::init_database(&db_path, None).unwrap();
+        let db = crate::db::Db::new(dir.join("test.db"));
+        crate::db::init_database(&db, None).unwrap();
 
-        let a = insert_ws_connection(&db_path, &conn_row("wss://a")).unwrap();
-        let b = insert_ws_connection(&db_path, &conn_row("wss://b")).unwrap();
+        let a = insert_ws_connection(&db, &conn_row("wss://a")).unwrap();
+        let b = insert_ws_connection(&db, &conn_row("wss://b")).unwrap();
         for _ in 0..3 {
-            save_ws_message(&db_path, &mut msg_row(a)).unwrap();
-            increment_ws_message_count(&db_path, a).unwrap();
+            save_ws_message(&db, &mut msg_row(a)).unwrap();
+            increment_ws_message_count(&db, a).unwrap();
         }
-        save_ws_message(&db_path, &mut msg_row(b)).unwrap();
-        increment_ws_message_count(&db_path, b).unwrap();
+        save_ws_message(&db, &mut msg_row(b)).unwrap();
+        increment_ws_message_count(&db, b).unwrap();
 
-        clear_ws_messages(&db_path, Some(a)).unwrap();
-        assert!(load_ws_messages(&db_path, a, None).unwrap().is_empty());
-        let a_count = load_ws_connections(&db_path).unwrap().iter().find(|c| c.connection_id == a).unwrap().message_count;
+        clear_ws_messages(&db, Some(a)).unwrap();
+        assert!(load_ws_messages(&db, a, None).unwrap().is_empty());
+        let a_count = load_ws_connections(&db).unwrap().iter().find(|c| c.connection_id == a).unwrap().message_count;
         assert_eq!(a_count, 0);
-        assert_eq!(load_ws_messages(&db_path, b, None).unwrap().len(), 1, "other session untouched");
+        assert_eq!(load_ws_messages(&db, b, None).unwrap().len(), 1, "other session untouched");
 
-        delete_ws_connection(&db_path, b).unwrap();
-        assert!(load_ws_messages(&db_path, b, None).unwrap().is_empty());
-        assert!(load_ws_connections(&db_path).unwrap().iter().all(|c| c.connection_id != b));
+        delete_ws_connection(&db, b).unwrap();
+        assert!(load_ws_messages(&db, b, None).unwrap().is_empty());
+        assert!(load_ws_connections(&db).unwrap().iter().all(|c| c.connection_id != b));
 
-        close_stale_ws_connections(&db_path, 99).unwrap();
-        let a_row = load_ws_connections(&db_path).unwrap().into_iter().find(|c| c.connection_id == a).unwrap();
+        close_stale_ws_connections(&db, 99).unwrap();
+        let a_row = load_ws_connections(&db).unwrap().into_iter().find(|c| c.connection_id == a).unwrap();
         assert_eq!((a_row.status.as_str(), a_row.closed_at), ("disconnected", Some(99)));
 
         std::fs::remove_dir_all(&dir).ok();

@@ -18,6 +18,7 @@ pub use commands::{handle, poll, Cmd};
 pub use payloads::{AttackType, PayloadConfig, PayloadKind};
 pub use results::{FuzzSearchScope, FuzzSortColumn};
 use results::FuzzerCache;
+use mitm_core::db::Db;
 pub use view::show;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -354,8 +355,8 @@ impl FuzzerState {
         self.cache = FuzzerCache::default();
     }
 
-    pub fn load_saved_runs(&mut self, db_path: &std::path::PathBuf) {
-        if let Ok(runs) = mitm_core::fuzzer::list_runs_db(db_path) {
+    pub fn load_saved_runs(&mut self, db: &Db) {
+        if let Ok(runs) = mitm_core::fuzzer::list_runs_db(db) {
             self.saved_runs = runs;
         }
     }

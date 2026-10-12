@@ -2,7 +2,6 @@ pub mod execute;
 pub mod preview;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -10,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::repeater::{HeaderItem, ParamItem, ExtractRuleItem};
 use crate::http::steps::{copy_steps, load_workspace_steps, save_steps};
+use crate::db::Db;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -97,10 +97,10 @@ fn ensure_schema_columns(conn: &Connection) {
 }
 
 pub fn get_collections_db(
-    db_path: &PathBuf,
+    db: &Db,
     workspace_id: &str,
 ) -> Result<Vec<CollectionTreeItem>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
 
     let mut stmt = conn
@@ -204,12 +204,12 @@ pub fn get_collections_db(
 }
 
 pub fn create_collection_db(
-    db_path: &PathBuf,
+    db: &Db,
     workspace_id: String,
     parent_id: Option<String>,
     name: String,
 ) -> Result<Collection, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
     let id = Uuid::new_v4().to_string();
 
@@ -232,8 +232,8 @@ pub fn create_collection_db(
     })
 }
 
-pub fn update_collection_db(db_path: &PathBuf, col: Collection) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn update_collection_db(db: &Db, col: Collection) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
 
     conn.execute(
@@ -245,18 +245,18 @@ pub fn update_collection_db(db_path: &PathBuf, col: Collection) -> Result<(), St
     Ok(())
 }
 
-pub fn delete_collection_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn delete_collection_db(db: &Db, id: &str) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM collections WHERE id = ?", params![id]).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 pub fn create_request_db(
-    db_path: &PathBuf,
+    db: &Db,
     collection_id: String,
     name: String,
 ) -> Result<RequestItem, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
     let id = Uuid::new_v4().to_string();
 
@@ -298,8 +298,8 @@ pub fn create_request_db(
     })
 }
 
-pub fn update_request_db(db_path: &PathBuf, req: RequestItem) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn update_request_db(db: &Db, req: RequestItem) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
 
     let headers_json = serde_json::to_string(&req.headers).unwrap_or_else(|_| "[]".to_string());
@@ -332,17 +332,17 @@ pub fn update_request_db(db_path: &PathBuf, req: RequestItem) -> Result<(), Stri
     Ok(())
 }
 
-pub fn delete_request_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn delete_request_db(db: &Db, id: &str) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM requests WHERE id = ?", params![id]).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 pub fn get_request_histories_db(
-    db_path: &PathBuf,
+    db: &Db,
     request_id: &str,
 ) -> Result<Vec<RequestHistoryItem>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
             "SELECT id, request_id, method, url, request_headers_json, request_body, status_code, response_headers_json, response_body, duration_ms, executed_at_ms
@@ -384,19 +384,19 @@ pub fn get_request_histories_db(
     Ok(histories)
 }
 
-pub fn clear_request_histories_db(db_path: &PathBuf, request_id: &str) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn clear_request_histories_db(db: &Db, request_id: &str) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM request_histories WHERE request_id = ?", params![request_id])
         .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 pub fn move_request_db(
-    db_path: &PathBuf,
+    db: &Db,
     request_id: &str,
     target_collection_id: &str,
 ) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
     conn.execute(
         "UPDATE requests SET collection_id = ?, updated_at_ms = ? WHERE id = ?",
@@ -407,11 +407,11 @@ pub fn move_request_db(
 }
 
 pub fn move_collection_db(
-    db_path: &PathBuf,
+    db: &Db,
     collection_id: &str,
     target_parent_id: Option<String>,
 ) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
     conn.execute(
         "UPDATE collections SET parent_id = ?, updated_at_ms = ? WHERE id = ?",
@@ -421,8 +421,8 @@ pub fn move_collection_db(
     Ok(())
 }
 
-pub fn duplicate_request_db(db_path: &PathBuf, request_id: &str) -> Result<RequestItem, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn duplicate_request_db(db: &Db, request_id: &str) -> Result<RequestItem, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
 
     let mut req: RequestItem = conn.query_row(
@@ -497,8 +497,8 @@ pub fn duplicate_request_db(db_path: &PathBuf, request_id: &str) -> Result<Reque
     Ok(req)
 }
 
-pub fn duplicate_collection_db(db_path: &PathBuf, collection_id: &str) -> Result<String, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn duplicate_collection_db(db: &Db, collection_id: &str) -> Result<String, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
 
     let (ws_id, parent_id, name, desc, order_idx): (String, Option<String>, String, Option<String>, i32) = conn.query_row(

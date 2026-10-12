@@ -1,10 +1,10 @@
 pub mod execute;
 
-use std::path::PathBuf;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
 use crate::http::steps::{load_steps, load_workspace_steps, save_steps};
+use crate::db::Db;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -147,8 +147,8 @@ fn row_to_tab(row: &rusqlite::Row) -> rusqlite::Result<RepeaterTab> {
     })
 }
 
-pub fn get_repeater_tabs_db(db_path: &PathBuf) -> Result<Vec<RepeaterTab>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn get_repeater_tabs_db(db: &Db) -> Result<Vec<RepeaterTab>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let query = format!(
         "{} WHERE c.workspace_id = ? ORDER BY r.order_index ASC, r.created_at_ms DESC",
         TAB_SELECT
@@ -171,8 +171,8 @@ pub fn get_repeater_tabs_db(db_path: &PathBuf) -> Result<Vec<RepeaterTab>, Strin
 }
 
 /// An order index that places a new tab above every existing one.
-pub fn top_order_index_db(db_path: &PathBuf) -> Result<i32, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn top_order_index_db(db: &Db) -> Result<i32, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let min: Option<i32> = conn
         .query_row(
             "SELECT MIN(r.order_index) FROM requests r
@@ -185,8 +185,8 @@ pub fn top_order_index_db(db_path: &PathBuf) -> Result<i32, String> {
     Ok(min.map(|m| m - 1).unwrap_or(0))
 }
 
-pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn create_repeater_tab_db(db: &Db, tab: &RepeaterTab) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
 
     let headers_json = serde_json::to_string(&tab.headers).unwrap_or_else(|_| "[]".to_string());
     let params_json = serde_json::to_string(&tab.params).unwrap_or_else(|_| "[]".to_string());
@@ -236,12 +236,12 @@ pub fn create_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<()
     Ok(())
 }
 
-pub fn update_repeater_tab_db(db_path: &PathBuf, tab: &RepeaterTab) -> Result<(), String> {
-    create_repeater_tab_db(db_path, tab)
+pub fn update_repeater_tab_db(db: &Db, tab: &RepeaterTab) -> Result<(), String> {
+    create_repeater_tab_db(db, tab)
 }
 
-pub fn delete_repeater_tab_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn delete_repeater_tab_db(db: &Db, id: &str) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM request_histories WHERE request_id = ?", params![id])
         .map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM requests WHERE id = ?", params![id])
@@ -249,8 +249,8 @@ pub fn delete_repeater_tab_db(db_path: &PathBuf, id: &str) -> Result<(), String>
     Ok(())
 }
 
-pub fn get_repeater_tab_by_id(db_path: &PathBuf, id: &str) -> Result<RepeaterTab, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn get_repeater_tab_by_id(db: &Db, id: &str) -> Result<RepeaterTab, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let query = format!("{} WHERE r.id = ?", TAB_SELECT);
     let mut tab = conn.query_row(&query, params![id], row_to_tab)
         .map_err(|e| e.to_string())?;
@@ -261,10 +261,10 @@ pub fn get_repeater_tab_by_id(db_path: &PathBuf, id: &str) -> Result<RepeaterTab
 }
 
 pub fn insert_repeater_history_db(
-    db_path: &PathBuf,
+    db: &Db,
     history: &RepeaterHistoryItem,
 ) -> Result<i64, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
 
     let req_headers_json = serde_json::to_string(&history.request_headers).unwrap_or_else(|_| "[]".to_string());
     let res_headers_json = serde_json::to_string(&history.response_headers).unwrap_or_else(|_| "[]".to_string());
@@ -291,12 +291,12 @@ pub fn insert_repeater_history_db(
 }
 
 pub fn get_repeater_history_db(
-    db_path: &PathBuf,
+    db: &Db,
     repeater_id: &str,
     page: u32,
     limit: u32,
 ) -> Result<Vec<RepeaterHistoryItem>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let offset = (page.saturating_sub(1)) * limit;
 
     let query = "
@@ -342,12 +342,12 @@ pub fn get_repeater_history_db(
 mod tests {
     use super::*;
 
-    fn apply_migrations(db_path: &PathBuf) {
-        apply_migrations_up_to(db_path, u32::MAX);
+    fn apply_migrations(db: &Db) {
+        apply_migrations_up_to(db, u32::MAX);
     }
 
-    fn apply_migrations_up_to(db_path: &PathBuf, version: u32) {
-        let conn = crate::db::open(db_path).unwrap();
+    fn apply_migrations_up_to(db: &Db, version: u32) {
+        let conn = db.conn().unwrap();
         for m in crate::db::migrations::MIGRATIONS.iter().filter(|m| m.version <= version) {
             for statement in m.sql.split(';') {
                 let trimmed = statement.trim();
@@ -358,8 +358,8 @@ mod tests {
         }
     }
 
-    fn temp_db() -> PathBuf {
-        std::env::temp_dir().join(format!("repeater-test-{}.db", uuid::Uuid::new_v4()))
+    fn temp_db() -> crate::db::Db {
+        crate::db::Db::new(std::env::temp_dir().join(format!("repeater-test-{}.db", uuid::Uuid::new_v4())))
     }
 
     fn blank_tab(id: &str, order_index: i32, created_at_ms: i64) -> RepeaterTab {
@@ -385,10 +385,10 @@ mod tests {
 
     #[test]
     fn migration_moves_repeater_tabs_and_runs_into_the_repeater_workspace() {
-        let db_path = temp_db();
-        apply_migrations_up_to(&db_path, 15);
+        let db = temp_db();
+        apply_migrations_up_to(&db, 15);
         {
-            let conn = crate::db::open(&db_path).unwrap();
+            let conn = crate::db::open(&db).unwrap();
             conn.execute_batch(
                 "INSERT INTO repeaters (id, method, url, body_type, body_content, created_at_ms, updated_at_ms)
                     VALUES ('old', 'GET', 'https://a', 'raw', 'hello', 1, 1),
@@ -398,12 +398,12 @@ mod tests {
             )
             .unwrap();
         }
-        apply_migrations(&db_path);
+        apply_migrations(&db);
 
-        let tabs = get_repeater_tabs_db(&db_path).unwrap();
-        let history = get_repeater_history_db(&db_path, "old", 1, 10).unwrap();
-        let old_table_gone = crate::db::open(&db_path).unwrap().prepare("SELECT 1 FROM repeaters").is_err();
-        let _ = std::fs::remove_file(&db_path);
+        let tabs = get_repeater_tabs_db(&db).unwrap();
+        let history = get_repeater_history_db(&db, "old", 1, 10).unwrap();
+        let old_table_gone = crate::db::open(&db).unwrap().prepare("SELECT 1 FROM repeaters").is_err();
+        let _ = std::fs::remove_file(&db);
 
         assert_eq!(tabs.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["new", "old"]);
         assert_eq!(tabs[0].body_content.as_deref(), Some("{\"a\":1}"));
@@ -415,23 +415,23 @@ mod tests {
 
     #[test]
     fn a_new_tab_goes_to_the_top() {
-        let db_path = temp_db();
-        apply_migrations(&db_path);
+        let db = temp_db();
+        apply_migrations(&db);
 
-        create_repeater_tab_db(&db_path, &blank_tab("first", top_order_index_db(&db_path).unwrap(), 1)).unwrap();
-        create_repeater_tab_db(&db_path, &blank_tab("second", top_order_index_db(&db_path).unwrap(), 2)).unwrap();
+        create_repeater_tab_db(&db, &blank_tab("first", top_order_index_db(&db).unwrap(), 1)).unwrap();
+        create_repeater_tab_db(&db, &blank_tab("second", top_order_index_db(&db).unwrap(), 2)).unwrap();
         // Saving an older tab again must not move it
-        create_repeater_tab_db(&db_path, &blank_tab("first", 99, 1)).unwrap();
+        create_repeater_tab_db(&db, &blank_tab("first", 99, 1)).unwrap();
 
-        let ids: Vec<String> = get_repeater_tabs_db(&db_path).unwrap().into_iter().map(|t| t.id).collect();
-        let _ = std::fs::remove_file(&db_path);
+        let ids: Vec<String> = get_repeater_tabs_db(&db).unwrap().into_iter().map(|t| t.id).collect();
+        let _ = std::fs::remove_file(&db);
         assert_eq!(ids, ["second", "first"]);
     }
 
     #[test]
     fn updating_a_tab_keeps_its_run_history() {
-        let db_path = temp_db();
-        apply_migrations(&db_path);
+        let db = temp_db();
+        apply_migrations(&db);
 
         let mut tab = RepeaterTab {
             id: "tab-1".into(),
@@ -451,7 +451,7 @@ mod tests {
             last_status_code: None,
             last_duration_ms: None,
         };
-        create_repeater_tab_db(&db_path, &tab).unwrap();
+        create_repeater_tab_db(&db, &tab).unwrap();
 
         for i in 0..3 {
             let run = RepeaterHistoryItem {
@@ -467,14 +467,14 @@ mod tests {
                 duration_ms: 10,
                 executed_at_ms: i,
             };
-            insert_repeater_history_db(&db_path, &run).unwrap();
+            insert_repeater_history_db(&db, &run).unwrap();
             // Every send saves the tab first; that must not drop earlier runs
             tab.url = format!("https://example.com/{}", i);
-            update_repeater_tab_db(&db_path, &tab).unwrap();
+            update_repeater_tab_db(&db, &tab).unwrap();
         }
 
-        let history = get_repeater_history_db(&db_path, &tab.id, 1, 100).unwrap();
-        let _ = std::fs::remove_file(&db_path);
+        let history = get_repeater_history_db(&db, &tab.id, 1, 100).unwrap();
+        let _ = std::fs::remove_file(&db);
         assert_eq!(history.len(), 3);
     }
 }

@@ -32,7 +32,7 @@ impl MitmApp {
 }
 
 pub(super) fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {
-    let mut state = AppState::load(&core.db_path);
+    let mut state = AppState::load(&core.db);
     state.traffic.set_history_limit(rt.block_on(core.get_history_settings()));
     state.proxy.mode = rt.block_on(core.proxy_mode());
     if state.proxy.mode.is_enabled() {

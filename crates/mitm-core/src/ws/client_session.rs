@@ -65,7 +65,7 @@ pub async fn connect_client_session(
         listener_label: String::new(),
     };
 
-    conn_info.connection_id = crate::db::ws_db::insert_ws_connection(&state.db_path, &conn_info)?;
+    conn_info.connection_id = crate::db::ws_db::insert_ws_connection(&state.db, &conn_info)?;
     let conn_id = conn_info.connection_id;
 
     let (mut write_half, mut read_half) = ws_stream.split();
@@ -75,7 +75,7 @@ pub async fn connect_client_session(
     state.ws_client_senders.insert(conn_id, tx);
     state.ws_client_stops.insert(conn_id, Arc::new(Mutex::new(Some(stop_tx))));
 
-    let db_path_clone = state.db_path.clone();
+    let db = state.db.clone();
     let event_bus_clone = event_bus.clone();
     let state_clone = Arc::clone(&state);
 
@@ -120,8 +120,8 @@ pub async fn connect_client_session(
                                 is_injected: false,
                             };
 
-                            let _ = crate::db::ws_db::save_ws_message(&db_path_clone, &mut msg_record);
-                            let _count = crate::db::ws_db::increment_ws_message_count(&db_path_clone, conn_id).unwrap_or(1);
+                            let _ = crate::db::ws_db::save_ws_message(&db, &mut msg_record);
+                            let _count = crate::db::ws_db::increment_ws_message_count(&db, conn_id).unwrap_or(1);
 
                             if let Some(ref bus) = event_bus_clone {
                                 if let Ok(val) = serde_json::to_value(&msg_record) {
@@ -143,7 +143,7 @@ pub async fn connect_client_session(
         }
 
         let close_time = chrono::Local::now().timestamp_millis();
-        let _ = crate::db::ws_db::update_ws_connection_status(&db_path_clone, conn_id, "disconnected", Some(close_time));
+        let _ = crate::db::ws_db::update_ws_connection_status(&db, conn_id, "disconnected", Some(close_time));
 
         state_clone.ws_client_senders.remove(&conn_id);
         state_clone.ws_client_stops.remove(&conn_id);
@@ -203,8 +203,8 @@ pub async fn send_frame(
         is_injected: true,
     };
     record.length = record.payload.len();
-    crate::db::ws_db::save_ws_message(&state.db_path, &mut record)?;
-    let _ = crate::db::ws_db::increment_ws_message_count(&state.db_path, connection_id);
+    crate::db::ws_db::save_ws_message(&state.db, &mut record)?;
+    let _ = crate::db::ws_db::increment_ws_message_count(&state.db, connection_id);
     if let Some(bus) = event_bus {
         if let Ok(val) = serde_json::to_value(&record) {
             bus.emit(crate::events::CoreEvent::WsFrameReceived {
@@ -225,6 +225,6 @@ pub async fn disconnect_client_session(state: Arc<AppState>, connection_id: i64)
     }
     state.ws_client_senders.remove(&connection_id);
     let now = chrono::Local::now().timestamp_millis();
-    crate::db::ws_db::update_ws_connection_status(&state.db_path, connection_id, "disconnected", Some(now))?;
+    crate::db::ws_db::update_ws_connection_status(&state.db, connection_id, "disconnected", Some(now))?;
     Ok(())
 }

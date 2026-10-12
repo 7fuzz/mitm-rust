@@ -1,4 +1,3 @@
-use std::path::Path;
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use crate::ui::theme::{self, Tone};
@@ -6,9 +5,10 @@ use crate::widgets::split;
 use mitm_core::db::browser::DbColumn;
 use super::{DatabaseState, DatabaseTab};
 use crate::ui::icons;
+use mitm_core::db::Db;
 
-pub fn show(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
-    state.ensure_loaded(db_path);
+pub fn show(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
+    state.ensure_loaded(db);
 
     ui.horizontal(|ui| {
         if ui.selectable_label(state.tab == DatabaseTab::Tables, "Tables").clicked() {
@@ -21,18 +21,18 @@ pub fn show(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
     ui.separator();
 
     match state.tab {
-        DatabaseTab::Tables => tables_view(ui, state, db_path),
-        DatabaseTab::Query => query_view(ui, state, db_path),
+        DatabaseTab::Tables => tables_view(ui, state, db),
+        DatabaseTab::Query => query_view(ui, state, db),
     }
 }
 
-fn tables_view(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
+fn tables_view(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
     let [mut left, mut right] = split::side_by_side(ui, "db_tables_split", &mut state.tables_fraction);
 
     left.horizontal(|ui| {
         ui.add(egui::TextEdit::singleline(&mut state.table_filter).hint_text("Filter tables…").desired_width((ui.available_width() - 28.0).max(60.0)));
         if ui.small_button("⟳").on_hover_text("Refresh table list").clicked() {
-            state.load_tables(db_path);
+            state.load_tables(db);
         }
     });
     left.add_space(4.0);
@@ -52,7 +52,7 @@ fn tables_view(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
             }
         });
     if let Some(name) = clicked {
-        state.select_table(db_path, name);
+        state.select_table(db, name);
     }
 
     if let Some(error) = &state.error {
@@ -68,10 +68,10 @@ fn tables_view(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
         return;
     }
 
-    table_content(&mut right, state, db_path);
+    table_content(&mut right, state, db);
 }
 
-fn table_content(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
+fn table_content(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
     ui.horizontal(|ui| {
         let search_edit = ui.add(
             egui::TextEdit::singleline(&mut state.search_query)
@@ -81,16 +81,16 @@ fn table_content(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
         crate::widgets::search::claim_focus(&search_edit);
         if search_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             state.page = 0;
-            state.load_current_page(db_path);
+            state.load_current_page(db);
         }
         if ui.small_button("Search").clicked() {
             state.page = 0;
-            state.load_current_page(db_path);
+            state.load_current_page(db);
         }
         if !state.search_query.is_empty() && ui.small_button("Clear").clicked() {
             state.search_query.clear();
             state.page = 0;
-            state.load_current_page(db_path);
+            state.load_current_page(db);
         }
 
         ui.separator();
@@ -100,20 +100,20 @@ fn table_content(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
 
         if ui.add_enabled(state.page > 0, egui::Button::new(icons::CARET_DOUBLE_LEFT)).clicked() {
             state.page = 0;
-            state.load_current_page(db_path);
+            state.load_current_page(db);
         }
         if ui.add_enabled(state.page > 0, egui::Button::new(icons::CARET_LEFT)).clicked() {
             state.page -= 1;
-            state.load_current_page(db_path);
+            state.load_current_page(db);
         }
         ui.label(format!("Page {} / {} ({} rows)", state.page + 1, total_pages, total));
         if ui.add_enabled(state.page + 1 < total_pages, egui::Button::new(icons::CARET_RIGHT)).clicked() {
             state.page += 1;
-            state.load_current_page(db_path);
+            state.load_current_page(db);
         }
         if ui.add_enabled(state.page + 1 < total_pages, egui::Button::new(icons::CARET_DOUBLE_RIGHT)).clicked() {
             state.page = total_pages - 1;
-            state.load_current_page(db_path);
+            state.load_current_page(db);
         }
     });
 
@@ -121,10 +121,10 @@ fn table_content(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
 
     if state.selected_row_index.is_some() {
         let [mut grid_pane, mut detail_pane] = split::side_by_side(ui, "db_detail_split", &mut state.detail_split_fraction);
-        render_grid(&mut grid_pane, state, db_path);
+        render_grid(&mut grid_pane, state, db);
         render_detail(&mut detail_pane, state);
     } else {
-        render_grid(ui, state, db_path);
+        render_grid(ui, state, db);
     }
 }
 
@@ -133,7 +133,7 @@ enum GridClick {
     Row(usize),
 }
 
-fn render_grid(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
+fn render_grid(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
     let Some(current_rows) = &state.current_rows else {
         return;
     };
@@ -152,8 +152,8 @@ fn render_grid(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
         state.selected_row_index,
     );
     match click {
-        Some(GridClick::Sort(column)) => state.toggle_sort(db_path, &column),
-        Some(GridClick::Row(index)) => state.select_row(db_path, index),
+        Some(GridClick::Sort(column)) => state.toggle_sort(db, &column),
+        Some(GridClick::Row(index)) => state.select_row(db, index),
         None => {}
     }
 }
@@ -307,14 +307,14 @@ fn render_detail(ui: &mut egui::Ui, state: &mut DatabaseState) {
     }
 }
 
-fn query_view(ui: &mut egui::Ui, state: &mut DatabaseState, db_path: &Path) {
+fn query_view(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
     ui.horizontal(|ui| {
         ui.strong("SQL Editor");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let can_run = !state.sql_query.trim().is_empty();
             let is_ctrl_enter = ui.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(egui::Key::Enter));
             if ui.add_enabled(can_run, egui::Button::new("Run (Ctrl+Enter)")).clicked() || (can_run && is_ctrl_enter) {
-                state.run_query(db_path);
+                state.run_query(db);
             }
         });
     });

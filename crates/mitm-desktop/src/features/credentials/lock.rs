@@ -1,10 +1,10 @@
-use std::path::Path;
 use eframe::egui::{self, RichText};
 use mitm_core::credentials;
 use crate::app::command::AppCommand;
 use crate::widgets::confirm;
 use super::{AutoLock, CredentialsState};
 use crate::widgets::section::section;
+use mitm_core::db::Db;
 
 /// Asked for when a send needs locked credentials; the send goes out once unlocked.
 #[derive(Default)]
@@ -24,7 +24,7 @@ pub(super) struct MasterForm {
 }
 
 /// The password field and button; returns true once unlocked.
-pub(super) fn unlock_form(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path) -> bool {
+pub(super) fn unlock_form(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db) -> bool {
     let mut unlocked = false;
     ui.horizontal(|ui| {
         let edit = ui.add(
@@ -35,7 +35,7 @@ pub(super) fn unlock_form(ui: &mut egui::Ui, state: &mut CredentialsState, db_pa
         );
         let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         if ui.button("Unlock").clicked() || enter {
-            match credentials::unlock(db_path, &state.unlock.password) {
+            match credentials::unlock(db, &state.unlock.password) {
                 Ok(()) => {
                     state.unlock.password.clear();
                     state.unlock.error = None;
@@ -53,7 +53,7 @@ pub(super) fn unlock_form(ui: &mut egui::Ui, state: &mut CredentialsState, db_pa
 }
 
 /// The unlock popup. Returns the send to dispatch again once the password is right.
-pub fn show_unlock(ctx: &egui::Context, state: &mut CredentialsState, db_path: &Path) -> Option<AppCommand> {
+pub fn show_unlock(ctx: &egui::Context, state: &mut CredentialsState, db: &Db) -> Option<AppCommand> {
     if !state.unlock.open {
         return None;
     }
@@ -63,7 +63,7 @@ pub fn show_unlock(ctx: &egui::Context, state: &mut CredentialsState, db_path: &
         ui.set_width(360.0);
         ui.heading("Credentials locked");
         ui.add_space(6.0);
-        if unlock_form(ui, state, db_path) {
+        if unlock_form(ui, state, db) {
             retry = Some(state.unlock.pending.take());
         }
         ui.add_space(4.0);
@@ -77,7 +77,7 @@ pub fn show_unlock(ctx: &egui::Context, state: &mut CredentialsState, db_path: &
     retry.flatten()
 }
 
-pub fn settings_section(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path) {
+pub fn settings_section(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db) {
     section(ui, "Master password");
     let form = &mut state.master;
     let password = |text: &mut String, hint: &str, ui: &mut egui::Ui| {
@@ -94,10 +94,10 @@ pub fn settings_section(ui: &mut egui::Ui, state: &mut CredentialsState, db_path
         let label = if state.has_password { "Change" } else { "Set" };
         if ui.add_enabled(matches, egui::Button::new(label)).clicked() {
             let current = state.has_password.then_some(form.current.as_str());
-            result = Some(credentials::set_master_password(db_path, current, &form.new).map(|_| "Master password saved".to_string()));
+            result = Some(credentials::set_master_password(db, current, &form.new).map(|_| "Master password saved".to_string()));
         }
         if state.has_password && ui.add_enabled(!form.current.is_empty(), egui::Button::new("Remove")).clicked() {
-            result = Some(credentials::remove_master_password(db_path, &form.current).map(|_| "Master password removed".to_string()));
+            result = Some(credentials::remove_master_password(db, &form.current).map(|_| "Master password removed".to_string()));
         }
     });
     if let Some(result) = result {
@@ -142,7 +142,7 @@ pub fn settings_section(ui: &mut egui::Ui, state: &mut CredentialsState, db_path
     ui.add_space(12.0);
     let reset_id = ui.id().with("reset_credentials");
     if confirm::confirm_button(ui, reset_id, RichText::new("Reset credentials…"), "Wipe all values?", "Forgot the password: clears every value and note, keeps names and fields") {
-        state.master.status = Some(credentials::reset_credentials(db_path).map(|_| "Credential values wiped".to_string()));
+        state.master.status = Some(credentials::reset_credentials(db).map(|_| "Credential values wiped".to_string()));
         state.stale = true;
     }
 }

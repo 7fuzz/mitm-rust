@@ -1,59 +1,60 @@
 use std::path::{Path, PathBuf};
 use crate::events::EventBus;
 use super::InitError;
+use crate::db::Db;
 
-pub fn run_migrations(db_path: &PathBuf, event_bus: Option<&EventBus>) -> Result<(), InitError> {
-    super::init_database(db_path, event_bus)
+pub fn run_migrations(db: &Db, event_bus: Option<&EventBus>) -> Result<(), InitError> {
+    super::init_database(db, event_bus)
 }
 
 /// Copies the database aside as `<name>.bak_<unix secs>`, deletes it with its WAL and SHM files,
 /// and migrates a fresh one. Returns the backup path, or `None` when there was nothing to back up.
-pub fn backup_and_reset(db_path: &PathBuf, event_bus: Option<&EventBus>) -> Result<Option<PathBuf>, InitError> {
-    let backup = if db_path.exists() {
-        let backup = sibling(db_path, &format!(".bak_{}", chrono::Utc::now().timestamp()));
-        std::fs::copy(db_path, &backup).map_err(|e| InitError::Io(format!("Failed to back up database: {}", e)))?;
+pub fn backup_and_reset(db: &Db, event_bus: Option<&EventBus>) -> Result<Option<PathBuf>, InitError> {
+    let backup = if db.exists() {
+        let backup = sibling(db, &format!(".bak_{}", chrono::Utc::now().timestamp()));
+        std::fs::copy(db, &backup).map_err(|e| InitError::Io(format!("Failed to back up database: {}", e)))?;
         for suffix in ["", "-wal", "-shm"] {
-            let _ = std::fs::remove_file(sibling(db_path, suffix));
+            let _ = std::fs::remove_file(sibling(db, suffix));
         }
         Some(backup)
     } else {
         None
     };
-    super::init_database(db_path, event_bus)?;
+    super::init_database(db, event_bus)?;
     Ok(backup)
 }
 
-pub fn factory_reset(db_path: &PathBuf, event_bus: Option<&EventBus>) -> Result<(), InitError> {
-    factory_reset_with_ca(db_path, None, event_bus)
+pub fn factory_reset(db: &Db, event_bus: Option<&EventBus>) -> Result<(), InitError> {
+    factory_reset_with_ca(db, None, event_bus)
 }
 
 pub fn factory_reset_with_ca(
-    db_path: &PathBuf,
+    db: &Db,
     ca_dir: Option<PathBuf>,
     event_bus: Option<&EventBus>,
 ) -> Result<(), InitError> {
     for suffix in ["", "-wal", "-shm"] {
-        let _ = std::fs::remove_file(sibling(db_path, suffix));
+        let _ = std::fs::remove_file(sibling(db, suffix));
     }
     let ca_path = ca_dir.unwrap_or_else(crate::ca::get_default_ca_dir);
     crate::ca::delete_ca(ca_path.clone());
     let _ = crate::ca::get_ca(ca_path);
-    super::init_database(db_path, event_bus)?;
+    super::init_database(db, event_bus)?;
     Ok(())
 }
 
-pub fn export_database(db_path: &Path, destination: &Path) -> Result<(), String> {
-    if !db_path.exists() {
+pub fn export_database(db: &Db, destination: &Path) -> Result<(), String> {
+    if !db.exists() {
         return Err("Database file does not exist yet".to_string());
     }
-    std::fs::copy(db_path, destination).map_err(|e| format!("Failed to export database: {}", e))?;
+    std::fs::copy(db, destination).map_err(|e| format!("Failed to export database: {}", e))?;
     Ok(())
 }
 
-fn sibling(db_path: &Path, suffix: &str) -> PathBuf {
-    let mut name = db_path.file_name().unwrap_or_default().to_os_string();
+fn sibling(db: &Db, suffix: &str) -> PathBuf {
+    let mut name = db.file_name().unwrap_or_default().to_os_string();
     name.push(suffix);
-    db_path.with_file_name(name)
+    db.with_file_name(name)
 }
 
 #[cfg(test)]
@@ -69,7 +70,7 @@ mod tests {
     #[test]
     fn backup_and_reset_keeps_a_copy_and_migrates_a_fresh_db() {
         let dir = temp_dir();
-        let db = dir.join("mitm.db");
+        let db = crate::db::Db::new(dir.join("mitm.db"));
         std::fs::write(&db, b"not a database").unwrap();
         std::fs::write(dir.join("mitm.db-wal"), b"x").unwrap();
 
@@ -83,7 +84,7 @@ mod tests {
     #[test]
     fn export_copies_the_file_and_rejects_a_missing_db() {
         let dir = temp_dir();
-        let db = dir.join("mitm.db");
+        let db = crate::db::Db::new(dir.join("mitm.db"));
         assert!(export_database(&db, &dir.join("out.db")).is_err());
         std::fs::write(&db, b"data").unwrap();
         export_database(&db, &dir.join("out.db")).unwrap();
@@ -94,7 +95,7 @@ mod tests {
     #[test]
     fn factory_reset_clears_db_and_ca_and_remigrates() {
         let dir = temp_dir();
-        let db = dir.join("mitm.db");
+        let db = crate::db::Db::new(dir.join("mitm.db"));
         let ca_dir = dir.join("ca");
         std::fs::create_dir_all(&ca_dir).unwrap();
         let _ = crate::ca::get_ca(ca_dir.clone());

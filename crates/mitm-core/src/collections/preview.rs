@@ -1,7 +1,7 @@
-use std::path::PathBuf;
 use serde::Deserialize;
 
 use crate::workspace::interpolate_variables;
+use crate::db::Db;
 
 #[derive(Debug, Clone)]
 pub struct RequestPreview {
@@ -28,8 +28,8 @@ struct StoredRequest {
     workspace_id: String,
 }
 
-fn load(db_path: &PathBuf, request_id: &str) -> Result<StoredRequest, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+fn load(db: &Db, request_id: &str) -> Result<StoredRequest, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.query_row(
         "SELECT r.method, r.url, r.headers_json, r.params_json, r.body_type,
                 r.body_json, r.body_raw, r.body_form_data, r.body_urlencoded, c.workspace_id
@@ -76,9 +76,9 @@ fn active_rows(json: &str) -> Vec<Row> {
         .collect()
 }
 
-pub fn preview_request_db(db_path: &PathBuf, request_id: &str) -> Result<RequestPreview, String> {
-    let stored = load(db_path, request_id)?;
-    let fill = |text: &str| interpolate_variables(db_path, &stored.workspace_id, text);
+pub fn preview_request_db(db: &Db, request_id: &str) -> Result<RequestPreview, String> {
+    let stored = load(db, request_id)?;
+    let fill = |text: &str| interpolate_variables(db, &stored.workspace_id, text);
     let method = stored.method.to_uppercase();
 
     let query: Vec<String> = active_rows(&stored.params_json)
@@ -143,8 +143,8 @@ mod tests {
     fn renders_request_with_params_and_implied_content_type() {
         let dir = std::env::temp_dir().join(format!("mitm-preview-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db_path = dir.join("test.db");
-        let conn = crate::db::open(&db_path).unwrap();
+        let db = crate::db::Db::new(dir.join("test.db"));
+        let conn = crate::db::open(&db).unwrap();
         conn.execute_batch(
             "CREATE TABLE collections (id TEXT PRIMARY KEY, workspace_id TEXT);
              CREATE TABLE requests (id TEXT PRIMARY KEY, collection_id TEXT, method TEXT, url TEXT,
@@ -159,7 +159,7 @@ mod tests {
         .unwrap();
         drop(conn);
 
-        let preview = preview_request_db(&db_path, "r1").unwrap();
+        let preview = preview_request_db(&db, "r1").unwrap();
         assert!(preview.full_url_request.starts_with("POST https://api.example.com/users?q=a%20b HTTP/1.1\r\n"));
         assert!(preview.full_request.starts_with("POST /users?q=a%20b HTTP/1.1\r\nHost: api.example.com\r\n"));
         assert!(preview.full_request.contains("X-Trace: abc\r\nContent-Type: application/json\r\n"));

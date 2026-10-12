@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use rusqlite::params;
 
 use crate::collections::{get_collections_db, CollectionTreeItem, RequestItem};
@@ -10,15 +9,16 @@ use super::file::{
     make_ref, Body, ExportOptions, CollectionEntry, EnvironmentEntry, ExtractEntry, ExtractSource, FormField, FormFieldType, KeyValue,
     RequestEntry, VariableEntry, WorkspaceFile, WorkspaceInfo,
 };
+use crate::db::Db;
 
 /// The workspace as a `mitm-workspace` file. Credential values go in only when sealed with `credentials_passphrase`.
 pub fn export_workspace_json_db(
-    db_path: &PathBuf,
+    db: &Db,
     workspace_id: &str,
     options: ExportOptions,
     credentials_passphrase: Option<&str>,
 ) -> Result<String, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let (name, description): (String, Option<String>) = conn
         .query_row("SELECT name, description FROM workspaces WHERE id = ?", params![workspace_id], |row| {
             Ok((row.get(0)?, row.get(1)?))
@@ -26,7 +26,7 @@ pub fn export_workspace_json_db(
         .map_err(|e| format!("Workspace with ID '{}' not found: {}", workspace_id, e))?;
 
     let mut file = WorkspaceFile::new(WorkspaceInfo { name, description: non_empty(description) });
-    file.environments = get_workspace_environments_db(db_path, workspace_id)?
+    file.environments = get_workspace_environments_db(db, workspace_id)?
         .iter()
         .map(|env| EnvironmentEntry {
             name: env.name.clone(),
@@ -35,23 +35,23 @@ pub fn export_workspace_json_db(
         })
         .collect();
 
-    let tree = get_collections_db(db_path, workspace_id)?;
+    let tree = get_collections_db(db, workspace_id)?;
     let refs = step_refs(&tree);
     file.collections = tree.iter().map(|node| collection_entry(node, &refs)).collect();
     (file.credentials, file.credentials_sealed) =
-        crate::credentials::export_credentials(db_path, workspace_id, credentials_passphrase, options.include_auto)?;
+        crate::credentials::export_credentials(db, workspace_id, credentials_passphrase, options.include_auto)?;
 
     serde_json::to_string_pretty(&file).map_err(|e| format!("Failed to serialize workspace: {}", e))
 }
 
 pub fn export_workspace_file_db(
-    db_path: &PathBuf,
+    db: &Db,
     workspace_id: &str,
     destination_path: &str,
     options: ExportOptions,
     credentials_passphrase: Option<&str>,
 ) -> Result<(), String> {
-    let json = export_workspace_json_db(db_path, workspace_id, options, credentials_passphrase)?;
+    let json = export_workspace_json_db(db, workspace_id, options, credentials_passphrase)?;
     let target = std::path::Path::new(destination_path);
     if let Some(parent) = target.parent().filter(|p| !p.exists()) {
         std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create destination directory: {}", e))?;
@@ -181,10 +181,10 @@ mod tests {
 
     const EXAMPLE: &str = include_str!("../../../../examples/online-store.mitm.json");
 
-    fn temp_db() -> (PathBuf, PathBuf) {
+    fn temp_db() -> (crate::db::Db, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!("mitm-export-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db = dir.join("test.db");
+        let db = crate::db::Db::new(dir.join("test.db"));
         crate::db::init_database(&db, None).unwrap();
         (db, dir)
     }
@@ -222,7 +222,7 @@ mod tests {
         assert!(!first.contains("\"id\""));
     }
 
-    fn workspace_with_credentials(db: &PathBuf) -> String {
+    fn workspace_with_credentials(db: &crate::db::Db) -> String {
         use crate::credentials::{create_credential, save_credential, Field, FieldKind};
         use crate::workspace::{save_workspace_environment_db, Environment, EnvironmentVariable, VariableVariant};
         let ws = crate::workspace::create_workspace_db(db, "W".into(), None).unwrap().id;

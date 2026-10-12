@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use dashmap::DashMap;
@@ -10,11 +9,12 @@ use crate::proxy::listener::{normalize_listener_address, ListenerConfig, Listene
 use crate::proxy::rewrite::{RewriteHistoryEntry, RewriteRule};
 use crate::proxy::rules::SourceScope;
 use crate::proxy::history::HistoryEntry;
+use crate::db::Db;
 
 /// Loads listener configs from preferences, assigning ids to entries saved without one
 /// and recreating listener #0 when it's missing.
-fn load_listener_configs(db_path: &PathBuf) -> Vec<ListenerConfig> {
-    let raw: Vec<serde_json::Value> = crate::db::get_preference(db_path, "proxy_listeners")
+fn load_listener_configs(db: &Db) -> Vec<ListenerConfig> {
+    let raw: Vec<serde_json::Value> = crate::db::get_preference(db, "proxy_listeners")
         .and_then(|json| serde_json::from_str(&json).ok())
         .unwrap_or_default();
 
@@ -68,8 +68,8 @@ fn load_listener_configs(db_path: &PathBuf) -> Vec<ListenerConfig> {
     configs
 }
 
-fn load_source_scope(db_path: &PathBuf, key: &str) -> SourceScope {
-    crate::db::get_preference(db_path, key)
+fn load_source_scope(db: &Db, key: &str) -> SourceScope {
+    crate::db::get_preference(db, key)
         .and_then(|json| serde_json::from_str(&json).ok())
         .unwrap_or_default()
 }
@@ -79,7 +79,7 @@ type StopSignal = Arc<Mutex<Option<oneshot::Sender<()>>>>;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db_path: PathBuf,
+    pub db: Db,
     pub history_tx: tokio::sync::mpsc::Sender<HistoryEntry>,
     pub rewrite_tx: tokio::sync::mpsc::Sender<RewriteHistoryEntry>,
     pub proxy_active: Arc<AtomicBool>,
@@ -108,8 +108,8 @@ pub struct AppState {
 }
 
 /// Highest id in `table`, so in-memory id counters resume after it
-fn max_id(db_path: &PathBuf, table: &str) -> u64 {
-    crate::db::open(db_path)
+fn max_id(db: &Db, table: &str) -> u64 {
+    db.conn()
         .and_then(|conn| {
             conn.query_row(&format!("SELECT COALESCE(MAX(id), 0) FROM {}", table), [], |row| row.get::<_, i64>(0))
         })
@@ -119,49 +119,49 @@ fn max_id(db_path: &PathBuf, table: &str) -> u64 {
 
 impl AppState {
     pub fn new(
-        db_path: PathBuf,
+        db: Db,
         history_tx: tokio::sync::mpsc::Sender<HistoryEntry>,
         rewrite_tx: tokio::sync::mpsc::Sender<RewriteHistoryEntry>,
     ) -> Self {
         let (broadcast_tx, _) = broadcast::channel(500);
 
-        let initial_next_history_id = max_id(&db_path, "history");
-        let initial_next_rewrite_history_id = max_id(&db_path, "rewrite_history");
-        let initial_next_fuzz_run_id = max_id(&db_path, "fuzz_runs");
+        let initial_next_history_id = max_id(&db, "history");
+        let initial_next_rewrite_history_id = max_id(&db, "rewrite_history");
+        let initial_next_fuzz_run_id = max_id(&db, "fuzz_runs");
 
-        let initial_proxy_mode = crate::db::get_preference(&db_path, "proxy_mode")
+        let initial_proxy_mode = crate::db::get_preference(&db, "proxy_mode")
             .unwrap_or_else(|| "on".to_string());
 
         let initial_proxy_enabled = initial_proxy_mode != "off";
-        let initial_intercept_enabled = crate::db::get_preference(&db_path, "intercept_enabled")
+        let initial_intercept_enabled = crate::db::get_preference(&db, "intercept_enabled")
             .map(|v| v == "true")
             .unwrap_or(false);
-        let initial_intercept_mode = crate::db::get_preference(&db_path, "intercept_mode")
+        let initial_intercept_mode = crate::db::get_preference(&db, "intercept_mode")
             .unwrap_or_else(|| "both".to_string());
 
-        let initial_rewrite_enabled = crate::db::get_preference(&db_path, "rewrite_enabled")
+        let initial_rewrite_enabled = crate::db::get_preference(&db, "rewrite_enabled")
             .map(|v| v == "true")
             .unwrap_or(true);
 
-        let initial_webhook_port = crate::db::get_preference(&db_path, "webhook_port")
+        let initial_webhook_port = crate::db::get_preference(&db, "webhook_port")
             .and_then(|v| v.parse::<u16>().ok())
             .unwrap_or(9000);
 
-        let limiter_enabled = crate::db::get_preference(&db_path, "history_limiter_enabled")
+        let limiter_enabled = crate::db::get_preference(&db, "history_limiter_enabled")
             .map(|v| v == "true")
             .unwrap_or(true);
-        let max_rows = crate::db::get_preference(&db_path, "history_limiter_max_rows")
+        let max_rows = crate::db::get_preference(&db, "history_limiter_max_rows")
             .and_then(|v| v.parse::<u32>().ok())
             .unwrap_or(500);
 
-        let initial_ws_mitm_enabled = crate::db::get_preference(&db_path, "ws_mitm_enabled")
+        let initial_ws_mitm_enabled = crate::db::get_preference(&db, "ws_mitm_enabled")
             .map(|v| v == "true")
             .unwrap_or(false);
 
-        let initial_rules = crate::db::load_intercept_rules(&db_path).unwrap_or_default();
-        let initial_rewrite_rules = crate::db::load_rewrite_rules(&db_path).unwrap_or_default();
+        let initial_rules = crate::db::load_intercept_rules(&db).unwrap_or_default();
+        let initial_rewrite_rules = crate::db::load_rewrite_rules(&db).unwrap_or_default();
 
-        let initial_listener_configs = load_listener_configs(&db_path);
+        let initial_listener_configs = load_listener_configs(&db);
 
         let proxy_config = ProxyConfig {
             proxy_enabled: initial_proxy_enabled,
@@ -169,10 +169,10 @@ impl AppState {
             intercept_mode: initial_intercept_mode,
             proxy_mode: initial_proxy_mode,
             ws_mitm_enabled: initial_ws_mitm_enabled,
-            intercept_source_scope: load_source_scope(&db_path, "intercept_source_scope"),
+            intercept_source_scope: load_source_scope(&db, "intercept_source_scope"),
         };
 
-        let initial_rewrite_source_scope = load_source_scope(&db_path, "rewrite_source_scope");
+        let initial_rewrite_source_scope = load_source_scope(&db, "rewrite_source_scope");
 
         let history_settings = HistorySettings {
             limiter_enabled,
@@ -180,7 +180,7 @@ impl AppState {
         };
 
         Self {
-            db_path,
+            db,
             history_tx,
             rewrite_tx,
             proxy_active: Arc::new(AtomicBool::new(initial_proxy_enabled)),

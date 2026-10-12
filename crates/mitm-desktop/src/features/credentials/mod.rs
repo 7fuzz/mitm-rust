@@ -4,9 +4,9 @@ mod lock;
 mod view;
 
 use crate::util::save_queue::SaveQueue;
-use std::path::Path;
 use mitm_core::credentials::{self, Credential, CredentialSummary, Field, FieldKind};
 use serde::{Deserialize, Serialize};
+use mitm_core::db::Db;
 
 pub use commands::{handle, Cmd};
 pub use json_import::show as show_json_import;
@@ -90,10 +90,10 @@ impl Default for CredentialsState {
 
 impl CredentialsState {
     /// Reloads when the active workspace changed or something else wrote credentials (extract, import).
-    pub fn sync(&mut self, db_path: &Path, workspace_id: &str) {
+    pub fn sync(&mut self, db: &Db, workspace_id: &str) {
         if self.stale || self.loaded_for.as_deref() != Some(workspace_id) {
-            self.flush(db_path);
-            self.load(db_path, workspace_id);
+            self.flush(db);
+            self.load(db, workspace_id);
         }
     }
 
@@ -101,7 +101,7 @@ impl CredentialsState {
         self.stale = true;
     }
 
-    fn load(&mut self, db_path: &Path, workspace_id: &str) {
+    fn load(&mut self, db: &Db, workspace_id: &str) {
         self.stale = false;
         if self.loaded_for.as_deref() != Some(workspace_id) {
             self.selected = None;
@@ -109,13 +109,13 @@ impl CredentialsState {
             self.totp_draft = None;
         }
         self.loaded_for = Some(workspace_id.to_string());
-        self.has_password = credentials::has_master_password(db_path);
-        self.locked = credentials::is_locked(db_path);
-        self.summaries = credentials::list_credentials(db_path, workspace_id).unwrap_or_default();
+        self.has_password = credentials::has_master_password(db);
+        self.locked = credentials::is_locked(db);
+        self.summaries = credentials::list_credentials(db, workspace_id).unwrap_or_default();
         self.entries = if self.locked {
             Vec::new()
         } else {
-            self.summaries.iter().filter_map(|s| credentials::load_credential(db_path, &s.id).ok()).collect()
+            self.summaries.iter().filter_map(|s| credentials::load_credential(db, &s.id).ok()).collect()
         };
         if !self.selected.as_ref().is_some_and(|id| self.summaries.iter().any(|e| &e.id == id)) {
             self.selected = self.summaries.first().map(|e| e.id.clone());
@@ -137,9 +137,9 @@ impl CredentialsState {
         self.unlock = lock::UnlockPrompt { open: true, pending, ..Default::default() };
     }
 
-    pub fn lock(&mut self, db_path: &Path) {
-        self.flush(db_path);
-        credentials::lock(db_path);
+    pub fn lock(&mut self, db: &Db) {
+        self.flush(db);
+        credentials::lock(db);
         self.stale = true;
     }
 
@@ -174,7 +174,7 @@ impl CredentialsState {
     }
 
     /// Any input counts as activity; once idle past the auto-lock limit the key is dropped.
-    pub fn tick(&mut self, ctx: &eframe::egui::Context, db_path: &Path, now: f64) {
+    pub fn tick(&mut self, ctx: &eframe::egui::Context, db: &Db, now: f64) {
         if ctx.input(|i| !i.events.is_empty() || i.pointer.is_moving()) {
             self.last_activity = now;
         }
@@ -184,15 +184,15 @@ impl CredentialsState {
         }
         let left = f64::from(minutes.max(1)) * 60.0 - (now - self.last_activity);
         if left <= 0.0 {
-            self.lock(db_path);
+            self.lock(db);
         } else {
             ctx.request_repaint_after(std::time::Duration::from_secs_f64(left));
         }
     }
 
-    fn reload(&mut self, db_path: &Path) {
+    fn reload(&mut self, db: &Db) {
         if let Some(workspace_id) = self.loaded_for.clone() {
-            self.load(db_path, &workspace_id);
+            self.load(db, &workspace_id);
         }
     }
 
@@ -201,9 +201,9 @@ impl CredentialsState {
         self.publish();
     }
 
-    pub fn flush_if_idle(&mut self, db_path: &Path, now: f64) {
+    pub fn flush_if_idle(&mut self, db: &Db, now: f64) {
         if self.saves.is_due(now) {
-            self.flush(db_path);
+            self.flush(db);
             self.saves.retry_later(now);
         }
     }
@@ -212,75 +212,75 @@ impl CredentialsState {
         self.saves.take_errors()
     }
 
-    pub fn flush(&mut self, db_path: &Path) {
+    pub fn flush(&mut self, db: &Db) {
         for id in self.saves.take() {
             let Some(entry) = self.entries.iter().find(|e| e.id == id) else { continue };
-            match credentials::save_credential(db_path, entry) {
+            match credentials::save_credential(db, entry) {
                 Ok(_) => self.saves.saved(&id),
                 Err(e) => self.saves.failed(id, format!("Couldn't save credential: {e}")),
             }
         }
     }
 
-    fn create(&mut self, db_path: &Path) {
+    fn create(&mut self, db: &Db) {
         let Some(workspace_id) = self.loaded_for.clone() else { return };
         let name = free_name(self.entries.iter().map(|e| e.name.as_str()), "credential");
-        match credentials::create_credential(db_path, &workspace_id, &name) {
+        match credentials::create_credential(db, &workspace_id, &name) {
             Ok(created) => {
                 self.rename = Some(Rename { id: created.id.clone(), field: None, text: created.name.clone() });
                 self.selected = Some(created.id);
-                self.reload(db_path);
+                self.reload(db);
             }
             Err(e) => self.error = Some(e),
         }
     }
 
-    fn delete(&mut self, db_path: &Path, id: &str) {
+    fn delete(&mut self, db: &Db, id: &str) {
         self.saves.remove(id);
-        if let Err(e) = credentials::delete_credential(db_path, id) {
+        if let Err(e) = credentials::delete_credential(db, id) {
             self.error = Some(e);
         }
-        self.reload(db_path);
+        self.reload(db);
     }
 
-    fn add_field(&mut self, db_path: &Path, id: &str) {
+    fn add_field(&mut self, db: &Db, id: &str) {
         let Some(entry) = self.entries.iter_mut().find(|e| e.id == id) else { return };
         let key = free_name(entry.fields.iter().map(|f| f.key.as_str()), "field");
         entry.fields.push(Field { key: key.clone(), kind: FieldKind::Text, extracted: false, value: String::new() });
         self.saves.insert(id);
-        self.flush(db_path);
+        self.flush(db);
         self.rename = Some(Rename { id: id.to_string(), field: Some(key.clone()), text: key });
     }
 
-    fn commit_rename(&mut self, db_path: &Path) {
+    fn commit_rename(&mut self, db: &Db) {
         let Some(rename) = self.rename.take() else { return };
         let text = rename.text.trim();
-        self.flush(db_path);
+        self.flush(db);
         let result = match &rename.field {
-            None => credentials::rename_credential(db_path, &rename.id, text),
-            Some(old) if old != text => credentials::rename_field(db_path, &rename.id, old, text),
+            None => credentials::rename_credential(db, &rename.id, text),
+            Some(old) if old != text => credentials::rename_field(db, &rename.id, old, text),
             Some(_) => Ok(()),
         };
         if let Err(e) = result {
             self.error = Some(e);
         }
-        self.reload(db_path);
+        self.reload(db);
     }
 }
 
 /// Moves a variable's value into `entry.field` (created as needed) and returns the ref to leave behind.
-pub fn move_value(db_path: &Path, workspace_id: &str, entry: &str, field: &str, value: String) -> Result<String, String> {
+pub fn move_value(db: &Db, workspace_id: &str, entry: &str, field: &str, value: String) -> Result<String, String> {
     credentials::validate_name(entry)?;
     credentials::validate_name(field)?;
-    let mut credential = match credentials::find_credential(db_path, workspace_id, entry)? {
+    let mut credential = match credentials::find_credential(db, workspace_id, entry)? {
         Some(existing) => existing,
-        None => credentials::create_credential(db_path, workspace_id, entry)?,
+        None => credentials::create_credential(db, workspace_id, entry)?,
     };
     if credential.field(field).is_some() {
         return Err(format!("{} already has a field \"{field}\"", credential.name));
     }
     credential.fields.push(Field { key: field.to_string(), kind: FieldKind::Secret, extracted: false, value });
-    credentials::save_credential(db_path, &credential)?;
+    credentials::save_credential(db, &credential)?;
     Ok(credentials::format_ref(&credential.name, field))
 }
 
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn move_value_creates_or_extends_an_entry_and_returns_its_link() {
-        let db = std::env::temp_dir().join(format!("mitm-desktop-creds-{}.db", uuid::Uuid::new_v4()));
+        let db = mitm_core::db::Db::new(std::env::temp_dir().join(format!("mitm-desktop-creds-{}.db", uuid::Uuid::new_v4())));
         mitm_core::db::init_database(&db, None).unwrap();
         let ws = mitm_core::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
 

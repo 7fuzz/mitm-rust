@@ -3,7 +3,7 @@ use crate::{db, webhook, MitmCore};
 
 impl MitmCore {
     pub fn clear_webhook_deliveries(&self) -> Result<(), String> {
-        db::webhook_db::clear_webhook_deliveries(&self.db_path)
+        db::webhook_db::clear_webhook_deliveries(&self.db)
     }
 
     pub async fn webhook_status(&self) -> crate::webhook::types::WebhookListenerConfig {
@@ -37,7 +37,7 @@ impl MitmCore {
         let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
         *self.state.webhook_stop_signal.lock().await = Some(stop_tx);
         *self.state.webhook_port.write().await = port;
-        let _ = db::set_preference(&self.db_path, "webhook_port", &port.to_string());
+        let _ = db::set_preference(&self.db, "webhook_port", &port.to_string());
 
         let bus = self.event_bus.clone();
         let state = Arc::clone(&self.state);
@@ -66,11 +66,11 @@ impl MitmCore {
             return Err("Stop the receiver before changing its port".to_string());
         }
         *self.state.webhook_port.write().await = port;
-        db::set_preference(&self.db_path, "webhook_port", &port.to_string())
+        db::set_preference(&self.db, "webhook_port", &port.to_string())
     }
 
     pub fn webhook_endpoints(&self) -> Result<Vec<crate::webhook::types::WebhookEndpoint>, String> {
-        db::webhook_db::load_webhook_endpoints(&self.db_path)
+        db::webhook_db::load_webhook_endpoints(&self.db)
     }
 
     pub fn create_webhook_endpoint(&self, name: String, path: String, secret: String) -> Result<crate::webhook::types::WebhookEndpoint, String> {
@@ -82,16 +82,16 @@ impl MitmCore {
             created_at: chrono::Local::now().timestamp_millis(),
             hit_count: 0,
         };
-        db::webhook_db::save_webhook_endpoint(&self.db_path, &endpoint)?;
+        db::webhook_db::save_webhook_endpoint(&self.db, &endpoint)?;
         Ok(endpoint)
     }
 
     pub fn delete_webhook_endpoint(&self, id: &str) -> Result<(), String> {
-        db::webhook_db::delete_webhook_endpoint(&self.db_path, id)
+        db::webhook_db::delete_webhook_endpoint(&self.db, id)
     }
 
     pub fn webhook_deliveries(&self, limit: Option<u32>) -> Result<Vec<crate::webhook::types::WebhookDelivery>, String> {
-        db::webhook_db::load_webhook_deliveries(&self.db_path, limit)
+        db::webhook_db::load_webhook_deliveries(&self.db, limit)
     }
 
     pub fn calculate_webhook_signature(&self, secret: &str, body: &str, provider: &str) -> crate::webhook::types::WebhookSignatureResult {
@@ -102,7 +102,7 @@ impl MitmCore {
     /// Re-verifies a stored delivery against its endpoint's current secret.
     /// Returns (status, expected, provided).
     pub fn verify_webhook(&self, delivery: &crate::webhook::types::WebhookDelivery) -> Result<(String, Option<String>, Option<String>), String> {
-        let secret = db::webhook_db::load_webhook_endpoints(&self.db_path)?
+        let secret = db::webhook_db::load_webhook_endpoints(&self.db)?
             .into_iter()
             .find(|e| e.id == delivery.endpoint_id)
             .map(|e| e.secret_key)

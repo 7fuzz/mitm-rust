@@ -15,24 +15,24 @@ impl MitmApp {
                     self.state.credentials.ask_unlock(Some(AppCommand::RepeaterSend(id)));
                     continue;
                 }
-                self.state.repeater.finish_run(&id, result, &self.core.db_path);
-                self.state.environments.refresh(&self.core.db_path);
+                self.state.repeater.finish_run(&id, result, &self.core.db);
+                self.state.environments.refresh(&self.core.db);
                 self.state.credentials.mark_stale();
             }
-            self.state.repeater.flush_if_idle(&self.core.db_path, now);
+            self.state.repeater.flush_if_idle(&self.core.db, now);
             for (id, result) in self.collection_runs.drain() {
                 if is_locked_error(&result) {
-                    self.state.collections.finish_run(&id, result, &self.core.db_path);
+                    self.state.collections.finish_run(&id, result, &self.core.db);
                     self.state.credentials.ask_unlock(Some(AppCommand::Collections(CollectionsCmd::Execute(id))));
                     continue;
                 }
-                self.state.collections.finish_run(&id, result, &self.core.db_path);
-                self.state.environments.refresh(&self.core.db_path);
+                self.state.collections.finish_run(&id, result, &self.core.db);
+                self.state.environments.refresh(&self.core.db);
                 self.state.credentials.mark_stale();
             }
-            self.state.collections.flush_if_idle(&self.core.db_path, now);
-            self.state.environments.flush_if_idle(&self.core.db_path, now);
-            self.state.credentials.flush_if_idle(&self.core.db_path, now);
+            self.state.collections.flush_if_idle(&self.core.db, now);
+            self.state.environments.flush_if_idle(&self.core.db, now);
+            self.state.credentials.flush_if_idle(&self.core.db, now);
             let save_errors = [
                 self.state.repeater.take_save_errors(),
                 self.state.collections.take_save_errors(),
@@ -42,7 +42,7 @@ impl MitmApp {
             for error in save_errors.into_iter().flatten() {
                 top_bar::flash(ui, Err(error));
             }
-            self.state.traffic.sync_header_search(&self.core.db_path);
+            self.state.traffic.sync_header_search(&self.core.db);
             for (target, decoded) in self.qr_images.drain().flatten() {
                     match (target, decoded) {
                     (QrTarget::TotpTool, Ok(text)) => {

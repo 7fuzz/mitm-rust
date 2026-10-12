@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use eframe::egui::{self, RichText};
-use mitm_core::db::{recovery, InitError};
+use mitm_core::db::{recovery, Db, InitError};
 use tokio::runtime::Runtime;
 use crate::util::files;
 use crate::app::jobs::Jobs;
@@ -9,7 +9,7 @@ use crate::widgets::confirm::confirm_button;
 
 pub struct Recovery {
     error: InitError,
-    db_path: PathBuf,
+    db: Db,
     status: Option<(String, Tone)>,
     exports: Jobs<Option<Result<PathBuf, String>>>,
 }
@@ -18,7 +18,7 @@ impl Recovery {
     pub fn new(error: InitError) -> Self {
         Self {
             error,
-            db_path: mitm_core::db::get_default_db_path(),
+            db: Db::new(mitm_core::db::get_default_db_path()),
             status: None,
             exports: Jobs::default(),
         }
@@ -41,7 +41,7 @@ impl Recovery {
                 ui.label(RichText::new(heading(&self.error)).heading().color(theme::color(ui, Tone::Danger)));
                 ui.add_space(8.0);
                 ui.label(RichText::new(self.error.message()).monospace().weak());
-                ui.label(RichText::new(self.db_path.display().to_string()).monospace().weak().small());
+                ui.label(RichText::new(self.db.display().to_string()).monospace().weak().small());
                 ui.add_space(16.0);
                 ui.horizontal(|ui| {
                     restart |= ui.add(crate::widgets::button::primary(ui, "Retry migrations")).clicked();
@@ -66,7 +66,7 @@ impl Recovery {
     }
 
     fn backup_and_reset(&mut self) -> bool {
-        match recovery::backup_and_reset(&self.db_path, None) {
+        match recovery::backup_and_reset(&self.db, None) {
             Ok(_) => true,
             Err(error) => {
                 self.status = Some((error.to_string(), Tone::Danger));
@@ -76,11 +76,11 @@ impl Recovery {
     }
 
     fn export(&self, rt: &Runtime, ctx: &egui::Context) {
-        let db_path = self.db_path.clone();
+        let db = self.db.clone();
         self.exports.spawn(rt, ctx, async move {
             let destination = files::pick_save("mitm.db", &[("SQLite database", &["db"])]).await?;
             let copy = tokio::task::spawn_blocking(move || {
-                recovery::export_database(&db_path, &destination).map(|_| destination)
+                recovery::export_database(&db, &destination).map(|_| destination)
             });
             Some(copy.await.unwrap_or_else(|e| Err(e.to_string())))
         });

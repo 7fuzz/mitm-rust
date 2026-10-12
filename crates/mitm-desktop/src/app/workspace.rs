@@ -8,34 +8,34 @@ use super::MitmApp;
 
 impl MitmApp {
     pub(super) fn select_workspace(&mut self, ctx: &egui::Context, id: String) {
-        let db_path = &self.core.db_path;
+        let db = &self.core.db;
         let cx = Cx { rt: &self.rt, core: &self.core, ctx };
-        cx.report(mitm_core::workspace::set_active_workspace_db(db_path, &id));
+        cx.report(mitm_core::workspace::set_active_workspace_db(db, &id));
         self.state.environments.active_workspace_id = id.clone();
-        self.state.environments.reload_environments(db_path);
+        self.state.environments.reload_environments(db);
         self.state.collections.apply(CollectionsCmd::SelectWorkspace(id), &cx);
     }
 
     pub(super) fn create_workspace(&mut self, ctx: &egui::Context, name: String) {
-        let db_path = &self.core.db_path;
+        let db = &self.core.db;
         let cx = Cx { rt: &self.rt, core: &self.core, ctx };
-        if let Some(ws) = cx.report(mitm_core::workspace::create_workspace_db(db_path, name, None)) {
+        if let Some(ws) = cx.report(mitm_core::workspace::create_workspace_db(db, name, None)) {
             self.state.environments.workspaces.push(ws.clone());
             self.run_command(ctx, AppCommand::SelectWorkspace(ws.id));
         }
     }
 
     pub(super) fn delete_workspace(&mut self, ctx: &egui::Context, id: String) {
-        let db_path = &self.core.db_path;
+        let db = &self.core.db;
         let cx = Cx { rt: &self.rt, core: &self.core, ctx };
-        if cx.report(mitm_core::workspace::delete_workspace_db(db_path, &id)).is_none() {
+        if cx.report(mitm_core::workspace::delete_workspace_db(db, &id)).is_none() {
             return;
         }
         self.state.environments.workspaces.retain(|w| w.id != id);
         if self.state.environments.active_workspace_id == id {
             if let Some(first) = self.state.environments.workspaces.first().cloned() {
                 self.run_command(ctx, AppCommand::SelectWorkspace(first.id));
-            } else if let Ok(ws) = mitm_core::workspace::create_workspace_db(db_path, "Default Workspace".to_string(), None) {
+            } else if let Ok(ws) = mitm_core::workspace::create_workspace_db(db, "Default Workspace".to_string(), None) {
                 self.state.environments.workspaces.push(ws.clone());
                 self.run_command(ctx, AppCommand::SelectWorkspace(ws.id));
             }
@@ -73,22 +73,22 @@ impl MitmApp {
     }
 
     pub(super) fn export_workspace_file(&mut self, ctx: &egui::Context, options: ExportOptions, passphrase: Option<String>) {
-        let db_path = &self.core.db_path;
-        if passphrase.is_some() && mitm_core::credentials::is_locked(db_path) {
+        let db = &self.core.db;
+        if passphrase.is_some() && mitm_core::credentials::is_locked(db) {
             self.state.credentials.ask_unlock(Some(AppCommand::ExportWorkspaceFile { options, passphrase }));
             return;
         }
         let Some(workspace) = self.state.environments.active_workspace().cloned() else { return };
         // Export reads the database, so edits still waiting for their debounced save go first.
-        self.state.environments.flush(db_path);
-        self.state.collections.flush(db_path);
-        self.state.credentials.flush(db_path);
-        let db_path = db_path.clone();
+        self.state.environments.flush(db);
+        self.state.collections.flush(db);
+        self.state.credentials.flush(db);
+        let db = db.clone();
         self.file_saves.spawn(&self.rt, ctx, async move {
             let name = format!("{}.mitm.json", workspace.name);
             let path = crate::util::files::pick_save(&name, &[("Workspace file", &["json"])]).await?;
             let result = mitm_core::workspace::export::export_workspace_file_db(
-                &db_path,
+                &db,
                 &workspace.id,
                 &path.to_string_lossy(),
                 options,
@@ -99,9 +99,9 @@ impl MitmApp {
     }
 
     pub(super) fn import_workspace(&mut self, ctx: &egui::Context, json: String, target: Option<String>, name: Option<String>, passphrase: Option<String>) {
-        let db_path = &self.core.db_path;
+        let db = &self.core.db;
         let imported = mitm_core::workspace::import::import_workspace_json_db(
-            db_path,
+            db,
             &json,
             target.as_deref(),
             name.as_deref(),
@@ -110,12 +110,12 @@ impl MitmApp {
         match imported {
             Ok(_) if target.is_some() => {
                 self.state.environments.import = Default::default();
-                self.state.environments.refresh(db_path);
-                self.state.collections.reload_tree(db_path);
+                self.state.environments.refresh(db);
+                self.state.collections.reload_tree(db);
             }
             Ok(summary) => {
                 self.state.environments.import = Default::default();
-                self.state.environments.load(db_path);
+                self.state.environments.load(db);
                 self.run_command(ctx, AppCommand::SelectWorkspace(summary.workspace_id));
             }
             Err(e) if e == mitm_core::credentials::LOCKED => {
@@ -127,12 +127,12 @@ impl MitmApp {
     }
 
     pub(super) fn move_to_credentials(&mut self, ctx: &egui::Context, env_id: String, var_idx: usize, entry: String, field: String) {
-        let db_path = &self.core.db_path;
+        let db = &self.core.db;
         let workspace_id = self.state.environments.active_workspace_id.clone();
         let environments = &mut self.state.environments;
         let Some(env) = environments.environments.iter_mut().find(|e| e.id == env_id) else { return };
         let Some(var) = env.variables.get_mut(var_idx) else { return };
-        match crate::features::credentials::move_value(db_path, &workspace_id, &entry, &field, var.current_value().to_string()) {
+        match crate::features::credentials::move_value(db, &workspace_id, &entry, &field, var.current_value().to_string()) {
             Ok(link) => {
                 if var.variants.is_empty() {
                     var.value = link;
@@ -143,7 +143,7 @@ impl MitmApp {
                 }
                 environments.move_modal = None;
                 environments.mark_dirty(&env_id, ctx.input(|i| i.time));
-                environments.flush(db_path);
+                environments.flush(db);
                 self.state.credentials.mark_stale();
             }
             Err(e) => {

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::time::Duration;
 
 use futures_util::stream::{self, StreamExt};
@@ -10,6 +9,7 @@ use super::{apply_payloads, evaluate_matches, insert_results, FuzzConfig, FuzzRe
 use crate::events::{CoreEvent, EventBus};
 use crate::repeater::execute::send_tab_request_with;
 use crate::repeater::RepeaterTab;
+use crate::db::Db;
 
 const WRITE_BATCH: usize = 500;
 
@@ -76,7 +76,7 @@ async fn run_one(client: &reqwest::Client, idx: u32, config: &FuzzConfig, names:
 /// in-flight requests, so nothing sent before the stop lands after it except results already being written.
 pub(crate) async fn run_attack(
     bus: EventBus,
-    db_path: PathBuf,
+    db: Db,
     run_id: i64,
     config: FuzzConfig,
     names: Vec<String>,
@@ -88,8 +88,8 @@ pub(crate) async fn run_attack(
     let delay = Duration::from_millis(config.delay_ms);
     let (tx, rx) = mpsc::channel::<FuzzResult>(WRITE_BATCH * 2);
     let writer = tokio::task::spawn_blocking({
-        let (bus, db_path) = (bus.clone(), db_path.clone());
-        move || write_results(&bus, &db_path, run_id, rx)
+        let (bus, db) = (bus.clone(), db.clone());
+        move || write_results(&bus, &db, run_id, rx)
     });
 
     let completed = match crate::repeater::execute::http_client(None) {
@@ -136,8 +136,8 @@ pub(crate) async fn run_attack(
 }
 
 /// Rows are announced only after they're committed, so a row the UI shows can always be opened.
-fn write_results(bus: &EventBus, db_path: &PathBuf, run_id: i64, mut rx: mpsc::Receiver<FuzzResult>) {
-    let mut conn = crate::db::open(db_path).ok();
+fn write_results(bus: &EventBus, db: &Db, run_id: i64, mut rx: mpsc::Receiver<FuzzResult>) {
+    let mut conn = db.conn().ok();
     if let Some(conn) = &conn {
         let _ = conn.busy_timeout(Duration::from_secs(5));
     }
@@ -195,10 +195,10 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
-    fn temp_db() -> (PathBuf, PathBuf) {
+    fn temp_db() -> (crate::db::Db, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!("mitm-fuzz-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db = dir.join("test.db");
+        let db = crate::db::Db::new(dir.join("test.db"));
         crate::db::init_database(&db, None).unwrap();
         (db, dir)
     }
@@ -254,7 +254,7 @@ mod tests {
         }
     }
 
-    async fn run(db: &PathBuf, config: FuzzConfig, stop_after: Option<Duration>) -> Vec<CoreEvent> {
+    async fn run(db: &crate::db::Db, config: FuzzConfig, stop_after: Option<Duration>) -> Vec<CoreEvent> {
         let bus = EventBus::new(1024);
         let mut events = bus.subscribe();
         let (names, combos) = generate_combos(&config).unwrap();

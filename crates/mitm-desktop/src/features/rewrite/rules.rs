@@ -4,7 +4,6 @@ use mitm_core::proxy::rewrite::RewriteRule;
 use crate::app::command::Commands;
 use crate::ui::theme;
 use crate::widgets::{source_scope, split};
-use std::path::Path;
 use super::{action_label, action_tone, editor, log, RewriteState, RewriteView};
 use crate::ui::icons;
 use crate::widgets::button::icon_button;
@@ -12,13 +11,14 @@ use crate::widgets::search::search_field_sized;
 use crate::widgets::section::section_with;
 use crate::widgets::subtabs::subtabs;
 use crate::widgets::toggle::labelled_toggle;
+use mitm_core::db::Db;
 
-pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerConfig], db_path: &Path, cmds: &mut Commands) {
+pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerConfig], db: &Db, cmds: &mut Commands) {
     let now = ui.input(|i| i.time);
     toolbar(ui, state, listeners, cmds, now);
     ui.add_space(4.0);
     if state.prefs.view == RewriteView::Log {
-        log::show(ui, state, db_path, cmds);
+        log::show(ui, state, db, cmds);
         return;
     }
     let Some(index) = state.selected_index() else {

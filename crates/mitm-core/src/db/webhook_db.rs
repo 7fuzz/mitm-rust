@@ -1,9 +1,9 @@
-use std::path::PathBuf;
 use rusqlite::params;
 use crate::webhook::types::{WebhookDelivery, WebhookEndpoint};
+use crate::db::Db;
 
-pub fn load_webhook_endpoints(db_path: &PathBuf) -> Result<Vec<WebhookEndpoint>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn load_webhook_endpoints(db: &Db) -> Result<Vec<WebhookEndpoint>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, name, path, secret_key, created_at, hit_count FROM webhook_endpoints ORDER BY created_at ASC")
         .map_err(|e| e.to_string())?;
@@ -26,8 +26,8 @@ pub fn load_webhook_endpoints(db_path: &PathBuf) -> Result<Vec<WebhookEndpoint>,
     Ok(endpoints)
 }
 
-pub fn get_webhook_endpoint_by_path(db_path: &PathBuf, path: &str) -> Result<Option<WebhookEndpoint>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn get_webhook_endpoint_by_path(db: &Db, path: &str) -> Result<Option<WebhookEndpoint>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, name, path, secret_key, created_at, hit_count FROM webhook_endpoints WHERE path = ? LIMIT 1")
         .map_err(|e| e.to_string())?;
@@ -52,8 +52,8 @@ pub fn get_webhook_endpoint_by_path(db_path: &PathBuf, path: &str) -> Result<Opt
     }
 }
 
-pub fn save_webhook_endpoint(db_path: &PathBuf, endpoint: &WebhookEndpoint) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn save_webhook_endpoint(db: &Db, endpoint: &WebhookEndpoint) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR REPLACE INTO webhook_endpoints (id, name, path, secret_key, created_at, hit_count)
          VALUES (?, ?, ?, ?, ?, ?)",
@@ -69,8 +69,8 @@ pub fn save_webhook_endpoint(db_path: &PathBuf, endpoint: &WebhookEndpoint) -> R
     Ok(())
 }
 
-pub fn delete_webhook_endpoint(db_path: &PathBuf, id: &str) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn delete_webhook_endpoint(db: &Db, id: &str) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM webhook_endpoints WHERE id = ?", params![id])
         .map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM webhook_deliveries WHERE endpoint_id = ?", params![id])
@@ -78,8 +78,8 @@ pub fn delete_webhook_endpoint(db_path: &PathBuf, id: &str) -> Result<(), String
     Ok(())
 }
 
-pub fn increment_webhook_endpoint_hits(db_path: &PathBuf, id: &str) -> Result<u64, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn increment_webhook_endpoint_hits(db: &Db, id: &str) -> Result<u64, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute(
         "UPDATE webhook_endpoints SET hit_count = hit_count + 1 WHERE id = ?",
         params![id],
@@ -94,8 +94,8 @@ pub fn increment_webhook_endpoint_hits(db_path: &PathBuf, id: &str) -> Result<u6
     Ok(hit_count)
 }
 
-pub fn load_webhook_deliveries(db_path: &PathBuf, limit: Option<u32>) -> Result<Vec<WebhookDelivery>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn load_webhook_deliveries(db: &Db, limit: Option<u32>) -> Result<Vec<WebhookDelivery>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let limit_val = limit.unwrap_or(500);
 
     let mut stmt = conn
@@ -127,8 +127,8 @@ pub fn load_webhook_deliveries(db_path: &PathBuf, limit: Option<u32>) -> Result<
     Ok(deliveries)
 }
 
-pub fn save_webhook_delivery(db_path: &PathBuf, delivery: &WebhookDelivery) -> Result<i64, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn save_webhook_delivery(db: &Db, delivery: &WebhookDelivery) -> Result<i64, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let headers_json = serde_json::to_string(&delivery.headers).unwrap_or_else(|_| "[]".to_string());
 
     conn.execute(
@@ -148,8 +148,8 @@ pub fn save_webhook_delivery(db_path: &PathBuf, delivery: &WebhookDelivery) -> R
     Ok(conn.last_insert_rowid())
 }
 
-pub fn clear_webhook_deliveries(db_path: &PathBuf) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn clear_webhook_deliveries(db: &Db) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM webhook_deliveries", []).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -187,31 +187,31 @@ mod tests {
     fn endpoints_and_deliveries_lifecycle() {
         let dir = std::env::temp_dir().join(format!("mitm-wh-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db_path = dir.join("test.db");
-        crate::db::init_database(&db_path, None).unwrap();
+        let db = crate::db::Db::new(dir.join("test.db"));
+        crate::db::init_database(&db, None).unwrap();
 
-        save_webhook_endpoint(&db_path, &endpoint("a", "/a")).unwrap();
-        save_webhook_endpoint(&db_path, &endpoint("b", "/b")).unwrap();
-        assert_eq!(load_webhook_endpoints(&db_path).unwrap().len(), 2);
-        assert_eq!(get_webhook_endpoint_by_path(&db_path, "/a").unwrap().unwrap().id, "a");
-        assert!(get_webhook_endpoint_by_path(&db_path, "/missing").unwrap().is_none());
+        save_webhook_endpoint(&db, &endpoint("a", "/a")).unwrap();
+        save_webhook_endpoint(&db, &endpoint("b", "/b")).unwrap();
+        assert_eq!(load_webhook_endpoints(&db).unwrap().len(), 2);
+        assert_eq!(get_webhook_endpoint_by_path(&db, "/a").unwrap().unwrap().id, "a");
+        assert!(get_webhook_endpoint_by_path(&db, "/missing").unwrap().is_none());
 
-        assert_eq!(increment_webhook_endpoint_hits(&db_path, "a").unwrap(), 1);
-        assert_eq!(increment_webhook_endpoint_hits(&db_path, "a").unwrap(), 2);
+        assert_eq!(increment_webhook_endpoint_hits(&db, "a").unwrap(), 1);
+        assert_eq!(increment_webhook_endpoint_hits(&db, "a").unwrap(), 2);
 
-        save_webhook_delivery(&db_path, &delivery("a", "/a")).unwrap();
-        save_webhook_delivery(&db_path, &delivery("a", "/a")).unwrap();
-        save_webhook_delivery(&db_path, &delivery("b", "/b")).unwrap();
-        assert_eq!(load_webhook_deliveries(&db_path, None).unwrap().len(), 3);
+        save_webhook_delivery(&db, &delivery("a", "/a")).unwrap();
+        save_webhook_delivery(&db, &delivery("a", "/a")).unwrap();
+        save_webhook_delivery(&db, &delivery("b", "/b")).unwrap();
+        assert_eq!(load_webhook_deliveries(&db, None).unwrap().len(), 3);
 
         // Deleting an endpoint removes its deliveries but leaves the others.
-        delete_webhook_endpoint(&db_path, "a").unwrap();
-        assert_eq!(load_webhook_endpoints(&db_path).unwrap().len(), 1);
-        let left = load_webhook_deliveries(&db_path, None).unwrap();
+        delete_webhook_endpoint(&db, "a").unwrap();
+        assert_eq!(load_webhook_endpoints(&db).unwrap().len(), 1);
+        let left = load_webhook_deliveries(&db, None).unwrap();
         assert_eq!(left.len(), 1);
         assert_eq!(left[0].endpoint_id, "b");
 
-        clear_webhook_deliveries(&db_path).unwrap();
-        assert!(load_webhook_deliveries(&db_path, None).unwrap().is_empty());
+        clear_webhook_deliveries(&db).unwrap();
+        assert!(load_webhook_deliveries(&db, None).unwrap().is_empty());
     }
 }

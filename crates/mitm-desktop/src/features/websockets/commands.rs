@@ -33,7 +33,7 @@ pub struct WsJobs {
 pub fn handle(state: &mut WebSocketsState, cx: &Cx, cmd: Cmd) {
     let core = Arc::clone(cx.core);
     match cmd {
-        Cmd::Select(id) => state.select(id, cx.db_path()),
+        Cmd::Select(id) => state.select(id, cx.db()),
         Cmd::Connect { url, headers } => {
             let headers = (!headers.is_empty()).then_some(headers);
             state.jobs.connects.spawn(cx.rt, cx.ctx, async move { core.connect_ws_client(url, headers).await });
@@ -66,7 +66,7 @@ pub fn poll(state: &mut WebSocketsState, cx: &Cx) {
     let connects: Vec<_> = state.jobs.connects.drain().collect();
     for result in connects {
         if let Some(conn) = cx.report(result) {
-            state.connected(conn, cx.db_path());
+            state.connected(conn, cx.db());
         }
     }
     for result in state.jobs.actions.drain() {

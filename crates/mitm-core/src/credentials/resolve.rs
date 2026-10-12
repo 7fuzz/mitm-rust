@@ -1,7 +1,7 @@
-use std::path::Path;
 use super::store::{find_credential, validate_name, FieldKind};
 use super::LOCKED;
 use crate::utils::totp;
+use crate::db::Db;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Resolve {
@@ -36,8 +36,8 @@ pub fn format_ref(entry: &str, field: &str) -> String {
 }
 
 /// A field's value as sent: `totp` fields give the current code, not their secret.
-pub fn resolve(db_path: &Path, workspace_id: &str, entry: &str, field: &str) -> Resolve {
-    let credential = match find_credential(db_path, workspace_id, entry) {
+pub fn resolve(db: &Db, workspace_id: &str, entry: &str, field: &str) -> Resolve {
+    let credential = match find_credential(db, workspace_id, entry) {
         Ok(Some(c)) => c,
         Ok(None) => return Resolve::Missing,
         Err(e) if e == LOCKED => return Resolve::Locked,

@@ -4,6 +4,7 @@ use mitm_core::workspace::import::{preview_workspace_import_db, ImportPreview};
 use crate::app::command::{AppCommand, Commands};
 use crate::ui::theme::{self, Tone};
 use crate::ui::icons;
+use mitm_core::db::Db;
 
 #[derive(Default)]
 pub struct ImportState {
@@ -24,14 +25,14 @@ impl ImportState {
     }
 }
 
-pub fn show(ctx: &egui::Context, state: &mut ImportState, current_workspace: (&str, &str), db_path: &Path, cmds: &mut Commands) {
+pub fn show(ctx: &egui::Context, state: &mut ImportState, current_workspace: (&str, &str), db: &Db, cmds: &mut Commands) {
     if !state.open {
         return;
     }
     if state.stale {
         state.stale = false;
         state.error = None;
-        state.preview = (!state.json.trim().is_empty()).then(|| preview_workspace_import_db(&db_path.to_path_buf(), &state.json));
+        state.preview = (!state.json.trim().is_empty()).then(|| preview_workspace_import_db(db, &state.json));
     }
 
     let (current_id, current_name) = current_workspace;

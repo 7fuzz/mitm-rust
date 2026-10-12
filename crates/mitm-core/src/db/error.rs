@@ -63,7 +63,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mitm-init-error-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         // A directory can't be opened as a database file.
-        let err = super::super::init_database(&dir, None).unwrap_err();
+        let err = super::super::init_database(&super::super::Db::new(dir.clone()), None).unwrap_err();
         assert!(matches!(err, InitError::Io(_)), "{:?}", err);
         std::fs::remove_dir_all(&dir).unwrap();
     }

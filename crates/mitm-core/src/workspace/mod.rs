@@ -3,13 +3,13 @@ pub mod export;
 pub mod file;
 pub mod import;
 
-use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::repeater::REPEATER_WORKSPACE_ID;
+use crate::db::Db;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -92,8 +92,8 @@ fn ensure_schema_columns(conn: &Connection) {
     let _ = conn.execute("ALTER TABLE collections ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''", []);
 }
 
-pub fn get_workspaces_db(db_path: &PathBuf) -> Result<Vec<Workspace>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn get_workspaces_db(db: &Db) -> Result<Vec<Workspace>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
     let mut stmt = conn
         .prepare("SELECT id, name, description, active_environment_id, created_at_ms, updated_at_ms FROM workspaces WHERE id != ? ORDER BY updated_at_ms DESC")
@@ -119,11 +119,11 @@ pub fn get_workspaces_db(db_path: &PathBuf) -> Result<Vec<Workspace>, String> {
 }
 
 pub fn create_workspace_db(
-    db_path: &PathBuf,
+    db: &Db,
     name: String,
     description: Option<String>,
 ) -> Result<Workspace, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
     let id = Uuid::new_v4().to_string();
 
@@ -144,8 +144,8 @@ pub fn create_workspace_db(
     })
 }
 
-pub fn update_workspace_db(db_path: &PathBuf, workspace: Workspace) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn update_workspace_db(db: &Db, workspace: Workspace) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
 
     if workspace.id == REPEATER_WORKSPACE_ID {
@@ -166,11 +166,11 @@ pub fn update_workspace_db(db_path: &PathBuf, workspace: Workspace) -> Result<()
     Ok(())
 }
 
-pub fn delete_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
+pub fn delete_workspace_db(db: &Db, id: &str) -> Result<(), String> {
     if id == REPEATER_WORKSPACE_ID {
         return Err("The Repeater workspace can't be deleted.".to_string());
     }
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let _ = conn.execute("DELETE FROM environments WHERE workspace_id = ?", params![id]);
     let _ = conn.execute("DELETE FROM credentials WHERE workspace_id = ?", params![id]);
 
@@ -202,8 +202,8 @@ pub fn delete_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn get_workspace_db(db_path: &PathBuf, id: &str) -> Result<Option<Workspace>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn get_workspace_db(db: &Db, id: &str) -> Result<Option<Workspace>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
     let mut stmt = conn
         .prepare("SELECT id, name, description, active_environment_id, created_at_ms, updated_at_ms FROM workspaces WHERE id = ?")
@@ -227,22 +227,22 @@ pub fn get_workspace_db(db_path: &PathBuf, id: &str) -> Result<Option<Workspace>
     }
 }
 
-pub fn get_active_workspace_db(db_path: &PathBuf) -> Result<Option<Workspace>, String> {
-    if let Some(active_id) = crate::db::get_preference(db_path, "active_workspace_id") {
-        if let Ok(Some(ws)) = get_workspace_db(db_path, &active_id) {
+pub fn get_active_workspace_db(db: &Db) -> Result<Option<Workspace>, String> {
+    if let Some(active_id) = crate::db::get_preference(db, "active_workspace_id") {
+        if let Ok(Some(ws)) = get_workspace_db(db, &active_id) {
             return Ok(Some(ws));
         }
     }
-    let all = get_workspaces_db(db_path)?;
+    let all = get_workspaces_db(db)?;
     if let Some(first) = all.into_iter().next() {
-        let _ = crate::db::set_preference(db_path, "active_workspace_id", &first.id);
+        let _ = crate::db::set_preference(db, "active_workspace_id", &first.id);
         return Ok(Some(first));
     }
     Ok(None)
 }
 
-pub fn set_active_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn set_active_workspace_db(db: &Db, id: &str) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
 
     conn.execute(
@@ -251,12 +251,12 @@ pub fn set_active_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String
     )
     .map_err(|e| e.to_string())?;
 
-    crate::db::set_preference(db_path, "active_workspace_id", id)?;
+    crate::db::set_preference(db, "active_workspace_id", id)?;
     Ok(())
 }
 
-pub fn rename_workspace_db(db_path: &PathBuf, id: &str, new_name: &str) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn rename_workspace_db(db: &Db, id: &str, new_name: &str) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
     conn.execute(
         "UPDATE workspaces SET name = ?, updated_at_ms = ? WHERE id = ?",
@@ -266,8 +266,8 @@ pub fn rename_workspace_db(db_path: &PathBuf, id: &str, new_name: &str) -> Resul
     Ok(())
 }
 
-pub fn update_workspace_description_db(db_path: &PathBuf, id: &str, description: Option<&str>) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn update_workspace_description_db(db: &Db, id: &str, description: Option<&str>) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
     conn.execute(
         "UPDATE workspaces SET description = ?, updated_at_ms = ? WHERE id = ?",
@@ -278,10 +278,10 @@ pub fn update_workspace_description_db(db_path: &PathBuf, id: &str, description:
 }
 
 pub fn get_workspace_environments_db(
-    db_path: &PathBuf,
+    db: &Db,
     workspace_id: &str,
 ) -> Result<Vec<Environment>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
     let active_id: Option<String> = conn
         .query_row(
@@ -325,10 +325,10 @@ pub fn get_workspace_environments_db(
 }
 
 pub fn save_workspace_environment_db(
-    db_path: &PathBuf,
+    db: &Db,
     env: Environment,
 ) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let ts = now_ms();
     let vars_json = serde_json::to_string(&env.variables).unwrap_or_else(|_| "[]".to_string());
     let is_active_int = if env.is_active { 1 } else { 0 };
@@ -360,8 +360,8 @@ pub fn save_workspace_environment_db(
 }
 
 /// Deleting the active environment hands "active" to the oldest remaining one, if any.
-pub fn delete_workspace_environment_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
-    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn delete_workspace_environment_db(db: &Db, id: &str) -> Result<(), String> {
+    let mut conn = db.conn().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
     let (workspace_id, was_active): (String, bool) = tx
@@ -398,10 +398,10 @@ pub fn delete_workspace_environment_db(db_path: &PathBuf, id: &str) -> Result<()
 }
 
 pub fn get_workspace_environment_db(
-    db_path: &PathBuf,
+    db: &Db,
     id: &str,
 ) -> Result<Option<Environment>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
     let mut stmt = conn
         .prepare("SELECT e.id, e.workspace_id, e.name, e.is_active, e.variables_json, e.created_at_ms, e.updated_at_ms, w.active_environment_id FROM environments e LEFT JOIN workspaces w ON e.workspace_id = w.id WHERE e.id = ?")
@@ -439,11 +439,11 @@ pub fn get_workspace_environment_db(
 }
 
 pub fn set_active_environment_db(
-    db_path: &PathBuf,
+    db: &Db,
     workspace_id: &str,
     env_id: Option<&str>,
 ) -> Result<(), String> {
-    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = db.conn().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     let ts = now_ms();
 
@@ -477,11 +477,11 @@ pub fn set_active_environment_db(
 }
 
 pub fn duplicate_workspace_environment_db(
-    db_path: &PathBuf,
+    db: &Db,
     id: &str,
     new_name: Option<&str>,
 ) -> Result<Environment, String> {
-    let src = get_workspace_environment_db(db_path, id)?
+    let src = get_workspace_environment_db(db, id)?
         .ok_or_else(|| format!("Environment {} not found", id))?;
     let now = now_ms();
     let name = match new_name {
@@ -497,7 +497,7 @@ pub fn duplicate_workspace_environment_db(
         created_at_ms: now,
         updated_at_ms: now,
     };
-    save_workspace_environment_db(db_path, new_env.clone())?;
+    save_workspace_environment_db(db, new_env.clone())?;
     Ok(new_env)
 }
 
@@ -671,7 +671,7 @@ pub fn totp_params_in_env(env: Option<&Environment>, key: &str) -> Option<crate:
 /// Where `{{$cred:entry.field}}` refs are looked up.
 #[derive(Debug, Clone, Copy)]
 pub struct CredentialScope<'a> {
-    pub db_path: &'a Path,
+    pub db: &'a Db,
     pub workspace_id: &'a str,
 }
 
@@ -768,7 +768,7 @@ pub fn interpolate(
                     }
                 } else if let Some((entry, field)) = crate::credentials::parse_ref(key) {
                     let Some(scope) = creds else { return unresolved() };
-                    match crate::credentials::resolve(scope.db_path, scope.workspace_id, entry, field) {
+                    match crate::credentials::resolve(scope.db, scope.workspace_id, entry, field) {
                         crate::credentials::Resolve::Value(value, kind) => {
                             if kind == crate::credentials::FieldKind::Secret && !record.secrets.contains(&value) {
                                 record.secrets.push(value.clone());
@@ -821,17 +821,17 @@ pub fn interpolate_dynamic_variables(text: &str) -> String {
     .to_string()
 }
 
-pub fn interpolate_variables(db_path: &PathBuf, workspace_id: &str, text: &str) -> String {
+pub fn interpolate_variables(db: &Db, workspace_id: &str, text: &str) -> String {
     if !text.contains("{{") || !text.contains("}}") {
         return text.to_string();
     }
-    let env = active_environment_db(db_path, workspace_id);
-    let scope = CredentialScope { db_path, workspace_id };
+    let env = active_environment_db(db, workspace_id);
+    let scope = CredentialScope { db, workspace_id };
     interpolate(env.as_ref(), Some(scope), text, &mut Interpolation::default())
 }
 
-pub fn active_environment_db(db_path: &PathBuf, workspace_id: &str) -> Option<Environment> {
-    get_workspace_environments_db(db_path, workspace_id)
+pub fn active_environment_db(db: &Db, workspace_id: &str) -> Option<Environment> {
+    get_workspace_environments_db(db, workspace_id)
         .unwrap_or_default()
         .into_iter()
         .find(|e| e.is_active)
@@ -981,7 +981,7 @@ mod tests {
 
         let mut env = env_with(&[("adminPassword", "")]);
         env.variables[0].variants = vec![VariableVariant { name: "dev".into(), value: "{{$cred:dgAdmin.password}}".into() }];
-        let scope = Some(CredentialScope { db_path: &db, workspace_id: &ws });
+        let scope = Some(CredentialScope { db: &db, workspace_id: &ws });
 
         let mut record = Interpolation::default();
         let out = interpolate(Some(&env), scope, "p={{adminPassword}}&q={{ $cred:DGADMIN.Password }}", &mut record);
@@ -1118,7 +1118,7 @@ mod tests {
     fn test_workspace_and_environment_db_crud() {
         let dir = std::env::temp_dir().join(format!("mitm-ws-test-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db = dir.join("test.db");
+        let db = crate::db::Db::new(dir.join("test.db"));
         crate::db::init_database(&db, None).unwrap();
 
         let ws = create_workspace_db(&db, "Test Workspace".to_string(), Some("Desc".to_string())).unwrap();
@@ -1246,7 +1246,7 @@ mod tests {
     fn test_active_environment_survives_restart() {
         let dir = std::env::temp_dir().join(format!("mitm-env-survive-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db = dir.join("test.db");
+        let db = crate::db::Db::new(dir.join("test.db"));
         crate::db::init_database(&db, None).unwrap();
 
         let ws = create_workspace_db(&db, "Main Workspace".to_string(), None).unwrap();

@@ -3,9 +3,9 @@ mod composer;
 mod connect;
 mod view;
 
-use std::path::PathBuf;
 use mitm_core::ws::types::{WebSocketConn, WebSocketMessage};
 use serde::{Deserialize, Serialize};
+use mitm_core::db::Db;
 
 pub use commands::{handle, poll, Cmd};
 pub use view::show;
@@ -86,16 +86,16 @@ pub fn sources(conns: &[WebSocketConn]) -> Vec<String> {
 }
 
 impl WebSocketsState {
-    pub fn load_connections(&mut self, db_path: &PathBuf) {
-        if let Ok(conns) = mitm_core::db::ws_db::load_ws_connections(db_path) {
+    pub fn load_connections(&mut self, db: &Db) {
+        if let Ok(conns) = mitm_core::db::ws_db::load_ws_connections(db) {
             self.connections = conns;
         }
     }
 
-    pub fn select(&mut self, conn_id: i64, db_path: &PathBuf) {
+    pub fn select(&mut self, conn_id: i64, db: &Db) {
         self.selected_id = Some(conn_id);
         self.selected_msg = None;
-        if let Ok(msgs) = mitm_core::db::ws_db::load_ws_messages(db_path, conn_id, None) {
+        if let Ok(msgs) = mitm_core::db::ws_db::load_ws_messages(db, conn_id, None) {
             self.messages = msgs;
         }
     }
@@ -112,10 +112,10 @@ impl WebSocketsState {
 
     /// Frames can arrive before the connect result does, so the session's frames
     /// and count come from the DB rather than starting empty.
-    pub fn connected(&mut self, conn: WebSocketConn, db_path: &PathBuf) {
+    pub fn connected(&mut self, conn: WebSocketConn, db: &Db) {
         let id = conn.connection_id;
         self.upsert_connection(conn);
-        self.select(id, db_path);
+        self.select(id, db);
         let count = self.messages.len() as u64;
         if let Some(conn) = self.connections.iter_mut().find(|c| c.connection_id == id) {
             conn.message_count = conn.message_count.max(count);

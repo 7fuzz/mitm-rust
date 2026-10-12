@@ -1,7 +1,6 @@
 //! Credentials in workspace files: names and field keys always, values only sealed by a passphrase.
 
 use std::collections::BTreeMap;
-use std::path::Path;
 use base64::Engine;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -9,6 +8,7 @@ use zeroize::Zeroizing;
 use super::crypto::{self, DataKey, KdfParams};
 use super::store::{self, list_credentials, load_credential, Field};
 use crate::workspace::file::{CredentialEntry, SealedCredentials};
+use crate::db::Db;
 
 const AAD: &[u8] = b"mitm-workspace-credentials";
 const WRONG_PASSPHRASE: &str = "Wrong passphrase for the credentials in this file";
@@ -29,18 +29,18 @@ fn b64() -> base64::engine::GeneralPurpose {
 /// The workspace's entries for a file, plus their values sealed with `passphrase` when one is given.
 /// Extracted fields (tokens) carry their values only with `include_auto`.
 pub fn export_credentials(
-    db_path: &Path,
+    db: &Db,
     workspace_id: &str,
     passphrase: Option<&str>,
     include_auto: bool,
 ) -> Result<(Vec<CredentialEntry>, Option<SealedCredentials>), String> {
-    let summaries = list_credentials(db_path, workspace_id)?;
+    let summaries = list_credentials(db, workspace_id)?;
     let entries = summaries.iter().map(|c| CredentialEntry { name: c.name.clone(), fields: c.fields.clone() }).collect();
     let Some(passphrase) = passphrase.filter(|_| !summaries.is_empty()) else { return Ok((entries, None)) };
 
     let mut sealed_entries = Vec::new();
     for summary in &summaries {
-        let credential = load_credential(db_path, &summary.id)?;
+        let credential = load_credential(db, &summary.id)?;
         let values = credential
             .fields
             .iter()

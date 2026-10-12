@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
-use std::path::Path;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 use super::crypto;
 use super::session::{self, now_ms};
+use crate::db::Db;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -120,9 +120,6 @@ fn validate_fields(fields: &[Field]) -> Result<(), String> {
     Ok(())
 }
 
-fn open(db_path: &Path) -> Result<Connection, String> {
-    crate::db::open(db_path).map_err(|e| e.to_string())
-}
 
 fn name_taken(conn: &Connection, workspace_id: &str, name: &str, except_id: &str) -> Result<bool, String> {
     conn.query_row(
@@ -135,8 +132,8 @@ fn name_taken(conn: &Connection, workspace_id: &str, name: &str, except_id: &str
     .map_err(|e| e.to_string())
 }
 
-pub fn list_credentials(db_path: &Path, workspace_id: &str) -> Result<Vec<CredentialSummary>, String> {
-    let conn = open(db_path)?;
+pub fn list_credentials(db: &Db, workspace_id: &str) -> Result<Vec<CredentialSummary>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, workspace_id, name, fields_json FROM credentials WHERE workspace_id = ? ORDER BY order_index, name")
         .map_err(|e| e.to_string())?;
@@ -175,8 +172,8 @@ fn decrypt_row(key: &crypto::DataKey, row: Row) -> Result<Credential, String> {
     Ok(Credential { id, workspace_id, name, fields, notes: payload.notes, order_index, created_at_ms, updated_at_ms })
 }
 
-fn existing_key(db_path: &Path) -> Result<crypto::DataKey, String> {
-    session::data_key(db_path)?.ok_or_else(|| "credentials have no data key".to_string())
+fn existing_key(db: &Db) -> Result<crypto::DataKey, String> {
+    session::data_key(db)?.ok_or_else(|| "credentials have no data key".to_string())
 }
 
 const COLUMNS: &str = "id, workspace_id, name, fields_json, nonce, ciphertext, order_index, created_at_ms, updated_at_ms";
@@ -185,18 +182,18 @@ fn read_row(r: &rusqlite::Row) -> rusqlite::Result<Row> {
     Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?))
 }
 
-pub fn load_credential(db_path: &Path, id: &str) -> Result<Credential, String> {
-    let row = open(db_path)?
+pub fn load_credential(db: &Db, id: &str) -> Result<Credential, String> {
+    let row = db.conn().map_err(|e| e.to_string())?
         .query_row(&format!("SELECT {COLUMNS} FROM credentials WHERE id = ?"), [id], read_row)
         .map_err(|e| e.to_string())?;
-    decrypt_row(&existing_key(db_path)?, row)
+    decrypt_row(&existing_key(db)?, row)
 }
 
 /// Looks an entry up by name, ignoring case.
-pub fn find_credential(db_path: &Path, workspace_id: &str, name: &str) -> Result<Option<Credential>, String> {
-    let conn = open(db_path)?;
+pub fn find_credential(db: &Db, workspace_id: &str, name: &str) -> Result<Option<Credential>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let Some(row) = find_row(&conn, workspace_id, name)? else { return Ok(None) };
-    decrypt_row(&existing_key(db_path)?, row).map(Some)
+    decrypt_row(&existing_key(db)?, row).map(Some)
 }
 
 fn find_row(conn: &Connection, workspace_id: &str, name: &str) -> Result<Option<Row>, String> {
@@ -240,17 +237,17 @@ pub(crate) fn new_credential(conn: &Connection, workspace_id: &str, name: &str) 
     })
 }
 
-pub fn create_credential(db_path: &Path, workspace_id: &str, name: &str) -> Result<Credential, String> {
-    let conn = open(db_path)?;
+pub fn create_credential(db: &Db, workspace_id: &str, name: &str) -> Result<Credential, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let credential = new_credential(&conn, workspace_id, name)?;
-    write(&conn, &session::data_key_or_create(db_path)?, &credential, true)?;
+    write(&conn, &session::data_key_or_create(db)?, &credential, true)?;
     Ok(credential)
 }
 
 /// Saves fields, values and notes. The name only changes through `rename_credential`, which keeps refs intact.
-pub fn save_credential(db_path: &Path, credential: &Credential) -> Result<(), String> {
+pub fn save_credential(db: &Db, credential: &Credential) -> Result<(), String> {
     validate_fields(&credential.fields)?;
-    write(&open(db_path)?, &session::data_key_or_create(db_path)?, credential, false)
+    write(&db.conn().map_err(|e| e.to_string())?, &session::data_key_or_create(db)?, credential, false)
 }
 
 pub(crate) fn insert_credential_conn(conn: &Connection, key: &crypto::DataKey, credential: &Credential) -> Result<(), String> {
@@ -302,8 +299,8 @@ fn write(conn: &Connection, key: &crypto::DataKey, credential: &Credential, inse
 
 /// Stores an extracted value (a token) in `entry.field`. A missing field is created as an extracted secret;
 /// a missing entry is an error, since entries are never created implicitly.
-pub fn write_extracted(db_path: &Path, workspace_id: &str, entry: &str, field: &str, value: &str) -> Result<(), String> {
-    let mut credential = find_credential(db_path, workspace_id, entry)?.ok_or_else(|| format!("no credential named \"{entry}\""))?;
+pub fn write_extracted(db: &Db, workspace_id: &str, entry: &str, field: &str, value: &str) -> Result<(), String> {
+    let mut credential = find_credential(db, workspace_id, entry)?.ok_or_else(|| format!("no credential named \"{entry}\""))?;
     match credential.field_mut(field) {
         Some(existing) => existing.value = value.to_string(),
         None => {
@@ -311,11 +308,11 @@ pub fn write_extracted(db_path: &Path, workspace_id: &str, entry: &str, field: &
             credential.fields.push(Field { key: field.to_string(), kind: FieldKind::Secret, extracted: true, value: value.to_string() });
         }
     }
-    save_credential(db_path, &credential)
+    save_credential(db, &credential)
 }
 
-pub fn delete_credential(db_path: &Path, id: &str) -> Result<(), String> {
-    open(db_path)?
+pub fn delete_credential(db: &Db, id: &str) -> Result<(), String> {
+    db.conn().map_err(|e| e.to_string())?
         .execute("DELETE FROM credentials WHERE id = ?", [id])
         .map(|_| ())
         .map_err(|e| e.to_string())
@@ -325,13 +322,13 @@ pub fn delete_credential(db_path: &Path, id: &str) -> Result<(), String> {
 pub(crate) mod tests {
     use super::*;
 
-    pub(crate) fn temp_db() -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(format!("mitm-creds-{}.db", uuid::Uuid::new_v4()));
-        crate::db::init_database(&path, None).unwrap();
-        path
+    pub(crate) fn temp_db() -> crate::db::Db {
+        let db = crate::db::Db::new(std::env::temp_dir().join(format!("mitm-creds-{}.db", uuid::Uuid::new_v4())));
+        crate::db::init_database(&db, None).unwrap();
+        db
     }
 
-    pub(crate) fn workspace(db: &std::path::PathBuf, name: &str) -> String {
+    pub(crate) fn workspace(db: &crate::db::Db, name: &str) -> String {
         crate::workspace::create_workspace_db(db, name.to_string(), None).unwrap().id
     }
 

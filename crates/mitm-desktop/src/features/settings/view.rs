@@ -1,4 +1,3 @@
-use std::path::Path;
 use eframe::egui::{self, RichText};
 use crate::ui::theme::{self, Tone};
 use crate::app::command::{AppCommand, Commands};
@@ -13,6 +12,7 @@ use crate::widgets::list_row::list_row;
 use crate::widgets::segmented::segmented;
 use crate::util::format::format_count;
 use crate::widgets::section::{section, section_with};
+use mitm_core::db::Db;
 
 #[allow(clippy::too_many_arguments)]
 pub fn show(
@@ -25,7 +25,7 @@ pub fn show(
     form: &mut ListenerForm,
     traffic: &TrafficState,
     credentials: &mut crate::features::credentials::CredentialsState,
-    db_path: &Path,
+    db: &Db,
     cmds: &mut Commands,
 ) {
     let [mut list, mut content] = split::side_by_side(ui, "settings_split", &mut prefs.list_fraction);
@@ -44,14 +44,14 @@ pub fn show(
         .auto_shrink([false, false])
         .show(&mut content, |ui| match prefs.section {
             SettingsSection::Proxy => {
-                ui.add_enabled_ui(!proxy.busy(), |ui| proxy_section(ui, proxy, form, traffic, db_path, cmds));
+                ui.add_enabled_ui(!proxy.busy(), |ui| proxy_section(ui, proxy, form, traffic, db, cmds));
             }
             SettingsSection::Certificate => certificate_section(ui, cert, cmds),
             SettingsSection::Appearance => appearance_section(ui),
             SettingsSection::Shortcuts => shortcuts_section(ui),
             SettingsSection::Data => data_section(ui, data, cmds),
-            SettingsSection::Credentials => crate::features::credentials::settings_section(ui, credentials, db_path),
-            SettingsSection::Database => crate::features::database::show(ui, database, db_path),
+            SettingsSection::Credentials => crate::features::credentials::settings_section(ui, credentials, db),
+            SettingsSection::Database => crate::features::database::show(ui, database, db),
         });
 }
 
@@ -327,7 +327,7 @@ fn proxy_section(
     proxy: &mut ProxyState,
     form: &mut ListenerForm,
     traffic: &TrafficState,
-    db_path: &Path,
+    db: &Db,
     cmds: &mut Commands,
 ) {
     section(ui, "Listeners");
@@ -504,7 +504,7 @@ fn proxy_section(
             detail_row(ui, "Proxy", status, false);
             detail_row(ui, "Listening on", &proxy.active_summary, false);
             detail_row(ui, "Flows in memory", &format!("{} / {}", format_count(traffic.flows.len()), format_count(traffic.max_flows)), false);
-            detail_row(ui, "Database", &db_path.to_string_lossy(), true);
+            detail_row(ui, "Database", &db.to_string_lossy(), true);
         });
 }
 

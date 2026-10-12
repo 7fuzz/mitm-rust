@@ -1,4 +1,3 @@
-use std::path::Path;
 use eframe::egui;
 use egui_dock::{DockState, NodePath, TabIndex};
 use crate::app::command::Commands;
@@ -7,6 +6,7 @@ use crate::widgets::template;
 use crate::app::state::AppState;
 use crate::ui::theme;
 use crate::util::format::format_count;
+use mitm_core::db::Db;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Tab {
@@ -200,7 +200,7 @@ pub fn cycle_tab(dock: &mut DockState<Tab>, forward: bool) {
 pub struct TabViewer<'a> {
     pub state: &'a mut AppState,
     pub cmds: &'a mut Commands,
-    pub db_path: &'a Path,
+    pub db: &'a Db,
     pub focus_search: Option<Tab>,
     pub focused: Option<Tab>,
     pub visuals: egui::Visuals,
@@ -219,7 +219,7 @@ impl TabViewer<'_> {
             }
             Tab::Fuzzer => features::fuzzer::show(ui, &mut state.fuzzer, cmds),
             Tab::Intercept => features::intercept::show(ui, &mut state.intercept, &state.proxy.listeners, cmds),
-            Tab::Rewrite => features::rewrite::show(ui, &mut state.rewrite, &state.proxy.listeners, self.db_path, cmds),
+            Tab::Rewrite => features::rewrite::show(ui, &mut state.rewrite, &state.proxy.listeners, self.db, cmds),
             Tab::Collections => features::collections::show(ui, &mut state.collections, cmds),
             Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
             Tab::Webhooks => features::webhooks::show(ui, &mut state.webhooks, cmds),
@@ -232,7 +232,7 @@ impl TabViewer<'_> {
             Tab::Totp => features::utilities::totp::show(ui, &mut state.totp, cmds),
             Tab::Environments => features::environments::show(ui, &mut state.environments, &state.credentials.entries, cmds),
             Tab::Credentials => {
-                features::credentials::show(ui, &mut state.credentials, &state.environments.active_workspace_id, self.db_path, cmds)
+                features::credentials::show(ui, &mut state.credentials, &state.environments.active_workspace_id, self.db, cmds)
             }
             Tab::Settings => features::settings::show(
                 ui,
@@ -244,7 +244,7 @@ impl TabViewer<'_> {
                 &mut state.listener_form,
                 &state.traffic,
                 &mut state.credentials,
-                self.db_path,
+                self.db,
                 cmds,
             ),
         }

@@ -1,12 +1,12 @@
 //! The optional master password. It only wraps the data key, so setting, changing or removing it never
 //! re-encrypts entries. Without one the key is stored raw and credentials are always unlocked.
 
-use std::path::Path;
 use rusqlite::{params, Connection, OptionalExtension};
 use zeroize::Zeroizing;
 use super::crypto::{self, DataKey, KdfParams};
 use super::session::{self, now_ms};
 use super::LOCKED;
+use crate::db::Db;
 
 const AAD: &[u8] = b"mitm-credential-key";
 const WRONG_PASSWORD: &str = "Wrong master password";
@@ -19,9 +19,6 @@ struct KeyRow {
     wrapped: Vec<u8>,
 }
 
-fn open(db_path: &Path) -> Result<Connection, String> {
-    crate::db::open(db_path).map_err(|e| e.to_string())
-}
 
 fn key_row(conn: &Connection) -> Result<Option<KeyRow>, String> {
     conn.query_row("SELECT kdf, kdf_params, salt, nonce, wrapped_key FROM credential_keys WHERE id = 1", [], |r| {
@@ -31,12 +28,12 @@ fn key_row(conn: &Connection) -> Result<Option<KeyRow>, String> {
     .map_err(|e| e.to_string())
 }
 
-pub fn has_master_password(db_path: &Path) -> bool {
-    open(db_path).ok().and_then(|c| key_row(&c).ok().flatten()).is_some_and(|row| row.kdf.is_some())
+pub fn has_master_password(db: &Db) -> bool {
+    db.conn().ok().and_then(|c| key_row(&c).ok().flatten()).is_some_and(|row| row.kdf.is_some())
 }
 
-pub fn is_locked(db_path: &Path) -> bool {
-    has_master_password(db_path) && !session::is_cached(db_path)
+pub fn is_locked(db: &Db) -> bool {
+    has_master_password(db) && !session::is_cached(db)
 }
 
 fn unwrap_key(row: &KeyRow, password: &str) -> Result<DataKey, String> {
@@ -49,16 +46,16 @@ fn unwrap_key(row: &KeyRow, password: &str) -> Result<DataKey, String> {
     crypto::key_from_slice(&raw)
 }
 
-pub fn unlock(db_path: &Path, password: &str) -> Result<(), String> {
-    let row = key_row(&open(db_path)?)?.ok_or("No master password is set")?;
+pub fn unlock(db: &Db, password: &str) -> Result<(), String> {
+    let row = key_row(&db.conn().map_err(|e| e.to_string())?)?.ok_or("No master password is set")?;
     let key = unwrap_key(&row, password)?;
-    session::remember(db_path, key);
+    session::remember(db, key);
     Ok(())
 }
 
 /// Drops the data key from memory; it is zeroed on drop.
-pub fn lock(db_path: &Path) {
-    session::forget(db_path);
+pub fn lock(db: &Db) {
+    session::forget(db);
 }
 
 fn store_wrapped(conn: &Connection, key: &DataKey, password: &str) -> Result<(), String> {
@@ -98,29 +95,29 @@ fn current_key(conn: &Connection, current: Option<&str>) -> Result<Option<DataKe
 }
 
 /// Sets or changes the master password. Changing needs the current one.
-pub fn set_master_password(db_path: &Path, current: Option<&str>, new_password: &str) -> Result<(), String> {
+pub fn set_master_password(db: &Db, current: Option<&str>, new_password: &str) -> Result<(), String> {
     if new_password.is_empty() {
         return Err("The master password can't be empty".to_string());
     }
-    let conn = open(db_path)?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let key = current_key(&conn, current)?.unwrap_or_else(crypto::generate_key);
     store_wrapped(&conn, &key, new_password)?;
-    session::remember(db_path, key);
+    session::remember(db, key);
     Ok(())
 }
 
-pub fn remove_master_password(db_path: &Path, current: &str) -> Result<(), String> {
-    let conn = open(db_path)?;
+pub fn remove_master_password(db: &Db, current: &str) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let Some(key) = current_key(&conn, Some(current))? else { return Ok(()) };
     store_raw(&conn, &key)?;
-    session::remember(db_path, key);
+    session::remember(db, key);
     Ok(())
 }
 
 /// For a forgotten password: every value and note is wiped, names and field keys stay, and a new raw key
 /// replaces the old one.
-pub fn reset_credentials(db_path: &Path) -> Result<(), String> {
-    let mut conn = open(db_path)?;
+pub fn reset_credentials(db: &Db) -> Result<(), String> {
+    let mut conn = db.conn().map_err(|e| e.to_string())?;
     let key = crypto::generate_key();
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     let ids: Vec<String> = {
@@ -136,13 +133,13 @@ pub fn reset_credentials(db_path: &Path) -> Result<(), String> {
     }
     store_raw(&tx, &key)?;
     tx.commit().map_err(|e| e.to_string())?;
-    session::remember(db_path, key);
+    session::remember(db, key);
     Ok(())
 }
 
 /// `Err(LOCKED)` when a master password is set and not entered this session.
-pub fn ensure_unlocked(db_path: &Path) -> Result<(), String> {
-    if is_locked(db_path) {
+pub fn ensure_unlocked(db: &Db) -> Result<(), String> {
+    if is_locked(db) {
         Err(LOCKED.to_string())
     } else {
         Ok(())
@@ -155,7 +152,7 @@ mod tests {
     use crate::credentials::store::tests::{field, temp_db, workspace};
     use crate::credentials::{create_credential, find_credential, load_credential, resolve, save_credential, FieldKind, Resolve};
 
-    fn with_entry() -> (std::path::PathBuf, String, String) {
+    fn with_entry() -> (crate::db::Db, String, String) {
         let db = temp_db();
         let ws = workspace(&db, "W");
         let mut cred = create_credential(&db, &ws, "dgAdmin").unwrap();

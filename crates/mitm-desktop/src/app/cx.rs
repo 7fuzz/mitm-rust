@@ -1,9 +1,9 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 use eframe::egui;
 use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
 use crate::widgets::toast;
+use mitm_core::db::Db;
 
 /// What a feature's command handler works with: the runtime for jobs, the core, and the egui context.
 pub struct Cx<'a> {
@@ -13,8 +13,8 @@ pub struct Cx<'a> {
 }
 
 impl Cx<'_> {
-    pub fn db_path(&self) -> &PathBuf {
-        &self.core.db_path
+    pub fn db(&self) -> &Db {
+        &self.core.db
     }
 
     /// Shows a failure as a toast and passes a success through.

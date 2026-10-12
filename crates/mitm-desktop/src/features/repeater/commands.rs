@@ -16,10 +16,10 @@ impl From<Cmd> for AppCommand {
 }
 
 pub fn handle(state: &mut RepeaterState, cx: &Cx, cmd: Cmd) {
-    let db_path = cx.db_path();
+    let db = cx.db();
     match cmd {
-        Cmd::New => state.create_blank(db_path),
-        Cmd::Select(id) => state.select(id, db_path),
-        Cmd::Delete(id) => state.delete(&id, db_path),
+        Cmd::New => state.create_blank(db),
+        Cmd::Select(id) => state.select(id, db),
+        Cmd::Delete(id) => state.delete(&id, db),
     }
 }

@@ -39,7 +39,7 @@ pub async fn bridge_proxied_websocket<C, S>(
         listener_label,
     };
 
-    match crate::db::ws_db::insert_ws_connection(&state.db_path, &conn_info) {
+    match crate::db::ws_db::insert_ws_connection(&state.db, &conn_info) {
         Ok(id) => conn_info.connection_id = id,
         Err(e) => eprintln!("[WS Proxy] Failed to save connection {}: {}", url, e),
     }
@@ -64,7 +64,7 @@ pub async fn bridge_proxied_websocket<C, S>(
 
     state.ws_stream_senders.insert(conn_id, (to_server_tx, to_client_tx));
 
-    let db_path_c2s = state.db_path.clone();
+    let db_c2s = state.db.clone();
     let bus_c2s = event_bus.clone();
 
     let c2s_task = tokio::spawn(async move {
@@ -100,8 +100,8 @@ pub async fn bridge_proxied_websocket<C, S>(
                                 length: len,
                                 is_injected: false,
                             };
-                            let _ = crate::db::ws_db::save_ws_message(&db_path_c2s, &mut msg_record);
-                            let _count = crate::db::ws_db::increment_ws_message_count(&db_path_c2s, conn_id).unwrap_or(1);
+                            let _ = crate::db::ws_db::save_ws_message(&db_c2s, &mut msg_record);
+                            let _count = crate::db::ws_db::increment_ws_message_count(&db_c2s, conn_id).unwrap_or(1);
                             if let Some(ref bus) = bus_c2s {
                                 if let Ok(val) = serde_json::to_value(&msg_record) {
                                     bus.emit(crate::events::CoreEvent::WsFrameReceived {
@@ -123,7 +123,7 @@ pub async fn bridge_proxied_websocket<C, S>(
         }
     });
 
-    let db_path_s2c = state.db_path.clone();
+    let db_s2c = state.db.clone();
     let bus_s2c = event_bus.clone();
 
     let s2c_task = tokio::spawn(async move {
@@ -159,8 +159,8 @@ pub async fn bridge_proxied_websocket<C, S>(
                                 length: len,
                                 is_injected: false,
                             };
-                            let _ = crate::db::ws_db::save_ws_message(&db_path_s2c, &mut msg_record);
-                            let _count = crate::db::ws_db::increment_ws_message_count(&db_path_s2c, conn_id).unwrap_or(1);
+                            let _ = crate::db::ws_db::save_ws_message(&db_s2c, &mut msg_record);
+                            let _count = crate::db::ws_db::increment_ws_message_count(&db_s2c, conn_id).unwrap_or(1);
                             if let Some(ref bus) = bus_s2c {
                                 if let Ok(val) = serde_json::to_value(&msg_record) {
                                     bus.emit(crate::events::CoreEvent::WsFrameReceived {
@@ -185,7 +185,7 @@ pub async fn bridge_proxied_websocket<C, S>(
     let _ = tokio::join!(c2s_task, s2c_task);
 
     let close_time = chrono::Local::now().timestamp_millis();
-    let _ = crate::db::ws_db::update_ws_connection_status(&state.db_path, conn_id, "disconnected", Some(close_time));
+    let _ = crate::db::ws_db::update_ws_connection_status(&state.db, conn_id, "disconnected", Some(close_time));
     state.ws_stream_senders.remove(&conn_id);
 
     let mut closed_conn = conn_info;

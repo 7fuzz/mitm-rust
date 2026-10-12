@@ -1,10 +1,10 @@
 //! Refs name entries and fields rather than ids, so a rename rewrites every ref to them in the workspace.
 
-use std::path::Path;
 use std::sync::OnceLock;
 use regex::{Captures, Regex};
 use rusqlite::{params, Connection};
 use super::store::{load_credential, save_credential, validate_name};
+use crate::db::Db;
 
 const REQUEST_COLUMNS: [&str; 8] = [
     "url",
@@ -88,9 +88,9 @@ fn rewrite_workspace(conn: &mut Connection, workspace_id: &str, map: RefMap) -> 
     tx.commit().map_err(|e| e.to_string())
 }
 
-pub fn rename_credential(db_path: &Path, id: &str, new_name: &str) -> Result<(), String> {
+pub fn rename_credential(db: &Db, id: &str, new_name: &str) -> Result<(), String> {
     validate_name(new_name)?;
-    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = db.conn().map_err(|e| e.to_string())?;
     let (workspace_id, old_name): (String, String) = conn
         .query_row("SELECT workspace_id, name FROM credentials WHERE id = ?", [id], |r| Ok((r.get(0)?, r.get(1)?)))
         .map_err(|e| e.to_string())?;
@@ -115,9 +115,9 @@ pub fn rename_credential(db_path: &Path, id: &str, new_name: &str) -> Result<(),
     })
 }
 
-pub fn rename_field(db_path: &Path, id: &str, old_key: &str, new_key: &str) -> Result<(), String> {
+pub fn rename_field(db: &Db, id: &str, old_key: &str, new_key: &str) -> Result<(), String> {
     validate_name(new_key)?;
-    let mut credential = load_credential(db_path, id)?;
+    let mut credential = load_credential(db, id)?;
     if credential.fields.iter().any(|f| f.key.eq_ignore_ascii_case(new_key) && !f.key.eq_ignore_ascii_case(old_key)) {
         return Err(format!("Field \"{new_key}\" already exists"));
     }
@@ -126,9 +126,9 @@ pub fn rename_field(db_path: &Path, id: &str, old_key: &str, new_key: &str) -> R
         return Ok(());
     }
     field.key = new_key.to_string();
-    save_credential(db_path, &credential)?;
+    save_credential(db, &credential)?;
 
-    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = db.conn().map_err(|e| e.to_string())?;
     let (name, old_key, new_key) = (credential.name.clone(), old_key.to_string(), new_key.to_string());
     rewrite_workspace(&mut conn, &credential.workspace_id, &|entry, field| {
         (entry.eq_ignore_ascii_case(&name) && field.eq_ignore_ascii_case(&old_key)).then(|| (name.clone(), new_key.clone()))
@@ -157,7 +157,7 @@ mod tests {
         assert_eq!(rewrite_refs("{{$cred:other.y}}", &rename_entry), None);
     }
 
-    fn setup(db: &std::path::PathBuf, ws: &str) -> (Environment, crate::collections::RequestItem) {
+    fn setup(db: &crate::db::Db, ws: &str) -> (Environment, crate::collections::RequestItem) {
         let env = Environment {
             id: uuid::Uuid::new_v4().to_string(),
             workspace_id: ws.to_string(),
@@ -192,7 +192,7 @@ mod tests {
         (env, req)
     }
 
-    fn snapshot(db: &std::path::PathBuf, env: &Environment, req: &crate::collections::RequestItem) -> String {
+    fn snapshot(db: &crate::db::Db, env: &Environment, req: &crate::collections::RequestItem) -> String {
         let conn = crate::db::open(db).unwrap();
         let vars: String = conn.query_row("SELECT variables_json FROM environments WHERE id = ?", [&env.id], |r| r.get(0)).unwrap();
         let row: String = conn

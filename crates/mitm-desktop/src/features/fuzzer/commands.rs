@@ -4,6 +4,7 @@ use crate::app::command::AppCommand;
 use crate::app::cx::Cx;
 use crate::app::jobs::Jobs;
 use super::FuzzerState;
+use mitm_core::db::Db;
 
 #[derive(Clone)]
 pub enum Cmd {
@@ -31,7 +32,7 @@ pub struct FuzzJobs {
 }
 
 pub fn handle(state: &mut FuzzerState, cx: &Cx, cmd: Cmd) {
-    let db_path = cx.db_path();
+    let db = cx.db();
     match cmd {
         Cmd::Start(_) if state.starting => {}
         Cmd::Start(config) => {
@@ -40,9 +41,9 @@ pub fn handle(state: &mut FuzzerState, cx: &Cx, cmd: Cmd) {
             state.jobs.start.spawn(cx.rt, cx.ctx, async move { core.start_fuzz(config).await });
         }
         Cmd::Stop => cx.core.stop_fuzz(),
-        Cmd::SelectResult { run_id, idx } => state.select_result(run_id, idx, db_path),
+        Cmd::SelectResult { run_id, idx } => state.select_result(run_id, idx, db),
         Cmd::CopyCurl { run_id, idx } => {
-            if let Some(result) = state.result(run_id, idx, db_path) {
+            if let Some(result) = state.result(run_id, idx, db) {
                 cx.ctx.copy_text(crate::util::format::Exchange::from_fuzz_result(&result).curl());
             }
         }
@@ -52,7 +53,7 @@ pub fn handle(state: &mut FuzzerState, cx: &Cx, cmd: Cmd) {
                     state.is_saved = true;
                     state.run_name = Some(name);
                 }
-                state.load_saved_runs(db_path);
+                state.load_saved_runs(db);
             }
             Err(e) => state.error = Some(e),
         },
@@ -65,9 +66,9 @@ pub fn handle(state: &mut FuzzerState, cx: &Cx, cmd: Cmd) {
                 state.is_saved = false;
                 state.run_name = None;
             }
-            state.load_saved_runs(db_path);
+            state.load_saved_runs(db);
         }
-        Cmd::ReloadSavedRuns => state.load_saved_runs(db_path),
+        Cmd::ReloadSavedRuns => state.load_saved_runs(db),
     }
 }
 
@@ -86,11 +87,11 @@ pub fn poll(state: &mut FuzzerState, cx: &Cx) {
 
 impl FuzzerState {
     /// The full stored result, reusing the selected one when it is the same row.
-    pub fn result(&self, run_id: i64, idx: u32, db_path: &std::path::PathBuf) -> Option<FuzzResult> {
+    pub fn result(&self, run_id: i64, idx: u32, db: &Db) -> Option<FuzzResult> {
         let selected = self.selected_result.as_ref().filter(|r| r.idx == idx && self.run_id == Some(run_id));
         match selected {
             Some(result) => Some(result.clone()),
-            None => mitm_core::fuzzer::get_result_db(db_path, run_id, idx).ok().flatten(),
+            None => mitm_core::fuzzer::get_result_db(db, run_id, idx).ok().flatten(),
         }
     }
 }

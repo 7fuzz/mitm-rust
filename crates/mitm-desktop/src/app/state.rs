@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use crate::features::collections::CollectionsState;
 use crate::features::credentials::CredentialsState;
 use crate::features::utilities::cvss::CvssState;
@@ -16,6 +15,7 @@ use crate::features::settings::{CertificateState, DataSectionState, ListenerForm
 use crate::features::traffic::TrafficState;
 use crate::features::webhooks::WebhooksState;
 use crate::features::websockets::WebSocketsState;
+use mitm_core::db::Db;
 
 #[derive(Default)]
 pub struct AppState {
@@ -55,19 +55,19 @@ impl AppState {
         }
     }
 
-    pub fn load(db_path: &PathBuf) -> Self {
+    pub fn load(db: &Db) -> Self {
         let mut state = Self::default();
-        state.traffic.load_from_db(db_path);
-        state.repeater.load(db_path);
-        if let Ok(rules) = mitm_core::db::load_intercept_rules(db_path) {
+        state.traffic.load_from_db(db);
+        state.repeater.load(db);
+        if let Ok(rules) = mitm_core::db::load_intercept_rules(db) {
             state.intercept.rules = rules;
         }
-        state.environments.load(db_path);
-        state.collections.load(db_path, state.environments.active_workspace_id.clone());
-        state.websockets.load_connections(db_path);
-        state.webhooks.load(db_path);
-        state.data.counts = mitm_core::db::get_data_category_counts(db_path).ok();
-        state.fuzzer.load_saved_runs(db_path);
+        state.environments.load(db);
+        state.collections.load(db, state.environments.active_workspace_id.clone());
+        state.websockets.load_connections(db);
+        state.webhooks.load(db);
+        state.data.counts = mitm_core::db::get_data_category_counts(db).ok();
+        state.fuzzer.load_saved_runs(db);
         state
     }
 }

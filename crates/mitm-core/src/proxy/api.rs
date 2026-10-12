@@ -3,7 +3,7 @@ use crate::{ca, db, events, proxy, MitmCore, RewriteHistoryEntry};
 
 impl MitmCore {
     pub fn clear_rewrite_history(&self) -> Result<(), String> {
-        db::clear_rewrite_history_logs(&self.db_path)
+        db::clear_rewrite_history_logs(&self.db)
     }
 
     pub async fn start_all_listeners(&self) -> Result<Vec<String>, String> {
@@ -73,7 +73,7 @@ impl MitmCore {
             config.enabled = enabled;
             let config = config.clone();
             let json = serde_json::to_string(&*configs).map_err(|e| e.to_string())?;
-            db::set_preference(&self.db_path, "proxy_listeners", &json)?;
+            db::set_preference(&self.db, "proxy_listeners", &json)?;
             config
         };
         self.stop_listener(id).await;
@@ -123,8 +123,8 @@ impl MitmCore {
             cfg.proxy_mode = mode.as_str().to_string();
             cfg.proxy_enabled = mode.is_enabled();
         }
-        db::set_preference(&self.db_path, "proxy_mode", mode.as_str())?;
-        db::set_preference(&self.db_path, "proxy_enabled", if mode.is_enabled() { "true" } else { "false" })?;
+        db::set_preference(&self.db, "proxy_mode", mode.as_str())?;
+        db::set_preference(&self.db, "proxy_enabled", if mode.is_enabled() { "true" } else { "false" })?;
 
         let active = self.state.proxy_active.load(std::sync::atomic::Ordering::SeqCst);
         if mode.is_enabled() && !active {
@@ -142,7 +142,7 @@ impl MitmCore {
 
     pub async fn set_listener_configs(&self, configs: Vec<crate::proxy::listener::ListenerConfig>) -> Result<(), String> {
         let json = serde_json::to_string(&configs).map_err(|e| e.to_string())?;
-        db::set_preference(&self.db_path, "proxy_listeners", &json)?;
+        db::set_preference(&self.db, "proxy_listeners", &json)?;
         {
             let mut w = self.state.listener_configs.write().await;
             *w = configs;
@@ -180,8 +180,8 @@ impl MitmCore {
             cfg.intercept_enabled = enabled;
             cfg.intercept_mode = mode.clone();
         }
-        let _ = db::set_preference(&self.db_path, "intercept_enabled", if enabled { "true" } else { "false" });
-        let _ = db::set_preference(&self.db_path, "intercept_mode", &mode);
+        let _ = db::set_preference(&self.db, "intercept_enabled", if enabled { "true" } else { "false" });
+        let _ = db::set_preference(&self.db, "intercept_mode", &mode);
         Ok(())
     }
 
@@ -227,7 +227,7 @@ impl MitmCore {
         for (index, rule) in rules.iter_mut().enumerate() {
             rule.order_index = index as i32;
         }
-        db::save_rewrite_rules(&self.db_path, &rules)?;
+        db::save_rewrite_rules(&self.db, &rules)?;
         *self.state.rewrite_rules.write().await = rules;
         Ok(())
     }
@@ -237,7 +237,7 @@ impl MitmCore {
     }
 
     pub fn set_rewrite_enabled(&self, enabled: bool) -> Result<(), String> {
-        db::set_preference(&self.db_path, "rewrite_enabled", if enabled { "true" } else { "false" })?;
+        db::set_preference(&self.db, "rewrite_enabled", if enabled { "true" } else { "false" })?;
         self.state.set_rewrite_enabled(enabled);
         Ok(())
     }
@@ -248,13 +248,13 @@ impl MitmCore {
 
     pub async fn set_rewrite_source_scope(&self, scope: crate::proxy::rules::SourceScope) -> Result<(), String> {
         let json = serde_json::to_string(&scope).map_err(|e| e.to_string())?;
-        db::set_preference(&self.db_path, "rewrite_source_scope", &json)?;
+        db::set_preference(&self.db, "rewrite_source_scope", &json)?;
         *self.state.rewrite_source_scope.write().await = scope;
         Ok(())
     }
 
     pub fn rewrite_history(&self, limit: u32) -> Result<Vec<RewriteHistoryEntry>, String> {
-        db::get_rewrite_history_logs(&self.db_path, limit)
+        db::get_rewrite_history_logs(&self.db, limit)
     }
 
     /// The interceptor settings as they were loaded at startup or last set.
@@ -265,7 +265,7 @@ impl MitmCore {
 
     pub async fn set_intercept_source_scope(&self, scope: crate::proxy::rules::SourceScope) -> Result<(), String> {
         let json = serde_json::to_string(&scope).map_err(|e| e.to_string())?;
-        db::set_preference(&self.db_path, "intercept_source_scope", &json)?;
+        db::set_preference(&self.db, "intercept_source_scope", &json)?;
         self.state.proxy_config.write().await.intercept_source_scope = scope;
         Ok(())
     }
@@ -291,7 +291,7 @@ impl MitmCore {
     }
 
     pub async fn update_intercept_rules(&self, rules: Vec<db::InterceptRule>) -> Result<(), String> {
-        db::save_intercept_rules(&self.db_path, &rules)?;
+        db::save_intercept_rules(&self.db, &rules)?;
         let mut r = self.state.rules.write().await;
         *r = rules;
         Ok(())
@@ -302,10 +302,10 @@ impl MitmCore {
     }
 
     pub async fn set_history_settings(&self, settings: crate::proxy::history::HistorySettings) -> Result<(), String> {
-        db::set_preference(&self.db_path, "history_limiter_enabled", if settings.limiter_enabled { "true" } else { "false" })?;
-        db::set_preference(&self.db_path, "history_limiter_max_rows", &settings.max_rows.to_string())?;
+        db::set_preference(&self.db, "history_limiter_enabled", if settings.limiter_enabled { "true" } else { "false" })?;
+        db::set_preference(&self.db, "history_limiter_max_rows", &settings.max_rows.to_string())?;
         if settings.limiter_enabled {
-            db::prune_history_logs(&self.db_path, settings.max_rows)?;
+            db::prune_history_logs(&self.db, settings.max_rows)?;
         }
         *self.state.history_settings.write().await = settings;
         Ok(())

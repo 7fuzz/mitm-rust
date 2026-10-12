@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -11,6 +10,7 @@ use crate::http::body::{build_multipart_payload, build_urlencoded_payload, forma
 use crate::http::steps::{jar_cookie, pre_request_failure, request_steps};
 use crate::repeater::HeaderItem;
 use crate::workspace::{active_environment_db, interpolate, CredentialScope, Interpolation};
+use crate::db::Db;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,7 +48,7 @@ fn url_encode_str(s: &str) -> String {
 }
 
 pub async fn execute_collection_request_db(
-    db_path: &PathBuf,
+    db: &Db,
     request_id: &str,
 ) -> Result<ExecutionResult, String> {
     let jar = Arc::new(Jar::default());
@@ -59,28 +59,28 @@ pub async fn execute_collection_request_db(
         .build()
         .map_err(|e| e.to_string())?;
 
-    let steps = request_steps(db_path, request_id)?;
+    let steps = request_steps(db, request_id)?;
     for pre_id in &steps.pre {
-        if let Err(error) = send_collection_request(db_path, pre_id, &client, &jar).await {
+        if let Err(error) = send_collection_request(db, pre_id, &client, &jar).await {
             if error == crate::credentials::LOCKED {
                 return Err(error);
             }
-            return record_unsent_run(db_path, request_id, pre_request_failure(db_path, pre_id, &error));
+            return record_unsent_run(db, request_id, pre_request_failure(db, pre_id, &error));
         }
     }
 
-    let result = send_collection_request(db_path, request_id, &client, &jar).await?;
+    let result = send_collection_request(db, request_id, &client, &jar).await?;
 
     // The main response is what the user asked for; a failing post-request only shows in its own history
     for post_id in &steps.post {
-        let _ = send_collection_request(db_path, post_id, &client, &jar).await;
+        let _ = send_collection_request(db, post_id, &client, &jar).await;
     }
     Ok(result)
 }
 
 /// Logs a run that never reached the server, so the failure shows up like any other response.
-fn record_unsent_run(db_path: &PathBuf, request_id: &str, error: String) -> Result<ExecutionResult, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+fn record_unsent_run(db: &Db, request_id: &str, error: String) -> Result<ExecutionResult, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let (method, url): (String, String) = conn
         .query_row("SELECT method, url FROM requests WHERE id = ?", [request_id], |row| Ok((row.get(0)?, row.get(1)?)))
         .map_err(|e| e.to_string())?;
@@ -105,14 +105,14 @@ fn record_unsent_run(db_path: &PathBuf, request_id: &str, error: String) -> Resu
 }
 
 async fn send_collection_request(
-    db_path: &PathBuf,
+    db: &Db,
     request_id: &str,
     client: &reqwest::Client,
     jar: &Jar,
 ) -> Result<ExecutionResult, String> {
     // Scoped so the Connection is dropped before the .await below.
     let (id, workspace_id, raw_method, target_url, mut logged_req_headers, final_body, mut req_headers_map, body_type, extract_rules_json, record, extract_needs_credentials) = {
-        let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+        let conn = db.conn().map_err(|e| e.to_string())?;
 
         let mut stmt = conn
             .prepare(
@@ -153,8 +153,8 @@ async fn send_collection_request(
             _ => None,
         };
 
-        let env = active_environment_db(db_path, &workspace_id);
-        let scope = CredentialScope { db_path, workspace_id: &workspace_id };
+        let env = active_environment_db(db, &workspace_id);
+        let scope = CredentialScope { db, workspace_id: &workspace_id };
         let mut record = Interpolation::default();
         let mut fill = |text: &str| interpolate(env.as_ref(), Some(scope), text, &mut record);
 
@@ -230,7 +230,7 @@ async fn send_collection_request(
     };
 
     // Sending with a ref left unresolved, or dropping an extracted token, would both be silent failures.
-    if record.locked || (extract_needs_credentials && crate::credentials::is_locked(db_path)) {
+    if record.locked || (extract_needs_credentials && crate::credentials::is_locked(db)) {
         return Err(crate::credentials::LOCKED.to_string());
     }
 
@@ -306,10 +306,10 @@ async fn send_collection_request(
 
     let executed_at = now_ms();
 
-    perform_auto_extraction_db(db_path, &workspace_id, Some(&workspace_id), &extract_rules_json, &decoded_body, &response_headers);
+    perform_auto_extraction_db(db, &workspace_id, Some(&workspace_id), &extract_rules_json, &decoded_body, &response_headers);
 
     let history_id = {
-        let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+        let conn = db.conn().map_err(|e| e.to_string())?;
         for header in &mut logged_req_headers {
             header.key = record.mask(&header.key);
             header.value = record.mask(&header.value);
@@ -522,7 +522,7 @@ pub(crate) fn extract_targets_credentials(env: Option<&crate::workspace::Environ
 /// `$cred:entry.field` ref, or a variable whose `(auto)` variant links to one, is written into that credential
 /// (looked up in `credentials_workspace_id`) instead, so the variant keeps its link.
 pub fn perform_auto_extraction_db(
-    db_path: &PathBuf,
+    db: &Db,
     workspace_id: &str,
     credentials_workspace_id: Option<&str>,
     extract_rules_json: &str,
@@ -542,12 +542,12 @@ pub fn perform_auto_extraction_db(
         return;
     }
 
-    let mut envs = crate::workspace::get_workspace_environments_db(db_path, workspace_id).unwrap_or_default();
+    let mut envs = crate::workspace::get_workspace_environments_db(db, workspace_id).unwrap_or_default();
     let mut active_env = envs.iter_mut().find(|e| e.is_active);
     let mut modified = false;
     let write_credential = |entry: &str, field: &str, value: &str| {
         let Some(credentials_workspace_id) = credentials_workspace_id else { return };
-        if let Err(e) = crate::credentials::write_extracted(db_path, credentials_workspace_id, entry, field, value) {
+        if let Err(e) = crate::credentials::write_extracted(db, credentials_workspace_id, entry, field, value) {
             eprintln!("[extract] skipped $cred:{entry}.{field}: {e}");
         }
     };
@@ -639,7 +639,7 @@ pub fn perform_auto_extraction_db(
     }
 
     if let (true, Some(active_env)) = (modified, active_env) {
-        let _ = crate::workspace::save_workspace_environment_db(db_path, active_env.clone());
+        let _ = crate::workspace::save_workspace_environment_db(db, active_env.clone());
     }
 }
 
@@ -715,9 +715,9 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn unreachable_pre_request_stops_the_main_request() {
-        let db_path = std::env::temp_dir().join(format!("collection-pre-request-{}.db", uuid::Uuid::new_v4()));
+        let db = crate::db::Db::new(std::env::temp_dir().join(format!("collection-pre-request-{}.db", uuid::Uuid::new_v4())));
         {
-            let conn = crate::db::open(&db_path).unwrap();
+            let conn = crate::db::open(&db).unwrap();
             for m in crate::db::migrations::MIGRATIONS {
                 for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
                     let _ = conn.execute(statement, []);
@@ -728,17 +728,17 @@ pub(crate) mod tests {
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
             listener.local_addr().unwrap().port()
         };
-        let col = crate::collections::create_collection_db(&db_path, crate::repeater::REPEATER_WORKSPACE_ID.into(), None, "c".into()).unwrap();
-        let mut fetch = crate::collections::create_request_db(&db_path, col.id.clone(), "Get CSRF Token".into()).unwrap();
+        let col = crate::collections::create_collection_db(&db, crate::repeater::REPEATER_WORKSPACE_ID.into(), None, "c".into()).unwrap();
+        let mut fetch = crate::collections::create_request_db(&db, col.id.clone(), "Get CSRF Token".into()).unwrap();
         fetch.url = format!("http://127.0.0.1:{}/form", closed_port);
-        crate::collections::update_request_db(&db_path, fetch.clone()).unwrap();
-        let mut submit = crate::collections::create_request_db(&db_path, col.id, "Submit".into()).unwrap();
+        crate::collections::update_request_db(&db, fetch.clone()).unwrap();
+        let mut submit = crate::collections::create_request_db(&db, col.id, "Submit".into()).unwrap();
         submit.pre_requests = vec![fetch.id.clone()];
-        crate::collections::update_request_db(&db_path, submit.clone()).unwrap();
+        crate::collections::update_request_db(&db, submit.clone()).unwrap();
 
-        let result = execute_collection_request_db(&db_path, &submit.id).await.unwrap();
-        let history = crate::collections::get_request_histories_db(&db_path, &submit.id).unwrap();
-        let _ = std::fs::remove_file(&db_path);
+        let result = execute_collection_request_db(&db, &submit.id).await.unwrap();
+        let history = crate::collections::get_request_histories_db(&db, &submit.id).unwrap();
+        let _ = std::fs::remove_file(&db);
 
         assert_eq!(result.status_code, 0);
         assert!(result.response_body.starts_with("Pre-request \"Get CSRF Token\" failed:"), "{}", result.response_body);
@@ -783,13 +783,13 @@ pub(crate) mod tests {
         use crate::credentials::{create_credential, save_credential, Field, FieldKind};
         use crate::workspace::{save_workspace_environment_db, Environment, EnvironmentVariable, VariableVariant};
 
-        let db_path = crate::credentials::tests_support::temp_db();
-        let ws = crate::workspace::create_workspace_db(&db_path, "W".into(), None).unwrap().id;
-        let mut cred = create_credential(&db_path, &ws, "dgAdmin").unwrap();
+        let db = crate::credentials::tests_support::temp_db();
+        let ws = crate::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
+        let mut cred = create_credential(&db, &ws, "dgAdmin").unwrap();
         let field = |key: &str, kind, value: &str| Field { key: key.into(), kind, extracted: false, value: value.into() };
         cred.fields = vec![field("password", FieldKind::Secret, "hunter2!"), field("totp", FieldKind::Totp, "MZXW6"), field("user", FieldKind::Text, "admin@x")];
-        save_credential(&db_path, &cred).unwrap();
-        save_workspace_environment_db(&db_path, Environment {
+        save_credential(&db, &cred).unwrap();
+        save_workspace_environment_db(&db, Environment {
             id: "env".into(),
             workspace_id: ws.clone(),
             name: "dev".into(),
@@ -808,19 +808,19 @@ pub(crate) mod tests {
         .unwrap();
 
         let base = serve_echo().await;
-        let col = crate::collections::create_collection_db(&db_path, ws.clone(), None, "c".into()).unwrap();
-        let mut req = crate::collections::create_request_db(&db_path, col.id, "signin".into()).unwrap();
+        let col = crate::collections::create_collection_db(&db, ws.clone(), None, "c".into()).unwrap();
+        let mut req = crate::collections::create_request_db(&db, col.id, "signin".into()).unwrap();
         req.method = "POST".into();
         req.url = format!("{base}/signin");
         req.params = vec![crate::repeater::ParamItem { id: "p".into(), key: "pw".into(), value: "{{adminPassword}}".into(), enabled: true }];
         req.headers = vec![HeaderItem { id: "h".into(), key: "X-Pass".into(), value: "{{$cred:dgAdmin.password}}".into(), enabled: true }];
         req.body_type = "raw".into();
         req.body_raw = Some("{{adminPassword}}|{{$cred:dgAdmin.totp}}|{{$cred:dgAdmin.user}}|{{$uuid}}".into());
-        crate::collections::update_request_db(&db_path, req.clone()).unwrap();
+        crate::collections::update_request_db(&db, req.clone()).unwrap();
 
-        let result = execute_collection_request_db(&db_path, &req.id).await.unwrap();
-        let history = crate::collections::get_request_histories_db(&db_path, &req.id).unwrap();
-        let _ = std::fs::remove_file(&db_path);
+        let result = execute_collection_request_db(&db, &req.id).await.unwrap();
+        let history = crate::collections::get_request_histories_db(&db, &req.id).unwrap();
+        let _ = std::fs::remove_file(&db);
 
         assert!(result.response_body.contains("x-pass: hunter2!"), "{}", result.response_body);
         assert!(result.response_body.contains("pw=hunter2%21"), "{}", result.response_body);
@@ -869,14 +869,14 @@ pub(crate) mod tests {
         }
     }
 
-    fn setup_extract() -> (PathBuf, String) {
+    fn setup_extract() -> (crate::db::Db, String) {
         let db = crate::credentials::tests_support::temp_db();
         let ws = crate::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
         crate::credentials::create_credential(&db, &ws, "dgAdmin").unwrap();
         (db, ws)
     }
 
-    fn extract(db: &PathBuf, ws: &str, target: &str) {
+    fn extract(db: &crate::db::Db, ws: &str, target: &str) {
         let rules = serde_json::to_string(&[rule(target)]).unwrap();
         perform_auto_extraction_db(db, ws, Some(ws), &rules, r#"{"access_token": "eyJtoken"}"#, &[]);
     }

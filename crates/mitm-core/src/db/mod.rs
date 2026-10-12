@@ -12,6 +12,7 @@ pub use error::InitError;
 pub use history_db::*;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -45,6 +46,38 @@ pub fn get_default_db_path() -> PathBuf {
     app_dir.join("mitm.db")
 }
 
+/// The app database. Cheap to clone; every `conn()` opens a connection configured by `open`.
+#[derive(Clone, Debug)]
+pub struct Db(Arc<PathBuf>);
+
+impl Db {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self(Arc::new(path.into()))
+    }
+
+    pub fn conn(&self) -> rusqlite::Result<Connection> {
+        open(&self.0)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for Db {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for Db {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
 /// Opens a connection with the settings SQLite keeps per connection; journal_mode lives in the file.
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
@@ -53,20 +86,20 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     Ok(conn)
 }
 
-pub fn init_database(db_path: &PathBuf, event_bus: Option<&crate::events::EventBus>) -> Result<(), InitError> {
-    if let Some(parent) = db_path.parent() {
+pub fn init_database(db: &Db, event_bus: Option<&crate::events::EventBus>) -> Result<(), InitError> {
+    if let Some(parent) = db.parent() {
         if !parent.exists() {
             std::fs::create_dir_all(parent).map_err(|e| InitError::Io(e.to_string()))?;
         }
     }
-    let conn = open(db_path).map_err(InitError::from)?;
+    let conn = db.conn().map_err(InitError::from)?;
     conn.execute_batch("PRAGMA journal_mode = WAL;").map_err(InitError::from)?;
 
     migrations::run_all(event_bus, &conn).map_err(InitError::migration)
 }
 
-pub fn get_preference(db_path: &PathBuf, key: &str) -> Option<String> {
-    let conn = open(db_path).ok()?;
+pub fn get_preference(db: &Db, key: &str) -> Option<String> {
+    let conn = db.conn().ok()?;
     conn.query_row(
         "SELECT value FROM app_preferences WHERE key = ?",
         [key],
@@ -74,8 +107,8 @@ pub fn get_preference(db_path: &PathBuf, key: &str) -> Option<String> {
     ).ok()
 }
 
-pub fn set_preference(db_path: &PathBuf, key: &str, value: &str) -> Result<(), String> {
-    let conn = open(db_path).map_err(|e| e.to_string())?;
+pub fn set_preference(db: &Db, key: &str, value: &str) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR REPLACE INTO app_preferences (key, value) VALUES (?, ?)",
         params![key, value],
@@ -93,13 +126,13 @@ pub fn prune_history_logs_conn(conn: &Connection, max_rows: u32) -> Result<usize
     ).map_err(|e| e.to_string())
 }
 
-pub fn prune_history_logs(db_path: &PathBuf, max_rows: u32) -> Result<usize, String> {
-    let conn = open(db_path).map_err(|e| e.to_string())?;
+pub fn prune_history_logs(db: &Db, max_rows: u32) -> Result<usize, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     prune_history_logs_conn(&conn, max_rows)
 }
 
-pub fn load_intercept_rules(db_path: &PathBuf) -> Result<Vec<InterceptRule>, String> {
-    let conn = open(db_path).map_err(|e| e.to_string())?;
+pub fn load_intercept_rules(db: &Db) -> Result<Vec<InterceptRule>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, is_enabled, target_phase, match_field, operator, match_value, order_index, created_at_ms, COALESCE(action, 'intercept') FROM intercept_rules ORDER BY order_index ASC")
         .map_err(|e| e.to_string())?;
@@ -126,8 +159,8 @@ pub fn load_intercept_rules(db_path: &PathBuf) -> Result<Vec<InterceptRule>, Str
     Ok(rules)
 }
 
-pub fn save_intercept_rules(db_path: &PathBuf, rules: &[InterceptRule]) -> Result<(), String> {
-    let mut conn = open(db_path).map_err(|e| e.to_string())?;
+pub fn save_intercept_rules(db: &Db, rules: &[InterceptRule]) -> Result<(), String> {
+    let mut conn = db.conn().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
     tx.execute("DELETE FROM intercept_rules", []).map_err(|e| e.to_string())?;
@@ -154,8 +187,8 @@ pub fn save_intercept_rules(db_path: &PathBuf, rules: &[InterceptRule]) -> Resul
     Ok(())
 }
 
-pub fn load_rewrite_rules(db_path: &PathBuf) -> Result<Vec<crate::proxy::rewrite::RewriteRule>, String> {
-    let conn = open(db_path).map_err(|e| e.to_string())?;
+pub fn load_rewrite_rules(db: &Db) -> Result<Vec<crate::proxy::rewrite::RewriteRule>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, name, enabled, action_type, match_field, match_operator, match_value, target_part, target_header, match_pattern, replacement_value, is_regex, mock_status_code, mock_headers_json, mock_body, order_index, created_at_ms FROM rewrite_rules ORDER BY order_index ASC")
         .map_err(|e| e.to_string())?;
@@ -191,8 +224,8 @@ pub fn load_rewrite_rules(db_path: &PathBuf) -> Result<Vec<crate::proxy::rewrite
     Ok(rules)
 }
 
-pub fn save_rewrite_rules(db_path: &PathBuf, rules: &[crate::proxy::rewrite::RewriteRule]) -> Result<(), String> {
-    let mut conn = open(db_path).map_err(|e| e.to_string())?;
+pub fn save_rewrite_rules(db: &Db, rules: &[crate::proxy::rewrite::RewriteRule]) -> Result<(), String> {
+    let mut conn = db.conn().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
     tx.execute("DELETE FROM rewrite_rules", []).map_err(|e| e.to_string())?;
@@ -227,8 +260,8 @@ pub fn save_rewrite_rules(db_path: &PathBuf, rules: &[crate::proxy::rewrite::Rew
     Ok(())
 }
 
-pub fn get_rewrite_history_logs(db_path: &PathBuf, limit: u32) -> Result<Vec<crate::proxy::rewrite::RewriteHistoryEntry>, String> {
-    let conn = open(db_path).map_err(|e| e.to_string())?;
+pub fn get_rewrite_history_logs(db: &Db, limit: u32) -> Result<Vec<crate::proxy::rewrite::RewriteHistoryEntry>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, rule_id, rule_name, action_type, method, original_url, rewritten_url, original_headers, rewritten_headers, original_body, rewritten_body, status_code, duration_ms, created_at FROM rewrite_history ORDER BY id DESC LIMIT ?")
         .map_err(|e| e.to_string())?;
@@ -265,8 +298,8 @@ pub fn get_rewrite_history_logs(db_path: &PathBuf, limit: u32) -> Result<Vec<cra
     Ok(rows)
 }
 
-pub fn clear_rewrite_history_logs(db_path: &PathBuf) -> Result<(), String> {
-    let conn = open(db_path).map_err(|e| e.to_string())?;
+pub fn clear_rewrite_history_logs(db: &Db) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM rewrite_history", []).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -323,8 +356,8 @@ impl DataCategoryCounts {
     }
 }
 
-pub fn get_data_category_counts(db_path: &PathBuf) -> Result<DataCategoryCounts, String> {
-    let conn = open(db_path).map_err(|e| e.to_string())?;
+pub fn get_data_category_counts(db: &Db) -> Result<DataCategoryCounts, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let traffic = conn.query_row("SELECT COUNT(*) FROM history", [], |r| r.get(0)).unwrap_or(0);
     let webhook_deliveries = conn.query_row("SELECT COUNT(*) FROM webhook_deliveries", [], |r| r.get(0)).unwrap_or(0);
     let ws_messages = conn.query_row("SELECT COUNT(*) FROM ws_messages", [], |r| r.get(0)).unwrap_or(0);
@@ -344,10 +377,10 @@ pub fn get_data_category_counts(db_path: &PathBuf) -> Result<DataCategoryCounts,
 mod tests {
     use super::*;
 
-    fn temp_db() -> (PathBuf, PathBuf) {
+    fn temp_db() -> (crate::db::Db, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!("mitm-counts-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db = dir.join("test.db");
+        let db = crate::db::Db::new(dir.join("test.db"));
         init_database(&db, None).unwrap();
         (db, dir)
     }

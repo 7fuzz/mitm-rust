@@ -1,12 +1,12 @@
 //! Imports credentials from any JSON file: leaves become rows the user ticks and assigns to entries and fields.
 //! Grouping and kinds are guesses from key names; nothing here knows a particular file format.
 
-use std::path::Path;
 use eframe::egui::{self, RichText};
 use mitm_core::credentials::{self, Field, FieldKind};
 use serde_json::Value;
 use crate::app::command::{AppCommand, Commands};
 use super::CredentialsState;
+use mitm_core::db::Db;
 
 /// Key endings that name a credential field: `adminPassword` is entry `admin`, field `password`.
 const FIELD_SUFFIXES: [&str; 14] = [
@@ -198,7 +198,7 @@ fn row(path: &str, value: &Value, owner: String, owner_name: Option<&str>, key: 
 
 /// Writes the picked rows, creating entries as needed; a field that exists gets the new value.
 /// Returns (fields written, entries touched).
-pub fn apply(db_path: &Path, workspace_id: &str, rows: &[Row]) -> Result<(usize, usize), String> {
+pub fn apply(db: &Db, workspace_id: &str, rows: &[Row]) -> Result<(usize, usize), String> {
     let mut entries: Vec<(String, Vec<&Row>)> = Vec::new();
     for row in rows.iter().filter(|r| r.picked) {
         credentials::validate_name(&row.entry)?;
@@ -210,9 +210,9 @@ pub fn apply(db_path: &Path, workspace_id: &str, rows: &[Row]) -> Result<(usize,
     }
     let mut fields = 0;
     for (name, picked) in &entries {
-        let mut credential = match credentials::find_credential(db_path, workspace_id, name)? {
+        let mut credential = match credentials::find_credential(db, workspace_id, name)? {
             Some(existing) => existing,
-            None => credentials::create_credential(db_path, workspace_id, name)?,
+            None => credentials::create_credential(db, workspace_id, name)?,
         };
         for row in picked {
             match credential.field_mut(&row.field) {
@@ -221,12 +221,12 @@ pub fn apply(db_path: &Path, workspace_id: &str, rows: &[Row]) -> Result<(usize,
             }
             fields += 1;
         }
-        credentials::save_credential(db_path, &credential)?;
+        credentials::save_credential(db, &credential)?;
     }
     Ok((fields, entries.len()))
 }
 
-pub fn show(ctx: &egui::Context, state: &mut CredentialsState, db_path: &Path, cmds: &mut Commands) {
+pub fn show(ctx: &egui::Context, state: &mut CredentialsState, db: &Db, cmds: &mut Commands) {
     if !state.json_import.open {
         return;
     }
@@ -295,7 +295,7 @@ pub fn show(ctx: &egui::Context, state: &mut CredentialsState, db_path: &Path, c
     });
     if import {
         let workspace_id = state.loaded_for.clone().unwrap_or_default();
-        match apply(db_path, &workspace_id, &state.json_import.rows) {
+        match apply(db, &workspace_id, &state.json_import.rows) {
             Ok(_) => {
                 close = true;
                 state.stale = true;
@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn apply_creates_entries_and_updates_existing_fields() {
-        let db = std::env::temp_dir().join(format!("mitm-json-import-{}.db", uuid::Uuid::new_v4()));
+        let db = mitm_core::db::Db::new(std::env::temp_dir().join(format!("mitm-json-import-{}.db", uuid::Uuid::new_v4())));
         mitm_core::db::init_database(&db, None).unwrap();
         let ws = mitm_core::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
         let mut picked = rows(&json!({ "credentials": { "adminEmail": "a@x", "adminPassword": "p1", "note": "n" } }));

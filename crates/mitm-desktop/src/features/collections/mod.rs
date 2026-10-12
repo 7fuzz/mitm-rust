@@ -6,7 +6,6 @@ mod tree;
 mod view;
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use mitm_core::collections::execute::ExecutionResult;
 use mitm_core::collections::preview::RequestPreview;
@@ -17,6 +16,7 @@ use crate::features::request_editor::body::{is_multipart, is_urlencoded};
 use crate::features::request_editor::captured::CapturedRequest;
 use crate::features::request_editor::run_list::RunDetails;
 use crate::widgets::message_pane::PaneState;
+use mitm_core::db::Db;
 
 pub use view::show;
 
@@ -157,14 +157,14 @@ impl Default for CollectionsState {
 }
 
 impl CollectionsState {
-    pub fn load(&mut self, db_path: &PathBuf, workspace_id: String) {
+    pub fn load(&mut self, db: &Db, workspace_id: String) {
         self.active_workspace_id = workspace_id;
-        self.reload_tree(db_path);
+        self.reload_tree(db);
     }
 
-    pub fn reload_tree(&mut self, db_path: &PathBuf) {
-        self.flush(db_path);
-        self.trees = core_collections::get_collections_db(db_path, &self.active_workspace_id).unwrap_or_default();
+    pub fn reload_tree(&mut self, db: &Db) {
+        self.flush(db);
+        self.trees = core_collections::get_collections_db(db, &self.active_workspace_id).unwrap_or_default();
         let saved: HashMap<String, RequestItem> = all_requests(&self.trees).into_iter().map(|r| (r.id.clone(), r.clone())).collect();
         self.open.retain(|r| saved.contains_key(&r.id));
         for request in &mut self.open {
@@ -183,9 +183,9 @@ impl CollectionsState {
         self.saves.edited(id, now);
     }
 
-    pub fn flush_if_idle(&mut self, db_path: &PathBuf, now: f64) {
+    pub fn flush_if_idle(&mut self, db: &Db, now: f64) {
         if self.saves.is_due(now) {
-            self.flush(db_path);
+            self.flush(db);
             self.saves.retry_later(now);
         }
     }
@@ -194,10 +194,10 @@ impl CollectionsState {
         self.saves.take_errors()
     }
 
-    pub fn flush(&mut self, db_path: &PathBuf) {
+    pub fn flush(&mut self, db: &Db) {
         for id in self.saves.take() {
             let Some(request) = self.open.iter().find(|r| r.id == id).cloned() else { continue };
-            match core_collections::update_request_db(db_path, request.clone()) {
+            match core_collections::update_request_db(db, request.clone()) {
                 Ok(_) => {
                     self.saves.saved(&id);
                     patch_tree(&mut self.trees, request);
@@ -207,14 +207,14 @@ impl CollectionsState {
         }
     }
 
-    pub fn save_captured(&mut self, db_path: &PathBuf, target: SaveTarget, name: String, captured: CapturedRequest) -> Result<(), String> {
+    pub fn save_captured(&mut self, db: &Db, target: SaveTarget, name: String, captured: CapturedRequest) -> Result<(), String> {
         let folder_id = match target {
             SaveTarget::Folder(id) => id,
             SaveTarget::NewFolder(new_name) => {
-                core_collections::create_collection_db(db_path, self.active_workspace_id.clone(), None, new_name)?.id
+                core_collections::create_collection_db(db, self.active_workspace_id.clone(), None, new_name)?.id
             }
         };
-        let mut request = core_collections::create_request_db(db_path, folder_id.clone(), name)?;
+        let mut request = core_collections::create_request_db(db, folder_id.clone(), name)?;
         request.method = captured.method;
         request.url = captured.url;
         request.params = captured.params;
@@ -227,27 +227,27 @@ impl CollectionsState {
             _ => request.body_raw = body,
         }
         request.body_type = captured.body_type;
-        core_collections::update_request_db(db_path, request)?;
+        core_collections::update_request_db(db, request)?;
         self.reveal.insert(folder_id);
-        self.reload_tree(db_path);
+        self.reload_tree(db);
         Ok(())
     }
 
-    fn open_request(&mut self, id: String, db_path: &PathBuf) {
+    fn open_request(&mut self, id: String, db: &Db) {
         if !self.open.iter().any(|r| r.id == id) {
             let Some(request) = self.find_request(&id).cloned() else { return };
             self.open.push(request);
         }
-        self.reload_runs(&id, db_path);
+        self.reload_runs(&id, db);
         self.active_id = Some(id);
     }
 
-    fn first_root_folder_or_create(&mut self, db_path: &PathBuf) -> Option<String> {
+    fn first_root_folder_or_create(&mut self, db: &Db) -> Option<String> {
         if let Some(first) = self.trees.iter().find(|c| c.parent_id.is_none()) {
             return Some(first.id.clone());
         }
         let created = core_collections::create_collection_db(
-            db_path,
+            db,
             self.active_workspace_id.clone(),
             None,
             "Unassigned Requests".to_string(),
@@ -255,23 +255,23 @@ impl CollectionsState {
         created.ok().map(|c| c.id)
     }
 
-    pub fn reload_runs(&mut self, id: &str, db_path: &PathBuf) {
-        let runs = core_collections::get_request_histories_db(db_path, id).unwrap_or_default();
+    pub fn reload_runs(&mut self, id: &str, db: &Db) {
+        let runs = core_collections::get_request_histories_db(db, id).unwrap_or_default();
         self.runs.insert(id.to_string(), runs);
     }
 
-    pub fn start_run(&mut self, id: &str, db_path: &PathBuf) -> bool {
-        self.flush(db_path);
+    pub fn start_run(&mut self, id: &str, db: &Db) -> bool {
+        self.flush(db);
         self.executing.insert(id.to_string())
     }
 
-    pub fn finish_run(&mut self, id: &str, result: Result<ExecutionResult, String>, db_path: &PathBuf) {
+    pub fn finish_run(&mut self, id: &str, result: Result<ExecutionResult, String>, db: &Db) {
         self.executing.remove(id);
         if let Ok(result) = result {
             self.latest.insert(id.to_string(), result);
         }
         self.selected_run.remove(id);
-        self.reload_runs(id, db_path);
+        self.reload_runs(id, db);
     }
 
     pub fn start_edit(&mut self, edit: TreeEdit, text: String) {
@@ -321,7 +321,7 @@ mod tests {
     fn captured_flow_saves_as_a_request_in_a_new_folder() {
         let dir = std::env::temp_dir().join(format!("mitm-save-flow-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db = dir.join("test.db");
+        let db = mitm_core::db::Db::new(dir.join("test.db"));
         mitm_core::db::init_database(&db, None).unwrap();
         let workspace = mitm_core::workspace::create_workspace_db(&db, "W".to_string(), None).unwrap();
 

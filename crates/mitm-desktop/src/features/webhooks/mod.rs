@@ -2,10 +2,10 @@ mod commands;
 mod view;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use mitm_core::webhook::types::{WebhookDelivery, WebhookDeliveryCapturedEvent, WebhookEndpoint};
 use mitm_core::webhook::WebhookReplayResult;
 use serde::{Deserialize, Serialize};
+use mitm_core::db::Db;
 
 pub use commands::{handle, poll, Cmd};
 pub use view::show;
@@ -78,11 +78,11 @@ impl Default for WebhooksState {
 }
 
 impl WebhooksState {
-    pub fn load(&mut self, db_path: &PathBuf) {
-        if let Ok(endpoints) = mitm_core::db::webhook_db::load_webhook_endpoints(db_path) {
+    pub fn load(&mut self, db: &Db) {
+        if let Ok(endpoints) = mitm_core::db::webhook_db::load_webhook_endpoints(db) {
             self.endpoints = endpoints;
         }
-        if let Ok(deliveries) = mitm_core::db::webhook_db::load_webhook_deliveries(db_path, None) {
+        if let Ok(deliveries) = mitm_core::db::webhook_db::load_webhook_deliveries(db, None) {
             self.deliveries = deliveries;
         }
     }

@@ -1,8 +1,8 @@
-use std::path::PathBuf;
 use crate::proxy::history::{HistoryDetail, HistoryEntry};
+use crate::db::Db;
 
 pub fn get_history_logs(
-    db_path: &PathBuf,
+    db: &Db,
     limit: u32,
     offset: u32,
     search_term: Option<&str>,
@@ -10,7 +10,7 @@ pub fn get_history_logs(
     status_range: Option<&str>,
     include_bodies: bool,
 ) -> Result<Vec<HistoryEntry>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
 
     let select_fields = if include_bodies { FULL_FIELDS } else { SUMMARY_FIELDS };
 
@@ -146,13 +146,13 @@ fn search_clause(search: Option<&str>, include_headers: bool) -> (String, Option
 
 /// Newest first; pass the smallest id seen so far as `before_id` for the next page, which stays stable while new flows arrive.
 pub fn get_history_page(
-    db_path: &PathBuf,
+    db: &Db,
     search: Option<&str>,
     include_headers: bool,
     before_id: Option<i64>,
     limit: u32,
 ) -> Result<Vec<HistoryEntry>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let (clause, pattern) = search_clause(search, include_headers);
     let sql = format!(
         "SELECT {SUMMARY_FIELDS} FROM history WHERE id < ?2{clause} ORDER BY id DESC LIMIT ?3"
@@ -164,8 +164,8 @@ pub fn get_history_page(
     Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
-pub fn get_history_count(db_path: &PathBuf, search: Option<&str>, include_headers: bool) -> Result<u64, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn get_history_count(db: &Db, search: Option<&str>, include_headers: bool) -> Result<u64, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let (clause, pattern) = search_clause(search, include_headers);
     let sql = format!("SELECT COUNT(*) FROM history WHERE 1=1{clause}");
     let count = match pattern {
@@ -176,8 +176,8 @@ pub fn get_history_count(db_path: &PathBuf, search: Option<&str>, include_header
 }
 
 /// Every stored flow without headers or bodies, newest first.
-pub fn get_history_summaries(db_path: &PathBuf) -> Result<Vec<HistoryEntry>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn get_history_summaries(db: &Db) -> Result<Vec<HistoryEntry>, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(&format!("SELECT {SUMMARY_FIELDS} FROM history ORDER BY id DESC"))
         .map_err(|e| e.to_string())?;
@@ -186,9 +186,9 @@ pub fn get_history_summaries(db_path: &PathBuf) -> Result<Vec<HistoryEntry>, Str
 }
 
 /// Full flows with headers and bodies, oldest first.
-pub fn get_history_by_ids(db_path: &PathBuf, ids: &[i64]) -> Result<Vec<HistoryEntry>, String> {
+pub fn get_history_by_ids(db: &Db, ids: &[i64]) -> Result<Vec<HistoryEntry>, String> {
     const CHUNK: usize = 500;
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let mut entries = Vec::with_capacity(ids.len());
     for chunk in ids.chunks(CHUNK) {
         let placeholders = vec!["?"; chunk.len()].join(",");
@@ -205,10 +205,10 @@ pub fn get_history_by_ids(db_path: &PathBuf, ids: &[i64]) -> Result<Vec<HistoryE
 }
 
 pub fn get_history_detail(
-    db_path: &PathBuf,
+    db: &Db,
     id: i64,
 ) -> Result<Option<HistoryDetail>, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+    let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, request_headers, response_headers, request_body, response_body FROM history WHERE id = ?")
         .map_err(|e| e.to_string())?;
@@ -241,8 +241,8 @@ pub fn get_history_detail(
     }
 }
 
-pub fn clear_history(db_path: &PathBuf) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn clear_history(db: &Db) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute_batch(
         "DELETE FROM history;
          DELETE FROM sqlite_sequence WHERE name = 'history';"
@@ -250,8 +250,8 @@ pub fn clear_history(db_path: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-pub fn delete_history_entry(db_path: &PathBuf, id: i64) -> Result<(), String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn delete_history_entry(db: &Db, id: i64) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM history WHERE id = ?1", [id])
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -261,10 +261,10 @@ pub fn delete_history_entry(db_path: &PathBuf, id: i64) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    fn db_with_flows(count: i64) -> (PathBuf, PathBuf) {
+    fn db_with_flows(count: i64) -> (crate::db::Db, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!("mitm-history-page-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db = dir.join("test.db");
+        let db = crate::db::Db::new(dir.join("test.db"));
         crate::db::init_database(&db, None).unwrap();
         let conn = crate::db::open(&db).unwrap();
         for id in 1..=count {

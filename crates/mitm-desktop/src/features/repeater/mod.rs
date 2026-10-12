@@ -5,7 +5,6 @@ mod sidebar;
 mod view;
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use mitm_core::http::curl::ParsedCurl;
 use mitm_core::repeater::{
@@ -18,6 +17,7 @@ use crate::features::request_editor::run_list::Run;
 use crate::features::request_editor::url_params::{new_id, parse_query};
 use crate::features::request_editor::run_list::RunDetails;
 use crate::widgets::message_pane::PaneState;
+use mitm_core::db::Db;
 
 pub use curl_import::{show as show_curl_import, CurlImport};
 pub use commands::{handle, Cmd};
@@ -122,15 +122,15 @@ impl Default for RepeaterState {
 }
 
 impl RepeaterState {
-    pub fn load(&mut self, db_path: &PathBuf) {
-        self.tabs = core_repeater::get_repeater_tabs_db(db_path).unwrap_or_default();
+    pub fn load(&mut self, db: &Db) {
+        self.tabs = core_repeater::get_repeater_tabs_db(db).unwrap_or_default();
         if let Some(first) = self.tabs.first().map(|t| t.id.clone()) {
-            self.select(first, db_path);
+            self.select(first, db);
         }
     }
 
-    pub fn select(&mut self, id: String, db_path: &PathBuf) {
-        self.reload_history(&id, db_path);
+    pub fn select(&mut self, id: String, db: &Db) {
+        self.reload_history(&id, db);
         self.active_id = Some(id);
     }
 
@@ -141,9 +141,9 @@ impl RepeaterState {
         self.saves.edited(id, now);
     }
 
-    pub fn flush_if_idle(&mut self, db_path: &PathBuf, now: f64) {
+    pub fn flush_if_idle(&mut self, db: &Db, now: f64) {
         if self.saves.is_due(now) {
-            self.flush(db_path);
+            self.flush(db);
             self.saves.retry_later(now);
         }
     }
@@ -154,42 +154,42 @@ impl RepeaterState {
         errors
     }
 
-    pub fn flush(&mut self, db_path: &PathBuf) {
+    pub fn flush(&mut self, db: &Db) {
         for id in self.saves.take() {
             let Some(tab) = self.tabs.iter().find(|t| t.id == id) else { continue };
-            match core_repeater::update_repeater_tab_db(db_path, tab) {
+            match core_repeater::update_repeater_tab_db(db, tab) {
                 Ok(_) => self.saves.saved(&id),
                 Err(e) => self.saves.failed(id, format!("Couldn't save request: {e}")),
             }
         }
     }
 
-    pub fn create(&mut self, tab: RepeaterTab, db_path: &PathBuf) -> String {
-        if let Err(e) = core_repeater::create_repeater_tab_db(db_path, &tab) {
+    pub fn create(&mut self, tab: RepeaterTab, db: &Db) -> String {
+        if let Err(e) = core_repeater::create_repeater_tab_db(db, &tab) {
             self.errors.push(format!("Couldn't save request: {e}"));
         }
         let id = tab.id.clone();
         self.tabs.insert(0, tab);
         self.search.clear();
-        self.select(id.clone(), db_path);
+        self.select(id.clone(), db);
         id
     }
 
-    pub fn create_blank(&mut self, db_path: &PathBuf) {
-        let tab = blank_tab(db_path);
-        self.create(tab, db_path);
+    pub fn create_blank(&mut self, db: &Db) {
+        let tab = blank_tab(db);
+        self.create(tab, db);
     }
 
-    pub fn create_from_flow(&mut self, flow: &HistoryEntry, detail: Option<&HistoryDetail>, db_path: &PathBuf) {
+    pub fn create_from_flow(&mut self, flow: &HistoryEntry, detail: Option<&HistoryDetail>, db: &Db) {
         let response_headers = detail.map_or(&flow.response_headers, |d| &d.response_headers);
         let response_body = detail.map_or(&flow.response_body, |d| &d.response_body);
         let captured = CapturedRequest::from_flow(flow, detail);
         let headers = captured.headers.clone();
         let body_content = captured.body_content.clone();
 
-        let mut tab = blank_tab(db_path);
+        let mut tab = blank_tab(db);
         apply_captured(&mut tab, captured);
-        let id = self.create(tab, db_path);
+        let id = self.create(tab, db);
 
         let run = RepeaterHistoryItem {
             id: 0,
@@ -204,19 +204,19 @@ impl RepeaterState {
             duration_ms: flow.duration_ms.unwrap_or(0),
             executed_at_ms: chrono::Utc::now().timestamp_millis(),
         };
-        if let Ok(history_id) = core_repeater::insert_repeater_history_db(db_path, &run) {
+        if let Ok(history_id) = core_repeater::insert_repeater_history_db(db, &run) {
             self.responses.insert(id.clone(), ShownResponse::from_run(&RepeaterHistoryItem { id: history_id, ..run }));
         }
-        self.after_run(&id, db_path);
+        self.after_run(&id, db);
     }
 
-    pub fn create_from_curl(&mut self, curl: ParsedCurl, db_path: &PathBuf) {
-        let mut tab = blank_tab(db_path);
+    pub fn create_from_curl(&mut self, curl: ParsedCurl, db: &Db) {
+        let mut tab = blank_tab(db);
         apply_captured(&mut tab, curl.into());
-        self.create(tab, db_path);
+        self.create(tab, db);
     }
 
-    pub fn create_from_fuzz_result(&mut self, result: &mitm_core::fuzzer::FuzzResult, db_path: &PathBuf) {
+    pub fn create_from_fuzz_result(&mut self, result: &mitm_core::fuzzer::FuzzResult, db: &Db) {
         let content_type = result
             .request_headers
             .iter()
@@ -235,9 +235,9 @@ impl RepeaterState {
             body_content,
         };
 
-        let mut tab = blank_tab(db_path);
+        let mut tab = blank_tab(db);
         apply_captured(&mut tab, captured);
-        let id = self.create(tab, db_path);
+        let id = self.create(tab, db);
 
         let run = RepeaterHistoryItem {
             id: 0,
@@ -252,14 +252,14 @@ impl RepeaterState {
             duration_ms: result.duration_ms,
             executed_at_ms: chrono::Utc::now().timestamp_millis(),
         };
-        if let Ok(history_id) = core_repeater::insert_repeater_history_db(db_path, &run) {
+        if let Ok(history_id) = core_repeater::insert_repeater_history_db(db, &run) {
             self.responses.insert(id.clone(), ShownResponse::from_run(&RepeaterHistoryItem { id: history_id, ..run }));
         }
-        self.after_run(&id, db_path);
+        self.after_run(&id, db);
     }
 
-    pub fn delete(&mut self, id: &str, db_path: &PathBuf) {
-        if let Err(e) = core_repeater::delete_repeater_tab_db(db_path, id) {
+    pub fn delete(&mut self, id: &str, db: &Db) {
+        if let Err(e) = core_repeater::delete_repeater_tab_db(db, id) {
             self.errors.push(format!("Couldn't delete request: {e}"));
         }
         self.tabs.retain(|t| t.id != id);
@@ -277,19 +277,19 @@ impl RepeaterState {
         if self.active_id.as_deref() == Some(id) {
             self.active_id = None;
             if let Some(next) = self.tabs.first().map(|t| t.id.clone()) {
-                self.select(next, db_path);
+                self.select(next, db);
             }
         }
     }
 
-    pub fn reload_history(&mut self, id: &str, db_path: &PathBuf) {
-        let runs = core_repeater::get_repeater_history_db(db_path, id, 1, 100).unwrap_or_default();
+    pub fn reload_history(&mut self, id: &str, db: &Db) {
+        let runs = core_repeater::get_repeater_history_db(db, id, 1, 100).unwrap_or_default();
         self.history.insert(id.to_string(), runs);
     }
 
-    pub fn after_run(&mut self, id: &str, db_path: &PathBuf) {
-        self.reload_history(id, db_path);
-        let Ok(stored) = core_repeater::get_repeater_tab_by_id(db_path, id) else { return };
+    pub fn after_run(&mut self, id: &str, db: &Db) {
+        self.reload_history(id, db);
+        let Ok(stored) = core_repeater::get_repeater_tab_by_id(db, id) else { return };
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
             tab.execution_count = stored.execution_count;
             tab.last_status_code = stored.last_status_code;
@@ -297,7 +297,7 @@ impl RepeaterState {
         }
     }
 
-    pub fn finish_run(&mut self, id: &str, result: Result<RepeaterExecutionResult, String>, db_path: &PathBuf) {
+    pub fn finish_run(&mut self, id: &str, result: Result<RepeaterExecutionResult, String>, db: &Db) {
         self.executing.remove(id);
         let shown = match result {
             Ok(result) => ShownResponse::from_result(result),
@@ -312,7 +312,7 @@ impl RepeaterState {
             },
         };
         self.responses.insert(id.to_string(), shown);
-        self.after_run(id, db_path);
+        self.after_run(id, db);
     }
 
     pub fn show_run(&mut self, tab_id: &str, run_id: i64) {
@@ -350,7 +350,7 @@ fn header(key: &str, value: &str, enabled: bool) -> HeaderItem {
     HeaderItem { id: new_id(), key: key.to_string(), value: value.to_string(), enabled }
 }
 
-fn blank_tab(db_path: &PathBuf) -> RepeaterTab {
+fn blank_tab(db: &Db) -> RepeaterTab {
     let now = chrono::Utc::now().timestamp_millis();
     RepeaterTab {
         id: new_id(),
@@ -373,7 +373,7 @@ fn blank_tab(db_path: &PathBuf) -> RepeaterTab {
         extract_rules: Vec::new(),
         pre_requests: Vec::new(),
         post_requests: Vec::new(),
-        order_index: core_repeater::top_order_index_db(db_path).unwrap_or(0),
+        order_index: core_repeater::top_order_index_db(db).unwrap_or(0),
         created_at_ms: now,
         updated_at_ms: now,
         execution_count: 0,

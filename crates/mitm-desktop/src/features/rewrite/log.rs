@@ -1,4 +1,3 @@
-use std::path::Path;
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use mitm_core::proxy::rewrite::RewriteHistoryEntry;
@@ -12,6 +11,7 @@ use super::{action_tone, RewriteState};
 use crate::ui::icons;
 use crate::widgets::button::icon_button;
 use crate::widgets::section::section;
+use mitm_core::db::Db;
 
 const LOG_LIMIT: u32 = 2000;
 
@@ -21,19 +21,19 @@ pub struct EntryDiff {
     body: Vec<DiffLine>,
 }
 
-pub fn reload(state: &mut RewriteState, db_path: &Path) {
-    state.log = mitm_core::db::get_rewrite_history_logs(&db_path.to_path_buf(), LOG_LIMIT).unwrap_or_default();
+pub fn reload(state: &mut RewriteState, db: &Db) {
+    state.log = mitm_core::db::get_rewrite_history_logs(db, LOG_LIMIT).unwrap_or_default();
     state.log_loaded = true;
 }
 
-pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, db_path: &Path, cmds: &mut Commands) {
+pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, db: &Db, cmds: &mut Commands) {
     if !state.log_loaded {
-        reload(state, db_path);
+        reload(state, db);
     }
     ui.horizontal(|ui| {
         ui.label(RichText::new(format!("{} entries", state.log.len())).weak());
         if icon_button(ui, icons::ARROW_CLOCKWISE, "Reload the log").clicked() {
-            reload(state, db_path);
+            reload(state, db);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if confirm_button(ui, ui.id().with("clear_rewrite_log"), RichText::new(icons::TRASH), "Clear log?", "Clear the rewrite log") {

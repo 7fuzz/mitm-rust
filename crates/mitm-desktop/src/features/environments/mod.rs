@@ -4,10 +4,10 @@ mod import;
 mod quick;
 mod view;
 
-use std::path::Path;
 use mitm_core::repeater::REPEATER_WORKSPACE_ID;
 use mitm_core::workspace::{Environment, Workspace};
 use crate::util::save_queue::SaveQueue;
+use mitm_core::db::Db;
 
 pub use commands::{handle, Cmd};
 pub use export::show as show_export;
@@ -93,31 +93,29 @@ impl Default for EnvironmentsState {
 }
 
 impl EnvironmentsState {
-    pub fn load(&mut self, db_path: &Path) {
-        let db_buf = db_path.to_path_buf();
-        self.workspaces = mitm_core::workspace::get_workspaces_db(&db_buf).unwrap_or_default();
+    pub fn load(&mut self, db: &Db) {
+        self.workspaces = mitm_core::workspace::get_workspaces_db(db).unwrap_or_default();
         if self.workspaces.is_empty() {
             if let Ok(created) = mitm_core::workspace::create_workspace_db(
-                &db_buf,
+                db,
                 "Default Workspace".to_string(),
                 Some("Main development workspace".to_string()),
             ) {
                 self.workspaces.push(created);
             }
         }
-        if let Ok(Some(active)) = mitm_core::workspace::get_active_workspace_db(&db_buf) {
+        if let Ok(Some(active)) = mitm_core::workspace::get_active_workspace_db(db) {
             self.active_workspace_id = active.id;
         } else if let Some(first) = self.workspaces.first() {
             self.active_workspace_id = first.id.clone();
-            let _ = mitm_core::workspace::set_active_workspace_db(&db_buf, &first.id);
+            let _ = mitm_core::workspace::set_active_workspace_db(db, &first.id);
         }
-        self.reload_environments(db_path);
-        self.load_repeater_env(db_path);
+        self.reload_environments(db);
+        self.load_repeater_env(db);
     }
 
-    fn load_repeater_env(&mut self, db_path: &Path) {
-        let db_buf = db_path.to_path_buf();
-        let envs = mitm_core::workspace::get_workspace_environments_db(&db_buf, REPEATER_WORKSPACE_ID).unwrap_or_default();
+    fn load_repeater_env(&mut self, db: &Db) {
+        let envs = mitm_core::workspace::get_workspace_environments_db(db, REPEATER_WORKSPACE_ID).unwrap_or_default();
         let existing = envs.iter().find(|e| e.is_active).or(envs.first()).cloned();
         self.repeater_env = existing.or_else(|| {
             let now = chrono::Utc::now().timestamp_millis();
@@ -130,13 +128,12 @@ impl EnvironmentsState {
                 created_at_ms: now,
                 updated_at_ms: now,
             };
-            mitm_core::workspace::save_workspace_environment_db(&db_buf, env.clone()).ok().map(|_| env)
+            mitm_core::workspace::save_workspace_environment_db(db, env.clone()).ok().map(|_| env)
         });
     }
 
-    pub fn reload_environments(&mut self, db_path: &Path) {
-        let db_buf = db_path.to_path_buf();
-        self.environments = mitm_core::workspace::get_workspace_environments_db(&db_buf, &self.active_workspace_id).unwrap_or_default();
+    pub fn reload_environments(&mut self, db: &Db) {
+        self.environments = mitm_core::workspace::get_workspace_environments_db(db, &self.active_workspace_id).unwrap_or_default();
         self.active_environment_id = self.environments.iter().find(|e| e.is_active).map(|e| e.id.clone());
         if self.selected_environment_id.is_none() || !self.environments.iter().any(|e| Some(&e.id) == self.selected_environment_id.as_ref()) {
             self.selected_environment_id = self.active_environment_id.clone().or_else(|| self.environments.first().map(|e| e.id.clone()));
@@ -144,10 +141,10 @@ impl EnvironmentsState {
     }
 
     /// Picks up variables a request run extracted into the database.
-    pub fn refresh(&mut self, db_path: &Path) {
-        self.flush(db_path);
-        self.reload_environments(db_path);
-        self.load_repeater_env(db_path);
+    pub fn refresh(&mut self, db: &Db) {
+        self.flush(db);
+        self.reload_environments(db);
+        self.load_repeater_env(db);
     }
 
     pub fn active_workspace(&self) -> Option<&Workspace> {
@@ -163,9 +160,9 @@ impl EnvironmentsState {
         self.saves.edited(env_id, now);
     }
 
-    pub fn flush_if_idle(&mut self, db_path: &Path, now: f64) {
+    pub fn flush_if_idle(&mut self, db: &Db, now: f64) {
         if self.saves.is_due(now) {
-            self.flush(db_path);
+            self.flush(db);
             self.saves.retry_later(now);
         }
     }
@@ -174,11 +171,10 @@ impl EnvironmentsState {
         self.saves.take_errors()
     }
 
-    pub fn flush(&mut self, db_path: &Path) {
-        let db_buf = db_path.to_path_buf();
+    pub fn flush(&mut self, db: &Db) {
         for id in self.saves.take() {
             let Some(env) = self.environments.iter().chain(&self.repeater_env).find(|e| e.id == id).cloned() else { continue };
-            match mitm_core::workspace::save_workspace_environment_db(&db_buf, env) {
+            match mitm_core::workspace::save_workspace_environment_db(db, env) {
                 Ok(_) => self.saves.saved(&id),
                 Err(e) => self.saves.failed(id, format!("Couldn't save environment: {e}")),
             }
@@ -203,7 +199,7 @@ mod tests {
     fn repeater_gets_one_default_environment_apart_from_workspaces() {
         let dir = std::env::temp_dir().join(format!("mitm-repeater-env-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db = dir.join("test.db");
+        let db = mitm_core::db::Db::new(dir.join("test.db"));
         mitm_core::db::init_database(&db, None).unwrap();
 
         let mut state = EnvironmentsState::default();

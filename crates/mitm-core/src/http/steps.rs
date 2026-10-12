@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use reqwest::cookie::{CookieStore, Jar};
 use rusqlite::{params, Connection};
+use crate::db::Db;
 
 /// Requests that run around a request on every send, in order.
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -85,14 +85,14 @@ pub fn copy_steps(
     load_steps(conn, to_request_id)
 }
 
-pub fn request_steps(db_path: &PathBuf, request_id: &str) -> Result<RequestSteps, String> {
-    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
+pub fn request_steps(db: &Db, request_id: &str) -> Result<RequestSteps, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
     load_steps(&conn, request_id).map_err(|e| e.to_string())
 }
 
 /// Shown as the main request's response when a pre-request never reached the server.
-pub fn pre_request_failure(db_path: &PathBuf, pre_id: &str, error: &str) -> String {
-    let name: Option<String> = crate::db::open(db_path)
+pub fn pre_request_failure(db: &Db, pre_id: &str, error: &str) -> String {
+    let name: Option<String> = db.conn()
         .ok()
         .and_then(|conn| {
             conn.query_row("SELECT name FROM requests WHERE id = ?", params![pre_id], |row| row.get(0))
@@ -111,7 +111,7 @@ pub fn jar_cookie(jar: &Jar, url: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    fn db_with_requests(ids: &[&str]) -> (PathBuf, Connection) {
+    fn db_with_requests(ids: &[&str]) -> (crate::db::Db, Connection) {
         let path = std::env::temp_dir().join(format!("request-steps-test-{}.db", uuid::Uuid::new_v4()));
         let conn = crate::db::open(&path).unwrap();
         conn.execute_batch("CREATE TABLE requests (id TEXT PRIMARY KEY)").unwrap();
@@ -119,7 +119,7 @@ mod tests {
         for id in ids {
             conn.execute("INSERT INTO requests (id) VALUES (?)", params![id]).unwrap();
         }
-        (path, conn)
+        (crate::db::Db::new(path), conn)
     }
 
     fn ids(list: &[&str]) -> Vec<String> {
