@@ -125,25 +125,34 @@ pub fn tab_bar_menus(ui: &mut egui::Ui, dock: &DockState<Tab>) -> Option<(NodePa
         }
         let response = ui.interact(bar, ui.id().with(("tab_bar_menu", path)), egui::Sense::click());
         response.context_menu(|ui| {
-            for group in Tab::GROUPS {
-                for &tab in *group {
-                    if ui.selectable_label(leaf.tabs.contains(&tab), tab.name()).clicked() {
-                        picked = Some((path, tab));
-                        ui.close();
-                    }
-                }
-                ui.separator();
+            if let Some(tab) = panel_menu(ui, |tab| leaf.tabs.contains(&tab)) {
+                picked = Some((path, tab));
             }
-            ui.menu_button("Utilities ▸", |ui| {
-                for &tab in Tab::UTILITIES {
-                    if ui.selectable_label(leaf.tabs.contains(&tab), tab.name()).clicked() {
-                        picked = Some((path, tab));
-                        ui.close();
-                    }
-                }
-            });
         });
     }
+    picked
+}
+
+/// Every tab in its group, then Utilities ▸; `is_open` ticks the ones already shown. Returns the clicked tab.
+pub fn panel_menu(ui: &mut egui::Ui, is_open: impl Fn(Tab) -> bool) -> Option<Tab> {
+    let mut picked = None;
+    let mut item = |ui: &mut egui::Ui, tab: Tab| {
+        if ui.selectable_label(is_open(tab), tab.name()).clicked() {
+            picked = Some(tab);
+            ui.close();
+        }
+    };
+    for group in Tab::GROUPS {
+        for &tab in *group {
+            item(ui, tab);
+        }
+        ui.separator();
+    }
+    ui.menu_button("Utilities ▸", |ui| {
+        for &tab in Tab::UTILITIES {
+            item(ui, tab);
+        }
+    });
     picked
 }
 
