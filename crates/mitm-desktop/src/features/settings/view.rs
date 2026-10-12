@@ -132,7 +132,8 @@ fn data_section(ui: &mut egui::Ui, data: &mut DataSectionState, cmds: &mut Comma
     ui.strong("Danger Zone");
     ui.add_space(6.0);
 
-    if ui.button(RichText::new("Factory Reset…").color(theme::color(ui, Tone::Danger))).clicked() {
+    let reset = egui::Button::new(RichText::new("Factory Reset…").color(theme::color(ui, Tone::Danger)));
+    if ui.add_enabled(!data.resetting, reset).clicked() {
         data.factory_reset_open = true;
         data.factory_reset_input.clear();
     }

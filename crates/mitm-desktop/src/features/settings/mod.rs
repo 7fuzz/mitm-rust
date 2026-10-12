@@ -67,6 +67,7 @@ pub struct DataSectionState {
     pub status: Option<(String, crate::ui::theme::Tone)>,
     pub factory_reset_open: bool,
     pub factory_reset_input: String,
+    pub resetting: bool,
 }
 
 pub struct ProxyState {

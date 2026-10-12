@@ -54,6 +54,8 @@ pub struct MitmApp {
     bcrypt_jobs: Jobs<crate::features::utilities::hashing::BcryptOutcome>,
     proxy_jobs: Jobs<(ProxyChange, Vec<mitm_core::state::ListenerStatus>)>,
     webhook_receiver: Jobs<(Result<(), String>, bool)>,
+    factory_resets: Jobs<Result<Option<MitmCore>, String>>,
+    history_limits: Jobs<(mitm_core::state::HistorySettings, Result<(), String>)>,
 }
 
 impl MitmApp {
@@ -85,6 +87,8 @@ impl MitmApp {
             bcrypt_jobs: Jobs::default(),
             proxy_jobs: Jobs::default(),
             webhook_receiver: Jobs::default(),
+            factory_resets: Jobs::default(),
+            history_limits: Jobs::default(),
         }
     }
 
@@ -211,23 +215,15 @@ impl MitmApp {
             AppCommand::RefreshDataCounts => {
                 self.state.data.counts = self.core.data_counts().ok();
             }
+            AppCommand::FactoryReset if self.state.data.resetting => {}
             AppCommand::FactoryReset => {
-                match self.rt.block_on(self.core.factory_reset()) {
-                    Ok(()) => {
-                        let event_bus = mitm_core::EventBus::default();
-                        if let Ok(new_core) = MitmCore::init_with_events(event_bus) {
-                            self.core = Arc::new(new_core);
-                            self.core_events = forward_core_events(&self.rt, &self.core, ctx);
-                        }
-                        let mut state = startup_state(&self.rt, &self.core);
-                        prefs::carry_over(&mut self.state, &mut state);
-                        self.state = state;
-                        self.state.data.status = Some(("Factory reset complete".to_string(), Tone::Success));
-                    }
-                    Err(e) => {
-                        self.state.data.status = Some((e, Tone::Danger));
-                    }
-                }
+                self.state.data.resetting = true;
+                let core = Arc::clone(&self.core);
+                self.factory_resets.spawn(&self.rt, ctx, async move {
+                    core.factory_reset().await?;
+                    let fresh = tokio::task::spawn_blocking(|| MitmCore::init_with_events(mitm_core::EventBus::default()).ok());
+                    Ok(fresh.await.ok().flatten())
+                });
             }
 
             AppCommand::LoadOlderFlows => self.state.traffic.load_older(db_path),
@@ -285,10 +281,11 @@ impl MitmApp {
                 });
             }
             AppCommand::SetHistoryLimit(settings) => {
-                if self.rt.block_on(self.core.set_history_settings(settings.clone())).is_ok() {
-                    self.state.traffic.set_history_limit(settings);
-                    self.state.traffic.load_from_db(db_path);
-                }
+                let core = Arc::clone(&self.core);
+                self.history_limits.spawn(&self.rt, ctx, async move {
+                    let result = core.set_history_settings(settings.clone()).await;
+                    (settings, result)
+                });
             }
             AppCommand::AddInterceptRuleForHost(host) => {
                 let rules = &mut self.state.intercept.rules;
@@ -816,6 +813,25 @@ impl MitmApp {
         });
     }
 
+    fn finish_factory_reset(&mut self, ctx: &egui::Context, result: Result<Option<MitmCore>, String>) {
+        let fresh = match result {
+            Ok(fresh) => fresh,
+            Err(e) => {
+                self.state.data.resetting = false;
+                self.state.data.status = Some((e, Tone::Danger));
+                return;
+            }
+        };
+        if let Some(core) = fresh {
+            self.core = Arc::new(core);
+            self.core_events = forward_core_events(&self.rt, &self.core, ctx);
+        }
+        let mut state = startup_state(&self.rt, &self.core);
+        prefs::carry_over(&mut self.state, &mut state);
+        self.state = state;
+        self.state.data.status = Some(("Factory reset complete".to_string(), Tone::Success));
+    }
+
     fn spawn_proxy_job(&mut self, ctx: &egui::Context, job: impl std::future::Future<Output = ProxyChange> + Send + 'static) {
         self.state.proxy.pending += 1;
         let core = Arc::clone(&self.core);
@@ -982,6 +998,19 @@ impl eframe::App for MitmApp {
         }
         for error in self.webhook_actions.drain().filter_map(Result::err) {
             top_bar::flash(ui, Err(error));
+        }
+        let resets: Vec<_> = self.factory_resets.drain().collect();
+        for result in resets {
+            self.finish_factory_reset(ui.ctx(), result);
+        }
+        for (settings, result) in self.history_limits.drain() {
+            match result {
+                Ok(()) => {
+                    self.state.traffic.set_history_limit(settings);
+                    self.state.traffic.load_from_db(&self.core.db_path);
+                }
+                Err(e) => top_bar::flash(ui, Err(e)),
+            }
         }
         let proxy_results: Vec<_> = self.proxy_jobs.drain().collect();
         for (change, statuses) in proxy_results {
