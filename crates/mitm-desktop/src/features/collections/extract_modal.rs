@@ -10,8 +10,8 @@ pub fn show(ctx: &egui::Context, state: &mut CollectionsState, cmds: &mut Comman
 
     let response = egui::Modal::new(egui::Id::new("collections_extract_modal")).show(ctx, |ui| {
         ui.set_width(640.0);
-        ui.heading("Auto-Extract Rules");
-        ui.separator();
+        ui.heading("Auto-extract rules");
+        ui.add_space(8.0);
 
         if modal.request_ids.len() > 1 {
             let name_of = |id: &str| {
@@ -40,7 +40,7 @@ pub fn show(ctx: &egui::Context, state: &mut CollectionsState, cmds: &mut Comman
             extract_rules::show(ui, "extract_modal_rules", &mut modal.rules);
         });
 
-        ui.separator();
+        ui.add_space(8.0);
         ui.horizontal(|ui| {
             if ui.button("Save Rules").clicked() {
                 cmds.push(AppCommand::Collections(CollectionsCmd::SaveExtractRules {

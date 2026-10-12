@@ -8,6 +8,8 @@ use crate::widgets::pills::method_text;
 use crate::widgets::split;
 use super::{editor, extract_modal, tree, CollectionsCmd, CollectionsState};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
+use crate::widgets::section::section_with;
 
 pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands) {
     let now = ui.input(|i| i.time);
@@ -20,12 +22,12 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
 
     egui::CentralPanel::no_frame().show(ui, |ui| {
         tab_strip(ui, state, cmds);
-        ui.separator();
+        ui.add_space(4.0);
 
         let Some(active_id) = state.active_id.clone() else {
             ui.vertical_centered(|ui| {
                 ui.add_space(60.0);
-                ui.label(RichText::new("No collection request tab open").weak().italics());
+                ui.label(RichText::new("Open a request from the tree").weak());
             });
             return;
         };
@@ -68,7 +70,7 @@ fn tab_strip(ui: &mut egui::Ui, state: &CollectionsState, cmds: &mut Commands) {
                     if response.clicked() {
                         cmds.push(AppCommand::Collections(CollectionsCmd::Activate(request.id.clone())));
                     }
-                    let close = ui.small_button(icons::X).on_hover_text("Close tab").clicked();
+                    let close = icon_button(ui, icons::X, "Close tab").clicked();
                     if close || response.middle_clicked() {
                         cmds.push(AppCommand::Collections(CollectionsCmd::Close(request.id.clone())));
                     }
@@ -148,20 +150,16 @@ fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str, c
 fn history_drawer(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str, cmds: &mut Commands) {
     let runs = state.runs.get(request_id).map(Vec::as_slice).unwrap_or_default();
 
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("Run History ({})", runs.len())).strong());
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button(icons::X).on_hover_text("Close run history").clicked() {
-                state.prefs.history_open = false;
-            }
-            let confirm_id = ui.id().with(("clear_runs", request_id));
-            let hover = "Delete all recorded runs of this request";
-            if !runs.is_empty() && confirm_button(ui, confirm_id, RichText::new(icons::TRASH), "Clear all?", hover) {
-                cmds.push(AppCommand::Collections(CollectionsCmd::ClearRuns(request_id.to_string())));
-            }
-        });
+    section_with(ui, &format!("Run history · {}", runs.len()), |ui| {
+        if icon_button(ui, icons::X, "Close run history").clicked() {
+            state.prefs.history_open = false;
+        }
+        let confirm_id = ui.id().with(("clear_runs", request_id));
+        let hover = "Delete all recorded runs of this request";
+        if !runs.is_empty() && confirm_button(ui, confirm_id, RichText::new(icons::TRASH), "Clear all?", hover) {
+            cmds.push(AppCommand::Collections(CollectionsCmd::ClearRuns(request_id.to_string())));
+        }
     });
-    ui.separator();
 
     let selected = state.selected_run.get(request_id).copied().or_else(|| runs.first().map(|r| r.id));
     if let Some(RunAction::Select(run_id)) = run_list::show(ui, "collections_runs", runs, selected, false, &mut state.run_details) {

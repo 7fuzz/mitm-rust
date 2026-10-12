@@ -8,6 +8,8 @@ use crate::widgets::pills::method_text;
 use crate::widgets::search::search_field;
 use super::{all_requests, CollectionsCmd, CollectionsState, TreeEdit};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
+use crate::widgets::section::section_with;
 
 #[derive(Clone)]
 enum DragItem {
@@ -41,7 +43,6 @@ struct TreeUi<'a> {
 
 pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands) {
     header(ui, state);
-    ui.separator();
 
     let searching = !state.search.trim().is_empty();
     let visible: Cow<[CollectionTreeItem]> = if searching {
@@ -82,17 +83,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
 }
 
 fn header(ui: &mut egui::Ui, state: &mut CollectionsState) {
-    egui::Sides::new().show(
-        ui,
-        |ui| {
-            ui.strong("Collections");
-        },
-        |ui| {
-            if ui.button(icons::PLUS).on_hover_text("New folder").clicked() {
-                state.start_edit(TreeEdit::NewFolder { parent: None }, String::new());
-            }
-        },
-    );
+    section_with(ui, "Collections", |ui| {
+        if icon_button(ui, icons::PLUS, "New folder").clicked() {
+            state.start_edit(TreeEdit::NewFolder { parent: None }, String::new());
+        }
+    });
 
     search_field(ui, &mut state.search, "Search");
 }

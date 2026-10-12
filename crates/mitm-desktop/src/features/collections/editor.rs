@@ -9,6 +9,9 @@ use crate::ui::theme::{self, Tone};
 use crate::features::request_editor::request_bar;
 use super::{docs, CollectionsCmd, CollectionsState, DocsMode, EditorTab, PreviewMode};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
+use crate::widgets::segmented::segmented;
+use crate::widgets::subtabs::subtabs;
 
 
 pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands, now: f64) {
@@ -28,29 +31,23 @@ pub fn show(ui: &mut egui::Ui, state: &mut CollectionsState, cmds: &mut Commands
     send |= bar.send || (bar.url.has_focus() && ui.input(|i| i.modifiers.is_none() && i.key_pressed(egui::Key::Enter)));
     let hotkey = ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Enter));
     send |= hotkey && ui.ui_contains_pointer();
-    ui.separator();
+    ui.add_space(4.0);
 
     ui.horizontal_wrapped(|ui| {
-        let docs_label = if request.description.as_deref().is_some_and(|d| !d.is_empty()) { "Docs •" } else { "Docs" };
         let tabs = [
-            (EditorTab::Docs, docs_label.to_string()),
-            (EditorTab::Params, format!("Params ({})", request.params.len())),
-            (EditorTab::Headers, format!("Headers ({})", request.headers.len())),
-            (EditorTab::Body, "Body".to_string()),
-            (EditorTab::Extract, format!("Extract Rules ({})", request.extract_rules.len())),
-            (EditorTab::Steps, format!("Pre/Post ({})", request.pre_requests.len() + request.post_requests.len())),
-            (EditorTab::Interpolation, "Interpolation".to_string()),
+            (EditorTab::Docs, "Docs", None),
+            (EditorTab::Params, "Params", Some(request.params.len())),
+            (EditorTab::Headers, "Headers", Some(request.headers.len())),
+            (EditorTab::Body, "Body", None),
+            (EditorTab::Extract, "Extract", Some(request.extract_rules.len())),
+            (EditorTab::Steps, "Pre/Post", Some(request.pre_requests.len() + request.post_requests.len())),
+            (EditorTab::Interpolation, "Interpolation", None),
         ];
-        for (tab, label) in tabs {
-            if ui.selectable_label(state.editor_tab == tab, label).clicked() {
-                state.editor_tab = tab;
-                if tab == EditorTab::Interpolation {
-                    cmds.push(AppCommand::Collections(CollectionsCmd::RefreshPreview(id.clone())));
-                }
-            }
+        if subtabs(ui, &mut state.editor_tab, &tabs) && state.editor_tab == EditorTab::Interpolation {
+            cmds.push(AppCommand::Collections(CollectionsCmd::RefreshPreview(id.clone())));
         }
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     match state.editor_tab {
         EditorTab::Docs => changed |= docs_tab(ui, request, &mut state.docs_mode),
@@ -102,18 +99,16 @@ fn docs_tab(ui: &mut egui::Ui, request: &mut RequestItem, mode: &mut DocsMode) -
     let mut changed = false;
 
     ui.horizontal(|ui| {
-        for (value, label) in [(DocsMode::Preview, "PREVIEW"), (DocsMode::Edit, "EDIT"), (DocsMode::Split, "SPLIT")] {
-            ui.selectable_value(mode, value, label);
-        }
+        segmented(ui, mode, &[(DocsMode::Preview, "Preview"), (DocsMode::Edit, "Edit"), (DocsMode::Split, "Split")]);
         if !description.is_empty() {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("Copy MD").clicked() {
+                if icon_button(ui, icons::COPY, "Copy Markdown").clicked() {
                     ui.ctx().copy_text(description.clone());
                 }
             });
         }
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     let preview = |ui: &mut egui::Ui, text: &str, mode: &mut DocsMode| {
         egui::ScrollArea::vertical().id_salt("docs_preview").auto_shrink([false, false]).show(ui, |ui| {
@@ -170,7 +165,7 @@ fn body_tab(ui: &mut egui::Ui, request: &mut RequestItem) -> bool {
             changed |= convert_menu(ui, request);
         });
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     let body_type = request.body_type.clone();
     match body_buffer(request) {
@@ -220,11 +215,10 @@ fn convert_menu(ui: &mut egui::Ui, request: &mut RequestItem) -> bool {
 
 fn interpolation_tab(ui: &mut egui::Ui, state: &mut CollectionsState, id: &str, cmds: &mut Commands) {
     ui.horizontal(|ui| {
-        for (mode, label) in [(PreviewMode::Request, "request"), (PreviewMode::FullUrl, "custom"), (PreviewMode::Curl, "cURL")] {
-            ui.selectable_value(&mut state.preview_mode, mode, label);
-        }
+        let modes = [(PreviewMode::Request, "Request"), (PreviewMode::FullUrl, "Custom"), (PreviewMode::Curl, "cURL")];
+        segmented(ui, &mut state.preview_mode, &modes);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("⟳ Refresh").clicked() {
+            if icon_button(ui, icons::ARROW_CLOCKWISE, "Refresh").clicked() {
                 cmds.push(AppCommand::Collections(CollectionsCmd::RefreshPreview(id.to_string())));
             }
             if let Some(Ok(preview)) = state.previews.get(id) {
@@ -233,13 +227,13 @@ fn interpolation_tab(ui: &mut egui::Ui, state: &mut CollectionsState, id: &str, 
                     PreviewMode::FullUrl => &preview.full_url_request,
                     PreviewMode::Curl => &preview.curl_command,
                 };
-                if ui.small_button("Copy").clicked() {
+                if icon_button(ui, icons::COPY, "Copy").clicked() {
                     ui.ctx().copy_text(text.clone());
                 }
             }
         });
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     match state.previews.get(id) {
         Some(Ok(preview)) => {
