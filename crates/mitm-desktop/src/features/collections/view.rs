@@ -56,9 +56,6 @@ fn tab_strip(ui: &mut egui::Ui, state: &CollectionsState, cmds: &mut Commands) {
         .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                if state.open.is_empty() {
-                    ui.weak("Open a request from the tree");
-                }
                 for request in &state.open {
                     let active = state.active_id.as_deref() == Some(request.id.as_str());
                     let style = ui.style().clone();
