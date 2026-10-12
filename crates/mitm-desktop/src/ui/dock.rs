@@ -17,6 +17,7 @@ pub enum Tab {
     WebSockets,
     Webhooks,
     Environments,
+    Credentials,
     Settings,
     Encoding,
     Hashing,
@@ -28,7 +29,7 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 17] = [
+    pub const ALL: [Tab; 18] = [
         Tab::Traffic,
         Tab::Repeater,
         Tab::Fuzzer,
@@ -38,6 +39,7 @@ impl Tab {
         Tab::WebSockets,
         Tab::Webhooks,
         Tab::Environments,
+        Tab::Credentials,
         Tab::Settings,
         Tab::Encoding,
         Tab::Hashing,
@@ -59,6 +61,7 @@ impl Tab {
             Tab::WebSockets => "WebSockets",
             Tab::Webhooks => "Webhooks",
             Tab::Environments => "Environments",
+            Tab::Credentials => "Credentials",
             Tab::Settings => "Settings",
             Tab::Encoding => "Encoding tool",
             Tab::Hashing => "Hashing tool",
@@ -205,6 +208,9 @@ impl TabViewer<'_> {
             Tab::Cvss => features::utilities::cvss::show(ui, &mut state.cvss),
             Tab::Totp => features::utilities::totp::show(ui, &mut state.totp),
             Tab::Environments => features::environments::show(ui, &mut state.environments, cmds),
+            Tab::Credentials => {
+                features::credentials::show(ui, &mut state.credentials, &state.environments.active_workspace_id, self.db_path)
+            }
             Tab::Settings => features::settings::show(
                 ui,
                 &mut state.settings,

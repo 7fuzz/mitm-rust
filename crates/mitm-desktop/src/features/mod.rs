@@ -1,4 +1,5 @@
 pub mod collections;
+pub mod credentials;
 pub mod database;
 pub mod environments;
 pub mod fuzzer;

@@ -1,6 +1,6 @@
 mod view;
 
-pub use view::show;
+pub use view::{show, show_code};
 
 #[derive(Default)]
 pub struct TotpState {

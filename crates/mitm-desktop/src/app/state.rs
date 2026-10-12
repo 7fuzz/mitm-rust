@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use crate::features::collections::CollectionsState;
+use crate::features::credentials::CredentialsState;
 use crate::features::utilities::cvss::CvssState;
 use crate::features::utilities::encoding::EncodingState;
 use crate::features::fuzzer::FuzzerState;
@@ -41,6 +42,7 @@ pub struct AppState {
     pub totp: TotpState,
     pub database: crate::features::database::DatabaseState,
     pub environments: crate::features::environments::EnvironmentsState,
+    pub credentials: CredentialsState,
 }
 
 impl AppState {

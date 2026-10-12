@@ -118,6 +118,8 @@ impl MitmApp {
         // These reload environments from the DB, and a later flush of a stale copy would undo the switch.
         if cmd.touches_environments() {
             self.state.environments.flush(db_path);
+            self.state.credentials.flush(db_path);
+            self.state.credentials.mark_stale();
         }
         match cmd {
             AppCommand::OpenPalette => self.palette.open(),
@@ -788,11 +790,13 @@ impl eframe::App for MitmApp {
         self.state.repeater.flush(&self.core.db_path);
         self.state.collections.flush(&self.core.db_path);
         self.state.environments.flush(&self.core.db_path);
+        self.state.credentials.flush(&self.core.db_path);
         self.save_rewrite_rules(0.0, true);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         crate::widgets::template::set_active_env(self.state.environments.active_environment());
+        self.state.credentials.sync(&self.core.db_path, &self.state.environments.active_workspace_id);
         while let Ok(event) = self.core_events.try_recv() {
             self.apply_core_event(ui.ctx(), event);
         }
@@ -802,14 +806,17 @@ impl eframe::App for MitmApp {
         for (id, result) in self.repeater_runs.drain() {
             self.state.repeater.finish_run(&id, result, &self.core.db_path);
             self.state.environments.refresh(&self.core.db_path);
+            self.state.credentials.mark_stale();
         }
         self.state.repeater.flush_if_idle(&self.core.db_path, now);
         for (id, result) in self.collection_runs.drain() {
             self.state.collections.finish_run(&id, result, &self.core.db_path);
             self.state.environments.refresh(&self.core.db_path);
+            self.state.credentials.mark_stale();
         }
         self.state.collections.flush_if_idle(&self.core.db_path, now);
         self.state.environments.flush_if_idle(&self.core.db_path, now);
+        self.state.credentials.flush_if_idle(&self.core.db_path, now);
         self.save_rewrite_rules(now, false);
         self.state.traffic.sync_header_search(&self.core.db_path);
         for (run_id, query, matches) in self.fuzz_search.drain() {

@@ -6,6 +6,7 @@ use eframe::egui::text::CCursor;
 use eframe::egui::text_edit::{TextEditOutput, TextEditState};
 use eframe::egui::text_selection::CCursorRange;
 use eframe::egui::{self, Color32, Galley, Id, Key, Modifiers, Response, RichText, TextBuffer, TextEdit, TextStyle, Ui};
+use mitm_core::credentials::{Credential, FieldKind};
 use mitm_core::workspace::Environment;
 use crate::ui::theme::Tone;
 
@@ -21,7 +22,28 @@ pub fn set_active_env(env: Option<&Environment>) {
     });
 }
 
+thread_local! {
+    static CREDENTIALS: RefCell<Vec<Credential>> = const { RefCell::new(Vec::new()) };
+}
+
+/// The active workspace's credentials, for `{{$cred:entry.field}}` highlights, hovers and completion.
+pub fn set_credentials(entries: &[Credential]) {
+    CREDENTIALS.with(|cell| *cell.borrow_mut() = entries.to_vec());
+}
+
+fn cred_field(name: &str) -> Option<(FieldKind, String)> {
+    let (entry, field) = mitm_core::credentials::parse_ref(name)?;
+    CREDENTIALS.with(|cell| {
+        let entries = cell.borrow();
+        let field = entries.iter().find(|e| e.name.eq_ignore_ascii_case(entry))?.field(field)?;
+        Some((field.kind, field.value.clone()))
+    })
+}
+
 pub fn resolve_var(name: &str) -> Option<String> {
+    if mitm_core::credentials::parse_ref(name).is_some() {
+        return cred_field(name).map(|(_, value)| value);
+    }
     ACTIVE_ENV.with(|cell| {
         let env_ref = cell.borrow();
         mitm_core::workspace::variable_value_in_env(env_ref.as_ref(), name)
@@ -43,12 +65,29 @@ fn totp_params(name: &str) -> Option<mitm_core::utils::totp::TotpParams> {
     ACTIVE_ENV.with(|cell| mitm_core::workspace::totp_params_in_env(cell.borrow().as_ref(), name))
 }
 
+fn live_code(params: &mitm_core::utils::totp::TotpParams) -> String {
+    use mitm_core::utils::totp;
+    let now = totp::now_unix();
+    let code = crate::features::utilities::totp::group_code(&totp::code_at(params, now));
+    format!("{code} · {}s", totp::remaining(params.period, now))
+}
+
+fn cred_totp(name: &str) -> Option<mitm_core::utils::totp::TotpParams> {
+    match cred_field(name)? {
+        (FieldKind::Totp, secret) => mitm_core::utils::totp::parse_secret(&secret).ok(),
+        _ => None,
+    }
+}
+
 fn hover_value(name: &str) -> String {
-    if let Some(params) = totp_params(name) {
-        use mitm_core::utils::totp;
-        let now = totp::now_unix();
-        let code = crate::features::utilities::totp::group_code(&totp::code_at(&params, now));
-        return format!("{code} · {}s", totp::remaining(params.period, now));
+    if let Some(params) = totp_params(name).or_else(|| cred_totp(name)) {
+        return live_code(&params);
+    }
+    match cred_field(name) {
+        Some((FieldKind::Secret, _)) => return "••••••".to_string(),
+        Some((_, value)) => return value,
+        None if mitm_core::credentials::parse_ref(name).is_some() => return "undefined".to_string(),
+        None => {}
     }
     match resolve_var(name) {
         Some(_) if is_secret(name) => "••••••".to_string(),
@@ -292,9 +331,21 @@ fn matching_keys(prefix: &str) -> Vec<String> {
                 .collect()
         })
     });
+    if prefix.starts_with('$') {
+        keys.extend(credential_refs().into_iter().filter(|k| k.to_lowercase().contains(&prefix)));
+    }
     keys.dedup();
     keys.sort_by_key(|k| !k.to_lowercase().starts_with(&prefix));
     keys
+}
+
+fn credential_refs() -> Vec<String> {
+    CREDENTIALS.with(|cell| {
+        cell.borrow()
+            .iter()
+            .flat_map(|e| e.fields.iter().map(move |f| format!("$cred:{}.{}", e.name, f.key)))
+            .collect()
+    })
 }
 
 /// The `{{name` the cursor sits in, as char indices; `end` also covers an existing `}}` after the cursor.
@@ -340,7 +391,7 @@ fn hover_tooltip(resp: Response, text: &str) -> Response {
     for v in &vars {
         lines.push(format!("{{{{{}}}}}: {}", v, hover_value(v)));
     }
-    if vars.iter().any(|v| totp_params(v).is_some()) {
+    if vars.iter().any(|v| totp_params(v).is_some() || cred_totp(v).is_some()) {
         resp.ctx.request_repaint_after(std::time::Duration::from_secs(1));
     }
     resp.on_hover_text(lines.join("\n"))
@@ -552,5 +603,34 @@ mod tests {
         assert_eq!(hover.split(" · ").next().unwrap().len(), 7);
         assert_eq!(hover_value("adminTotpSecret"), "••••••");
         assert_eq!(hover_value("$totp:missing"), "undefined");
+    }
+
+    #[test]
+    fn credential_refs_highlight_hover_and_complete() {
+        use mitm_core::credentials::Field;
+        let field = |key: &str, kind, value: &str| Field { key: key.into(), kind, extracted: false, value: value.into() };
+        set_credentials(&[Credential {
+            id: "c".into(),
+            workspace_id: "w".into(),
+            name: "dgAdmin".into(),
+            fields: vec![
+                field("user", FieldKind::Text, "admin@x"),
+                field("password", FieldKind::Secret, "hunter2"),
+                field("totp", FieldKind::Totp, "MZXW6"),
+            ],
+            notes: String::new(),
+            order_index: 0,
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        }]);
+        assert_eq!(hover_value("$cred:dgAdmin.user"), "admin@x");
+        assert_eq!(hover_value("$cred:DGADMIN.password"), "••••••");
+        assert!(hover_value("$cred:dgAdmin.totp").ends_with('s'));
+        assert_eq!(hover_value("$cred:dgAdmin.nope"), "undefined");
+        assert!(resolve_var("$cred:dgAdmin.password").is_some());
+        assert!(resolve_var("$cred:other.password").is_none());
+        assert_eq!(matching_keys("$cred:dg").len(), 3);
+        assert!(matching_keys("dg").iter().all(|k| !k.starts_with('$')));
+        set_credentials(&[]);
     }
 }
