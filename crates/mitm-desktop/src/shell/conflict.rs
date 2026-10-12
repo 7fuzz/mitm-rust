@@ -37,7 +37,7 @@ impl Conflict {
                 ui.add_space(16.0);
                 ui.horizontal(|ui| {
                     ui.add_enabled_ui(!self.waiting, |ui| {
-                        if ui.button("Switch to it").clicked() {
+                        if ui.add(crate::widgets::button::primary(ui, "Switch to it")).clicked() {
                             instance::request_focus();
                             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                         }

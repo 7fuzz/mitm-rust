@@ -26,6 +26,8 @@ enum Screen {
 impl Shell {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
+        crate::ui::theme::install_fonts(&cc.egui_ctx);
+        crate::ui::theme::apply_style(&cc.egui_ctx);
         let rt = Arc::new(Runtime::new().expect("Failed to initialize Tokio runtime"));
         close_on_signal(&rt, &cc.egui_ctx);
         // Nothing that binds ports starts until this launch owns the instance lock.

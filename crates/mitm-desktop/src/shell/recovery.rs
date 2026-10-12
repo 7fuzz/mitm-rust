@@ -44,7 +44,7 @@ impl Recovery {
                 ui.label(RichText::new(self.db_path.display().to_string()).monospace().weak().small());
                 ui.add_space(16.0);
                 ui.horizontal(|ui| {
-                    restart |= ui.button("Retry migrations").clicked();
+                    restart |= ui.add(crate::widgets::button::primary(ui, "Retry migrations")).clicked();
                     let id = ui.id().with("backup_reset");
                     if confirm_button(ui, id, RichText::new("Back up & reset"), "Confirm reset", "Moves the database aside and starts empty") {
                         restart |= self.backup_and_reset();
