@@ -4,7 +4,6 @@ pub mod jobs;
 pub mod prefs;
 pub mod state;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 use crossbeam_channel::Receiver;
 use eframe::egui;
@@ -21,7 +20,6 @@ use mitm_core::repeater::RepeaterExecutionResult;
 use crate::features::collections::CollectionsCmd;
 use crate::features::request_editor::captured::CapturedRequest;
 use crate::features::environments::{self, QuickVarScope};
-use crate::util::format::Exchange;
 use jobs::Jobs;
 use state::AppState;
 use crate::ui::palette::{self, PaletteState};
@@ -43,9 +41,7 @@ pub struct MitmApp {
     credential_files: Jobs<Option<Result<String, String>>>,
     qr_images: Jobs<Option<(crate::app::command::QrTarget, Result<String, String>)>>,
     file_saves: Jobs<Option<Result<String, String>>>,
-    har_index: Jobs<Result<Vec<mitm_core::HistoryEntry>, String>>,
     factory_resets: Jobs<Result<Option<MitmCore>, String>>,
-    history_limits: Jobs<(mitm_core::state::HistorySettings, Result<(), String>)>,
 }
 
 impl MitmApp {
@@ -68,9 +64,7 @@ impl MitmApp {
             credential_files: Jobs::default(),
             qr_images: Jobs::default(),
             file_saves: Jobs::default(),
-            har_index: Jobs::default(),
             factory_resets: Jobs::default(),
-            history_limits: Jobs::default(),
         }
     }
 
@@ -153,7 +147,10 @@ impl MitmApp {
                 });
             }
 
-            AppCommand::LoadOlderFlows => self.state.traffic.load_older(db_path),
+            AppCommand::Traffic(cmd) => {
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                crate::features::traffic::handle(&mut self.state.traffic, &mut self.state.inspector, &cx, cmd);
+            }
             AppCommand::SaveFlowToCollection { flow_id, target } => {
                 if let Some(flow) = self.state.traffic.flow(flow_id) {
                     let detail = mitm_core::db::get_history_detail(db_path, flow_id).ok().flatten();
@@ -163,56 +160,11 @@ impl MitmApp {
                     crate::widgets::toast::push(ctx, saved.map(|_| "Saved to collection".to_string()));
                 }
             }
-            AppCommand::SelectFlow(id) => {
-                self.state.traffic.select(id, db_path);
-                self.state.inspector.prefs.open = true;
-            }
-            AppCommand::ClearTraffic => {
-                let _ = self.core.clear_all_traffic();
-                self.state.traffic.clear();
-            }
-            AppCommand::OpenHarExport => {
-                self.state.traffic.har_export.open();
-                let db_path = db_path.clone();
-                self.har_index.spawn(&self.rt, ctx, async move { mitm_core::db::get_history_summaries(&db_path) });
-            }
-            AppCommand::ExportHar(ids) => {
-                let db_path = db_path.clone();
-                self.file_saves.spawn(&self.rt, ctx, async move {
-                    let path = crate::util::files::pick_save("traffic.har", &[("HAR", &["har"])]).await?;
-                    Some(write_har(&db_path, &ids, &path).map(|count| {
-                        format!("Exported {} requests to {}", count, crate::util::files::file_name(&path))
-                    }))
-                });
-            }
-            AppCommand::DeleteFlow(id) => {
-                let _ = mitm_core::db::delete_history_entry(db_path, id);
-                self.state.traffic.remove(id);
-            }
-            AppCommand::CopyFlow(id, format) => {
-                if let Some(flow) = self.state.traffic.flow(id) {
-                    let detail = mitm_core::db::get_history_detail(db_path, id).ok().flatten();
-                    ctx.copy_text(Exchange::from_flow(flow, detail.as_ref()).copy_text(format));
-                }
-            }
-            AppCommand::CopyFlowCustom(id, options) => {
-                if let Some(flow) = self.state.traffic.flow(id) {
-                    let detail = mitm_core::db::get_history_detail(db_path, id).ok().flatten();
-                    ctx.copy_text(Exchange::from_flow(flow, detail.as_ref()).custom_text(&options));
-                }
-            }
             AppCommand::SaveBody(body) => {
                 self.file_saves.spawn(&self.rt, ctx, async move {
                     let path = crate::util::files::pick_save(&body.file_name, &[]).await?;
                     let result = std::fs::write(&path, &body.bytes).map_err(|e| e.to_string());
                     Some(result.map(|_| format!("Saved {}", crate::util::files::file_name(&path))))
-                });
-            }
-            AppCommand::SetHistoryLimit(settings) => {
-                let core = Arc::clone(&self.core);
-                self.history_limits.spawn(&self.rt, ctx, async move {
-                    let result = core.set_history_settings(settings.clone()).await;
-                    (settings, result)
                 });
             }
             AppCommand::AddInterceptRuleForHost(host) => {
@@ -575,9 +527,6 @@ impl eframe::App for MitmApp {
         if let Some((name, json)) = dropped_json(ui.ctx()) {
             self.state.environments.import.open_with(Some(environments::file_label(&name, json.len())), json);
         }
-        for result in self.har_index.drain() {
-            self.state.traffic.har_export.loaded(result);
-        }
         for result in self.file_saves.drain().flatten() {
             top_bar::flash(ui, result);
         }
@@ -585,17 +534,9 @@ impl eframe::App for MitmApp {
         for result in resets {
             self.finish_factory_reset(ui.ctx(), result);
         }
-        for (settings, result) in self.history_limits.drain() {
-            match result {
-                Ok(()) => {
-                    self.state.traffic.set_history_limit(settings);
-                    self.state.traffic.load_from_db(&self.core.db_path);
-                }
-                Err(e) => top_bar::flash(ui, Err(e)),
-            }
-        }
         {
             let cx = Cx { rt: &self.rt, core: &self.core, ctx: ui.ctx() };
+            crate::features::traffic::poll(&mut self.state.traffic, &cx);
             crate::features::webhooks::poll(&mut self.state.webhooks, &cx);
             crate::features::websockets::poll(&mut self.state.websockets, &cx);
             crate::features::settings::poll(self.state.settings(), &cx);
@@ -662,15 +603,6 @@ impl eframe::App for MitmApp {
             ctx.request_repaint();
         }
     }
-}
-
-fn write_har(db_path: &PathBuf, ids: &[i64], path: &std::path::Path) -> Result<usize, String> {
-    let flows = mitm_core::db::get_history_by_ids(db_path, ids)?;
-    let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
-    let mut writer = std::io::BufWriter::new(file);
-    serde_json::to_writer_pretty(&mut writer, &mitm_core::http::har::build_har(&flows)).map_err(|e| e.to_string())?;
-    std::io::Write::flush(&mut writer).map_err(|e| e.to_string())?;
-    Ok(flows.len())
 }
 
 fn dropped_json(ctx: &egui::Context) -> Option<(String, String)> {

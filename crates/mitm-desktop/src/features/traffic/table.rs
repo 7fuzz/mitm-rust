@@ -9,7 +9,7 @@ use crate::util::format::{format_bytes, format_duration, local_clock, CopyFormat
 use crate::ui::theme::{self, Tone};
 use crate::widgets::copy_custom;
 use crate::widgets::pills::{badge, method_text, render_source_pill, status_text};
-use super::{flow_status_badge, ColumnId, ColumnLayout, FlowFlags, TrafficState};
+use super::{Cmd, flow_status_badge, ColumnId, ColumnLayout, FlowFlags, TrafficState};
 
 const ROW_HEIGHT: f32 = 26.0;
 const LOAD_AHEAD_ROWS: usize = 50;
@@ -77,7 +77,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], fold
         });
 
     if state.has_older && (near_end || visible.is_empty()) {
-        cmds.push(AppCommand::LoadOlderFlows);
+        cmds.push(Cmd::LoadOlder);
     }
 
     if visible.is_empty() {
@@ -140,7 +140,7 @@ fn flow_row(
     let response = text_cells.into_iter().fold(row.response(), |acc, r| acc | r);
 
     if response.clicked() || response.double_clicked() {
-        cmds.push(AppCommand::SelectFlow(flow.id));
+        cmds.push(Cmd::Select(flow.id));
     }
     response.context_menu(|ui| flow_menu(ui, flow, folders, cmds));
 }
@@ -342,21 +342,21 @@ fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, folders: &[CollectionTreeIt
             ui.ctx().copy_text(flow.url.clone());
             ui.close();
         }
-        menu_item(ui, "Copy Curl", AppCommand::CopyFlow(flow.id, CopyFormat::Curl), cmds);
-        menu_item(ui, "Copy Curl and Res", AppCommand::CopyFlow(flow.id, CopyFormat::CurlAndResponse), cmds);
-        menu_item(ui, "Copy URL, Body, and Response", AppCommand::CopyFlow(flow.id, CopyFormat::UrlBodyAndResponse), cmds);
+        menu_item(ui, "Copy Curl", Cmd::Copy(flow.id, CopyFormat::Curl), cmds);
+        menu_item(ui, "Copy Curl and Res", Cmd::Copy(flow.id, CopyFormat::CurlAndResponse), cmds);
+        menu_item(ui, "Copy URL, Body, and Response", Cmd::Copy(flow.id, CopyFormat::UrlBodyAndResponse), cmds);
         if let Some(options) = copy_custom::submenu(ui) {
-            cmds.push(AppCommand::CopyFlowCustom(flow.id, options));
+            cmds.push(Cmd::CopyCustom(flow.id, options));
         }
     });
     ui.separator();
     if ui.button(RichText::new("Delete Item").color(theme::color(ui, Tone::Danger))).clicked() {
-        cmds.push(AppCommand::DeleteFlow(flow.id));
+        cmds.push(Cmd::Delete(flow.id));
         ui.close();
     }
 }
 
-fn menu_item(ui: &mut egui::Ui, label: &str, cmd: AppCommand, cmds: &mut Commands) {
+fn menu_item(ui: &mut egui::Ui, label: &str, cmd: impl Into<AppCommand>, cmds: &mut Commands) {
     if ui.button(label).clicked() {
         cmds.push(cmd);
         ui.close();

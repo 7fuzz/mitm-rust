@@ -1,10 +1,10 @@
 use eframe::egui::containers::menu::{MenuButton, MenuConfig};
 use eframe::egui::{self, PopupCloseBehavior, RichText};
 use mitm_core::state::ListenerConfig;
-use crate::app::command::{AppCommand, Commands};
+use crate::app::command::Commands;
 use crate::widgets::confirm::confirm_button;
 use crate::widgets::tri_state::tri_state_button;
-use super::{TrafficState, FLAGS, METHODS, STATUS_GROUPS};
+use super::{Cmd, TrafficState, FLAGS, METHODS, STATUS_GROUPS};
 use crate::ui::icons;
 use crate::ui::theme::Palette;
 use crate::util::format::format_count;
@@ -31,10 +31,10 @@ pub fn show(
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let confirm_id = ui.id().with("clear_traffic");
             if confirm_button(ui, confirm_id, RichText::new(icons::TRASH), "Clear all?", "Clear all traffic logs") {
-                cmds.push(AppCommand::ClearTraffic);
+                cmds.push(Cmd::Clear);
             }
             if icon_button(ui, icons::EXPORT, "Export as HAR").clicked() {
-                cmds.push(AppCommand::OpenHarExport);
+                cmds.push(Cmd::OpenHarExport);
             }
             ui.add_space(8.0);
             limit_menu(ui, state, cmds);
@@ -107,7 +107,7 @@ fn limit_menu(ui: &mut egui::Ui, state: &mut TrafficState, cmds: &mut Commands) 
         ui.separator();
         ui.horizontal(|ui| {
             if ui.button("Apply & Delete Old").clicked() {
-                cmds.push(AppCommand::SetHistoryLimit(draft.clone()));
+                cmds.push(Cmd::SetHistoryLimit(draft.clone()));
                 ui.close();
             }
             if ui.button("Cancel").clicked() {

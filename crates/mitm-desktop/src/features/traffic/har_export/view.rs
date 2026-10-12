@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use eframe::egui::{self, RichText};
-use crate::app::command::{AppCommand, Commands};
+use crate::app::command::Commands;
 use crate::ui::theme::{self, Tone};
 use crate::widgets::tri_state::{tri_state_button, TriState};
 use super::HarExport;
@@ -35,7 +35,7 @@ pub fn show(ctx: &egui::Context, export: &mut HarExport, cmds: &mut Commands) {
                     close = true;
                 }
                 if ui.add_enabled(!ids.is_empty(), egui::Button::new("Export…")).clicked() {
-                    cmds.push(AppCommand::ExportHar(ids));
+                    cmds.push(super::super::Cmd::ExportHar(ids));
                     close = true;
                 }
             });

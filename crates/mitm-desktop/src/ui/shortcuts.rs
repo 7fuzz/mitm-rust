@@ -66,7 +66,7 @@ impl Action {
             Action::ToggleProxy => crate::features::settings::Cmd::ToggleProxy.into(),
             Action::SetProxyMode(mode) => crate::features::settings::Cmd::SetProxyMode(mode).into(),
             Action::ToggleInterceptor => intercept::Cmd::Toggle.into(),
-            Action::ClearTraffic => AppCommand::ClearTraffic,
+            Action::ClearTraffic => crate::features::traffic::Cmd::Clear.into(),
             Action::FocusSearch => AppCommand::FocusSearch,
         }
     }

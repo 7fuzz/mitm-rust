@@ -1,8 +1,6 @@
 use mitm_core::http::curl::ParsedCurl;
-use mitm_core::state::HistorySettings;
 use crate::ui::dock::Tab;
 use crate::features::collections::{CollectionsCmd, SaveTarget};
-use crate::util::format::{CopyFormat, CopyOptions};
 use crate::widgets::message_pane::SaveBody;
 
 /// Where a decoded QR code goes.
@@ -23,18 +21,10 @@ pub enum AppCommand {
     Settings(crate::features::settings::Cmd),
     FactoryReset,
 
-    SelectFlow(i64),
     SaveFlowToCollection { flow_id: i64, target: SaveTarget },
-    LoadOlderFlows,
-    ClearTraffic,
-    OpenHarExport,
-    ExportHar(Vec<i64>),
+    Traffic(crate::features::traffic::Cmd),
     FocusSearch,
-    DeleteFlow(i64),
-    CopyFlow(i64, CopyFormat),
-    CopyFlowCustom(i64, CopyOptions),
     SaveBody(SaveBody),
-    SetHistoryLimit(HistorySettings),
     AddInterceptRuleForHost(String),
     SendFlowToRepeater(i64),
     SendFlowToFuzzer(i64),

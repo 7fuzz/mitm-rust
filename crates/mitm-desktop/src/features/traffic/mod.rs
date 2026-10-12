@@ -1,4 +1,5 @@
 mod columns;
+mod commands;
 mod har_export;
 mod table;
 mod toolbar;
@@ -11,6 +12,7 @@ use crate::features::inspector::InspectorState;
 use crate::widgets::tri_state::TriState;
 
 pub use columns::{ColumnId, ColumnLayout};
+pub use commands::{handle, poll, Cmd};
 pub use har_export::{show as show_har_export, HarExport};
 
 const PAGE_SIZE: usize = 200;
@@ -103,6 +105,7 @@ pub struct TrafficState {
     /// Rows in the history table, which can be more than the flows loaded here.
     pub stored_count: u64,
     pub har_export: HarExport,
+    jobs: commands::TrafficJobs,
     /// Ids whose stored headers match the search; summaries are loaded without headers.
     header_matches: HashSet<i64>,
     header_search_key: Option<String>,
@@ -125,6 +128,7 @@ impl Default for TrafficState {
             has_older: false,
             stored_count: 0,
             har_export: HarExport::default(),
+            jobs: Default::default(),
             header_matches: HashSet::new(),
             header_search_key: None,
             width_epoch: 0,

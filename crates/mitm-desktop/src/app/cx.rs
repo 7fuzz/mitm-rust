@@ -18,6 +18,10 @@ impl Cx<'_> {
     }
 
     /// Shows a failure as a toast and passes a success through.
+    pub fn notify(&self, result: Result<String, String>) {
+        toast::push(self.ctx, result);
+    }
+
     pub fn report<T>(&self, result: Result<T, String>) -> Option<T> {
         match result {
             Ok(value) => Some(value),
