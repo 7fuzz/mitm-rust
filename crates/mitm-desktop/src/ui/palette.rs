@@ -8,6 +8,8 @@ pub struct PaletteState {
     pub open: bool,
     query: String,
     selected: usize,
+    /// Set when the keyboard moves the selection; scrolling every frame would undo mouse-wheel scrolling.
+    scroll_to_selected: bool,
 }
 
 impl PaletteState {
@@ -89,27 +91,26 @@ pub fn show(ctx: &egui::Context, state: &mut PaletteState, app_state: &AppState,
     let mut chosen = None;
     let modal = egui::Modal::new(id).area(area).show(ctx, |ui| {
         ui.set_width(420.0);
-        let search = ui.add(
-            egui::TextEdit::singleline(&mut state.query)
-                .hint_text("Type a command")
-                .desired_width(f32::INFINITY),
-        );
+        let search = crate::widgets::search::search_field(ui, &mut state.query, "Type a command");
         search.request_focus();
         if search.changed() {
             state.selected = 0;
+            state.scroll_to_selected = true;
         }
         ui.input_mut(|i| {
             if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
                 state.selected = (state.selected + 1).min(matches.len().saturating_sub(1));
+                state.scroll_to_selected = true;
             }
             if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
                 state.selected = state.selected.saturating_sub(1);
+                state.scroll_to_selected = true;
             }
             if i.consume_key(Modifiers::NONE, Key::Enter) {
                 chosen = matches.get(state.selected).cloned();
             }
         });
-        ui.separator();
+        ui.add_space(4.0);
 
         egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
             for (index, item) in matches.iter().enumerate() {
@@ -123,7 +124,7 @@ pub fn show(ctx: &egui::Context, state: &mut PaletteState, app_state: &AppState,
                         }
                     },
                 );
-                if selected {
+                if selected && std::mem::take(&mut state.scroll_to_selected) {
                     response.0.scroll_to_me(None);
                 }
                 if response.0.clicked() {
