@@ -1049,8 +1049,9 @@ impl eframe::App for MitmApp {
             cmds: &mut self.cmds,
             db_path: &self.core.db_path,
             focus_search: self.focus_search.take(),
+            focused: focused_tab,
         };
-        DockArea::new(&mut self.dock).show_inside(ui, &mut viewer);
+        DockArea::new(&mut self.dock).style(crate::ui::theme::dock_style(ui.style())).show_inside(ui, &mut viewer);
         if let Some(text) = crate::widgets::template::take_decode_request() {
             self.cmds.push(AppCommand::DecodeInEncodingTool(text));
         }

@@ -168,6 +168,49 @@ fn set_visuals(v: &mut Visuals, p: &Palette) {
     }
 }
 
+pub fn dock_style(style: &egui::Style) -> egui_dock::Style {
+    let p = if style.visuals.dark_mode { Palette::dark() } else { Palette::light() };
+    let mut s = egui_dock::Style::from_egui(style);
+    s.main_surface_border_stroke = Stroke::NONE;
+
+    s.tab_bar.bg_fill = p.base;
+    s.tab_bar.height = 30.0;
+    s.tab_bar.hline_color = p.border;
+    s.tab_bar.corner_radius = CornerRadius::ZERO;
+
+    let tab = |bg: Color32, text: Color32| egui_dock::TabInteractionStyle {
+        outline_color: Color32::TRANSPARENT,
+        corner_radius: CornerRadius::ZERO,
+        bg_fill: bg,
+        text_color: text,
+    };
+    s.tab.active = tab(p.panel, p.text);
+    s.tab.inactive = tab(p.base, p.text_weak);
+    s.tab.hovered = tab(p.hover, p.text);
+    s.tab.focused = tab(p.panel, p.text_strong);
+    s.tab.active_with_kb_focus = s.tab.active.clone();
+    s.tab.inactive_with_kb_focus = s.tab.hovered.clone();
+    s.tab.focused_with_kb_focus = s.tab.focused.clone();
+    s.tab.hline_below_active_tab_name = false;
+    s.tab.spacing = 0.0;
+    s.tab.tab_body.bg_fill = p.panel;
+    s.tab.tab_body.stroke = Stroke::NONE;
+    s.tab.tab_body.corner_radius = CornerRadius::ZERO;
+    s.tab.tab_body.inner_margin = egui::Margin::same(8);
+
+    s.buttons.close_tab_color = p.text_weak;
+    s.buttons.close_tab_active_color = p.text;
+    s.buttons.close_tab_bg_fill = p.hover;
+
+    s.separator.width = 1.0;
+    s.separator.color_idle = p.border;
+    s.separator.color_hovered = p.accent;
+    s.separator.color_dragged = p.accent;
+
+    s.overlay.selection_color = p.accent.gamma_multiply(0.25);
+    s
+}
+
 pub fn color(ui: &Ui, tone: Tone) -> Color32 {
     tone.color(ui.visuals())
 }

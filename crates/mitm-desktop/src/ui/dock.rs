@@ -200,6 +200,7 @@ pub struct TabViewer<'a> {
     pub cmds: &'a mut Commands,
     pub db_path: &'a Path,
     pub focus_search: Option<Tab>,
+    pub focused: Option<Tab>,
 }
 
 impl TabViewer<'_> {
@@ -265,6 +266,14 @@ impl egui_dock::TabViewer for TabViewer<'_> {
         match count {
             Some(n) => format!("{} ({})", tab.name(), n).into(),
             None => tab.name().into(),
+        }
+    }
+
+    fn on_tab_button(&mut self, tab: &mut Tab, response: &egui::Response) {
+        if self.focused == Some(*tab) {
+            let rect = response.rect;
+            let accent = response.ctx.global_style().visuals.selection.stroke.color;
+            response.ctx.layer_painter(response.layer_id).hline(rect.x_range(), rect.bottom() - 1.0, egui::Stroke::new(2.0, accent));
         }
     }
 
