@@ -57,6 +57,8 @@ pub struct EnvironmentsState {
     pub import: import::ImportState,
     pub export: export::ExportPrompt,
     saves: SaveQueue,
+    /// Failed writes outside the save queue, reported with the save errors.
+    errors: Vec<String>,
 }
 
 impl Default for EnvironmentsState {
@@ -88,6 +90,7 @@ impl Default for EnvironmentsState {
             import: import::ImportState::default(),
             export: export::ExportPrompt::default(),
             saves: SaveQueue::default(),
+            errors: Vec::new(),
         }
     }
 }
@@ -108,7 +111,9 @@ impl EnvironmentsState {
             self.active_workspace_id = active.id;
         } else if let Some(first) = self.workspaces.first() {
             self.active_workspace_id = first.id.clone();
-            let _ = mitm_core::workspace::set_active_workspace_db(db, &first.id);
+            if let Err(e) = mitm_core::workspace::set_active_workspace_db(db, &first.id) {
+                self.errors.push(format!("Couldn't select workspace: {e}"));
+            }
         }
         self.reload_environments(db);
         self.load_repeater_env(db);
@@ -168,7 +173,9 @@ impl EnvironmentsState {
     }
 
     pub fn take_save_errors(&mut self) -> Vec<String> {
-        self.saves.take_errors()
+        let mut errors = std::mem::take(&mut self.errors);
+        errors.extend(self.saves.take_errors());
+        errors
     }
 
     pub fn flush(&mut self, db: &Db) {

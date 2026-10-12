@@ -296,6 +296,7 @@ impl MitmApp {
 
     fn save_rewrite_rules_now(&mut self) {
         if let Some(rules) = self.state.rewrite.take_save(0.0, true) {
+            // The window is closing, so there's nowhere left to show a failure.
             let _ = self.rt.block_on(self.core.save_rewrite_rules(rules));
         }
     }
