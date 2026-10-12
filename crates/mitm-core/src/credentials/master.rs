@@ -5,8 +5,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use zeroize::Zeroizing;
 use super::crypto::{self, DataKey, KdfParams};
 use super::session::{self, now_ms};
-use super::LOCKED;
 use crate::db::Db;
+use super::CredentialError;
 
 const AAD: &[u8] = b"mitm-credential-key";
 const WRONG_PASSWORD: &str = "Wrong master password";
@@ -46,7 +46,7 @@ fn unwrap_key(row: &KeyRow, password: &str) -> Result<DataKey, String> {
     crypto::key_from_slice(&raw)
 }
 
-pub fn unlock(db: &Db, password: &str) -> Result<(), String> {
+pub fn unlock(db: &Db, password: &str) -> Result<(), CredentialError> {
     let row = key_row(&db.conn().map_err(|e| e.to_string())?)?.ok_or("No master password is set")?;
     let key = unwrap_key(&row, password)?;
     session::remember(db, key);
@@ -95,9 +95,9 @@ fn current_key(conn: &Connection, current: Option<&str>) -> Result<Option<DataKe
 }
 
 /// Sets or changes the master password. Changing needs the current one.
-pub fn set_master_password(db: &Db, current: Option<&str>, new_password: &str) -> Result<(), String> {
+pub fn set_master_password(db: &Db, current: Option<&str>, new_password: &str) -> Result<(), CredentialError> {
     if new_password.is_empty() {
-        return Err("The master password can't be empty".to_string());
+        return Err("The master password can't be empty".into());
     }
     let conn = db.conn().map_err(|e| e.to_string())?;
     let key = current_key(&conn, current)?.unwrap_or_else(crypto::generate_key);
@@ -106,7 +106,7 @@ pub fn set_master_password(db: &Db, current: Option<&str>, new_password: &str) -
     Ok(())
 }
 
-pub fn remove_master_password(db: &Db, current: &str) -> Result<(), String> {
+pub fn remove_master_password(db: &Db, current: &str) -> Result<(), CredentialError> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     let Some(key) = current_key(&conn, Some(current))? else { return Ok(()) };
     store_raw(&conn, &key)?;
@@ -116,7 +116,7 @@ pub fn remove_master_password(db: &Db, current: &str) -> Result<(), String> {
 
 /// For a forgotten password: every value and note is wiped, names and field keys stay, and a new raw key
 /// replaces the old one.
-pub fn reset_credentials(db: &Db) -> Result<(), String> {
+pub fn reset_credentials(db: &Db) -> Result<(), CredentialError> {
     let mut conn = db.conn().map_err(|e| e.to_string())?;
     let key = crypto::generate_key();
     let tx = conn.transaction().map_err(|e| e.to_string())?;
@@ -138,9 +138,9 @@ pub fn reset_credentials(db: &Db) -> Result<(), String> {
 }
 
 /// `Err(LOCKED)` when a master password is set and not entered this session.
-pub fn ensure_unlocked(db: &Db) -> Result<(), String> {
+pub fn ensure_unlocked(db: &Db) -> Result<(), CredentialError> {
     if is_locked(db) {
-        Err(LOCKED.to_string())
+        Err(CredentialError::Locked)
     } else {
         Ok(())
     }
@@ -172,8 +172,8 @@ mod tests {
         lock(&db);
         assert!(is_locked(&db));
         assert_eq!(resolve(&db, &ws, "dgAdmin", "password"), Resolve::Locked);
-        assert_eq!(load_credential(&db, &id).unwrap_err(), LOCKED);
-        assert_eq!(unlock(&db, "wrong").unwrap_err(), WRONG_PASSWORD);
+        assert_eq!(load_credential(&db, &id).unwrap_err(), CredentialError::Locked);
+        assert_eq!(unlock(&db, "wrong").unwrap_err(), CredentialError::from(WRONG_PASSWORD));
         unlock(&db, "one").unwrap();
         assert_eq!(load_credential(&db, &id).unwrap().fields[0].value, "hunter2");
 
@@ -199,7 +199,7 @@ mod tests {
         set_master_password(&db, None, "pw").unwrap();
         create_credential(&db, &ws, "a").unwrap();
         lock(&db);
-        assert_eq!(create_credential(&db, &ws, "b").unwrap_err(), LOCKED);
+        assert_eq!(create_credential(&db, &ws, "b").unwrap_err(), CredentialError::Locked);
         unlock(&db, "pw").unwrap();
         create_credential(&db, &ws, "b").unwrap();
         let _ = std::fs::remove_file(&db);

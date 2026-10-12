@@ -9,6 +9,7 @@ use super::crypto::{self, DataKey, KdfParams};
 use super::store::{self, list_credentials, load_credential, Field};
 use crate::workspace::file::{CredentialEntry, SealedCredentials};
 use crate::db::Db;
+use super::CredentialError;
 
 const AAD: &[u8] = b"mitm-workspace-credentials";
 const WRONG_PASSPHRASE: &str = "Wrong passphrase for the credentials in this file";
@@ -52,7 +53,7 @@ pub fn export_credentials(
     Ok((entries, Some(seal(passphrase, &sealed_entries)?)))
 }
 
-pub fn seal(passphrase: &str, entries: &[SealedEntry]) -> Result<SealedCredentials, String> {
+pub fn seal(passphrase: &str, entries: &[SealedEntry]) -> Result<SealedCredentials, CredentialError> {
     let params = KdfParams::default();
     let salt = crypto::random_bytes::<{ crypto::SALT_LEN }>();
     let key = crypto::derive_key(passphrase, &salt, params)?;
@@ -67,15 +68,15 @@ pub fn seal(passphrase: &str, entries: &[SealedEntry]) -> Result<SealedCredentia
     })
 }
 
-pub fn open_sealed(block: &SealedCredentials, passphrase: &str) -> Result<Vec<SealedEntry>, String> {
+pub fn open_sealed(block: &SealedCredentials, passphrase: &str) -> Result<Vec<SealedEntry>, CredentialError> {
     if block.kdf != crypto::KDF {
-        return Err(format!("Unsupported credential encryption \"{}\"", block.kdf));
+        return Err(format!("Unsupported credential encryption \"{}\"", block.kdf).into());
     }
     let decode = |s: &str| b64().decode(s).map_err(|_| "Corrupt credentials block".to_string());
     let key = crypto::derive_key(passphrase, &decode(&block.salt)?, block.params)?;
     let plain = crypto::open(&key, AAD, &decode(&block.nonce)?, &decode(&block.ciphertext)?)
         .map_err(|_| WRONG_PASSPHRASE.to_string())?;
-    serde_json::from_slice(&plain).map_err(|e| e.to_string())
+    Ok(serde_json::from_slice(&plain).map_err(|e| e.to_string())?)
 }
 
 /// Writes the file's entries into the workspace. An entry that already exists only gains the fields it lacks.
@@ -135,6 +136,6 @@ mod tests {
         let block = seal("pass phrase", &entries).unwrap();
         assert!(!block.ciphertext.contains("hunter2"));
         assert_eq!(open_sealed(&block, "pass phrase").unwrap(), entries);
-        assert_eq!(open_sealed(&block, "wrong").unwrap_err(), WRONG_PASSPHRASE);
+        assert_eq!(open_sealed(&block, "wrong").unwrap_err(), CredentialError::from(WRONG_PASSPHRASE));
     }
 }

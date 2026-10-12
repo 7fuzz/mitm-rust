@@ -1,5 +1,5 @@
 use super::store::{find_credential, validate_name, FieldKind};
-use super::LOCKED;
+use super::CredentialError;
 use crate::utils::totp;
 use crate::db::Db;
 
@@ -40,7 +40,7 @@ pub fn resolve(db: &Db, workspace_id: &str, entry: &str, field: &str) -> Resolve
     let credential = match find_credential(db, workspace_id, entry) {
         Ok(Some(c)) => c,
         Ok(None) => return Resolve::Missing,
-        Err(e) if e == LOCKED => return Resolve::Locked,
+        Err(CredentialError::Locked) => return Resolve::Locked,
         Err(_) => return Resolve::Missing,
     };
     let Some(field) = credential.field(field) else { return Resolve::Missing };

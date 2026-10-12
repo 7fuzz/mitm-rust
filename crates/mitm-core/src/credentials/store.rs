@@ -5,6 +5,7 @@ use zeroize::Zeroizing;
 use super::crypto;
 use super::session::{self, now_ms};
 use crate::db::Db;
+use super::CredentialError;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -100,13 +101,13 @@ fn is_false(b: &bool) -> bool {
 }
 
 /// Entry names and field keys: `[A-Za-z0-9_-]{1,64}`, so a `{{$cred:entry.field}}` ref splits on its one dot.
-pub fn validate_name(name: &str) -> Result<(), String> {
+pub fn validate_name(name: &str) -> Result<(), CredentialError> {
     let ok = (1..=64).contains(&name.len())
         && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
     if ok {
         Ok(())
     } else {
-        Err(format!("\"{name}\" may only use letters, digits, - and _ (up to 64)"))
+        Err(format!("\"{name}\" may only use letters, digits, - and _ (up to 64)").into())
     }
 }
 
@@ -132,7 +133,7 @@ fn name_taken(conn: &Connection, workspace_id: &str, name: &str, except_id: &str
     .map_err(|e| e.to_string())
 }
 
-pub fn list_credentials(db: &Db, workspace_id: &str) -> Result<Vec<CredentialSummary>, String> {
+pub fn list_credentials(db: &Db, workspace_id: &str) -> Result<Vec<CredentialSummary>, CredentialError> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, workspace_id, name, fields_json FROM credentials WHERE workspace_id = ? ORDER BY order_index, name")
@@ -172,8 +173,8 @@ fn decrypt_row(key: &crypto::DataKey, row: Row) -> Result<Credential, String> {
     Ok(Credential { id, workspace_id, name, fields, notes: payload.notes, order_index, created_at_ms, updated_at_ms })
 }
 
-fn existing_key(db: &Db) -> Result<crypto::DataKey, String> {
-    session::data_key(db)?.ok_or_else(|| "credentials have no data key".to_string())
+fn existing_key(db: &Db) -> Result<crypto::DataKey, CredentialError> {
+    session::data_key(db)?.ok_or_else(|| "credentials have no data key".into())
 }
 
 const COLUMNS: &str = "id, workspace_id, name, fields_json, nonce, ciphertext, order_index, created_at_ms, updated_at_ms";
@@ -182,18 +183,18 @@ fn read_row(r: &rusqlite::Row) -> rusqlite::Result<Row> {
     Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?))
 }
 
-pub fn load_credential(db: &Db, id: &str) -> Result<Credential, String> {
+pub fn load_credential(db: &Db, id: &str) -> Result<Credential, CredentialError> {
     let row = db.conn().map_err(|e| e.to_string())?
         .query_row(&format!("SELECT {COLUMNS} FROM credentials WHERE id = ?"), [id], read_row)
         .map_err(|e| e.to_string())?;
-    decrypt_row(&existing_key(db)?, row)
+    Ok(decrypt_row(&existing_key(db)?, row)?)
 }
 
 /// Looks an entry up by name, ignoring case.
-pub fn find_credential(db: &Db, workspace_id: &str, name: &str) -> Result<Option<Credential>, String> {
+pub fn find_credential(db: &Db, workspace_id: &str, name: &str) -> Result<Option<Credential>, CredentialError> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     let Some(row) = find_row(&conn, workspace_id, name)? else { return Ok(None) };
-    decrypt_row(&existing_key(db)?, row).map(Some)
+    Ok(Some(decrypt_row(&existing_key(db)?, row)?))
 }
 
 fn find_row(conn: &Connection, workspace_id: &str, name: &str) -> Result<Option<Row>, String> {
@@ -216,10 +217,10 @@ pub(crate) fn find_credential_conn(
 }
 
 /// A new, empty entry that `insert_credential_conn` can store.
-pub(crate) fn new_credential(conn: &Connection, workspace_id: &str, name: &str) -> Result<Credential, String> {
+pub(crate) fn new_credential(conn: &Connection, workspace_id: &str, name: &str) -> Result<Credential, CredentialError> {
     validate_name(name)?;
     if name_taken(conn, workspace_id, name, "")? {
-        return Err(format!("A credential named \"{name}\" already exists"));
+        return Err(format!("A credential named \"{name}\" already exists").into());
     }
     let order_index: i64 = conn
         .query_row("SELECT COALESCE(MAX(order_index) + 1, 0) FROM credentials WHERE workspace_id = ?", [workspace_id], |r| r.get(0))
@@ -237,7 +238,7 @@ pub(crate) fn new_credential(conn: &Connection, workspace_id: &str, name: &str) 
     })
 }
 
-pub fn create_credential(db: &Db, workspace_id: &str, name: &str) -> Result<Credential, String> {
+pub fn create_credential(db: &Db, workspace_id: &str, name: &str) -> Result<Credential, CredentialError> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     let credential = new_credential(&conn, workspace_id, name)?;
     write(&conn, &session::data_key_or_create(db)?, &credential, true)?;
@@ -245,19 +246,19 @@ pub fn create_credential(db: &Db, workspace_id: &str, name: &str) -> Result<Cred
 }
 
 /// Saves fields, values and notes. The name only changes through `rename_credential`, which keeps refs intact.
-pub fn save_credential(db: &Db, credential: &Credential) -> Result<(), String> {
+pub fn save_credential(db: &Db, credential: &Credential) -> Result<(), CredentialError> {
     validate_fields(&credential.fields)?;
-    write(&db.conn().map_err(|e| e.to_string())?, &session::data_key_or_create(db)?, credential, false)
+    Ok(write(&db.conn().map_err(|e| e.to_string())?, &session::data_key_or_create(db)?, credential, false)?)
 }
 
-pub(crate) fn insert_credential_conn(conn: &Connection, key: &crypto::DataKey, credential: &Credential) -> Result<(), String> {
+pub(crate) fn insert_credential_conn(conn: &Connection, key: &crypto::DataKey, credential: &Credential) -> Result<(), CredentialError> {
     validate_fields(&credential.fields)?;
-    write(conn, key, credential, true)
+    Ok(write(conn, key, credential, true)?)
 }
 
-pub(crate) fn update_credential_conn(conn: &Connection, key: &crypto::DataKey, credential: &Credential) -> Result<(), String> {
+pub(crate) fn update_credential_conn(conn: &Connection, key: &crypto::DataKey, credential: &Credential) -> Result<(), CredentialError> {
     validate_fields(&credential.fields)?;
-    write(conn, key, credential, false)
+    Ok(write(conn, key, credential, false)?)
 }
 
 fn write(conn: &Connection, key: &crypto::DataKey, credential: &Credential, insert: bool) -> Result<(), String> {
@@ -299,7 +300,7 @@ fn write(conn: &Connection, key: &crypto::DataKey, credential: &Credential, inse
 
 /// Stores an extracted value (a token) in `entry.field`. A missing field is created as an extracted secret;
 /// a missing entry is an error, since entries are never created implicitly.
-pub fn write_extracted(db: &Db, workspace_id: &str, entry: &str, field: &str, value: &str) -> Result<(), String> {
+pub fn write_extracted(db: &Db, workspace_id: &str, entry: &str, field: &str, value: &str) -> Result<(), CredentialError> {
     let mut credential = find_credential(db, workspace_id, entry)?.ok_or_else(|| format!("no credential named \"{entry}\""))?;
     match credential.field_mut(field) {
         Some(existing) => existing.value = value.to_string(),
@@ -311,11 +312,11 @@ pub fn write_extracted(db: &Db, workspace_id: &str, entry: &str, field: &str, va
     save_credential(db, &credential)
 }
 
-pub fn delete_credential(db: &Db, id: &str) -> Result<(), String> {
+pub fn delete_credential(db: &Db, id: &str) -> Result<(), CredentialError> {
     db.conn().map_err(|e| e.to_string())?
         .execute("DELETE FROM credentials WHERE id = ?", [id])
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[cfg(test)]

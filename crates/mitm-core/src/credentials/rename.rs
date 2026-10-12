@@ -5,6 +5,7 @@ use regex::{Captures, Regex};
 use rusqlite::{params, Connection};
 use super::store::{load_credential, save_credential, validate_name};
 use crate::db::Db;
+use super::CredentialError;
 
 const REQUEST_COLUMNS: [&str; 8] = [
     "url",
@@ -88,7 +89,7 @@ fn rewrite_workspace(conn: &mut Connection, workspace_id: &str, map: RefMap) -> 
     tx.commit().map_err(|e| e.to_string())
 }
 
-pub fn rename_credential(db: &Db, id: &str, new_name: &str) -> Result<(), String> {
+pub fn rename_credential(db: &Db, id: &str, new_name: &str) -> Result<(), CredentialError> {
     validate_name(new_name)?;
     let mut conn = db.conn().map_err(|e| e.to_string())?;
     let (workspace_id, old_name): (String, String) = conn
@@ -106,20 +107,21 @@ pub fn rename_credential(db: &Db, id: &str, new_name: &str) -> Result<(), String
         .map_err(|e| e.to_string())?
         > 0;
     if taken {
-        return Err(format!("A credential named \"{new_name}\" already exists"));
+        return Err(format!("A credential named \"{new_name}\" already exists").into());
     }
     conn.execute("UPDATE credentials SET name = ? WHERE id = ?", params![new_name, id]).map_err(|e| e.to_string())?;
     let new_name = new_name.to_string();
     rewrite_workspace(&mut conn, &workspace_id, &|entry, field| {
         entry.eq_ignore_ascii_case(&old_name).then(|| (new_name.clone(), field.to_string()))
-    })
+    })?;
+    Ok(())
 }
 
-pub fn rename_field(db: &Db, id: &str, old_key: &str, new_key: &str) -> Result<(), String> {
+pub fn rename_field(db: &Db, id: &str, old_key: &str, new_key: &str) -> Result<(), CredentialError> {
     validate_name(new_key)?;
     let mut credential = load_credential(db, id)?;
     if credential.fields.iter().any(|f| f.key.eq_ignore_ascii_case(new_key) && !f.key.eq_ignore_ascii_case(old_key)) {
-        return Err(format!("Field \"{new_key}\" already exists"));
+        return Err(format!("Field \"{new_key}\" already exists").into());
     }
     let field = credential.field_mut(old_key).ok_or_else(|| format!("Field \"{old_key}\" not found"))?;
     if field.key == new_key {
@@ -132,7 +134,8 @@ pub fn rename_field(db: &Db, id: &str, old_key: &str, new_key: &str) -> Result<(
     let (name, old_key, new_key) = (credential.name.clone(), old_key.to_string(), new_key.to_string());
     rewrite_workspace(&mut conn, &credential.workspace_id, &|entry, field| {
         (entry.eq_ignore_ascii_case(&name) && field.eq_ignore_ascii_case(&old_key)).then(|| (name.clone(), new_key.clone()))
-    })
+    })?;
+    Ok(())
 }
 
 #[cfg(test)]

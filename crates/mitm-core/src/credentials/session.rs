@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use rusqlite::{params, OptionalExtension};
 use super::crypto::{self, DataKey};
-use super::LOCKED;
 use crate::db::Db;
+use super::CredentialError;
 
 fn sessions() -> &'static Mutex<HashMap<PathBuf, DataKey>> {
     static SESSIONS: OnceLock<Mutex<HashMap<PathBuf, DataKey>>> = OnceLock::new();
@@ -42,7 +42,7 @@ pub(crate) fn now_ms() -> i64 {
 }
 
 /// The data key, `None` before the first credential is saved, or `Err(LOCKED)`.
-pub(crate) fn data_key(db: &Db) -> Result<Option<DataKey>, String> {
+pub(crate) fn data_key(db: &Db) -> Result<Option<DataKey>, CredentialError> {
     if let Some(key) = cached(db) {
         return Ok(Some(key));
     }
@@ -53,7 +53,7 @@ pub(crate) fn data_key(db: &Db) -> Result<Option<DataKey>, String> {
         .map_err(|e| e.to_string())?;
     match row {
         None => Ok(None),
-        Some((Some(_), _)) => Err(LOCKED.to_string()),
+        Some((Some(_), _)) => Err(CredentialError::Locked),
         Some((None, raw)) => {
             let key = crypto::key_from_slice(&raw)?;
             remember(db, key.clone());
@@ -63,7 +63,7 @@ pub(crate) fn data_key(db: &Db) -> Result<Option<DataKey>, String> {
 }
 
 /// The data key, created and stored raw on first use.
-pub(crate) fn data_key_or_create(db: &Db) -> Result<DataKey, String> {
+pub(crate) fn data_key_or_create(db: &Db) -> Result<DataKey, CredentialError> {
     if let Some(key) = data_key(db)? {
         return Ok(key);
     }
@@ -77,7 +77,7 @@ pub(crate) fn data_key_or_create(db: &Db) -> Result<DataKey, String> {
         .map_err(|e| e.to_string())?;
     if inserted == 0 {
         // Another writer stored a key first; use theirs.
-        return data_key(db)?.ok_or_else(|| "data key missing".to_string());
+        return data_key(db)?.ok_or_else(|| "data key missing".into());
     }
     remember(db, key.clone());
     Ok(key)

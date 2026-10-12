@@ -42,7 +42,7 @@ pub(super) fn unlock_form(ui: &mut egui::Ui, state: &mut CredentialsState, db: &
                     state.stale = true;
                     unlocked = true;
                 }
-                Err(e) => state.unlock.error = Some(e),
+                Err(e) => state.unlock.error = Some(e.to_string()),
             }
         }
     });
@@ -104,7 +104,7 @@ pub fn settings_section(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db
         if result.is_ok() {
             *form = MasterForm::default();
         }
-        form.status = Some(result);
+        form.status = Some(result.map_err(|e| e.to_string()));
         state.stale = true;
     }
     match &form.status {
@@ -142,7 +142,7 @@ pub fn settings_section(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db
     ui.add_space(12.0);
     let reset_id = ui.id().with("reset_credentials");
     if confirm::confirm_button(ui, reset_id, RichText::new("Reset credentials…"), "Wipe all values?", "Forgot the password: clears every value and note, keeps names and fields") {
-        state.master.status = Some(credentials::reset_credentials(db).map(|_| "Credential values wiped".to_string()));
+        state.master.status = Some(credentials::reset_credentials(db).map(|_| "Credential values wiped".to_string()).map_err(|e| e.to_string()));
         state.stale = true;
     }
 }

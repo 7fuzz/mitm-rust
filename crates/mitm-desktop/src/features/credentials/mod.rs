@@ -231,14 +231,14 @@ impl CredentialsState {
                 self.selected = Some(created.id);
                 self.reload(db);
             }
-            Err(e) => self.error = Some(e),
+            Err(e) => self.error = Some(e.to_string()),
         }
     }
 
     fn delete(&mut self, db: &Db, id: &str) {
         self.saves.remove(id);
         if let Err(e) = credentials::delete_credential(db, id) {
-            self.error = Some(e);
+            self.error = Some(e.to_string());
         }
         self.reload(db);
     }
@@ -262,7 +262,7 @@ impl CredentialsState {
             Some(_) => Ok(()),
         };
         if let Err(e) = result {
-            self.error = Some(e);
+            self.error = Some(e.to_string());
         }
         self.reload(db);
     }
