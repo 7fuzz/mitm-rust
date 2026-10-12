@@ -735,7 +735,13 @@ impl MitmCore {
 
     pub fn resolve_vars(&self, text: &str) -> (String, Vec<workspace::Unresolved>) {
         let active_env = self.get_active_environment().ok().flatten();
-        workspace::resolve_variables_with_env(active_env.as_ref(), text)
+        let workspace_id = self.get_active_workspace().ok().flatten().map(|w| w.id);
+        let scope = workspace_id
+            .as_deref()
+            .map(|workspace_id| workspace::CredentialScope { db_path: &self.db_path, workspace_id });
+        let resolved = workspace::interpolate(active_env.as_ref(), scope, text, &mut Default::default());
+        let unresolved = workspace::find_unresolved_variables(&resolved);
+        (resolved, unresolved)
     }
 
     pub fn variable_value(&self, name: &str) -> Option<String> {

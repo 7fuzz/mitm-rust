@@ -9,7 +9,7 @@ use base64::Engine;
 
 use super::{HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab};
 use crate::repeater::{get_repeater_tab_by_id, insert_repeater_history_db, REPEATER_WORKSPACE_ID};
-use crate::workspace::{get_workspace_environments_db, interpolate_dynamic_variables, interpolate_variables_with_env};
+use crate::workspace::{active_environment_db, interpolate, CredentialScope, Interpolation};
 use crate::collections::execute::perform_auto_extraction_db;
 use crate::http::body::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
 use crate::http::steps::{jar_cookie, pre_request_failure, request_steps};
@@ -270,6 +270,11 @@ pub(crate) async fn send_tab_request_with(client: &reqwest::Client, tab: &Repeat
     }
 }
 
+/// The Repeater has no credentials of its own; it uses the active workspace's.
+pub(crate) fn credential_workspace_id(db_path: &PathBuf) -> Option<String> {
+    crate::workspace::get_active_workspace_db(db_path).ok().flatten().map(|w| w.id)
+}
+
 fn with_scheme(url: &str) -> String {
     let url = url.trim();
     if url.starts_with("http://") || url.starts_with("https://") {
@@ -279,16 +284,12 @@ fn with_scheme(url: &str) -> String {
     }
 }
 
-/// Fills `{{vars}}` from the Repeater workspace's active environment.
-fn interpolate_tab(db_path: &PathBuf, tab: &RepeaterTab) -> RepeaterTab {
-    let env = get_workspace_environments_db(db_path, REPEATER_WORKSPACE_ID)
-        .unwrap_or_default()
-        .into_iter()
-        .find(|e| e.is_active);
-    let fill = |s: &str| match &env {
-        Some(env) => interpolate_variables_with_env(env, s),
-        None => interpolate_dynamic_variables(s),
-    };
+/// Fills `{{vars}}` from the Repeater workspace's active environment and credentials from the active workspace.
+fn interpolate_tab(db_path: &PathBuf, tab: &RepeaterTab, record: &mut Interpolation) -> RepeaterTab {
+    let env = active_environment_db(db_path, REPEATER_WORKSPACE_ID);
+    let workspace_id = credential_workspace_id(db_path);
+    let scope = workspace_id.as_deref().map(|workspace_id| CredentialScope { db_path, workspace_id });
+    let mut fill = |s: &str| interpolate(env.as_ref(), scope, s, record);
 
     let mut out = tab.clone();
     out.url = fill(&tab.url);
@@ -357,7 +358,8 @@ async fn run_repeater_tab(
     client: &reqwest::Client,
     jar: &Jar,
 ) -> Result<RepeaterExecutionResult, String> {
-    let mut filled = interpolate_tab(db_path, tab);
+    let mut record = Interpolation::default();
+    let mut filled = interpolate_tab(db_path, tab, &mut record);
     let has_cookie = filled.headers.iter().any(|h| h.enabled && h.key.trim().eq_ignore_ascii_case("cookie"));
     if !has_cookie {
         if let Some(cookie) = jar_cookie(jar, &with_scheme(&filled.url)) {

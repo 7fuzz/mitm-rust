@@ -2,7 +2,7 @@ pub mod export;
 pub mod file;
 pub mod import;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -669,7 +669,32 @@ pub fn totp_params_in_env(env: Option<&Environment>, key: &str) -> Option<crate:
     crate::utils::totp::parse_secret(env_var_value(env?, name)?).ok()
 }
 
+/// Where `{{$cred:entry.field}}` refs are looked up.
+#[derive(Debug, Clone, Copy)]
+pub struct CredentialScope<'a> {
+    pub db_path: &'a Path,
+    pub workspace_id: &'a str,
+}
+
+/// What an interpolation substituted from credentials, so the logged copy of a request can be masked.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Interpolation {
+    pub secrets: Vec<String>,
+    /// A `$cred:` ref stayed unresolved because credentials are locked.
+    pub locked: bool,
+}
+
 pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
+    interpolate(Some(env), None, text, &mut Interpolation::default())
+}
+
+/// Fills `{{vars}}` from `env`, credentials from `creds` and dynamic variables, up to 15 levels deep.
+pub fn interpolate(
+    env: Option<&Environment>,
+    creds: Option<CredentialScope>,
+    text: &str,
+    record: &mut Interpolation,
+) -> String {
     if !text.contains("{{") || !text.contains("}}") {
         return text.to_string();
     }
@@ -677,7 +702,7 @@ pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
     let mut var_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     let mut lower_var_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
 
-    for var in &env.variables {
+    for var in env.map(|e| e.variables.as_slice()).unwrap_or_default() {
         if var.enabled && !var.key.trim().is_empty() {
             let k = var.key.trim().to_string();
             let v = var.current_value().to_string();
@@ -703,6 +728,7 @@ pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
         let next_result = re
             .replace_all(&result, |caps: &regex::Captures| {
                 let key = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+                let unresolved = || caps.get(0).map(|m| m.as_str()).unwrap_or("").to_string();
                 if let Some(val) = var_map.get(key) {
                     changed = true;
                     val.to_string()
@@ -716,13 +742,29 @@ pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
                             changed = true;
                             code
                         }
-                        None => caps.get(0).map(|m| m.as_str()).unwrap_or("").to_string(),
+                        None => unresolved(),
+                    }
+                } else if let Some((entry, field)) = crate::credentials::parse_ref(key) {
+                    let Some(scope) = creds else { return unresolved() };
+                    match crate::credentials::resolve(scope.db_path, scope.workspace_id, entry, field) {
+                        crate::credentials::Resolve::Value(value, kind) => {
+                            if kind == crate::credentials::FieldKind::Secret && !record.secrets.contains(&value) {
+                                record.secrets.push(value.clone());
+                            }
+                            changed = true;
+                            value
+                        }
+                        crate::credentials::Resolve::Locked => {
+                            record.locked = true;
+                            unresolved()
+                        }
+                        crate::credentials::Resolve::Missing => unresolved(),
                     }
                 } else if let Some(val) = resolve_dynamic_variable(key) {
                     changed = true;
                     val
                 } else {
-                    caps.get(0).map(|m| m.as_str()).unwrap_or("").to_string()
+                    unresolved()
                 }
             })
             .to_string();
@@ -761,15 +803,16 @@ pub fn interpolate_variables(db_path: &PathBuf, workspace_id: &str, text: &str) 
     if !text.contains("{{") || !text.contains("}}") {
         return text.to_string();
     }
+    let env = active_environment_db(db_path, workspace_id);
+    let scope = CredentialScope { db_path, workspace_id };
+    interpolate(env.as_ref(), Some(scope), text, &mut Interpolation::default())
+}
 
-    let envs = get_workspace_environments_db(db_path, workspace_id).unwrap_or_default();
-    let active_env = envs.into_iter().find(|e| e.is_active);
-
-    if let Some(env) = active_env {
-        interpolate_variables_with_env(&env, text)
-    } else {
-        interpolate_dynamic_variables(text)
-    }
+pub fn active_environment_db(db_path: &PathBuf, workspace_id: &str) -> Option<Environment> {
+    get_workspace_environments_db(db_path, workspace_id)
+        .unwrap_or_default()
+        .into_iter()
+        .find(|e| e.is_active)
 }
 
 pub fn find_unresolved_variables(text: &str) -> Vec<Unresolved> {
@@ -903,6 +946,30 @@ mod tests {
         assert!(expected_code("MZXW6").contains(&code), "{code}");
         assert!(variable_value_in_env(Some(&env), "$totp:secret").is_some());
         assert!(totp_params_in_env(Some(&env), "$totp:secret").is_some());
+    }
+
+    #[test]
+    fn cred_refs_resolve_directly_and_through_a_variant_link() {
+        use crate::credentials::{create_credential, save_credential, Field, FieldKind};
+        let db = crate::credentials::tests_support::temp_db();
+        let ws = create_workspace_db(&db, "W".into(), None).unwrap().id;
+        let mut cred = create_credential(&db, &ws, "dgAdmin").unwrap();
+        cred.fields = vec![Field { key: "password".into(), kind: FieldKind::Secret, extracted: false, value: "hunter2".into() }];
+        save_credential(&db, &cred).unwrap();
+
+        let mut env = env_with(&[("adminPassword", "")]);
+        env.variables[0].variants = vec![VariableVariant { name: "dev".into(), value: "{{$cred:dgAdmin.password}}".into() }];
+        let scope = Some(CredentialScope { db_path: &db, workspace_id: &ws });
+
+        let mut record = Interpolation::default();
+        let out = interpolate(Some(&env), scope, "p={{adminPassword}}&q={{ $cred:DGADMIN.Password }}", &mut record);
+        assert_eq!(out, "p=hunter2&q=hunter2");
+        assert_eq!(record.secrets, ["hunter2"]);
+
+        let missing = "{{$cred:dgAdmin.nope}} {{$cred:nobody.password}}";
+        assert_eq!(interpolate(Some(&env), scope, missing, &mut Interpolation::default()), missing);
+        assert_eq!(interpolate(None, None, "{{$cred:dgAdmin.password}}", &mut record), "{{$cred:dgAdmin.password}}");
+        let _ = std::fs::remove_file(&db);
     }
 
     #[test]
