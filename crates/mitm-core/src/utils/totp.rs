@@ -42,6 +42,18 @@ pub fn remaining(period: u64, unix_secs: u64) -> u64 {
     period - unix_secs % period
 }
 
+/// Below this many seconds left the next window's code is sent instead; servers accept ±1 step, so it
+/// stays valid while the request is in flight.
+pub const SEND_MARGIN_SECS: u64 = 2;
+
+pub fn code_for_send(params: &TotpParams, unix_secs: u64) -> String {
+    if remaining(params.period, unix_secs) < SEND_MARGIN_SECS {
+        code_at(params, unix_secs + params.period)
+    } else {
+        code_at(params, unix_secs)
+    }
+}
+
 pub fn decode_base32(input: &str) -> Result<Vec<u8>, String> {
     let cleaned: String = input
         .chars()
@@ -165,6 +177,14 @@ mod tests {
         assert_eq!(remaining(30, 0), 30);
         assert_eq!(remaining(30, 29), 1);
         assert_eq!(remaining(30, 30), 30);
+    }
+
+    #[test]
+    fn code_for_send_uses_next_window_near_the_edge() {
+        let p = rfc_params(TotpAlgo::Sha1);
+        assert_eq!(code_for_send(&p, 1111111110), code_at(&p, 1111111110));
+        assert_eq!(code_for_send(&p, 1111111139), code_at(&p, 1111111140));
+        assert_eq!(code_for_send(&p, 1111111138), code_at(&p, 1111111138));
     }
 
     #[test]

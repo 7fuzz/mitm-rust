@@ -641,6 +641,33 @@ pub fn resolve_dynamic_variable(key: &str) -> Option<String> {
     }
 }
 
+/// `$totp:adminSecret` → `adminSecret`.
+fn totp_ref_name(key: &str) -> Option<&str> {
+    let key = key.trim();
+    let prefix = key.get(..6)?;
+    prefix.eq_ignore_ascii_case("$totp:").then(|| key[6..].trim())
+}
+
+fn totp_code_from_secret(secret: &str) -> Option<String> {
+    let params = crate::utils::totp::parse_secret(secret).ok()?;
+    Some(crate::utils::totp::code_for_send(&params, crate::utils::totp::now_unix()))
+}
+
+fn env_var_value<'a>(env: &'a Environment, name: &str) -> Option<&'a str> {
+    let name = name.trim();
+    env.variables
+        .iter()
+        .find(|v| v.enabled && v.key.trim() == name)
+        .or_else(|| env.variables.iter().find(|v| v.enabled && v.key.trim().eq_ignore_ascii_case(name)))
+        .map(|v| v.current_value())
+}
+
+/// The TOTP parameters behind a `$totp:<var>` reference, for showing a live code.
+pub fn totp_params_in_env(env: Option<&Environment>, key: &str) -> Option<crate::utils::totp::TotpParams> {
+    let name = totp_ref_name(key)?;
+    crate::utils::totp::parse_secret(env_var_value(env?, name)?).ok()
+}
+
 pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
     if !text.contains("{{") || !text.contains("}}") {
         return text.to_string();
@@ -681,6 +708,15 @@ pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
                 } else if let Some(val) = lower_var_map.get(&key.to_lowercase()) {
                     changed = true;
                     val.to_string()
+                } else if let Some(name) = totp_ref_name(key) {
+                    let secret = var_map.get(name).or_else(|| lower_var_map.get(&name.to_lowercase()));
+                    match secret.and_then(|s| totp_code_from_secret(s)) {
+                        Some(code) => {
+                            changed = true;
+                            code
+                        }
+                        None => caps.get(0).map(|m| m.as_str()).unwrap_or("").to_string(),
+                    }
                 } else if let Some(val) = resolve_dynamic_variable(key) {
                     changed = true;
                     val
@@ -768,17 +804,11 @@ pub fn resolve_variables_with_env(
 
 pub fn variable_value_in_env(env: Option<&Environment>, name: &str) -> Option<String> {
     let trimmed = name.trim();
-    if let Some(env) = env {
-        if let Some(var) = env.variables.iter().find(|v| v.enabled && v.key.trim() == trimmed) {
-            return Some(var.current_value().to_string());
-        }
-        if let Some(var) = env
-            .variables
-            .iter()
-            .find(|v| v.enabled && v.key.trim().eq_ignore_ascii_case(trimmed))
-        {
-            return Some(var.current_value().to_string());
-        }
+    if let Some(value) = env.and_then(|e| env_var_value(e, trimmed)) {
+        return Some(value.to_string());
+    }
+    if let Some(var) = totp_ref_name(trimmed) {
+        return env.and_then(|e| env_var_value(e, var)).and_then(totp_code_from_secret);
     }
     resolve_dynamic_variable(trimmed)
 }
@@ -813,6 +843,65 @@ mod tests {
         assert_eq!(v7.len(), 36);
         let parsed_v7 = Uuid::parse_str(&v7).expect("valid uuid v7");
         assert_eq!(parsed_v7.get_version_num(), 7);
+    }
+
+    fn env_with(vars: &[(&str, &str)]) -> Environment {
+        Environment {
+            id: "env-totp".to_string(),
+            workspace_id: "ws-1".to_string(),
+            name: "Totp".to_string(),
+            is_active: true,
+            variables: vars
+                .iter()
+                .map(|(k, v)| EnvironmentVariable {
+                    key: k.to_string(),
+                    value: v.to_string(),
+                    enabled: true,
+                    r#type: "secret".to_string(),
+                    active_index: 0,
+                    variants: vec![],
+                })
+                .collect(),
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        }
+    }
+
+    fn expected_code(secret: &str) -> [String; 2] {
+        let p = crate::utils::totp::parse_secret(secret).unwrap();
+        let now = crate::utils::totp::now_unix();
+        [crate::utils::totp::code_for_send(&p, now), crate::utils::totp::code_for_send(&p, now + 1)]
+    }
+
+    #[test]
+    fn totp_ref_resolves_base32_and_otpauth_secrets() {
+        let base32 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+        let uri = "otpauth://totp/x?secret=MZXW6&digits=8";
+        let env = env_with(&[("adminTotpSecret", base32), ("uriSecret", uri)]);
+
+        let code = interpolate_variables_with_env(&env, r#"{"code": "{{$totp:adminTotpSecret}}"}"#);
+        let code = code.trim_start_matches(r#"{"code": ""#).trim_end_matches(r#""}"#);
+        assert!(expected_code(base32).iter().any(|c| c == code), "{code}");
+
+        let code = interpolate_variables_with_env(&env, "{{ $TOTP:URISECRET }}");
+        assert_eq!(code.len(), 8);
+        assert!(expected_code(uri).contains(&code));
+    }
+
+    #[test]
+    fn totp_ref_with_unknown_var_or_bad_secret_stays_unresolved() {
+        let env = env_with(&[("bad", "not base32!")]);
+        assert_eq!(interpolate_variables_with_env(&env, "{{$totp:missing}}"), "{{$totp:missing}}");
+        assert_eq!(interpolate_variables_with_env(&env, "{{$totp:bad}}"), "{{$totp:bad}}");
+    }
+
+    #[test]
+    fn totp_ref_resolves_through_a_variable() {
+        let env = env_with(&[("secret", "MZXW6"), ("code", "{{$totp:secret}}")]);
+        let code = interpolate_variables_with_env(&env, "{{code}}");
+        assert!(expected_code("MZXW6").contains(&code), "{code}");
+        assert!(variable_value_in_env(Some(&env), "$totp:secret").is_some());
+        assert!(totp_params_in_env(Some(&env), "$totp:secret").is_some());
     }
 
     #[test]
