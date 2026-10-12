@@ -76,9 +76,9 @@ impl Tab {
     /// The non-utility tabs as menus list them, a separator between groups.
     pub const GROUPS: &'static [&'static [Tab]] = &[
         &[Tab::Traffic, Tab::Intercept, Tab::Rewrite],
-        &[Tab::Repeater, Tab::Collections, Tab::Fuzzer],
+        &[Tab::Repeater, Tab::Fuzzer],
         &[Tab::WebSockets, Tab::Webhooks],
-        &[Tab::Environments, Tab::Credentials],
+        &[Tab::Collections, Tab::Environments, Tab::Credentials],
         &[Tab::Settings],
     ];
 
