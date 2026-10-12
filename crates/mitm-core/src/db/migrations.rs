@@ -108,6 +108,11 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         name: "20261008_0020_fuzz_write_through",
         sql: include_str!("../../migrations/20261008_0020_fuzz_write_through.sql"),
     },
+    MigrationSpec {
+        version: 21,
+        name: "20261012_0021_credentials",
+        sql: include_str!("../../migrations/20261012_0021_credentials.sql"),
+    },
 ];
 
 pub fn run_all(event_bus: Option<&EventBus>, conn: &Connection) -> Result<(), String> {

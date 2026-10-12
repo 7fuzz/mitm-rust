@@ -13,6 +13,7 @@ Bodies and headers are stored as text (headers as JSON arrays of `[name, value]`
 | `rewrite_rules` / `rewrite_history` | Rewrite rules (partial edits or full mocks) and the log of rules that fired. |
 | `app_preferences` | Key/value settings: `proxy_mode`, `proxy_listeners`, `intercept_enabled`, `intercept_mode`, `intercept_source_scope`, `rewrite_enabled`, `rewrite_source_scope`, `ws_mitm_enabled`, `webhook_port`, `history_limiter_enabled`, `history_limiter_max_rows`, `active_workspace_id`. |
 | `workspaces` / `environments` | Workspaces and their environments. Variables and their variants are JSON in `environments.variables_json`. |
+| `credentials` / `credential_keys` | Credentials per workspace. Field keys and kinds are plaintext in `fields_json`; values and notes are AES-256-GCM `ciphertext` under the single data key in `credential_keys`, which is stored raw (`kdf` NULL) or wrapped by a master password. |
 | `collections` / `requests` | Folder tree and saved requests per workspace. Repeater tabs are `requests` in a hidden workspace (`REPEATER_WORKSPACE_ID`) with its own environment. |
 | `request_steps` | Pre/post requests: `request_id` runs `step_request_id` at `position` in the `pre` or `post` phase. |
 | `request_histories` | Runs of a saved request or Repeater tab. |
@@ -26,6 +27,7 @@ Bodies and headers are stored as text (headers as JSON arrays of `[name, value]`
 erDiagram
     workspaces ||--o{ environments : has
     workspaces ||--o{ collections : has
+    workspaces ||--o{ credentials : has
     collections ||--o{ collections : nests
     collections ||--o{ requests : holds
     requests ||--o{ request_histories : runs
@@ -273,4 +275,26 @@ CREATE TABLE request_steps (
     CHECK (step_request_id != request_id)
 );
 CREATE INDEX idx_request_steps_step ON request_steps(step_request_id);
+CREATE TABLE credential_keys (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    kdf TEXT,
+    kdf_params TEXT,
+    salt BLOB,
+    nonce BLOB,
+    wrapped_key BLOB NOT NULL,
+    updated_at_ms INTEGER NOT NULL
+);
+CREATE TABLE credentials (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name TEXT NOT NULL COLLATE NOCASE,
+    fields_json TEXT NOT NULL DEFAULT '[]',
+    nonce BLOB NOT NULL,
+    ciphertext BLOB NOT NULL,
+    order_index INTEGER NOT NULL DEFAULT 0,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    UNIQUE (workspace_id, name)
+);
+CREATE INDEX idx_credentials_workspace ON credentials(workspace_id, order_index);
 ```
