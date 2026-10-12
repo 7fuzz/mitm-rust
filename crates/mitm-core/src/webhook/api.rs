@@ -1,13 +1,13 @@
 use std::sync::Arc;
-use crate::{db, state, webhook, MitmCore};
+use crate::{db, webhook, MitmCore};
 
 impl MitmCore {
     pub fn clear_webhook_deliveries(&self) -> Result<(), String> {
         db::webhook_db::clear_webhook_deliveries(&self.db_path)
     }
 
-    pub async fn webhook_status(&self) -> state::WebhookListenerConfig {
-        state::WebhookListenerConfig {
+    pub async fn webhook_status(&self) -> crate::webhook::types::WebhookListenerConfig {
+        crate::webhook::types::WebhookListenerConfig {
             port: *self.state.webhook_port.read().await,
             is_running: self.state.is_webhook_running(),
         }
@@ -69,12 +69,12 @@ impl MitmCore {
         db::set_preference(&self.db_path, "webhook_port", &port.to_string())
     }
 
-    pub fn webhook_endpoints(&self) -> Result<Vec<state::WebhookEndpoint>, String> {
+    pub fn webhook_endpoints(&self) -> Result<Vec<crate::webhook::types::WebhookEndpoint>, String> {
         db::webhook_db::load_webhook_endpoints(&self.db_path)
     }
 
-    pub fn create_webhook_endpoint(&self, name: String, path: String, secret: String) -> Result<state::WebhookEndpoint, String> {
-        let endpoint = state::WebhookEndpoint {
+    pub fn create_webhook_endpoint(&self, name: String, path: String, secret: String) -> Result<crate::webhook::types::WebhookEndpoint, String> {
+        let endpoint = crate::webhook::types::WebhookEndpoint {
             id: format!("wh-ep-{}", uuid::Uuid::new_v4()),
             name,
             path,
@@ -90,18 +90,18 @@ impl MitmCore {
         db::webhook_db::delete_webhook_endpoint(&self.db_path, id)
     }
 
-    pub fn webhook_deliveries(&self, limit: Option<u32>) -> Result<Vec<state::WebhookDelivery>, String> {
+    pub fn webhook_deliveries(&self, limit: Option<u32>) -> Result<Vec<crate::webhook::types::WebhookDelivery>, String> {
         db::webhook_db::load_webhook_deliveries(&self.db_path, limit)
     }
 
-    pub fn calculate_webhook_signature(&self, secret: &str, body: &str, provider: &str) -> state::WebhookSignatureResult {
+    pub fn calculate_webhook_signature(&self, secret: &str, body: &str, provider: &str) -> crate::webhook::types::WebhookSignatureResult {
         let (header_name, header_value) = webhook::calculate_signature(secret, body, provider);
-        state::WebhookSignatureResult { header_name, header_value }
+        crate::webhook::types::WebhookSignatureResult { header_name, header_value }
     }
 
     /// Re-verifies a stored delivery against its endpoint's current secret.
     /// Returns (status, expected, provided).
-    pub fn verify_webhook(&self, delivery: &state::WebhookDelivery) -> Result<(String, Option<String>, Option<String>), String> {
+    pub fn verify_webhook(&self, delivery: &crate::webhook::types::WebhookDelivery) -> Result<(String, Option<String>, Option<String>), String> {
         let secret = db::webhook_db::load_webhook_endpoints(&self.db_path)?
             .into_iter()
             .find(|e| e.id == delivery.endpoint_id)
@@ -110,7 +110,7 @@ impl MitmCore {
         Ok(webhook::verify_signature(&delivery.headers, delivery.payload.as_bytes(), &secret))
     }
 
-    pub async fn replay_webhook(&self, delivery: state::WebhookDelivery, target_url: &str) -> Result<webhook::WebhookReplayResult, String> {
+    pub async fn replay_webhook(&self, delivery: crate::webhook::types::WebhookDelivery, target_url: &str) -> Result<webhook::WebhookReplayResult, String> {
         webhook::replay_delivery(delivery.headers, delivery.payload, target_url).await
     }
 }

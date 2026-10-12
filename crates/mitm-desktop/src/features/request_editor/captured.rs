@@ -1,6 +1,6 @@
 use mitm_core::http::curl::ParsedCurl;
 use mitm_core::repeater::{HeaderItem, ParamItem};
-use mitm_core::state::{HistoryDetail, HistoryEntry};
+use mitm_core::proxy::history::{HistoryDetail, HistoryEntry};
 use super::body::structured_from_capture;
 use super::url_params::{new_id, parse_query};
 

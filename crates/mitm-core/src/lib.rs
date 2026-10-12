@@ -20,7 +20,9 @@ use tokio::sync::mpsc;
 pub use ca::{CaFormat, CaInfo};
 pub use db::{DataCategory, DataCategoryCounts};
 pub use events::{CoreEvent, EventBus};
-pub use state::{AppState, HistoryEntry, RewriteHistoryEntry};
+pub use proxy::history::HistoryEntry;
+pub use proxy::rewrite::RewriteHistoryEntry;
+pub use state::AppState;
 pub use workspace::{Environment, EnvironmentVariable, Unresolved, VariableVariant, Workspace};
 
 pub struct MitmCore {
@@ -76,13 +78,13 @@ mod tests {
         (MitmCore { state, event_bus: EventBus::default(), db_path }, dir)
     }
 
-    fn pause(core: &MitmCore, id: &str) -> oneshot::Receiver<state::InterceptAction> {
+    fn pause(core: &MitmCore, id: &str) -> oneshot::Receiver<crate::proxy::intercept::InterceptAction> {
         let (tx, rx) = oneshot::channel();
         core.state.pending_flows.insert(
             id.to_string(),
-            state::PendingFlow {
+            crate::proxy::intercept::PendingFlow {
                 flow_id: id.to_string(),
-                phase: state::InterceptPhase::Request,
+                phase: crate::proxy::intercept::InterceptPhase::Request,
                 method: "GET".to_string(),
                 url: "http://a".to_string(),
                 headers: vec![],
@@ -99,7 +101,7 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             core.toggle_interceptor(true, "both".to_string()).await.unwrap();
-            core.set_intercept_source_scope(state::SourceScope { all: false, ids: vec![2] }).await.unwrap();
+            core.set_intercept_source_scope(crate::proxy::rules::SourceScope { all: false, ids: vec![2] }).await.unwrap();
         });
         let (history_tx, _) = mpsc::channel(1);
         let (rewrite_tx, _) = mpsc::channel(1);
@@ -119,7 +121,7 @@ mod tests {
     fn rewrite_settings_and_rule_order_persist() {
         let (core, dir) = test_core();
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let rule = |id: &str| state::RewriteRule {
+        let rule = |id: &str| crate::proxy::rewrite::RewriteRule {
             id: id.to_string(),
             name: id.to_string(),
             enabled: true,
@@ -140,7 +142,7 @@ mod tests {
         };
         rt.block_on(async {
             core.save_rewrite_rules(vec![rule("b"), rule("a")]).await.unwrap();
-            core.set_rewrite_source_scope(state::SourceScope { all: false, ids: vec![1] }).await.unwrap();
+            core.set_rewrite_source_scope(crate::proxy::rules::SourceScope { all: false, ids: vec![1] }).await.unwrap();
         });
         core.set_rewrite_enabled(false).unwrap();
 
@@ -156,11 +158,11 @@ mod tests {
         let (core, dir) = test_core();
         let mut forwarded = [pause(&core, "a"), pause(&core, "b")];
         assert_eq!(core.forward_all_intercepted(), 2);
-        assert!(forwarded.iter_mut().all(|rx| matches!(rx.try_recv(), Ok(state::InterceptAction::Forward { modified_url: None, .. }))));
+        assert!(forwarded.iter_mut().all(|rx| matches!(rx.try_recv(), Ok(crate::proxy::intercept::InterceptAction::Forward { modified_url: None, .. }))));
 
         let mut dropped = pause(&core, "c");
         assert_eq!(core.drop_all_intercepted(), 1);
-        assert!(matches!(dropped.try_recv(), Ok(state::InterceptAction::Drop)));
+        assert!(matches!(dropped.try_recv(), Ok(crate::proxy::intercept::InterceptAction::Drop)));
         assert!(core.state.pending_flows.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use mitm_core::state::{ListenerConfig, ListenerStatus, ProxyMode};
+use mitm_core::proxy::listener::{ListenerConfig, ListenerStatus, ProxyMode};
 use crate::app::command::AppCommand;
 use crate::app::cx::Cx;
 use crate::features::traffic::TrafficState;

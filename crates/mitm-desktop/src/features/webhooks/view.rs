@@ -1,6 +1,6 @@
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
-use mitm_core::state::WebhookDelivery;
+use mitm_core::webhook::types::WebhookDelivery;
 use crate::app::command::{AppCommand, Commands};
 use super::Cmd;
 use crate::util::format::format_bytes;

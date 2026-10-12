@@ -436,7 +436,7 @@ fn proxy_section(
                 format!("{}:{}", effective_host, port)
             };
             let next_id = proxy.listeners.iter().map(|l| l.id).max().unwrap_or(0) + 1;
-            proxy.listeners.push(mitm_core::state::ListenerConfig {
+            proxy.listeners.push(mitm_core::proxy::listener::ListenerConfig {
                 id: next_id,
                 label: form.label.trim().to_string(),
                 address,
@@ -521,7 +521,7 @@ fn host_ip_menu(resp: &egui::Response, ip: &str, form: &mut ListenerForm) {
     });
 }
 
-fn find_listener_overlap(listeners: &[mitm_core::state::ListenerConfig], host: &str, port: u16) -> Option<u32> {
+fn find_listener_overlap(listeners: &[mitm_core::proxy::listener::ListenerConfig], host: &str, port: u16) -> Option<u32> {
     let candidate_host = match host.trim() {
         "" => "0.0.0.0",
         h if h.eq_ignore_ascii_case("localhost") => "127.0.0.1",
@@ -548,7 +548,7 @@ fn find_listener_overlap(listeners: &[mitm_core::state::ListenerConfig], host: &
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mitm_core::state::ListenerConfig;
+    use mitm_core::proxy::listener::ListenerConfig;
 
     #[test]
     fn detects_overlapping_listeners() {

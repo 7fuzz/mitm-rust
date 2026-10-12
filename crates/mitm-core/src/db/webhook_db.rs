@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use rusqlite::params;
-use crate::state::{WebhookDelivery, WebhookEndpoint};
+use crate::webhook::types::{WebhookDelivery, WebhookEndpoint};
 
 pub fn load_webhook_endpoints(db_path: &PathBuf) -> Result<Vec<WebhookEndpoint>, String> {
     let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;

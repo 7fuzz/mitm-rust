@@ -4,13 +4,12 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
 use crate::db::InterceptRule;
-pub use crate::proxy::rewrite::{RewriteRule, RewriteHistoryEntry, RewriteCapturedEvent};
-pub use crate::proxy::rules::{SourceScope};
-pub use crate::proxy::listener::{ProxyConfig, ProxyMode, ListenerConfig, ListenerStatus, ListenerInstance, normalize_listener_address};
-pub use crate::proxy::history::{HistoryEntry, HistoryDetail, HistorySettings, TrafficCapturedEvent};
-pub use crate::proxy::intercept::{InterceptPhase, InterceptAction, PendingFlow, PendingFlowPayload};
-pub use crate::ws::types::{WebSocketConn, WebSocketMessage, WebSocketMessageCapturedEvent, WebSocketConnectionEvent};
-pub use crate::webhook::types::{WebhookEndpoint, WebhookDelivery, WebhookListenerConfig, WebhookSignatureResult, WebhookDeliveryCapturedEvent};
+use crate::proxy::history::{HistorySettings, TrafficCapturedEvent};
+use crate::proxy::intercept::PendingFlow;
+use crate::proxy::listener::{normalize_listener_address, ListenerConfig, ListenerInstance, ProxyConfig};
+use crate::proxy::rewrite::{RewriteHistoryEntry, RewriteRule};
+use crate::proxy::rules::SourceScope;
+use crate::proxy::history::HistoryEntry;
 
 /// Loads listener configs from preferences, assigning ids to entries saved without one
 /// and recreating listener #0 when it's missing.
@@ -264,7 +263,7 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    use super::ProxyMode;
+    use crate::proxy::listener::ProxyMode;
 
     #[test]
     fn proxy_modes_round_trip_through_their_stored_names() {

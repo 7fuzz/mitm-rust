@@ -1,7 +1,7 @@
 use std::path::Path;
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
-use mitm_core::state::RewriteHistoryEntry;
+use mitm_core::proxy::rewrite::RewriteHistoryEntry;
 use crate::app::command::Commands;
 use crate::util::format::headers_to_text;
 use crate::ui::theme;

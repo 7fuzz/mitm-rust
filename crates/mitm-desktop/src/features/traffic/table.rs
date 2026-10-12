@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder, TableRow};
 use mitm_core::collections::CollectionTreeItem;
-use mitm_core::state::HistoryEntry;
+use mitm_core::proxy::history::HistoryEntry;
 use crate::app::command::{AppCommand, Commands};
 use crate::features::collections::SaveTarget;
 use crate::util::format::{format_bytes, format_duration, local_clock, CopyFormat};

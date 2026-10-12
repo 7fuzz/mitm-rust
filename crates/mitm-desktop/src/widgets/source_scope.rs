@@ -1,5 +1,6 @@
 use eframe::egui;
-use mitm_core::state::{ListenerConfig, SourceScope};
+use mitm_core::proxy::listener::ListenerConfig;
+use mitm_core::proxy::rules::SourceScope;
 
 /// "All" or a pick of listeners; deselecting the last listener falls back to All.
 pub fn chips(ui: &mut egui::Ui, scope: &mut SourceScope, listeners: &[ListenerConfig]) -> bool {

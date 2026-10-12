@@ -1,5 +1,5 @@
 use eframe::egui::{self, RichText};
-use mitm_core::state::RewriteRule;
+use mitm_core::proxy::rewrite::RewriteRule;
 use mitm_core::repeater::HeaderItem;
 use crate::features::request_editor::body_editor::code_editor;
 use crate::features::request_editor::captured::header_items;

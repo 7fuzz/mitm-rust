@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{db, state, ws, MitmCore};
+use crate::{db, ws, MitmCore};
 
 impl MitmCore {
     pub fn clear_ws_messages(&self) -> Result<(), String> {
@@ -10,7 +10,7 @@ impl MitmCore {
         &self,
         url: String,
         headers: Option<Vec<(String, String)>>,
-    ) -> Result<state::WebSocketConn, String> {
+    ) -> Result<crate::ws::types::WebSocketConn, String> {
         ws::connect_client_session(Some(self.event_bus.clone()), Arc::clone(&self.state), url, headers).await
     }
 

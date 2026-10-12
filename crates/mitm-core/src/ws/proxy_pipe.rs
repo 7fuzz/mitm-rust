@@ -7,7 +7,8 @@ use tokio_tungstenite::tungstenite::protocol::Role;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 
-use crate::state::{AppState, WebSocketConn, WebSocketMessage};
+use crate::state::AppState;
+use crate::ws::types::{WebSocketConn, WebSocketMessage};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn bridge_proxied_websocket<C, S>(

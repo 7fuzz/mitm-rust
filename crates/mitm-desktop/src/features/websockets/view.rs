@@ -1,6 +1,6 @@
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
-use mitm_core::state::WebSocketConn;
+use mitm_core::ws::types::WebSocketConn;
 use crate::app::command::{AppCommand, Commands};
 use crate::util::format::format_bytes;
 use crate::ui::theme::{self, Tone};

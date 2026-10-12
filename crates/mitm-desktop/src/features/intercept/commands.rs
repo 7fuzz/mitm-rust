@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use mitm_core::db::InterceptRule;
-use mitm_core::state::SourceScope;
+use mitm_core::proxy::rules::SourceScope;
 use crate::app::command::AppCommand;
 use crate::app::cx::Cx;
 use super::InterceptState;

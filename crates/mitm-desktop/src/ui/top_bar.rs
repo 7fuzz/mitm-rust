@@ -1,5 +1,5 @@
 use eframe::egui::{self, CornerRadius, RichText};
-use mitm_core::state::ProxyMode;
+use mitm_core::proxy::listener::ProxyMode;
 use crate::ui::theme::{self, Tone};
 use egui_dock::DockState;
 use crate::app::command::{AppCommand, Commands};

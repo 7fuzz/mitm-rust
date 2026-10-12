@@ -1,6 +1,6 @@
 use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
 use crate::app::command::{AppCommand, Commands};
-use mitm_core::state::ProxyMode;
+use mitm_core::proxy::listener::ProxyMode;
 use crate::ui::dock::Tab;
 use crate::features::intercept;
 

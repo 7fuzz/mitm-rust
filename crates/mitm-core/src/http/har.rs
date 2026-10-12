@@ -2,7 +2,7 @@
 
 use base64::Engine;
 use serde_json::{json, Value};
-use crate::state::HistoryEntry;
+use crate::proxy::history::HistoryEntry;
 
 const BASE64_PREFIX: &str = "base64:";
 

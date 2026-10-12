@@ -5,7 +5,8 @@ use uuid::Uuid;
 use crate::events::EventBus;
 
 use crate::proxy::rules::should_intercept;
-use crate::state::{AppState, HistoryEntry, TrafficCapturedEvent};
+use crate::state::AppState;
+use crate::proxy::history::{HistoryEntry, TrafficCapturedEvent};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_intercept_hook(

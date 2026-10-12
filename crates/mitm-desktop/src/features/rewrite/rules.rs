@@ -1,5 +1,6 @@
 use eframe::egui::{self, RichText};
-use mitm_core::state::{ListenerConfig, RewriteRule};
+use mitm_core::proxy::listener::ListenerConfig;
+use mitm_core::proxy::rewrite::RewriteRule;
 use crate::app::command::Commands;
 use crate::ui::theme;
 use crate::widgets::{source_scope, split};

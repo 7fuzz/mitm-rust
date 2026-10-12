@@ -6,7 +6,9 @@ mod rules;
 use serde::{Deserialize, Serialize};
 use mitm_core::repeater::HeaderItem;
 use std::path::Path;
-use mitm_core::state::{HistoryEntry, RewriteHistoryEntry, RewriteRule, SourceScope};
+use mitm_core::proxy::history::HistoryEntry;
+use mitm_core::proxy::rewrite::{RewriteHistoryEntry, RewriteRule};
+use mitm_core::proxy::rules::SourceScope;
 use crate::ui::theme::Tone;
 
 pub use commands::{handle, poll, Cmd};

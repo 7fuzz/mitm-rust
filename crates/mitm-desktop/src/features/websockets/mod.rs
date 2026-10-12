@@ -4,7 +4,7 @@ mod connect;
 mod view;
 
 use std::path::PathBuf;
-use mitm_core::state::{WebSocketConn, WebSocketMessage};
+use mitm_core::ws::types::{WebSocketConn, WebSocketMessage};
 use serde::{Deserialize, Serialize};
 
 pub use commands::{handle, poll, Cmd};

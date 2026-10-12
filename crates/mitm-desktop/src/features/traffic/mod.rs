@@ -7,7 +7,7 @@ mod toolbar;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
-use mitm_core::state::{HistoryDetail, HistoryEntry, HistorySettings};
+use mitm_core::proxy::history::{HistoryDetail, HistoryEntry, HistorySettings};
 use crate::features::inspector::InspectorState;
 use crate::widgets::tri_state::TriState;
 
@@ -394,7 +394,7 @@ pub fn show(
     ui: &mut eframe::egui::Ui,
     state: &mut TrafficState,
     inspector: &mut InspectorState,
-    listeners: &[mitm_core::state::ListenerConfig],
+    listeners: &[mitm_core::proxy::listener::ListenerConfig],
     folders: &[mitm_core::collections::CollectionTreeItem],
     cmds: &mut crate::app::command::Commands,
 ) {

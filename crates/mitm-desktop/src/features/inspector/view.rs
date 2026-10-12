@@ -1,5 +1,5 @@
 use eframe::egui::{self, RichText};
-use mitm_core::state::HistoryEntry;
+use mitm_core::proxy::history::HistoryEntry;
 use crate::app::command::{AppCommand, Commands};
 use crate::features::traffic::{FlowFlags, TrafficState};
 use crate::util::format::{format_bytes, format_duration};

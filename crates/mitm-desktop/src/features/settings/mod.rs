@@ -3,7 +3,7 @@ mod view;
 
 use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
-use mitm_core::state::{ListenerConfig, ListenerStatus, ProxyMode};
+use mitm_core::proxy::listener::{ListenerConfig, ListenerStatus, ProxyMode};
 
 pub use commands::{handle, poll, Cmd, Settings};
 pub use view::show;

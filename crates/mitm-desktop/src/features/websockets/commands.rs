@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use mitm_core::state::WebSocketConn;
+use mitm_core::ws::types::WebSocketConn;
 use crate::app::command::AppCommand;
 use crate::app::cx::Cx;
 use crate::app::jobs::Jobs;

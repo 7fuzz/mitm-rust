@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
-use crate::state::{HistoryEntry, RewriteHistoryEntry};
+use crate::proxy::history::HistoryEntry;
+use crate::proxy::rewrite::RewriteHistoryEntry;
 use crate::db::prune_history_logs_conn;
 
 pub fn start_history_actor(

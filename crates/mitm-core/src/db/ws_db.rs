@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use rusqlite::params;
-use crate::state::{WebSocketConn, WebSocketMessage};
+use crate::ws::types::{WebSocketConn, WebSocketMessage};
 
 pub fn load_ws_connections(db_path: &PathBuf) -> Result<Vec<WebSocketConn>, String> {
     let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;

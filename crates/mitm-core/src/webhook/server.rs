@@ -9,7 +9,8 @@ use bytes::Bytes;
 use hyper_util::rt::TokioIo;
 use crate::events::{CoreEvent, EventBus};
 
-use crate::state::{AppState, WebhookDelivery, WebhookDeliveryCapturedEvent};
+use crate::state::AppState;
+use crate::webhook::types::{WebhookDelivery, WebhookDeliveryCapturedEvent};
 use crate::webhook::hmac::verify_signature;
 
 /// Binds the port up front so the caller can report a busy or forbidden port.

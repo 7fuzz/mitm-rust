@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{ca, db, events, proxy, state, MitmCore, RewriteHistoryEntry};
+use crate::{ca, db, events, proxy, MitmCore, RewriteHistoryEntry};
 
 impl MitmCore {
     pub fn clear_rewrite_history(&self) -> Result<(), String> {
@@ -21,7 +21,7 @@ impl MitmCore {
     }
 
     /// Binds one listener; a failure is recorded in `listener_errors`. Returns its summary when bound.
-    async fn start_listener(&self, config: state::ListenerConfig, ca: Arc<ca::CA>) -> Option<String> {
+    async fn start_listener(&self, config: crate::proxy::listener::ListenerConfig, ca: Arc<ca::CA>) -> Option<String> {
         let addr: std::net::SocketAddr = match config.address.parse() {
             Ok(a) => a,
             Err(e) => {
@@ -38,7 +38,7 @@ impl MitmCore {
         };
 
         let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
-        self.state.listeners.write().await.push(state::ListenerInstance {
+        self.state.listeners.write().await.push(crate::proxy::listener::ListenerInstance {
             id: config.id,
             stop_tx: Some(stop_tx),
         });
@@ -84,12 +84,12 @@ impl MitmCore {
         Ok(())
     }
 
-    pub async fn listener_status(&self) -> Vec<state::ListenerStatus> {
+    pub async fn listener_status(&self) -> Vec<crate::proxy::listener::ListenerStatus> {
         let configs = self.state.listener_configs.read().await.clone();
         let running = self.state.listeners.read().await;
         configs
             .into_iter()
-            .map(|config| state::ListenerStatus {
+            .map(|config| crate::proxy::listener::ListenerStatus {
                 running: running.iter().any(|l| l.id == config.id),
                 error: self.state.listener_errors.get(&config.id).map(|e| e.clone()),
                 config,
@@ -111,13 +111,13 @@ impl MitmCore {
         self.state.proxy_active.store(false, std::sync::atomic::Ordering::SeqCst);
     }
 
-    pub async fn proxy_mode(&self) -> state::ProxyMode {
+    pub async fn proxy_mode(&self) -> crate::proxy::listener::ProxyMode {
         let mode = self.state.proxy_config.read().await.proxy_mode.clone();
-        state::ProxyMode::parse(&mode).unwrap_or(state::ProxyMode::On)
+        crate::proxy::listener::ProxyMode::parse(&mode).unwrap_or(crate::proxy::listener::ProxyMode::On)
     }
 
     /// Saves the mode and starts or stops the listeners to match. Returns the listeners it started, if any.
-    pub async fn set_proxy_mode(&self, mode: state::ProxyMode) -> Result<Option<Vec<String>>, String> {
+    pub async fn set_proxy_mode(&self, mode: crate::proxy::listener::ProxyMode) -> Result<Option<Vec<String>>, String> {
         {
             let mut cfg = self.state.proxy_config.write().await;
             cfg.proxy_mode = mode.as_str().to_string();
@@ -136,11 +136,11 @@ impl MitmCore {
         Ok(None)
     }
 
-    pub async fn get_listener_configs(&self) -> Vec<state::ListenerConfig> {
+    pub async fn get_listener_configs(&self) -> Vec<crate::proxy::listener::ListenerConfig> {
         self.state.listener_configs.read().await.clone()
     }
 
-    pub async fn set_listener_configs(&self, configs: Vec<state::ListenerConfig>) -> Result<(), String> {
+    pub async fn set_listener_configs(&self, configs: Vec<crate::proxy::listener::ListenerConfig>) -> Result<(), String> {
         let json = serde_json::to_string(&configs).map_err(|e| e.to_string())?;
         db::set_preference(&self.db_path, "proxy_listeners", &json)?;
         {
@@ -194,7 +194,7 @@ impl MitmCore {
         modified_body: Option<Vec<u8>>,
     ) -> Result<(), String> {
         if let Some((_, pending)) = self.state.pending_flows.remove(flow_id) {
-            let action = state::InterceptAction::Forward {
+            let action = crate::proxy::intercept::InterceptAction::Forward {
                 modified_url,
                 modified_method,
                 modified_headers,
@@ -210,7 +210,7 @@ impl MitmCore {
 
     pub fn drop_intercepted_flow(&self, flow_id: &str) -> Result<(), String> {
         if let Some((_, pending)) = self.state.pending_flows.remove(flow_id) {
-            let _ = pending.tx.send(state::InterceptAction::Drop);
+            let _ = pending.tx.send(crate::proxy::intercept::InterceptAction::Drop);
             self.event_bus.emit(events::CoreEvent::InterceptResolved { flow_id: flow_id.to_string() });
             Ok(())
         } else {
@@ -218,12 +218,12 @@ impl MitmCore {
         }
     }
 
-    pub async fn rewrite_rules(&self) -> Vec<state::RewriteRule> {
+    pub async fn rewrite_rules(&self) -> Vec<crate::proxy::rewrite::RewriteRule> {
         self.state.rewrite_rules.read().await.clone()
     }
 
     /// Saves rules in the given order, which also covers reordering.
-    pub async fn save_rewrite_rules(&self, mut rules: Vec<state::RewriteRule>) -> Result<(), String> {
+    pub async fn save_rewrite_rules(&self, mut rules: Vec<crate::proxy::rewrite::RewriteRule>) -> Result<(), String> {
         for (index, rule) in rules.iter_mut().enumerate() {
             rule.order_index = index as i32;
         }
@@ -242,11 +242,11 @@ impl MitmCore {
         Ok(())
     }
 
-    pub async fn rewrite_source_scope(&self) -> state::SourceScope {
+    pub async fn rewrite_source_scope(&self) -> crate::proxy::rules::SourceScope {
         self.state.rewrite_source_scope.read().await.clone()
     }
 
-    pub async fn set_rewrite_source_scope(&self, scope: state::SourceScope) -> Result<(), String> {
+    pub async fn set_rewrite_source_scope(&self, scope: crate::proxy::rules::SourceScope) -> Result<(), String> {
         let json = serde_json::to_string(&scope).map_err(|e| e.to_string())?;
         db::set_preference(&self.db_path, "rewrite_source_scope", &json)?;
         *self.state.rewrite_source_scope.write().await = scope;
@@ -258,12 +258,12 @@ impl MitmCore {
     }
 
     /// The interceptor settings as they were loaded at startup or last set.
-    pub async fn intercept_config(&self) -> (bool, String, state::SourceScope) {
+    pub async fn intercept_config(&self) -> (bool, String, crate::proxy::rules::SourceScope) {
         let cfg = self.state.proxy_config.read().await;
         (cfg.intercept_enabled, cfg.intercept_mode.clone(), cfg.intercept_source_scope.clone())
     }
 
-    pub async fn set_intercept_source_scope(&self, scope: state::SourceScope) -> Result<(), String> {
+    pub async fn set_intercept_source_scope(&self, scope: crate::proxy::rules::SourceScope) -> Result<(), String> {
         let json = serde_json::to_string(&scope).map_err(|e| e.to_string())?;
         db::set_preference(&self.db_path, "intercept_source_scope", &json)?;
         self.state.proxy_config.write().await.intercept_source_scope = scope;
@@ -297,11 +297,11 @@ impl MitmCore {
         Ok(())
     }
 
-    pub async fn get_history_settings(&self) -> state::HistorySettings {
+    pub async fn get_history_settings(&self) -> crate::proxy::history::HistorySettings {
         self.state.history_settings.read().await.clone()
     }
 
-    pub async fn set_history_settings(&self, settings: state::HistorySettings) -> Result<(), String> {
+    pub async fn set_history_settings(&self, settings: crate::proxy::history::HistorySettings) -> Result<(), String> {
         db::set_preference(&self.db_path, "history_limiter_enabled", if settings.limiter_enabled { "true" } else { "false" })?;
         db::set_preference(&self.db_path, "history_limiter_max_rows", &settings.max_rows.to_string())?;
         if settings.limiter_enabled {

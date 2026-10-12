@@ -1,7 +1,7 @@
 mod view;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use mitm_core::state::HistoryEntry;
+use mitm_core::proxy::history::HistoryEntry;
 use crate::widgets::tri_state::TriState;
 
 pub use view::show;

@@ -11,7 +11,7 @@ use mitm_core::http::curl::ParsedCurl;
 use mitm_core::repeater::{
     self as core_repeater, HeaderItem, RepeaterExecutionResult, RepeaterHistoryItem, RepeaterTab,
 };
-use mitm_core::state::{HistoryDetail, HistoryEntry};
+use mitm_core::proxy::history::{HistoryDetail, HistoryEntry};
 use crate::util::save_queue::SaveQueue;
 use crate::features::request_editor::captured::{header_items, CapturedRequest};
 use crate::features::request_editor::run_list::Run;

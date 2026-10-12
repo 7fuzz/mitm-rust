@@ -6,7 +6,8 @@ use tokio_tungstenite::tungstenite::handshake::client::Request;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 
-use crate::state::{AppState, WebSocketConn, WebSocketMessage};
+use crate::state::AppState;
+use crate::ws::types::{WebSocketConn, WebSocketMessage};
 
 pub async fn connect_client_session(
     event_bus: Option<EventBus>,

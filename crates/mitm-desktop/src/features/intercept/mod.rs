@@ -3,7 +3,8 @@ mod view;
 
 use serde::{Deserialize, Serialize};
 use mitm_core::db::InterceptRule;
-use mitm_core::state::{PendingFlowPayload, SourceScope};
+use mitm_core::proxy::intercept::PendingFlowPayload;
+use mitm_core::proxy::rules::SourceScope;
 use mitm_core::repeater::HeaderItem;
 use crate::features::request_editor::captured::header_items;
 

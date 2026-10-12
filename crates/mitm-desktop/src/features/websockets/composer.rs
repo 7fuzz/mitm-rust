@@ -1,5 +1,5 @@
 use eframe::egui::{self, Key, Modifiers, RichText};
-use mitm_core::state::WebSocketConn;
+use mitm_core::ws::types::WebSocketConn;
 use serde::{Deserialize, Serialize};
 use crate::app::command::Commands;
 use crate::ui::theme::{self, Tone};

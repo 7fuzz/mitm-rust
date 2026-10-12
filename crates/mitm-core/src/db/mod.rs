@@ -154,7 +154,7 @@ pub fn save_intercept_rules(db_path: &PathBuf, rules: &[InterceptRule]) -> Resul
     Ok(())
 }
 
-pub fn load_rewrite_rules(db_path: &PathBuf) -> Result<Vec<crate::state::RewriteRule>, String> {
+pub fn load_rewrite_rules(db_path: &PathBuf) -> Result<Vec<crate::proxy::rewrite::RewriteRule>, String> {
     let conn = open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, name, enabled, action_type, match_field, match_operator, match_value, target_part, target_header, match_pattern, replacement_value, is_regex, mock_status_code, mock_headers_json, mock_body, order_index, created_at_ms FROM rewrite_rules ORDER BY order_index ASC")
@@ -164,7 +164,7 @@ pub fn load_rewrite_rules(db_path: &PathBuf) -> Result<Vec<crate::state::Rewrite
         .query_map([], |row| {
             let enabled_int: i32 = row.get(2)?;
             let is_regex_int: i32 = row.get(11)?;
-            Ok(crate::state::RewriteRule {
+            Ok(crate::proxy::rewrite::RewriteRule {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 enabled: enabled_int != 0,
@@ -191,7 +191,7 @@ pub fn load_rewrite_rules(db_path: &PathBuf) -> Result<Vec<crate::state::Rewrite
     Ok(rules)
 }
 
-pub fn save_rewrite_rules(db_path: &PathBuf, rules: &[crate::state::RewriteRule]) -> Result<(), String> {
+pub fn save_rewrite_rules(db_path: &PathBuf, rules: &[crate::proxy::rewrite::RewriteRule]) -> Result<(), String> {
     let mut conn = open(db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
@@ -227,7 +227,7 @@ pub fn save_rewrite_rules(db_path: &PathBuf, rules: &[crate::state::RewriteRule]
     Ok(())
 }
 
-pub fn get_rewrite_history_logs(db_path: &PathBuf, limit: u32) -> Result<Vec<crate::state::RewriteHistoryEntry>, String> {
+pub fn get_rewrite_history_logs(db_path: &PathBuf, limit: u32) -> Result<Vec<crate::proxy::rewrite::RewriteHistoryEntry>, String> {
     let conn = open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, rule_id, rule_name, action_type, method, original_url, rewritten_url, original_headers, rewritten_headers, original_body, rewritten_body, status_code, duration_ms, created_at FROM rewrite_history ORDER BY id DESC LIMIT ?")
@@ -241,7 +241,7 @@ pub fn get_rewrite_history_logs(db_path: &PathBuf, limit: u32) -> Result<Vec<cra
             let original_headers = serde_json::from_str::<Vec<(String, String)>>(&orig_headers_str).unwrap_or_default();
             let rewritten_headers = serde_json::from_str::<Vec<(String, String)>>(&rewr_headers_str).unwrap_or_default();
 
-            Ok(crate::state::RewriteHistoryEntry {
+            Ok(crate::proxy::rewrite::RewriteHistoryEntry {
                 id: row.get(0)?,
                 rule_id: row.get(1)?,
                 rule_name: row.get(2)?,

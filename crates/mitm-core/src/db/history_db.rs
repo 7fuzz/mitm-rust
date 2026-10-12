@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use crate::state::{HistoryDetail, HistoryEntry};
+use crate::proxy::history::{HistoryDetail, HistoryEntry};
 
 pub fn get_history_logs(
     db_path: &PathBuf,

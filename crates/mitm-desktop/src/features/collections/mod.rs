@@ -315,7 +315,7 @@ fn patch_tree(trees: &mut [CollectionTreeItem], request: RequestItem) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mitm_core::state::HistoryEntry;
+    use mitm_core::proxy::history::HistoryEntry;
 
     #[test]
     fn captured_flow_saves_as_a_request_in_a_new_folder() {

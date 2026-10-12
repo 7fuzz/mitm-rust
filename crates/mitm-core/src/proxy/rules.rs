@@ -3,7 +3,8 @@ use super::listener::default_true;
 use std::sync::Arc;
 use regex::Regex;
 use crate::db::InterceptRule;
-use crate::state::{AppState, InterceptPhase};
+use crate::state::AppState;
+use crate::proxy::intercept::InterceptPhase;
 
 /// With no enabled rules everything is intercepted. Otherwise a matching "pass" rule always lets the flow
 /// through; when "intercept" rules exist the flow must match one of them, and with only "pass" rules

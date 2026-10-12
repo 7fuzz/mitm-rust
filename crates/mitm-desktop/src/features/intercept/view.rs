@@ -7,7 +7,7 @@ use crate::widgets::pills::{badge, method_text, render_method_pill};
 use crate::widgets::section::section;
 use crate::widgets::toggle::labelled_toggle;
 use crate::widgets::{source_scope, split};
-use mitm_core::state::ListenerConfig;
+use mitm_core::proxy::listener::ListenerConfig;
 use crate::features::request_editor::kv_table::{self, KvLabels};
 use super::{Cmd, InterceptState};
 use crate::ui::icons;

@@ -25,7 +25,9 @@ use crate::events::{CoreEvent, EventBus};
 
 use crate::ca::CA;
 use crate::proxy::intercept::handle_intercept_hook;
-use crate::state::{AppState, HistoryEntry, InterceptAction, InterceptPhase, TrafficCapturedEvent};
+use crate::state::AppState;
+use crate::proxy::history::{HistoryEntry, TrafficCapturedEvent};
+use crate::proxy::intercept::{InterceptAction, InterceptPhase};
 
 pub async fn bind_proxy_listener(addr: SocketAddr) -> Result<TcpListener, String> {
     // On restart the previous listener task may not have dropped its socket yet.

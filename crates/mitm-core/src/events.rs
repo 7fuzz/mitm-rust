@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
-use crate::state::{PendingFlowPayload, TrafficCapturedEvent, WebhookDeliveryCapturedEvent};
+use crate::proxy::intercept::PendingFlowPayload;
+use crate::proxy::history::TrafficCapturedEvent;
+use crate::webhook::types::WebhookDeliveryCapturedEvent;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

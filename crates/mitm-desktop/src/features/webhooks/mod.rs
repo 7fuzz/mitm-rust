@@ -3,7 +3,7 @@ mod view;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use mitm_core::state::{WebhookDelivery, WebhookDeliveryCapturedEvent, WebhookEndpoint};
+use mitm_core::webhook::types::{WebhookDelivery, WebhookDeliveryCapturedEvent, WebhookEndpoint};
 use mitm_core::webhook::WebhookReplayResult;
 use serde::{Deserialize, Serialize};
 

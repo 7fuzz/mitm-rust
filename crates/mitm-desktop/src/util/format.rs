@@ -1,4 +1,4 @@
-use mitm_core::state::{HistoryDetail, HistoryEntry};
+use mitm_core::proxy::history::{HistoryDetail, HistoryEntry};
 
 pub fn format_bytes(bytes: u64) -> String {
     if bytes < 1024 {
