@@ -493,7 +493,7 @@ mod tests {
     async fn pre_request_supplies_token_and_session_cookie() {
         let db_path = std::env::temp_dir().join(format!("pre-request-e2e-{}.db", Uuid::new_v4()));
         {
-            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            let conn = crate::db::open(&db_path).unwrap();
             for m in crate::db::migrations::MIGRATIONS {
                 for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
                     let _ = conn.execute(statement, []);
@@ -543,7 +543,7 @@ mod tests {
     async fn unreachable_pre_request_stops_the_main_request() {
         let db_path = std::env::temp_dir().join(format!("pre-request-fail-{}.db", Uuid::new_v4()));
         {
-            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            let conn = crate::db::open(&db_path).unwrap();
             for m in crate::db::migrations::MIGRATIONS {
                 for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
                     let _ = conn.execute(statement, []);
@@ -576,7 +576,7 @@ mod tests {
     async fn post_requests_run_after_the_main_request_with_its_cookies() {
         let db_path = std::env::temp_dir().join(format!("post-request-{}.db", Uuid::new_v4()));
         {
-            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            let conn = crate::db::open(&db_path).unwrap();
             for m in crate::db::migrations::MIGRATIONS {
                 for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
                     let _ = conn.execute(statement, []);

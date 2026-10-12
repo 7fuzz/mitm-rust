@@ -4,7 +4,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::cookie::Jar;
 use reqwest::Method;
-use rusqlite::{params, Connection};
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
 use crate::http::body::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
@@ -80,7 +80,7 @@ pub async fn execute_collection_request_db(
 
 /// Logs a run that never reached the server, so the failure shows up like any other response.
 fn record_unsent_run(db_path: &PathBuf, request_id: &str, error: String) -> Result<ExecutionResult, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let (method, url): (String, String) = conn
         .query_row("SELECT method, url FROM requests WHERE id = ?", [request_id], |row| Ok((row.get(0)?, row.get(1)?)))
         .map_err(|e| e.to_string())?;
@@ -112,7 +112,7 @@ async fn send_collection_request(
 ) -> Result<ExecutionResult, String> {
     // Scoped so the Connection is dropped before the .await below.
     let (id, workspace_id, raw_method, target_url, mut logged_req_headers, final_body, mut req_headers_map, body_type, extract_rules_json, record, extract_needs_credentials) = {
-        let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+        let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
 
         let mut stmt = conn
             .prepare(
@@ -309,7 +309,7 @@ async fn send_collection_request(
     perform_auto_extraction_db(db_path, &workspace_id, Some(&workspace_id), &extract_rules_json, &decoded_body, &response_headers);
 
     let history_id = {
-        let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+        let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
         for header in &mut logged_req_headers {
             header.key = record.mask(&header.key);
             header.value = record.mask(&header.value);
@@ -717,7 +717,7 @@ pub(crate) mod tests {
     async fn unreachable_pre_request_stops_the_main_request() {
         let db_path = std::env::temp_dir().join(format!("collection-pre-request-{}.db", uuid::Uuid::new_v4()));
         {
-            let conn = Connection::open(&db_path).unwrap();
+            let conn = crate::db::open(&db_path).unwrap();
             for m in crate::db::migrations::MIGRATIONS {
                 for statement in m.sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
                     let _ = conn.execute(statement, []);

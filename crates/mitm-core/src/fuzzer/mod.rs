@@ -432,7 +432,7 @@ pub fn evaluate_matches(rules: &[MatchRule], body: &str) -> Vec<String> {
 
 /// Inserts the run as unsaved, so its results can be written while it runs.
 pub fn begin_run_db(db_path: &PathBuf, id: i64, config: &FuzzConfig, total: usize) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let config_json = serde_json::to_string(config).map_err(|e| e.to_string())?;
     let now = chrono::Local::now().timestamp_millis();
     conn.execute(
@@ -479,7 +479,7 @@ pub fn insert_results(conn: &mut Connection, run_id: i64, results: &[FuzzResult]
 }
 
 pub fn discard_unsaved_runs_db(db_path: &PathBuf) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     conn.execute_batch(
         "DELETE FROM fuzz_results WHERE run_id IN (SELECT id FROM fuzz_runs WHERE saved = 0);
          DELETE FROM fuzz_runs WHERE saved = 0;",
@@ -488,7 +488,7 @@ pub fn discard_unsaved_runs_db(db_path: &PathBuf) -> Result<(), String> {
 }
 
 pub fn list_runs_db(db_path: &PathBuf) -> Result<Vec<FuzzRunMeta>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, name, attack_type, total, created_at_ms FROM fuzz_runs WHERE saved = 1 ORDER BY created_at_ms DESC")
         .map_err(|e| e.to_string())?;
@@ -509,7 +509,7 @@ pub fn list_runs_db(db_path: &PathBuf) -> Result<Vec<FuzzRunMeta>, String> {
 }
 
 pub fn get_run_config_db(db_path: &PathBuf, id: i64) -> Result<FuzzConfig, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let json: String = conn
         .query_row("SELECT config_json FROM fuzz_runs WHERE id = ?", params![id], |row| row.get(0))
         .map_err(|e| format!("Run not found: {}", e))?;
@@ -517,7 +517,7 @@ pub fn get_run_config_db(db_path: &PathBuf, id: i64) -> Result<FuzzConfig, Strin
 }
 
 pub fn get_run_rows_db(db_path: &PathBuf, id: i64) -> Result<Vec<FuzzRow>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
             "SELECT idx, payloads_json, status_code, response_size, duration_ms, error, matches_json
@@ -543,7 +543,7 @@ pub fn get_run_rows_db(db_path: &PathBuf, id: i64) -> Result<Vec<FuzzRow>, Strin
 }
 
 pub fn get_result_db(db_path: &PathBuf, run_id: i64, idx: u32) -> Result<Option<FuzzResult>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let result = conn.query_row(
         "SELECT idx, payloads_json, method, url, request_headers_json, request_body, status_code,
                 response_headers_json, response_body, response_size, duration_ms, error, matches_json
@@ -576,7 +576,7 @@ pub fn get_result_db(db_path: &PathBuf, run_id: i64, idx: u32) -> Result<Option<
 
 /// Indexes of the results whose response body contains `query`, ignoring ASCII case.
 pub fn search_responses_db(db_path: &PathBuf, run_id: i64, query: &str) -> Result<Vec<u32>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT idx FROM fuzz_results WHERE run_id = ? AND instr(lower(response_body), lower(?)) > 0 ORDER BY idx")
         .map_err(|e| e.to_string())?;
@@ -589,7 +589,7 @@ pub fn search_responses_db(db_path: &PathBuf, run_id: i64, query: &str) -> Resul
 }
 
 pub fn save_run_db(db_path: &PathBuf, id: i64, name: &str) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let updated = conn
         .execute("UPDATE fuzz_runs SET name = ?, saved = 1 WHERE id = ?", params![name, id])
         .map_err(|e| e.to_string())?;
@@ -600,7 +600,7 @@ pub fn save_run_db(db_path: &PathBuf, id: i64, name: &str) -> Result<(), String>
 }
 
 pub fn is_run_saved_db(db_path: &PathBuf, id: i64) -> Result<bool, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let saved: i64 = conn
         .query_row("SELECT saved FROM fuzz_runs WHERE id = ?", params![id], |row| row.get(0))
         .map_err(|e| e.to_string())?;
@@ -608,7 +608,7 @@ pub fn is_run_saved_db(db_path: &PathBuf, id: i64) -> Result<bool, String> {
 }
 
 pub fn load_run_db(db_path: &PathBuf, id: i64) -> Result<LoadedFuzzRun, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let (name, attack_type, total, config_json): (String, String, i64, String) = conn
         .query_row(
             "SELECT name, attack_type, total, config_json FROM fuzz_runs WHERE id = ?",
@@ -629,7 +629,7 @@ pub fn load_run_db(db_path: &PathBuf, id: i64) -> Result<LoadedFuzzRun, String> 
 }
 
 pub fn delete_run_db(db_path: &PathBuf, id: i64) -> Result<(), String> {
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     tx.execute("DELETE FROM fuzz_results WHERE run_id = ?", params![id])
         .map_err(|e| e.to_string())?;
@@ -640,7 +640,7 @@ pub fn delete_run_db(db_path: &PathBuf, id: i64) -> Result<(), String> {
 }
 
 pub fn clear_fuzz_runs(db_path: &PathBuf) -> Result<(), String> {
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     tx.execute("DELETE FROM fuzz_results", []).map_err(|e| e.to_string())?;
     tx.execute("DELETE FROM fuzz_runs", []).map_err(|e| e.to_string())?;
@@ -794,7 +794,7 @@ mod tests {
             error: None,
             matches: vec![],
         };
-        let mut conn = Connection::open(&db_path).unwrap();
+        let mut conn = crate::db::open(&db_path).unwrap();
         insert_results(&mut conn, run_id, &[res]).unwrap();
         drop(conn);
 

@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use futures_util::stream::{self, StreamExt};
-use rusqlite::Connection;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -138,7 +137,7 @@ pub(crate) async fn run_attack(
 
 /// Rows are announced only after they're committed, so a row the UI shows can always be opened.
 fn write_results(bus: &EventBus, db_path: &PathBuf, run_id: i64, mut rx: mpsc::Receiver<FuzzResult>) {
-    let mut conn = Connection::open(db_path).ok();
+    let mut conn = crate::db::open(db_path).ok();
     if let Some(conn) = &conn {
         let _ = conn.busy_timeout(Duration::from_secs(5));
     }

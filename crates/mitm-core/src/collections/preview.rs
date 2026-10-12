@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use rusqlite::Connection;
 use serde::Deserialize;
 
 use crate::workspace::interpolate_variables;
@@ -30,7 +29,7 @@ struct StoredRequest {
 }
 
 fn load(db_path: &PathBuf, request_id: &str) -> Result<StoredRequest, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     conn.query_row(
         "SELECT r.method, r.url, r.headers_json, r.params_json, r.body_type,
                 r.body_json, r.body_raw, r.body_form_data, r.body_urlencoded, c.workspace_id
@@ -145,7 +144,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mitm-preview-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let db_path = dir.join("test.db");
-        let conn = Connection::open(&db_path).unwrap();
+        let conn = crate::db::open(&db_path).unwrap();
         conn.execute_batch(
             "CREATE TABLE collections (id TEXT PRIMARY KEY, workspace_id TEXT);
              CREATE TABLE requests (id TEXT PRIMARY KEY, collection_id TEXT, method TEXT, url TEXT,

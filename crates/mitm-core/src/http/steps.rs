@@ -86,13 +86,13 @@ pub fn copy_steps(
 }
 
 pub fn request_steps(db_path: &PathBuf, request_id: &str) -> Result<RequestSteps, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     load_steps(&conn, request_id).map_err(|e| e.to_string())
 }
 
 /// Shown as the main request's response when a pre-request never reached the server.
 pub fn pre_request_failure(db_path: &PathBuf, pre_id: &str, error: &str) -> String {
-    let name: Option<String> = Connection::open(db_path)
+    let name: Option<String> = crate::db::open(db_path)
         .ok()
         .and_then(|conn| {
             conn.query_row("SELECT name FROM requests WHERE id = ?", params![pre_id], |row| row.get(0))
@@ -113,7 +113,7 @@ mod tests {
 
     fn db_with_requests(ids: &[&str]) -> (PathBuf, Connection) {
         let path = std::env::temp_dir().join(format!("request-steps-test-{}.db", uuid::Uuid::new_v4()));
-        let conn = Connection::open(&path).unwrap();
+        let conn = crate::db::open(&path).unwrap();
         conn.execute_batch("CREATE TABLE requests (id TEXT PRIMARY KEY)").unwrap();
         conn.execute_batch(include_str!("../../migrations/20261005_0019_request_steps.sql")).unwrap();
         for id in ids {
