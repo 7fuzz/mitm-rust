@@ -22,7 +22,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
                 ui.add_space(60.0);
                 ui.label(RichText::new("No repeater request selected").weak().italics());
                 if ui.button("Create New Request").clicked() {
-                    cmds.push(AppCommand::RepeaterNew);
+                    cmds.push(super::Cmd::New);
                 }
             });
         });

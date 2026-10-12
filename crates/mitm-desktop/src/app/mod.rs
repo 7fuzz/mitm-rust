@@ -236,14 +236,15 @@ impl MitmApp {
                 }
             }
 
-            AppCommand::RepeaterNew => self.state.repeater.create_blank(db_path),
             AppCommand::OpenCurlImport => self.state.repeater.curl_import.open(),
             AppCommand::RepeaterImportCurl(curl) => {
                 self.state.repeater.create_from_curl(curl, db_path);
                 dock::open_tab(&mut self.dock, Tab::Repeater);
             }
-            AppCommand::RepeaterSelect(id) => self.state.repeater.select(id, db_path),
-            AppCommand::RepeaterDelete(id) => self.state.repeater.delete(&id, db_path),
+            AppCommand::Repeater(cmd) => {
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                crate::features::repeater::handle(&mut self.state.repeater, &cx, cmd);
+            }
             AppCommand::LockCredentials => self.state.credentials.lock(db_path),
             AppCommand::CopyTotp(id) => {
                 if let Some(code) = self.state.credentials.current_code(&id) {

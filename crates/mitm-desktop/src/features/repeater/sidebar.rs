@@ -1,6 +1,6 @@
 use eframe::egui::{self, RichText};
 use mitm_core::repeater::RepeaterTab;
-use crate::app::command::{AppCommand, Commands};
+use crate::app::command::Commands;
 use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::{method_text, status_text};
 use crate::widgets::search::search_field;
@@ -16,7 +16,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
         },
         |ui| {
             if ui.button(icons::PLUS).on_hover_text("New request").clicked() {
-                cmds.push(AppCommand::RepeaterNew);
+                cmds.push(super::Cmd::New);
             }
         },
     );
@@ -45,7 +45,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
     });
 }
 
-fn row(ui: &mut egui::Ui, tab: &RepeaterTab, active: bool) -> Option<AppCommand> {
+fn row(ui: &mut egui::Ui, tab: &RepeaterTab, active: bool) -> Option<super::Cmd> {
     let style = ui.style().clone();
     let mut title = egui::text::LayoutJob::default();
     method_text(ui.visuals(), &tab.method).append_to(&mut title, &style, egui::FontSelection::Default, egui::Align::Center);
@@ -72,12 +72,12 @@ fn row(ui: &mut egui::Ui, tab: &RepeaterTab, active: bool) -> Option<AppCommand>
     let mut cmd = None;
     response.context_menu(|ui| {
         if ui.button(RichText::new("Delete").color(theme::color(ui, Tone::Danger))).clicked() {
-            cmd = Some(AppCommand::RepeaterDelete(tab.id.clone()));
+            cmd = Some(super::Cmd::Delete(tab.id.clone()));
             ui.close();
         }
     });
     if response.clicked() {
-        cmd = Some(AppCommand::RepeaterSelect(tab.id.clone()));
+        cmd = Some(super::Cmd::Select(tab.id.clone()));
     }
     cmd
 }

@@ -1,4 +1,5 @@
 mod builder;
+mod commands;
 mod curl_import;
 mod sidebar;
 mod view;
@@ -19,6 +20,7 @@ use crate::features::request_editor::run_list::RunDetails;
 use crate::widgets::message_pane::PaneState;
 
 pub use curl_import::{show as show_curl_import, CurlImport};
+pub use commands::{handle, Cmd};
 pub use view::show;
 
 
@@ -95,6 +97,8 @@ pub struct RepeaterState {
     pub executing: HashSet<String>,
     pub history: HashMap<String, Vec<RepeaterHistoryItem>>,
     saves: SaveQueue,
+    /// Failed creates and deletes, reported with the save errors.
+    errors: Vec<String>,
 }
 
 impl Default for RepeaterState {
@@ -112,6 +116,7 @@ impl Default for RepeaterState {
             executing: HashSet::new(),
             history: HashMap::new(),
             saves: SaveQueue::default(),
+            errors: Vec::new(),
         }
     }
 }
@@ -144,7 +149,9 @@ impl RepeaterState {
     }
 
     pub fn take_save_errors(&mut self) -> Vec<String> {
-        self.saves.take_errors()
+        let mut errors = std::mem::take(&mut self.errors);
+        errors.extend(self.saves.take_errors());
+        errors
     }
 
     pub fn flush(&mut self, db_path: &PathBuf) {
@@ -158,7 +165,9 @@ impl RepeaterState {
     }
 
     pub fn create(&mut self, tab: RepeaterTab, db_path: &PathBuf) -> String {
-        let _ = core_repeater::create_repeater_tab_db(db_path, &tab);
+        if let Err(e) = core_repeater::create_repeater_tab_db(db_path, &tab) {
+            self.errors.push(format!("Couldn't save request: {e}"));
+        }
         let id = tab.id.clone();
         self.tabs.insert(0, tab);
         self.search.clear();
@@ -250,7 +259,9 @@ impl RepeaterState {
     }
 
     pub fn delete(&mut self, id: &str, db_path: &PathBuf) {
-        let _ = core_repeater::delete_repeater_tab_db(db_path, id);
+        if let Err(e) = core_repeater::delete_repeater_tab_db(db_path, id) {
+            self.errors.push(format!("Couldn't delete request: {e}"));
+        }
         self.tabs.retain(|t| t.id != id);
         for tab in &mut self.tabs {
             let before = tab.pre_requests.len() + tab.post_requests.len();

@@ -39,11 +39,9 @@ pub enum AppCommand {
     SendFlowToRepeater(i64),
     SendFlowToFuzzer(i64),
 
-    RepeaterNew,
     OpenCurlImport,
     RepeaterImportCurl(ParsedCurl),
-    RepeaterSelect(String),
-    RepeaterDelete(String),
+    Repeater(crate::features::repeater::Cmd),
     RepeaterSend(String),
     Fuzzer(crate::features::fuzzer::Cmd),
     SendFuzzResultToRepeater { run_id: i64, idx: u32 },
