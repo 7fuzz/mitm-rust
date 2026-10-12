@@ -5,6 +5,7 @@ use crate::util::format::{body_bytes, display_body, hex_dump};
 use crate::widgets::code_view::{self, Lang};
 use crate::widgets::form_view::{self, FormField};
 use crate::widgets::json_tree::JsonTree;
+use crate::widgets::subtabs::subtabs;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaneTab {
@@ -102,16 +103,16 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
     ui.horizontal(|ui| {
         if !data.title.is_empty() {
             ui.label(RichText::new(data.title).strong());
-            ui.separator();
+            ui.add_space(8.0);
         }
-        tab_label(ui, pane, PaneTab::Body, "Body".to_string());
-        tab_label(ui, pane, PaneTab::Headers, format!("Headers ({})", data.headers.len()));
+        let mut tabs = vec![(PaneTab::Body, "Body", None), (PaneTab::Headers, "Headers", Some(data.headers.len()))];
         if let Some(params) = &data.params {
-            tab_label(ui, pane, PaneTab::Params, format!("Params ({})", params.len()));
+            tabs.push((PaneTab::Params, "Params", Some(params.len())));
         }
         if let Some(cookies) = &data.cookies {
-            tab_label(ui, pane, PaneTab::Cookies, format!("Cookies ({})", cookies.len()));
+            tabs.push((PaneTab::Cookies, "Cookies", Some(cookies.len())));
         }
+        subtabs(ui, &mut pane.tab, &tabs);
 
         if pane.tab == PaneTab::Body {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -230,10 +231,6 @@ fn open_externally(data: &PaneData, id_salt: &str, ext: &str) {
     if std::fs::write(&path, body_bytes(data.body)).is_ok() {
         let _ = crate::util::files::open_external(&path);
     }
-}
-
-fn tab_label(ui: &mut egui::Ui, pane: &mut PaneState, tab: PaneTab, label: String) {
-    ui.selectable_value(&mut pane.tab, tab, label);
 }
 
 fn body(ui: &mut egui::Ui, pane: &mut PaneState, data: &PaneData) {

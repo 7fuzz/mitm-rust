@@ -16,3 +16,4 @@ pub mod toast;
 pub mod button;
 pub mod card;
 pub mod section;
+pub mod subtabs;
