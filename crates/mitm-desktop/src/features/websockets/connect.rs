@@ -1,6 +1,6 @@
 use eframe::egui;
 use mitm_core::repeater::HeaderItem;
-use crate::app::command::{AppCommand, Commands};
+use crate::app::command::Commands;
 use crate::features::request_editor::kv_table::{self, KvLabels};
 
 #[derive(Default)]
@@ -45,7 +45,7 @@ pub fn show(ctx: &egui::Context, state: &mut WsConnect, cmds: &mut Commands) {
         let valid = is_ws_url(&state.url);
         ui.horizontal(|ui| {
             if ui.add_enabled(valid, egui::Button::new("Connect")).clicked() || (valid && submitted) {
-                cmds.push(AppCommand::ConnectWs { url: state.url.trim().to_string(), headers: enabled_headers(&state.headers) });
+                cmds.push(super::Cmd::Connect { url: state.url.trim().to_string(), headers: enabled_headers(&state.headers) });
                 close = true;
             }
             if ui.button("Cancel").clicked() {

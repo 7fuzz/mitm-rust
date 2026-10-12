@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 use eframe::egui;
 use mitm_core::MitmCore;
@@ -12,6 +13,10 @@ pub struct Cx<'a> {
 }
 
 impl Cx<'_> {
+    pub fn db_path(&self) -> &PathBuf {
+        &self.core.db_path
+    }
+
     /// Shows a failure as a toast and passes a success through.
     pub fn report<T>(&self, result: Result<T, String>) -> Option<T> {
         match result {

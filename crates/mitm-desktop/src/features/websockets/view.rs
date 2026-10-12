@@ -6,7 +6,7 @@ use crate::util::format::format_bytes;
 use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::badge;
 use crate::widgets::split;
-use super::WebSocketsState;
+use super::{Cmd, WebSocketsState};
 use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Commands) {
@@ -27,7 +27,7 @@ fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comm
                 .toggle_value(&mut state.mitm_enabled, "MITM")
                 .on_hover_text("Capture proxied WebSocket frames (new connections)");
             if mitm.changed() {
-                cmds.push(AppCommand::SetWsMitm(state.mitm_enabled));
+                cmds.push(Cmd::SetMitm(state.mitm_enabled));
             }
         });
     });
@@ -94,14 +94,14 @@ fn sessions_list(ui: &mut egui::Ui, state: &mut WebSocketsState, cmds: &mut Comm
         });
 
     if let Some(id) = new_selection {
-        cmds.push(AppCommand::SelectWsConnection(id));
+        cmds.push(Cmd::Select(id));
     }
     if let Some(action) = action {
         cmds.push(action);
     }
 }
 
-fn session_menu(ui: &mut egui::Ui, conn: &WebSocketConn, action: &mut Option<AppCommand>) {
+fn session_menu(ui: &mut egui::Ui, conn: &WebSocketConn, action: &mut Option<Cmd>) {
     let id = conn.connection_id;
     let open = is_open(&conn.status);
     if ui.button("Copy URL").clicked() {
@@ -109,19 +109,19 @@ fn session_menu(ui: &mut egui::Ui, conn: &WebSocketConn, action: &mut Option<App
         ui.close();
     }
     if conn.is_client_session && open && ui.button("Disconnect").clicked() {
-        *action = Some(AppCommand::DisconnectWs(id));
+        *action = Some(Cmd::Disconnect(id));
         ui.close();
     }
     ui.separator();
     if ui.button("Clear frames").clicked() {
-        *action = Some(AppCommand::ClearWsSession(id));
+        *action = Some(Cmd::ClearSession(id));
         ui.close();
     }
     let delete = ui
         .add_enabled(!open, egui::Button::new(RichText::new("Delete").color(theme::color(ui, Tone::Danger))))
         .on_disabled_hover_text("Session is still open");
     if delete.clicked() {
-        *action = Some(AppCommand::DeleteWsSession(id));
+        *action = Some(Cmd::DeleteSession(id));
         ui.close();
     }
 }

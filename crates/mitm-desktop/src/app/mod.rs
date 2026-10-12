@@ -49,8 +49,6 @@ pub struct MitmApp {
     file_saves: Jobs<Option<Result<String, String>>>,
     har_index: Jobs<Result<Vec<mitm_core::HistoryEntry>, String>>,
     fuzz_search: Jobs<(i64, String, Vec<u32>)>,
-    ws_connects: Jobs<Result<mitm_core::state::WebSocketConn, String>>,
-    ws_actions: Jobs<Result<(), String>>,
     bcrypt_jobs: Jobs<crate::features::utilities::hashing::BcryptOutcome>,
     proxy_jobs: Jobs<(ProxyChange, Vec<mitm_core::state::ListenerStatus>)>,
     factory_resets: Jobs<Result<Option<MitmCore>, String>>,
@@ -80,8 +78,6 @@ impl MitmApp {
             file_saves: Jobs::default(),
             har_index: Jobs::default(),
             fuzz_search: Jobs::default(),
-            ws_connects: Jobs::default(),
-            ws_actions: Jobs::default(),
             bcrypt_jobs: Jobs::default(),
             proxy_jobs: Jobs::default(),
             factory_resets: Jobs::default(),
@@ -501,35 +497,9 @@ impl MitmApp {
                 }
             }
             AppCommand::Collections(cmd) => self.state.collections.apply(cmd, db_path),
-            AppCommand::SelectWsConnection(id) => self.state.websockets.select(id, db_path),
-            AppCommand::ConnectWs { url, headers } => {
-                let core = Arc::clone(&self.core);
-                let headers = (!headers.is_empty()).then_some(headers);
-                self.ws_connects.spawn(&self.rt, ctx, async move { core.connect_ws_client(url, headers).await });
-            }
-            AppCommand::SendWsFrame { connection_id, msg_type, payload, to_server } => {
-                let core = Arc::clone(&self.core);
-                self.ws_actions.spawn(&self.rt, ctx, async move {
-                    core.send_ws_frame(connection_id, msg_type, payload, to_server).await
-                });
-            }
-            AppCommand::DisconnectWs(id) => {
-                let core = Arc::clone(&self.core);
-                self.ws_actions.spawn(&self.rt, ctx, async move { core.disconnect_ws(id).await });
-            }
-            AppCommand::ClearWsSession(id) => match self.core.clear_ws_session(id) {
-                Ok(()) => self.state.websockets.cleared(id),
-                Err(e) => self.ws_actions.reply(ctx).send(Err(e)),
-            },
-            AppCommand::DeleteWsSession(id) => match self.core.delete_ws_connection(id) {
-                Ok(()) => self.state.websockets.removed(id),
-                Err(e) => self.ws_actions.reply(ctx).send(Err(e)),
-            },
-            AppCommand::SetWsMitm(enabled) => {
-                if let Err(e) = self.rt.block_on(self.core.set_ws_mitm_enabled(enabled)) {
-                    self.state.websockets.mitm_enabled = !enabled;
-                    self.ws_actions.reply(ctx).send(Err(e));
-                }
+            AppCommand::WebSockets(cmd) => {
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                crate::features::websockets::handle(&mut self.state.websockets, &cx, cmd);
             }
             AppCommand::Webhooks(cmd) => {
                 let cx = Cx { rt: &self.rt, core: &self.core, ctx };
@@ -924,15 +894,6 @@ impl eframe::App for MitmApp {
         for result in self.file_saves.drain().flatten() {
             top_bar::flash(ui, result);
         }
-        for result in self.ws_connects.drain() {
-            match result {
-                Ok(conn) => self.state.websockets.connected(conn, &self.core.db_path),
-                Err(e) => top_bar::flash(ui, Err(e)),
-            }
-        }
-        for error in self.ws_actions.drain().filter_map(Result::err) {
-            top_bar::flash(ui, Err(error));
-        }
         let resets: Vec<_> = self.factory_resets.drain().collect();
         for result in resets {
             self.finish_factory_reset(ui.ctx(), result);
@@ -953,6 +914,7 @@ impl eframe::App for MitmApp {
         {
             let cx = Cx { rt: &self.rt, core: &self.core, ctx: ui.ctx() };
             crate::features::webhooks::poll(&mut self.state.webhooks, &cx);
+            crate::features::websockets::poll(&mut self.state.websockets, &cx);
         }
         for outcome in self.bcrypt_jobs.drain() {
             self.state.hashing.bcrypt_done(outcome);

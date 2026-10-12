@@ -1,3 +1,4 @@
+mod commands;
 mod composer;
 mod connect;
 mod view;
@@ -6,6 +7,7 @@ use std::path::PathBuf;
 use mitm_core::state::{WebSocketConn, WebSocketMessage};
 use serde::{Deserialize, Serialize};
 
+pub use commands::{handle, poll, Cmd};
 pub use view::show;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -36,6 +38,7 @@ pub struct WebSocketsState {
     pub connect: connect::WsConnect,
     pub composer: composer::Composer,
     pub mitm_enabled: bool,
+    jobs: commands::WsJobs,
 }
 
 impl Default for WebSocketsState {
@@ -53,6 +56,7 @@ impl Default for WebSocketsState {
             connect: Default::default(),
             composer: Default::default(),
             mitm_enabled: false,
+            jobs: Default::default(),
         }
     }
 }

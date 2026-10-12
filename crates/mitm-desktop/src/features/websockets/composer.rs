@@ -1,7 +1,7 @@
 use eframe::egui::{self, Key, Modifiers, RichText};
 use mitm_core::state::WebSocketConn;
 use serde::{Deserialize, Serialize};
-use crate::app::command::{AppCommand, Commands};
+use crate::app::command::Commands;
 use crate::ui::theme::{self, Tone};
 use crate::widgets::code_view::{self, Lang};
 use crate::ui::icons;
@@ -120,7 +120,7 @@ pub fn show(
     });
 
     if send {
-        cmds.push(AppCommand::SendWsFrame {
+        cmds.push(super::Cmd::SendFrame {
             connection_id: conn.connection_id,
             msg_type: composer.mode.msg_type().to_string(),
             payload: composer.text.clone(),

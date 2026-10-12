@@ -89,13 +89,7 @@ pub enum AppCommand {
     SaveInterceptRules(Vec<InterceptRule>),
 
     Collections(CollectionsCmd),
-    SelectWsConnection(i64),
-    ConnectWs { url: String, headers: Vec<(String, String)> },
-    SendWsFrame { connection_id: i64, msg_type: String, payload: String, to_server: bool },
-    DisconnectWs(i64),
-    ClearWsSession(i64),
-    DeleteWsSession(i64),
-    SetWsMitm(bool),
+    WebSockets(crate::features::websockets::Cmd),
 
     Webhooks(crate::features::webhooks::Cmd),
     DecodeInEncodingTool(String),
