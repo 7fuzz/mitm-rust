@@ -4,7 +4,7 @@ use crate::ui::theme::{self, Tone};
 use crate::app::command::{AppCommand, Commands};
 use crate::features::traffic::TrafficState;
 use crate::widgets::split;
-use super::{CertificateState, DataSectionState, ListenerForm, ProxyState, SettingsPrefs, SettingsSection};
+use super::{Cmd, CertificateState, DataSectionState, ListenerForm, ProxyState, SettingsPrefs, SettingsSection};
 use crate::ui::icons;
 use crate::widgets::button::icon_button;
 use crate::widgets::card::card;
@@ -84,7 +84,7 @@ fn shortcuts_section(ui: &mut egui::Ui) {
 fn data_section(ui: &mut egui::Ui, data: &mut DataSectionState, cmds: &mut Commands) {
     section_with(ui, "Stored data", |ui| {
         if icon_button(ui, icons::ARROW_CLOCKWISE, "Refresh row counts").clicked() {
-            cmds.push(AppCommand::RefreshDataCounts);
+            cmds.push(Cmd::RefreshDataCounts);
         }
     });
 
@@ -117,7 +117,7 @@ fn data_section(ui: &mut egui::Ui, data: &mut DataSectionState, cmds: &mut Comma
                     "Confirm clear?",
                     &format!("Delete all {}", category.display_name().to_lowercase()),
                 ) {
-                    cmds.push(AppCommand::ClearDataCategory(category));
+                    cmds.push(Cmd::ClearData(category));
                 }
                 ui.end_row();
             }
@@ -177,18 +177,18 @@ fn certificate_section(
     ui.horizontal(|ui| {
         ui.menu_button(format!("Save certificate… {}", icons::CARET_DOWN), |ui| {
             if ui.button("PEM format (.crt)…").clicked() {
-                cmds.push(AppCommand::ExportCa(mitm_core::CaFormat::Pem));
+                cmds.push(Cmd::ExportCa(mitm_core::CaFormat::Pem));
                 ui.close();
             }
             if ui.button("DER format (.cer)…").clicked() {
-                cmds.push(AppCommand::ExportCa(mitm_core::CaFormat::Der));
+                cmds.push(Cmd::ExportCa(mitm_core::CaFormat::Der));
                 ui.close();
             }
         });
 
         let flash_id = ui.id().with("ca_copy_flash");
         if ui.button("Copy PEM").clicked() {
-            cmds.push(AppCommand::CopyCaPem);
+            cmds.push(Cmd::CopyCaPem);
             crate::widgets::flash::set(ui, flash_id, "PEM copied");
         }
         if let Some(msg) = crate::widgets::flash::current(ui, flash_id) {
@@ -196,7 +196,7 @@ fn certificate_section(
         }
 
         if ui.button("Open folder").clicked() {
-            cmds.push(AppCommand::OpenCaFolder);
+            cmds.push(Cmd::OpenCaFolder);
         }
 
         ui.separator();
@@ -214,7 +214,7 @@ fn certificate_section(
             })
             .inner;
         if confirmed {
-            cmds.push(AppCommand::RegenerateCa);
+            cmds.push(Cmd::RegenerateCa);
         }
     });
 
@@ -379,7 +379,7 @@ fn proxy_section(
                 ui.label(status_label).on_hover_text(tooltip);
 
                 if ui.checkbox(&mut listener.enabled, "").changed() {
-                    cmds.push(AppCommand::SetListenerEnabled {
+                    cmds.push(Cmd::SetListenerEnabled {
                         id: listener.id,
                         enabled: listener.enabled,
                     });
@@ -464,7 +464,7 @@ fn proxy_section(
     }));
 
     if modified {
-        cmds.push(AppCommand::SaveListeners(proxy.listeners.clone()));
+        cmds.push(Cmd::SaveListeners(proxy.listeners.clone()));
     }
 
     ui.add_space(8.0);

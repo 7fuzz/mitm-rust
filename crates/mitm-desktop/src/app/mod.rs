@@ -11,7 +11,6 @@ use eframe::egui;
 use egui_dock::{DockArea, DockState};
 use mitm_core::db::InterceptRule;
 use mitm_core::events::CoreEvent;
-use mitm_core::state::{ListenerConfig, ProxyMode};
 use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
 use tokio::sync::broadcast::error::RecvError;
@@ -23,7 +22,6 @@ use mitm_core::repeater::RepeaterExecutionResult;
 use crate::features::collections::CollectionsCmd;
 use crate::features::request_editor::captured::CapturedRequest;
 use crate::features::environments::{self, QuickVarScope};
-use crate::features::settings::ProxyChange;
 use crate::util::format::Exchange;
 use jobs::Jobs;
 use state::AppState;
@@ -42,7 +40,6 @@ pub struct MitmApp {
     core_events: Receiver<CoreEvent>,
     repeater_runs: Jobs<(String, Result<RepeaterExecutionResult, String>)>,
     collection_runs: Jobs<(String, Result<ExecutionResult, String>)>,
-    ca_jobs: Jobs<Option<Result<PathBuf, String>>>,
     import_files: Jobs<Option<Result<(String, String), String>>>,
     credential_files: Jobs<Option<Result<String, String>>>,
     qr_images: Jobs<Option<(crate::app::command::QrTarget, Result<String, String>)>>,
@@ -50,7 +47,6 @@ pub struct MitmApp {
     har_index: Jobs<Result<Vec<mitm_core::HistoryEntry>, String>>,
     fuzz_search: Jobs<(i64, String, Vec<u32>)>,
     bcrypt_jobs: Jobs<crate::features::utilities::hashing::BcryptOutcome>,
-    proxy_jobs: Jobs<(ProxyChange, Vec<mitm_core::state::ListenerStatus>)>,
     factory_resets: Jobs<Result<Option<MitmCore>, String>>,
     history_limits: Jobs<(mitm_core::state::HistorySettings, Result<(), String>)>,
 }
@@ -71,7 +67,6 @@ impl MitmApp {
             rt,
             repeater_runs: Jobs::default(),
             collection_runs: Jobs::default(),
-            ca_jobs: Jobs::default(),
             import_files: Jobs::default(),
             credential_files: Jobs::default(),
             qr_images: Jobs::default(),
@@ -79,7 +74,6 @@ impl MitmApp {
             har_index: Jobs::default(),
             fuzz_search: Jobs::default(),
             bcrypt_jobs: Jobs::default(),
-            proxy_jobs: Jobs::default(),
             factory_resets: Jobs::default(),
             history_limits: Jobs::default(),
         }
@@ -149,64 +143,9 @@ impl MitmApp {
             }
             AppCommand::FocusTabAt(index) => dock::focus_tab_at(&mut self.dock, index),
             AppCommand::CycleTab { forward } => dock::cycle_tab(&mut self.dock, forward),
-            AppCommand::ToggleProxy | AppCommand::SetProxyMode(_) | AppCommand::SaveListeners(_) | AppCommand::SetListenerEnabled { .. }
-            | AppCommand::RegenerateCa
-                if self.state.proxy.busy() => {}
-            AppCommand::ToggleProxy => {
-                let mode = if self.state.proxy.mode.is_enabled() { ProxyMode::Off } else { ProxyMode::On };
-                self.set_proxy_mode(ctx, mode);
-            }
-            AppCommand::SetProxyMode(mode) => self.set_proxy_mode(ctx, mode),
-            AppCommand::SaveListeners(listeners) => self.save_listeners(ctx, listeners),
-            AppCommand::SetListenerEnabled { id, enabled } => {
-                let core = Arc::clone(&self.core);
-                self.spawn_proxy_job(ctx, async move {
-                    ProxyChange::Listeners(core.set_listener_enabled(id, enabled).await.map(|_| None))
-                });
-            }
-            AppCommand::ExportCa(format) => {
-                let core = Arc::clone(&self.core);
-                let (file_name, filter_name, ext) = match format {
-                    mitm_core::CaFormat::Pem => ("mitm-ca.crt", "PEM certificate", "crt"),
-                    mitm_core::CaFormat::Der => ("mitm-ca.cer", "DER certificate", "cer"),
-                };
-                self.ca_jobs.spawn(&self.rt, ctx, async move {
-                    let path = crate::util::files::pick_save(file_name, &[(filter_name, &[ext])]).await?;
-                    let res = core.export_ca(&path, format).map(|_| path);
-                    Some(res)
-                });
-            }
-            AppCommand::CopyCaPem => {
-                if let Ok(pem) = self.core.ca_pem() {
-                    ctx.copy_text(pem);
-                }
-            }
-            AppCommand::OpenCaFolder => {
-                if let Ok(info) = self.core.ca_info() {
-                    let _ = crate::util::files::open_external(&info.ca_dir);
-                }
-            }
-            AppCommand::RegenerateCa => {
-                self.state.certificate.regenerating = true;
-                let core = Arc::clone(&self.core);
-                self.spawn_proxy_job(ctx, async move { ProxyChange::CaRegenerated(core.regenerate_ca().await) });
-            }
-            AppCommand::ClearDataCategory(category) => {
-                match self.core.clear_data_category(category) {
-                    Ok(()) => {
-                        if category == mitm_core::DataCategory::Traffic {
-                            self.state.traffic.clear();
-                        }
-                        self.state.data.counts = self.core.data_counts().ok();
-                        self.state.data.status = Some((format!("{} cleared", category.display_name()), Tone::Success));
-                    }
-                    Err(e) => {
-                        self.state.data.status = Some((e, Tone::Danger));
-                    }
-                }
-            }
-            AppCommand::RefreshDataCounts => {
-                self.state.data.counts = self.core.data_counts().ok();
+            AppCommand::Settings(cmd) => {
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                crate::features::settings::handle(self.state.settings(), &cx, cmd);
             }
             AppCommand::FactoryReset if self.state.data.resetting => {}
             AppCommand::FactoryReset => {
@@ -714,26 +653,6 @@ impl MitmApp {
         }
     }
 
-    fn set_proxy_mode(&mut self, ctx: &egui::Context, mode: ProxyMode) {
-        let core = Arc::clone(&self.core);
-        self.spawn_proxy_job(ctx, async move { ProxyChange::Mode(mode, core.set_proxy_mode(mode).await) });
-    }
-
-    fn save_listeners(&mut self, ctx: &egui::Context, listeners: Vec<ListenerConfig>) {
-        let was_running = self.state.proxy.running;
-        let core = Arc::clone(&self.core);
-        self.spawn_proxy_job(ctx, async move {
-            // Stopped first so set_listener_configs doesn't restart them itself; the restart below reports what bound.
-            core.stop_all_listeners().await;
-            let result = match core.set_listener_configs(listeners).await {
-                Ok(()) if was_running => core.start_all_listeners().await.map(Some),
-                Ok(()) => Ok(None),
-                Err(e) => Err(e),
-            };
-            ProxyChange::Listeners(result)
-        });
-    }
-
     fn finish_factory_reset(&mut self, ctx: &egui::Context, result: Result<Option<MitmCore>, String>) {
         let fresh = match result {
             Ok(fresh) => fresh,
@@ -751,42 +670,6 @@ impl MitmApp {
         prefs::carry_over(&mut self.state, &mut state);
         self.state = state;
         self.state.data.status = Some(("Factory reset complete".to_string(), Tone::Success));
-    }
-
-    fn spawn_proxy_job(&mut self, ctx: &egui::Context, job: impl std::future::Future<Output = ProxyChange> + Send + 'static) {
-        self.state.proxy.pending += 1;
-        let core = Arc::clone(&self.core);
-        self.proxy_jobs.spawn(&self.rt, ctx, async move {
-            let change = job.await;
-            (change, core.listener_status().await)
-        });
-    }
-
-    fn apply_proxy_change(&mut self, change: ProxyChange, statuses: &[mitm_core::state::ListenerStatus]) {
-        let proxy = &mut self.state.proxy;
-        proxy.pending = proxy.pending.saturating_sub(1);
-        match change {
-            ProxyChange::Mode(mode, Ok(started)) => {
-                proxy.mode = mode;
-                match started {
-                    Some(started) => proxy.set_started(Ok(started)),
-                    None => proxy.running &= mode.is_enabled(),
-                }
-            }
-            ProxyChange::Listeners(Ok(Some(started))) => proxy.set_started(Ok(started)),
-            ProxyChange::Listeners(Ok(None)) => {}
-            ProxyChange::Mode(_, Err(e)) | ProxyChange::Listeners(Err(e)) => proxy.error = Some(e),
-            ProxyChange::CaRegenerated(result) => {
-                let cert = &mut self.state.certificate;
-                cert.regenerating = false;
-                cert.info = self.core.ca_info().ok();
-                cert.status = Some(match result {
-                    Ok(()) => ("CA certificate regenerated".to_string(), Tone::Success),
-                    Err(e) => (e, Tone::Danger),
-                });
-            }
-        }
-        proxy.apply_statuses(statuses);
     }
 
     fn save_rewrite_rules(&mut self, now: f64, force: bool) {
@@ -907,25 +790,15 @@ impl eframe::App for MitmApp {
                 Err(e) => top_bar::flash(ui, Err(e)),
             }
         }
-        let proxy_results: Vec<_> = self.proxy_jobs.drain().collect();
-        for (change, statuses) in proxy_results {
-            self.apply_proxy_change(change, &statuses);
-        }
         {
             let cx = Cx { rt: &self.rt, core: &self.core, ctx: ui.ctx() };
             crate::features::webhooks::poll(&mut self.state.webhooks, &cx);
             crate::features::websockets::poll(&mut self.state.websockets, &cx);
+            crate::features::settings::poll(self.state.settings(), &cx);
         }
         for outcome in self.bcrypt_jobs.drain() {
             self.state.hashing.bcrypt_done(outcome);
         }
-        for result in self.ca_jobs.drain().flatten() {
-            self.state.certificate.status = Some(match result {
-                Ok(path) => (format!("Exported to {}", path.display()), Tone::Success),
-                Err(e) => (e, Tone::Danger),
-            });
-        }
-
         let palette = crate::ui::theme::Palette::of(ui.visuals());
         egui::Panel::top("top_panel")
             .frame(egui::Frame::new().fill(palette.base).inner_margin(egui::Margin::symmetric(8, 5)))

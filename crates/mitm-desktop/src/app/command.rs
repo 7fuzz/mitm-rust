@@ -1,7 +1,7 @@
 use mitm_core::http::curl::ParsedCurl;
 use mitm_core::db::InterceptRule;
 use mitm_core::fuzzer::FuzzConfig;
-use mitm_core::state::{HistorySettings, ListenerConfig, ProxyMode};
+use mitm_core::state::HistorySettings;
 use crate::ui::dock::Tab;
 use crate::features::collections::{CollectionsCmd, SaveTarget};
 use crate::util::format::{CopyFormat, CopyOptions};
@@ -22,17 +22,7 @@ pub enum AppCommand {
     OpenSettings(crate::features::settings::SettingsSection),
     FocusTabAt(usize),
     CycleTab { forward: bool },
-    ToggleProxy,
-    SetProxyMode(ProxyMode),
-    SaveListeners(Vec<ListenerConfig>),
-    SetListenerEnabled { id: u32, enabled: bool },
-    ExportCa(mitm_core::CaFormat),
-    CopyCaPem,
-    OpenCaFolder,
-    RegenerateCa,
-
-    ClearDataCategory(mitm_core::DataCategory),
-    RefreshDataCounts,
+    Settings(crate::features::settings::Cmd),
     FactoryReset,
 
     SelectFlow(i64),

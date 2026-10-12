@@ -7,6 +7,7 @@ use crate::ui::dock::{self, Tab};
 use crate::app::state::AppState;
 use crate::widgets::toast;
 use crate::ui::icons;
+use crate::features::settings;
 use crate::features::environments::EnvironmentsState;
 use crate::util::format::format_count;
 use crate::widgets::pills::badge;
@@ -155,13 +156,13 @@ fn proxy_controls(ui: &mut egui::Ui, state: &AppState, cmds: &mut Commands) {
         let right = CornerRadius { nw: 0, sw: 0, ne: 4, se: 4 };
         let dot = RichText::new("●").color(mode_tone(proxy.mode).color(ui.visuals()));
         if ui.add(egui::Button::new((dot, mode_label(proxy.mode))).corner_radius(left)).on_hover_text(toggle_hint).clicked() {
-            cmds.push(AppCommand::ToggleProxy);
+            cmds.push(settings::Cmd::ToggleProxy);
         }
         let caret = egui::Button::new(icons::CARET_DOWN).corner_radius(right);
         egui::containers::menu::MenuButton::from_button(caret).ui(ui, |ui| {
             for mode in ProxyMode::ALL {
                 if ui.selectable_label(proxy.mode == mode, mode_label(mode)).clicked() {
-                    cmds.push(AppCommand::SetProxyMode(mode));
+                    cmds.push(settings::Cmd::SetProxyMode(mode));
                     ui.close();
                 }
             }

@@ -46,6 +46,15 @@ pub struct AppState {
 }
 
 impl AppState {
+    pub fn settings(&mut self) -> crate::features::settings::Settings<'_> {
+        crate::features::settings::Settings {
+            proxy: &mut self.proxy,
+            cert: &mut self.certificate,
+            data: &mut self.data,
+            traffic: &mut self.traffic,
+        }
+    }
+
     pub fn load(db_path: &PathBuf) -> Self {
         let mut state = Self::default();
         state.traffic.load_from_db(db_path);

@@ -1,9 +1,11 @@
+mod commands;
 mod view;
 
 use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use mitm_core::state::{ListenerConfig, ListenerStatus, ProxyMode};
 
+pub use commands::{handle, poll, Cmd, Settings};
 pub use view::show;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -59,6 +61,7 @@ pub struct CertificateState {
     pub info: Option<mitm_core::CaInfo>,
     pub status: Option<(String, crate::ui::theme::Tone)>,
     pub regenerating: bool,
+    exports: crate::app::jobs::Jobs<commands::CaExport>,
 }
 
 #[derive(Default)]
@@ -81,6 +84,7 @@ pub struct ProxyState {
     pub active_summary: String,
     /// Proxy jobs still running; their controls stay disabled until they report back.
     pub pending: u32,
+    jobs: crate::app::jobs::Jobs<commands::ProxyJob>,
 }
 
 impl Default for ProxyState {
@@ -95,15 +99,9 @@ impl Default for ProxyState {
             host_ips: Vec::new(),
             active_summary: String::new(),
             pending: 0,
+            jobs: Default::default(),
         }
     }
-}
-
-/// Result of a proxy job that ran off the UI thread.
-pub enum ProxyChange {
-    Mode(ProxyMode, Result<Option<Vec<String>>, String>),
-    Listeners(Result<Option<Vec<String>>, String>),
-    CaRegenerated(Result<(), String>),
 }
 
 impl ProxyState {
