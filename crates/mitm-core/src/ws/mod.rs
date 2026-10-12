@@ -1,3 +1,4 @@
+mod api;
 pub mod client_session;
 pub mod proxy_pipe;
 
