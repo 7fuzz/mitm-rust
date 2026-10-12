@@ -63,6 +63,10 @@ pub struct KdfParams {
 
 impl Default for KdfParams {
     fn default() -> Self {
+        if cfg!(test) {
+            // Unit tests derive keys constantly; the real cost would make the suite crawl.
+            return Self { memory_kib: 64, iterations: 1, parallelism: 1 };
+        }
         Self { memory_kib: 19 * 1024, iterations: 2, parallelism: 1 }
     }
 }

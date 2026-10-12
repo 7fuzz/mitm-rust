@@ -1,12 +1,14 @@
 //! Workspace credentials: named entries of text, secret and TOTP fields, encrypted at rest.
 
 pub mod crypto;
+mod master;
 mod rename;
 mod resolve;
 mod session;
 mod store;
 mod transfer;
 
+pub use master::*;
 pub use rename::*;
 pub use resolve::*;
 pub use store::*;

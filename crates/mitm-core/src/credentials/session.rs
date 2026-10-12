@@ -17,17 +17,20 @@ fn cached(db_path: &Path) -> Option<DataKey> {
     sessions().lock().ok()?.get(db_path).cloned()
 }
 
-fn remember(db_path: &Path, key: DataKey) {
+pub(crate) fn remember(db_path: &Path, key: DataKey) {
     if let Ok(mut map) = sessions().lock() {
         map.insert(db_path.to_path_buf(), key);
     }
 }
 
-#[cfg(test)]
 pub(crate) fn forget(db_path: &Path) {
     if let Ok(mut map) = sessions().lock() {
         map.remove(db_path);
     }
+}
+
+pub(crate) fn is_cached(db_path: &Path) -> bool {
+    cached(db_path).is_some()
 }
 
 pub(crate) fn now_ms() -> i64 {
