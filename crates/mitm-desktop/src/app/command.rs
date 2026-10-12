@@ -7,6 +7,13 @@ use crate::features::collections::{CollectionsCmd, SaveTarget};
 use crate::util::format::{CopyFormat, CopyOptions};
 use crate::widgets::message_pane::SaveBody;
 
+/// Where a decoded QR code goes.
+#[derive(Clone)]
+pub enum QrTarget {
+    TotpTool,
+    CredentialField { id: String, key: String },
+}
+
 #[derive(Clone)]
 pub enum AppCommand {
     OpenPalette,
@@ -118,6 +125,7 @@ pub enum AppCommand {
     LockCredentials,
     CopyTotp(String),
     PickCredentialsJson,
+    PickQrImage(QrTarget),
 
     OpenImport,
     ExportWorkspace,

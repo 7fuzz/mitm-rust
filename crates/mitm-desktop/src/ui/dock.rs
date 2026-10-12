@@ -206,10 +206,10 @@ impl TabViewer<'_> {
             Tab::JsonDiff => features::utilities::json_diff::show(ui, &mut state.json_diff),
             Tab::JsonTools => features::utilities::json_tools::show(ui, &mut state.json_tools),
             Tab::Cvss => features::utilities::cvss::show(ui, &mut state.cvss),
-            Tab::Totp => features::utilities::totp::show(ui, &mut state.totp),
+            Tab::Totp => features::utilities::totp::show(ui, &mut state.totp, cmds),
             Tab::Environments => features::environments::show(ui, &mut state.environments, &state.credentials.entries, cmds),
             Tab::Credentials => {
-                features::credentials::show(ui, &mut state.credentials, &state.environments.active_workspace_id, self.db_path)
+                features::credentials::show(ui, &mut state.credentials, &state.environments.active_workspace_id, self.db_path, cmds)
             }
             Tab::Settings => features::settings::show(
                 ui,

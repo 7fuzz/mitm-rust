@@ -1,10 +1,11 @@
 mod view;
 
-pub use view::{show, show_code};
+pub use view::{qr_buttons, show, show_code};
 
 #[derive(Default)]
 pub struct TotpState {
     pub input: String,
+    pub qr_error: Option<String>,
 }
 
 /// "482913" → "482 913"; other lengths split in half the same way.

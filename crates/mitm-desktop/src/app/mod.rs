@@ -43,6 +43,7 @@ pub struct MitmApp {
     ca_jobs: Jobs<Option<Result<PathBuf, String>>>,
     import_files: Jobs<Option<Result<(String, String), String>>>,
     credential_files: Jobs<Option<Result<String, String>>>,
+    qr_images: Jobs<Option<(crate::app::command::QrTarget, Result<String, String>)>>,
     file_saves: Jobs<Option<Result<String, String>>>,
     har_index: Jobs<Result<Vec<mitm_core::HistoryEntry>, String>>,
     fuzz_search: Jobs<(i64, String, Vec<u32>)>,
@@ -70,6 +71,7 @@ impl MitmApp {
             ca_jobs: Jobs::default(),
             import_files: Jobs::default(),
             credential_files: Jobs::default(),
+            qr_images: Jobs::default(),
             file_saves: Jobs::default(),
             har_index: Jobs::default(),
             fuzz_search: Jobs::default(),
@@ -658,6 +660,13 @@ impl MitmApp {
                 }
             }
             AppCommand::OpenImport => self.state.environments.import.open_with(None, String::new()),
+            AppCommand::PickQrImage(target) => {
+                self.qr_images.spawn(&self.rt, ctx, async move {
+                    let path = crate::util::files::pick_open(&[("Image", &["png", "jpg", "jpeg", "gif", "webp"])]).await?;
+                    let decoded = std::fs::read(&path).map_err(|e| e.to_string()).and_then(|b| crate::util::qr::decode_file(&b));
+                    Some((target, decoded))
+                });
+            }
             AppCommand::PickCredentialsJson => {
                 self.credential_files.spawn(&self.rt, ctx, async {
                     let path = crate::util::files::pick_open(&[("JSON", &["json"])]).await?;
@@ -888,6 +897,18 @@ impl eframe::App for MitmApp {
             self.state.fuzzer.set_response_search_results(run_id, &query, matches);
         }
         self.state.fuzzer.sync_response_search(&self.rt, ui.ctx(), &self.core, &self.fuzz_search);
+        for (target, decoded) in self.qr_images.drain().flatten() {
+            use crate::app::command::QrTarget;
+            match (target, decoded) {
+                (QrTarget::TotpTool, Ok(text)) => {
+                    self.state.totp.input = text;
+                    self.state.totp.qr_error = None;
+                }
+                (QrTarget::TotpTool, Err(e)) => self.state.totp.qr_error = Some(e),
+                (QrTarget::CredentialField { id, key }, Ok(text)) => self.state.credentials.set_totp_secret(&id, &key, text, now),
+                (QrTarget::CredentialField { .. }, Err(e)) => self.state.credentials.show_error(e),
+            }
+        }
         for result in self.credential_files.drain().flatten() {
             let import = &mut self.state.credentials.json_import;
             match result {

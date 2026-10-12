@@ -153,6 +153,23 @@ impl CredentialsState {
         Some(totp::code_at(&params, totp::now_unix()))
     }
 
+    /// A scanned QR code for a `totp` field: saved like a typed secret.
+    pub fn set_totp_secret(&mut self, id: &str, key: &str, secret: String, now: f64) {
+        let Some(field) = self.entries.iter_mut().find(|e| e.id == id).and_then(|e| e.field_mut(key)) else { return };
+        match mitm_core::utils::totp::parse_secret(&secret) {
+            Ok(_) => {
+                field.value = secret.trim().to_string();
+                self.totp_draft = None;
+                self.mark_dirty(id, now);
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    pub fn show_error(&mut self, error: String) {
+        self.error = Some(error);
+    }
+
     pub fn touch(&mut self, now: f64) {
         self.last_activity = now;
     }

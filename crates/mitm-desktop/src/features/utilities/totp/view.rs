@@ -1,16 +1,31 @@
 use std::time::Duration;
 use eframe::egui::{self, RichText};
 use mitm_core::utils::totp::{self, TotpParams};
+use crate::app::command::{AppCommand, Commands, QrTarget};
 use super::{group_code, TotpState};
 
 const NEXT_HINT_SECS: u64 = 5;
 
-pub fn show(ui: &mut egui::Ui, state: &mut TotpState) {
-    ui.add(
-        egui::TextEdit::singleline(&mut state.input)
-            .hint_text("secret or otpauth://…")
-            .desired_width(f32::INFINITY),
-    );
+pub fn show(ui: &mut egui::Ui, state: &mut TotpState, cmds: &mut Commands) {
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(&mut state.input)
+                .hint_text("secret or otpauth://…")
+                .desired_width((ui.available_width() - 64.0).max(80.0)),
+        );
+        if let Some(result) = qr_buttons(ui, cmds, QrTarget::TotpTool) {
+            match result {
+                Ok(text) => {
+                    state.input = text;
+                    state.qr_error = None;
+                }
+                Err(e) => state.qr_error = Some(e),
+            }
+        }
+    });
+    if let Some(error) = &state.qr_error {
+        ui.colored_label(ui.visuals().error_fg_color, error);
+    }
     let input = state.input.trim();
     if input.is_empty() {
         return;
@@ -57,4 +72,16 @@ pub fn show_code(ui: &mut egui::Ui, params: &TotpParams, size: f32) {
         }
     });
     ui.ctx().request_repaint_after(Duration::from_secs(1));
+}
+
+/// Reads a QR code from an image file (picked asynchronously, delivered to `target`) or from the clipboard
+/// (returned right away).
+pub fn qr_buttons(ui: &mut egui::Ui, cmds: &mut Commands, target: QrTarget) -> Option<Result<String, String>> {
+    if ui.small_button("🖼").on_hover_text("QR code from image…").clicked() {
+        cmds.push(AppCommand::PickQrImage(target));
+    }
+    ui.small_button("▦")
+        .on_hover_text("QR code from clipboard image")
+        .clicked()
+        .then(crate::util::qr::decode_clipboard)
 }

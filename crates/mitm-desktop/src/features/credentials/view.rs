@@ -2,17 +2,18 @@ use std::path::Path;
 use eframe::egui::{self, RichText};
 use mitm_core::credentials::{Credential, FieldKind};
 use mitm_core::utils::totp;
-use crate::features::utilities::totp::{group_code, show_code};
+use crate::app::command::{Commands, QrTarget};
+use crate::features::utilities::totp::{group_code, qr_buttons, show_code};
 use crate::widgets::{confirm, split};
 use super::lock::unlock_form;
 use super::{CredentialsState, Rename};
 
-pub fn show(ui: &mut egui::Ui, state: &mut CredentialsState, workspace_id: &str, db_path: &Path) {
+pub fn show(ui: &mut egui::Ui, state: &mut CredentialsState, workspace_id: &str, db_path: &Path, cmds: &mut Commands) {
     state.sync(db_path, workspace_id);
     let now = ui.input(|i| i.time);
     let [mut list_ui, mut detail_ui] = split::side_by_side(ui, "credentials_split", &mut state.split_fraction);
     entry_list(&mut list_ui, state, db_path);
-    entry_detail(&mut detail_ui, state, db_path, now);
+    entry_detail(&mut detail_ui, state, db_path, now, cmds);
 }
 
 fn entry_list(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path) {
@@ -74,7 +75,7 @@ fn first_code(entry: &Credential) -> Option<String> {
     Some(totp::code_at(&params, totp::now_unix()))
 }
 
-fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path, now: f64) {
+fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path, now: f64, cmds: &mut Commands) {
     if state.locked {
         ui.add_space(8.0);
         unlock_form(ui, state, db_path);
@@ -165,13 +166,25 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                         }
                         (draft, _) => {
                             let mut text = draft.unwrap_or_default();
-                            let edit = ui.add(
-                                egui::TextEdit::singleline(&mut text)
-                                    .password(true)
-                                    .hint_text("secret or otpauth://…")
-                                    .desired_width(260.0),
-                            );
-                            let commit = edit.lost_focus() && !text.trim().is_empty();
+                            let (edit, scanned) = ui
+                                .horizontal(|ui| {
+                                    let edit = ui.add(
+                                        egui::TextEdit::singleline(&mut text)
+                                            .password(true)
+                                            .hint_text("secret or otpauth://…")
+                                            .desired_width(220.0),
+                                    );
+                                    let target = QrTarget::CredentialField { id: id.clone(), key: key.clone() };
+                                    (edit, qr_buttons(ui, cmds, target))
+                                })
+                                .inner;
+                            let was_scanned = matches!(scanned, Some(Ok(_)));
+                            match scanned {
+                                Some(Ok(scanned)) => text = scanned,
+                                Some(Err(e)) => state.error = Some(e),
+                                None => {}
+                            }
+                            let commit = (edit.lost_focus() || was_scanned) && !text.trim().is_empty();
                             if commit {
                                 match totp::parse_secret(&text) {
                                     Ok(_) => {
