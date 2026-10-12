@@ -21,7 +21,7 @@ use mitm_core::repeater::RepeaterExecutionResult;
 use crate::features::collections::CollectionsCmd;
 use crate::features::request_editor::captured::CapturedRequest;
 use crate::features::environments::{self, QuickVarScope};
-use crate::features::settings::ProxyState;
+use crate::features::settings::ProxyChange;
 use crate::util::format::Exchange;
 use jobs::Jobs;
 use state::AppState;
@@ -52,6 +52,8 @@ pub struct MitmApp {
     webhook_actions: Jobs<Result<(), String>>,
     webhook_replays: Jobs<(i64, Result<mitm_core::webhook::WebhookReplayResult, String>)>,
     bcrypt_jobs: Jobs<crate::features::utilities::hashing::BcryptOutcome>,
+    proxy_jobs: Jobs<(ProxyChange, Vec<mitm_core::state::ListenerStatus>)>,
+    webhook_receiver: Jobs<(Result<(), String>, bool)>,
 }
 
 impl MitmApp {
@@ -81,6 +83,8 @@ impl MitmApp {
             webhook_actions: Jobs::default(),
             webhook_replays: Jobs::default(),
             bcrypt_jobs: Jobs::default(),
+            proxy_jobs: Jobs::default(),
+            webhook_receiver: Jobs::default(),
         }
     }
 
@@ -148,17 +152,20 @@ impl MitmApp {
             }
             AppCommand::FocusTabAt(index) => dock::focus_tab_at(&mut self.dock, index),
             AppCommand::CycleTab { forward } => dock::cycle_tab(&mut self.dock, forward),
+            AppCommand::ToggleProxy | AppCommand::SetProxyMode(_) | AppCommand::SaveListeners(_) | AppCommand::SetListenerEnabled { .. }
+            | AppCommand::RegenerateCa
+                if self.state.proxy.busy() => {}
             AppCommand::ToggleProxy => {
                 let mode = if self.state.proxy.mode.is_enabled() { ProxyMode::Off } else { ProxyMode::On };
-                self.set_proxy_mode(mode);
+                self.set_proxy_mode(ctx, mode);
             }
-            AppCommand::SetProxyMode(mode) => self.set_proxy_mode(mode),
-            AppCommand::SaveListeners(listeners) => self.save_listeners(listeners),
+            AppCommand::SetProxyMode(mode) => self.set_proxy_mode(ctx, mode),
+            AppCommand::SaveListeners(listeners) => self.save_listeners(ctx, listeners),
             AppCommand::SetListenerEnabled { id, enabled } => {
-                if let Err(e) = self.rt.block_on(self.core.set_listener_enabled(id, enabled)) {
-                    self.state.proxy.error = Some(e);
-                }
-                self.refresh_listeners();
+                let core = Arc::clone(&self.core);
+                self.spawn_proxy_job(ctx, async move {
+                    ProxyChange::Listeners(core.set_listener_enabled(id, enabled).await.map(|_| None))
+                });
             }
             AppCommand::ExportCa(format) => {
                 let core = Arc::clone(&self.core);
@@ -183,16 +190,9 @@ impl MitmApp {
                 }
             }
             AppCommand::RegenerateCa => {
-                match self.rt.block_on(self.core.regenerate_ca()) {
-                    Ok(()) => {
-                        self.state.certificate.info = self.core.ca_info().ok();
-                        self.state.certificate.status = Some(("CA certificate regenerated".to_string(), Tone::Success));
-                    }
-                    Err(e) => {
-                        self.state.certificate.status = Some((e, Tone::Danger));
-                    }
-                }
-                self.refresh_listeners();
+                self.state.certificate.regenerating = true;
+                let core = Arc::clone(&self.core);
+                self.spawn_proxy_job(ctx, async move { ProxyChange::CaRegenerated(core.regenerate_ca().await) });
             }
             AppCommand::ClearDataCategory(category) => {
                 match self.core.clear_data_category(category) {
@@ -537,20 +537,14 @@ impl MitmApp {
                     self.ws_actions.reply(ctx).send(Err(e));
                 }
             }
+            AppCommand::StartWebhookReceiver | AppCommand::StopWebhookReceiver if self.state.webhooks.switching => {}
             AppCommand::StartWebhookReceiver => {
                 let port = self.state.webhooks.port;
-                match self.rt.block_on(self.core.start_webhook_receiver(port)) {
-                    Ok(()) => self.state.webhooks.running = true,
-                    Err(e) => {
-                        self.state.webhooks.running = false;
-                        self.webhook_actions.reply(ctx).send(Err(e));
-                    }
-                }
+                self.switch_webhook_receiver(ctx, move |core| async move { core.start_webhook_receiver(port).await });
             }
-            AppCommand::StopWebhookReceiver => match self.rt.block_on(self.core.stop_webhook_receiver()) {
-                Ok(()) => self.state.webhooks.running = false,
-                Err(e) => self.webhook_actions.reply(ctx).send(Err(e)),
-            },
+            AppCommand::StopWebhookReceiver => {
+                self.switch_webhook_receiver(ctx, |core| async move { core.stop_webhook_receiver().await });
+            }
             AppCommand::SetWebhookPort(port) => {
                 if let Err(e) = self.rt.block_on(self.core.set_webhook_port(port)) {
                     self.webhook_actions.reply(ctx).send(Err(e));
@@ -802,40 +796,74 @@ impl MitmApp {
         }
     }
 
-    fn set_proxy_mode(&mut self, mode: ProxyMode) {
+    fn set_proxy_mode(&mut self, ctx: &egui::Context, mode: ProxyMode) {
+        let core = Arc::clone(&self.core);
+        self.spawn_proxy_job(ctx, async move { ProxyChange::Mode(mode, core.set_proxy_mode(mode).await) });
+    }
+
+    fn save_listeners(&mut self, ctx: &egui::Context, listeners: Vec<ListenerConfig>) {
+        let was_running = self.state.proxy.running;
+        let core = Arc::clone(&self.core);
+        self.spawn_proxy_job(ctx, async move {
+            // Stopped first so set_listener_configs doesn't restart them itself; the restart below reports what bound.
+            core.stop_all_listeners().await;
+            let result = match core.set_listener_configs(listeners).await {
+                Ok(()) if was_running => core.start_all_listeners().await.map(Some),
+                Ok(()) => Ok(None),
+                Err(e) => Err(e),
+            };
+            ProxyChange::Listeners(result)
+        });
+    }
+
+    fn spawn_proxy_job(&mut self, ctx: &egui::Context, job: impl std::future::Future<Output = ProxyChange> + Send + 'static) {
+        self.state.proxy.pending += 1;
+        let core = Arc::clone(&self.core);
+        self.proxy_jobs.spawn(&self.rt, ctx, async move {
+            let change = job.await;
+            (change, core.listener_status().await)
+        });
+    }
+
+    fn apply_proxy_change(&mut self, change: ProxyChange, statuses: &[mitm_core::state::ListenerStatus]) {
         let proxy = &mut self.state.proxy;
-        match self.rt.block_on(self.core.set_proxy_mode(mode)) {
-            Ok(started) => {
+        proxy.pending = proxy.pending.saturating_sub(1);
+        match change {
+            ProxyChange::Mode(mode, Ok(started)) => {
                 proxy.mode = mode;
                 match started {
                     Some(started) => proxy.set_started(Ok(started)),
                     None => proxy.running &= mode.is_enabled(),
                 }
             }
-            Err(e) => proxy.error = Some(e),
+            ProxyChange::Listeners(Ok(Some(started))) => proxy.set_started(Ok(started)),
+            ProxyChange::Listeners(Ok(None)) => {}
+            ProxyChange::Mode(_, Err(e)) | ProxyChange::Listeners(Err(e)) => proxy.error = Some(e),
+            ProxyChange::CaRegenerated(result) => {
+                let cert = &mut self.state.certificate;
+                cert.regenerating = false;
+                cert.info = self.core.ca_info().ok();
+                cert.status = Some(match result {
+                    Ok(()) => ("CA certificate regenerated".to_string(), Tone::Success),
+                    Err(e) => (e, Tone::Danger),
+                });
+            }
         }
-        self.refresh_listeners();
+        proxy.apply_statuses(statuses);
     }
 
-    fn save_listeners(&mut self, listeners: Vec<ListenerConfig>) {
-        let was_running = self.state.proxy.running;
-        let core = &self.core;
-        let result = self.rt.block_on(async {
-            // Stopped first so set_listener_configs doesn't restart them itself; the restart below reports what bound.
-            core.stop_all_listeners().await;
-            core.set_listener_configs(listeners).await?;
-            if was_running {
-                core.start_all_listeners().await.map(Some)
-            } else {
-                Ok(None)
-            }
+    fn switch_webhook_receiver<F, Fut>(&mut self, ctx: &egui::Context, switch: F)
+    where
+        F: FnOnce(Arc<MitmCore>) -> Fut,
+        Fut: std::future::Future<Output = Result<(), String>> + Send + 'static,
+    {
+        self.state.webhooks.switching = true;
+        let core = Arc::clone(&self.core);
+        let job = switch(Arc::clone(&core));
+        self.webhook_receiver.spawn(&self.rt, ctx, async move {
+            let result = job.await;
+            (result, core.webhook_status().await.is_running)
         });
-        match result {
-            Ok(Some(started)) => self.state.proxy.set_started(Ok(started)),
-            Ok(None) => {}
-            Err(e) => self.state.proxy.error = Some(e),
-        }
-        self.refresh_listeners();
     }
 
     fn save_rewrite_rules(&mut self, now: f64, force: bool) {
@@ -844,9 +872,6 @@ impl MitmApp {
         }
     }
 
-    fn refresh_listeners(&mut self) {
-        refresh_listener_state(&self.rt, &self.core, &mut self.state.proxy);
-    }
 }
 
 impl eframe::App for MitmApp {
@@ -958,6 +983,17 @@ impl eframe::App for MitmApp {
         for error in self.webhook_actions.drain().filter_map(Result::err) {
             top_bar::flash(ui, Err(error));
         }
+        let proxy_results: Vec<_> = self.proxy_jobs.drain().collect();
+        for (change, statuses) in proxy_results {
+            self.apply_proxy_change(change, &statuses);
+        }
+        for (result, running) in self.webhook_receiver.drain() {
+            self.state.webhooks.switching = false;
+            self.state.webhooks.running = running;
+            if let Err(e) = result {
+                top_bar::flash(ui, Err(e));
+            }
+        }
         for (id, result) in self.webhook_replays.drain() {
             self.state.webhooks.replay_done(id, result);
         }
@@ -1046,7 +1082,7 @@ fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {
     if state.proxy.mode.is_enabled() {
         state.proxy.set_started(rt.block_on(core.start_all_listeners()));
     }
-    refresh_listener_state(rt, core, &mut state.proxy);
+    state.proxy.apply_statuses(&rt.block_on(core.listener_status()));
     state.proxy.reload_host_ips();
     state.certificate.info = core.ca_info().ok();
     let (enabled, mode, scope) = rt.block_on(core.intercept_config());
@@ -1061,21 +1097,6 @@ fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {
     state.webhooks.running = webhook.is_running;
     state.webhooks.port = webhook.port;
     state
-}
-
-fn refresh_listener_state(rt: &Runtime, core: &MitmCore, proxy: &mut ProxyState) {
-    let statuses = rt.block_on(core.listener_status());
-    proxy.listeners = statuses.iter().map(|s| s.config.clone()).collect();
-    proxy.running_listeners = statuses.iter().filter(|s| s.running).map(|s| s.config.id).collect();
-    proxy.listener_errors = statuses.iter().filter_map(|s| Some((s.config.id, s.error.clone()?))).collect();
-    if proxy.running {
-        let running_summaries: Vec<_> = statuses
-            .iter()
-            .filter(|s| s.running)
-            .map(|s| format!("{} ({})", s.config.label, s.config.address))
-            .collect();
-        proxy.active_summary = running_summaries.join("  |  ");
-    }
 }
 
 fn forward_core_events(rt: &Runtime, core: &MitmCore, ctx: &egui::Context) -> Receiver<CoreEvent> {

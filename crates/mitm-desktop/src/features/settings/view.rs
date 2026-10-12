@@ -28,7 +28,9 @@ pub fn show(
         .id_salt(("settings", prefs.section))
         .auto_shrink([false, false])
         .show(&mut content, |ui| match prefs.section {
-            SettingsSection::Proxy => proxy_section(ui, proxy, form, traffic, db_path, cmds),
+            SettingsSection::Proxy => {
+                ui.add_enabled_ui(!proxy.busy(), |ui| proxy_section(ui, proxy, form, traffic, db_path, cmds));
+            }
             SettingsSection::Certificate => certificate_section(ui, cert, cmds),
             SettingsSection::Appearance => appearance_section(ui),
             SettingsSection::Shortcuts => shortcuts_section(ui),
@@ -207,13 +209,18 @@ fn certificate_section(
         ui.separator();
 
         let regen_id = ui.id().with("regenerate_ca");
-        if crate::widgets::confirm::confirm_button(
-            ui,
-            regen_id,
-            RichText::new("Regenerate CA"),
-            "Confirm regenerate?",
-            "Recreates root CA. Devices will need to trust the new certificate.",
-        ) {
+        let confirmed = ui
+            .add_enabled_ui(!cert.regenerating, |ui| {
+                crate::widgets::confirm::confirm_button(
+                    ui,
+                    regen_id,
+                    RichText::new("Regenerate CA"),
+                    "Confirm regenerate?",
+                    "Recreates root CA. Devices will need to trust the new certificate.",
+                )
+            })
+            .inner;
+        if confirmed {
             cmds.push(AppCommand::RegenerateCa);
         }
     });

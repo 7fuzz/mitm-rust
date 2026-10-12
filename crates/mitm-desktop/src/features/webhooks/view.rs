@@ -24,7 +24,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
 fn toolbar(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
     ui.horizontal(|ui| {
         let toggle = ui
-            .toggle_value(&mut state.running, "Receiver")
+            .add_enabled_ui(!state.switching, |ui| ui.toggle_value(&mut state.running, "Receiver"))
+            .inner
             .on_hover_text("Accept incoming webhook deliveries");
         if toggle.changed() {
             cmds.push(if state.running {

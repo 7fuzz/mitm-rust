@@ -162,16 +162,18 @@ fn new_workspace_modal(ctx: &egui::Context, state: &mut AppState, cmds: &mut Com
 fn proxy_controls(ui: &mut egui::Ui, state: &AppState, cmds: &mut Commands) {
     let proxy = &state.proxy;
     let toggle_hint = if proxy.mode.is_enabled() { "Turn the proxy off" } else { "Turn the proxy on" };
-    if ui.button(mode_text(ui, proxy.mode).strong()).on_hover_text(toggle_hint).clicked() {
-        cmds.push(AppCommand::ToggleProxy);
-    }
-    ui.menu_button("⏷", |ui| {
-        for mode in ProxyMode::ALL {
-            if ui.selectable_label(proxy.mode == mode, mode_text(ui, mode)).clicked() {
-                cmds.push(AppCommand::SetProxyMode(mode));
-                ui.close();
-            }
+    ui.add_enabled_ui(!proxy.busy(), |ui| {
+        if ui.button(mode_text(ui, proxy.mode).strong()).on_hover_text(toggle_hint).clicked() {
+            cmds.push(AppCommand::ToggleProxy);
         }
+        ui.menu_button("⏷", |ui| {
+            for mode in ProxyMode::ALL {
+                if ui.selectable_label(proxy.mode == mode, mode_text(ui, mode)).clicked() {
+                    cmds.push(AppCommand::SetProxyMode(mode));
+                    ui.close();
+                }
+            }
+        });
     });
     let problems = proxy.problems();
     if !problems.is_empty() {

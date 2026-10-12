@@ -42,6 +42,7 @@ pub struct EndpointDraft {
 pub struct WebhooksState {
     pub prefs: WebhooksPrefs,
     pub running: bool,
+    pub switching: bool,
     pub port: u16,
     pub endpoints: Vec<WebhookEndpoint>,
     pub deliveries: Vec<WebhookDelivery>,
@@ -58,6 +59,7 @@ impl Default for WebhooksState {
         Self {
             prefs: WebhooksPrefs::default(),
             running: false,
+            switching: false,
             port: 9000,
             endpoints: Vec::new(),
             deliveries: Vec::new(),

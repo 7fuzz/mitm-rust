@@ -2,7 +2,7 @@ mod view;
 
 use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
-use mitm_core::state::{ListenerConfig, ProxyMode};
+use mitm_core::state::{ListenerConfig, ListenerStatus, ProxyMode};
 
 pub use view::show;
 
@@ -58,6 +58,7 @@ impl Default for SettingsPrefs {
 pub struct CertificateState {
     pub info: Option<mitm_core::CaInfo>,
     pub status: Option<(String, crate::ui::theme::Tone)>,
+    pub regenerating: bool,
 }
 
 #[derive(Default)]
@@ -77,6 +78,8 @@ pub struct ProxyState {
     pub listeners: Vec<ListenerConfig>,
     pub host_ips: Vec<mitm_core::proxy::host_ips::HostIp>,
     pub active_summary: String,
+    /// Proxy jobs still running; their controls stay disabled until they report back.
+    pub pending: u32,
 }
 
 impl Default for ProxyState {
@@ -90,11 +93,33 @@ impl Default for ProxyState {
             listeners: Vec::new(),
             host_ips: Vec::new(),
             active_summary: String::new(),
+            pending: 0,
         }
     }
 }
 
+/// Result of a proxy job that ran off the UI thread.
+pub enum ProxyChange {
+    Mode(ProxyMode, Result<Option<Vec<String>>, String>),
+    Listeners(Result<Option<Vec<String>>, String>),
+    CaRegenerated(Result<(), String>),
+}
+
 impl ProxyState {
+    pub fn busy(&self) -> bool {
+        self.pending > 0
+    }
+
+    pub fn apply_statuses(&mut self, statuses: &[ListenerStatus]) {
+        self.listeners = statuses.iter().map(|s| s.config.clone()).collect();
+        self.running_listeners = statuses.iter().filter(|s| s.running).map(|s| s.config.id).collect();
+        self.listener_errors = statuses.iter().filter_map(|s| Some((s.config.id, s.error.clone()?))).collect();
+        if self.running {
+            let running: Vec<_> = statuses.iter().filter(|s| s.running).map(|s| format!("{} ({})", s.config.label, s.config.address)).collect();
+            self.active_summary = running.join("  |  ");
+        }
+    }
+
     pub fn reload_host_ips(&mut self) {
         self.host_ips = mitm_core::proxy::host_ips::list().unwrap_or_default();
     }
