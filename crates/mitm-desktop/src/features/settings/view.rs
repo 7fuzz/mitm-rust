@@ -8,6 +8,10 @@ use super::{Cmd, CertificateState, DataSectionState, ListenerForm, ProxyState, S
 use crate::ui::icons;
 use crate::widgets::button::icon_button;
 use crate::widgets::card::card;
+use crate::widgets::button::danger_filled;
+use crate::widgets::list_row::list_row;
+use crate::widgets::segmented::segmented;
+use crate::util::format::format_count;
 use crate::widgets::section::{section, section_with};
 
 #[allow(clippy::too_many_arguments)]
@@ -26,7 +30,14 @@ pub fn show(
 ) {
     let [mut list, mut content] = split::side_by_side(ui, "settings_split", &mut prefs.list_fraction);
     for section in SettingsSection::ALL {
-        list.selectable_value(&mut prefs.section, section, section.name());
+        let selected = prefs.section == section;
+        if list_row(&mut list, selected, |ui| {
+            ui.label(section.name());
+        })
+        .clicked()
+        {
+            prefs.section = section;
+        }
     }
     egui::ScrollArea::vertical()
         .id_salt(("settings", prefs.section))
@@ -46,18 +57,15 @@ pub fn show(
 
 fn appearance_section(ui: &mut egui::Ui) {
     section(ui, "Theme");
-    ui.horizontal(|ui| {
-        let current_theme = ui.ctx().options(|opt| opt.theme_preference);
-        for (preference, label) in [
-            (egui::ThemePreference::System, "System"),
-            (egui::ThemePreference::Light, "Light"),
-            (egui::ThemePreference::Dark, "Dark"),
-        ] {
-            if ui.selectable_label(current_theme == preference, label).clicked() {
-                ui.ctx().set_theme(preference);
-            }
-        }
-    });
+    let mut theme_preference = ui.ctx().options(|opt| opt.theme_preference);
+    let choices = [
+        (egui::ThemePreference::System, "System"),
+        (egui::ThemePreference::Light, "Light"),
+        (egui::ThemePreference::Dark, "Dark"),
+    ];
+    if segmented(ui, &mut theme_preference, &choices) {
+        ui.ctx().set_theme(theme_preference);
+    }
 
     section(ui, "Zoom");
     ui.horizontal(|ui| {
@@ -71,7 +79,7 @@ fn appearance_section(ui: &mut egui::Ui) {
 }
 
 fn shortcuts_section(ui: &mut egui::Ui) {
-    egui::Grid::new("shortcut_list").num_columns(3).striped(true).spacing([24.0, 6.0]).show(ui, |ui| {
+    egui::Grid::new("shortcut_list").num_columns(3).striped(false).spacing([24.0, 6.0]).show(ui, |ui| {
         for (keys, action, scope) in crate::ui::shortcuts::listing(ui.ctx()) {
             ui.monospace(keys);
             ui.label(action);
@@ -98,17 +106,17 @@ fn data_section(ui: &mut egui::Ui, data: &mut DataSectionState, cmds: &mut Comma
     egui::Grid::new("data_categories_grid")
         .num_columns(3)
         .spacing([24.0, 8.0])
-        .striped(true)
+        .striped(false)
         .show(ui, |ui| {
-            ui.strong("Category");
-            ui.strong("Count");
-            ui.strong("Action");
+            for title in ["Category", "Rows", ""] {
+                ui.label(RichText::new(title).small().weak());
+            }
             ui.end_row();
 
             for category in mitm_core::DataCategory::ALL {
                 ui.label(category.display_name());
                 let count = counts.get(category);
-                ui.monospace(count.to_string());
+                ui.monospace(format_count(count as usize));
                 let clear_id = ui.id().with(category);
                 if crate::widgets::confirm::confirm_button(
                     ui,
@@ -125,7 +133,7 @@ fn data_section(ui: &mut egui::Ui, data: &mut DataSectionState, cmds: &mut Comma
 
     section(ui, "Danger zone");
 
-    let reset = egui::Button::new(RichText::new("Factory Reset…").color(theme::color(ui, Tone::Danger)));
+    let reset = egui::Button::new(RichText::new("Factory reset…").color(theme::color(ui, Tone::Danger)));
     if ui.add_enabled(!data.resetting, reset).clicked() {
         data.factory_reset_open = true;
         data.factory_reset_input.clear();
@@ -139,20 +147,16 @@ fn data_section(ui: &mut egui::Ui, data: &mut DataSectionState, cmds: &mut Comma
 fn factory_reset_modal(ctx: &egui::Context, data: &mut DataSectionState, cmds: &mut Commands) {
     let mut close = false;
     let modal = egui::Modal::new(egui::Id::new("factory_reset_modal")).show(ctx, |ui| {
-        ui.set_width(320.0);
-        ui.heading("Reset All Application Data");
+        ui.set_width(360.0);
+        ui.heading("Reset all data");
         ui.add_space(8.0);
-        ui.label(
-            "This action wipes the database and root CA certificate. All traffic, rules, collections, and settings will be permanently lost."
-        );
+        ui.label("Wipes the database and the root CA. Traffic, rules, collections and settings are lost.");
         ui.add_space(8.0);
-        ui.label(RichText::new("Type RESET below to proceed:").strong());
-        ui.add_space(4.0);
-        ui.add(egui::TextEdit::singleline(&mut data.factory_reset_input).desired_width(f32::INFINITY));
+        ui.add(egui::TextEdit::singleline(&mut data.factory_reset_input).hint_text("Type RESET").desired_width(f32::INFINITY));
         ui.add_space(12.0);
-        ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let can_reset = data.factory_reset_input.trim() == "RESET";
-            if ui.add_enabled(can_reset, egui::Button::new(RichText::new("Factory Reset").color(theme::color(ui, Tone::Danger)))).clicked() {
+            if ui.add_enabled(can_reset, danger_filled(ui, "Reset")).clicked() {
                 cmds.push(AppCommand::FactoryReset);
                 close = true;
             }
@@ -198,8 +202,7 @@ fn certificate_section(
         if ui.button("Open folder").clicked() {
             cmds.push(Cmd::OpenCaFolder);
         }
-
-        ui.separator();
+        ui.add_space(12.0);
 
         let regen_id = ui.id().with("regenerate_ca");
         let confirmed = ui
@@ -229,41 +232,14 @@ fn certificate_section(
         egui::Grid::new("ca_details_grid")
             .num_columns(2)
             .spacing([16.0, 6.0])
-            .striped(true)
+            .striped(false)
             .show(ui, |ui| {
-                ui.strong("Common Name:");
-                ui.label(&info.common_name);
-                ui.end_row();
-
-                ui.strong("Organization:");
-                ui.label(&info.organization);
-                ui.end_row();
-
-                ui.strong("Valid From:");
-                ui.label(&info.not_before);
-                ui.end_row();
-
-                ui.strong("Valid Until:");
-                ui.label(&info.not_after);
-                ui.end_row();
-
-                ui.strong("SHA-256 Fingerprint:");
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(&info.fingerprint).monospace());
-                    if ui.small_button(icons::COPY).on_hover_text("Copy fingerprint").clicked() {
-                        ui.ctx().copy_text(info.fingerprint.clone());
-                    }
-                });
-                ui.end_row();
-
-                ui.strong("File Path:");
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(&info.cert_path).monospace());
-                    if ui.small_button(icons::COPY).on_hover_text("Copy path").clicked() {
-                        ui.ctx().copy_text(info.cert_path.clone());
-                    }
-                });
-                ui.end_row();
+                detail_row(ui, "Common name", &info.common_name, false);
+                detail_row(ui, "Organization", &info.organization, false);
+                detail_row(ui, "Valid from", &info.not_before, false);
+                detail_row(ui, "Valid until", &info.not_after, false);
+                detail_row(ui, "SHA-256", &info.fingerprint, true);
+                detail_row(ui, "File", &info.cert_path, true);
             });
     }
 
@@ -273,7 +249,7 @@ fn certificate_section(
     let cert_path = cert.info.as_ref().map_or("~/.local/share/mitm/ca/ca.crt", |i| i.cert_path.as_str());
 
     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id("trust_linux"), os == "linux")
-        .show_header(ui, |ui| { ui.strong("Linux"); })
+        .show_header(ui, |ui| { ui.label("Linux"); })
         .body(|ui| {
             let p11_cmd = format!("sudo trust anchor --store \"{}\"", cert_path);
             copyable_command(ui, "linux_p11", "Fedora / Arch / RHEL / p11-kit:", &p11_cmd);
@@ -283,21 +259,21 @@ fn certificate_section(
         });
 
     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id("trust_macos"), os == "macos")
-        .show_header(ui, |ui| { ui.strong("macOS"); })
+        .show_header(ui, |ui| { ui.label("macOS"); })
         .body(|ui| {
             let mac_cmd = format!("sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain \"{}\"", cert_path);
             copyable_command(ui, "macos_trust", "System keychain:", &mac_cmd);
         });
 
     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id("trust_windows"), os == "windows")
-        .show_header(ui, |ui| { ui.strong("Windows"); })
+        .show_header(ui, |ui| { ui.label("Windows"); })
         .body(|ui| {
             let win_cmd = format!("certutil -addstore -f \"Root\" \"{}\"", cert_path);
             copyable_command(ui, "win_certutil", "Certificate store (Run as Administrator):", &win_cmd);
         });
 
     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id("trust_firefox"), false)
-        .show_header(ui, |ui| { ui.strong("Firefox"); })
+        .show_header(ui, |ui| { ui.label("Firefox"); })
         .body(|ui| {
             ui.label(RichText::new("Option 1: Allow Firefox to trust OS root certificates:").weak().small());
             ui.monospace("about:config -> set security.enterprise_roots.enabled = true");
@@ -306,7 +282,7 @@ fn certificate_section(
         });
 
     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id("trust_cli"), false)
-        .show_header(ui, |ui| { ui.strong("CLI / Node.js / Python"); })
+        .show_header(ui, |ui| { ui.label("CLI / Node.js / Python"); })
         .body(|ui| {
             let node_cmd = format!("export NODE_EXTRA_CA_CERTS=\"{}\"", cert_path);
             copyable_command(ui, "cli_node", "Node.js:", &node_cmd);
@@ -319,13 +295,24 @@ fn certificate_section(
         });
 }
 
+fn detail_row(ui: &mut egui::Ui, label: &str, value: &str, copyable: bool) {
+    ui.label(RichText::new(label).weak());
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(value).monospace());
+        if copyable && icon_button(ui, icons::COPY, &format!("Copy {}", label.to_lowercase())).clicked() {
+            ui.ctx().copy_text(value.to_string());
+        }
+    });
+    ui.end_row();
+}
+
 fn copyable_command(ui: &mut egui::Ui, id_salt: &str, label: &str, cmd: &str) {
     ui.label(RichText::new(label).weak().small());
     ui.horizontal(|ui| {
-        let width = (ui.available_width() - 40.0).max(100.0);
-        ui.add(egui::TextEdit::singleline(&mut cmd.to_string()).desired_width(width));
+        let width = (ui.available_width() - 60.0).max(100.0);
+        ui.add(egui::TextEdit::singleline(&mut cmd.to_string()).font(egui::TextStyle::Monospace).desired_width(width));
         let flash_id = ui.id().with(id_salt);
-        if ui.small_button(icons::COPY).on_hover_text("Copy command").clicked() {
+        if icon_button(ui, icons::COPY, "Copy command").clicked() {
             ui.ctx().copy_text(cmd.to_string());
             crate::widgets::flash::set(ui, flash_id, "Copied");
         }
@@ -349,16 +336,13 @@ fn proxy_section(
     let mut to_remove = None;
 
     egui::Grid::new("listeners_table_grid")
-        .striped(true)
+        .striped(false)
         .num_columns(6)
         .spacing([12.0, 8.0])
         .show(ui, |ui| {
-            ui.strong("Status");
-            ui.strong("Enabled");
-            ui.strong("Label");
-            ui.strong("Address (IP:Port)");
-            ui.strong("ID");
-            ui.strong("");
+            for title in ["", "On", "Label", "Address", "ID", ""] {
+                ui.label(RichText::new(title).small().weak());
+            }
             ui.end_row();
 
             for (idx, listener) in proxy.listeners.iter_mut().enumerate() {
@@ -367,7 +351,7 @@ fn proxy_section(
                 } else if proxy.running_listeners.contains(&listener.id) {
                     RichText::new("●").color(theme::color(ui, Tone::Success))
                 } else {
-                    RichText::new("○").weak()
+                    RichText::new("●").color(theme::color(ui, Tone::Neutral))
                 };
                 let tooltip = proxy.listener_errors.get(&listener.id).map(|s| s.as_str()).unwrap_or_else(|| {
                     if proxy.running_listeners.contains(&listener.id) {
@@ -389,14 +373,14 @@ fn proxy_section(
                     modified = true;
                 }
 
-                if ui.add(egui::TextEdit::singleline(&mut listener.address).desired_width(180.0)).lost_focus() {
+                if ui.add(egui::TextEdit::singleline(&mut listener.address).font(egui::TextStyle::Monospace).desired_width(180.0)).lost_focus() {
                     modified = true;
                 }
 
-                ui.label(listener.id.to_string());
+                ui.label(RichText::new(listener.id.to_string()).monospace().weak());
 
                 if listener.id != 0 {
-                    if ui.small_button(icons::TRASH).clicked() {
+                    if icon_button(ui, icons::TRASH, "Remove listener").clicked() {
                         to_remove = Some(idx);
                     }
                 } else {
@@ -471,28 +455,27 @@ fn proxy_section(
     let id = ui.make_persistent_id("host_addresses_collapsing");
     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
         .show_header(ui, |ui| {
-            ui.strong("Host addresses");
-            if ui.small_button("⟳").on_hover_text("Refresh host addresses").clicked() {
+            ui.label("Host addresses");
+            if icon_button(ui, icons::ARROW_CLOCKWISE, "Refresh host addresses").clicked() {
                 proxy.reload_host_ips();
             }
         })
         .body(|ui| {
             egui::Grid::new("host_ips_grid")
-                .striped(true)
+                .striped(false)
                 .num_columns(4)
                 .spacing([12.0, 6.0])
                 .show(ui, |ui| {
-                    ui.strong("Status");
-                    ui.strong("IP");
-                    ui.strong("Interface");
-                    ui.strong("");
+                    for title in ["", "IP", "Interface", ""] {
+                        ui.label(RichText::new(title).small().weak());
+                    }
                     ui.end_row();
 
                     for ip_info in &proxy.host_ips {
                         let (dot, tone, tooltip) = if ip_info.is_up {
                             ("●", Tone::Success, "Interface up")
                         } else {
-                            ("○", Tone::Neutral, "Interface down")
+                            ("●", Tone::Neutral, "Interface down")
                         };
                         ui.label(RichText::new(dot).color(theme::color(ui, tone))).on_hover_text(tooltip);
 
@@ -517,25 +500,11 @@ fn proxy_section(
         .num_columns(2)
         .spacing([12.0, 6.0])
         .show(ui, |ui| {
-            ui.strong("Proxy Status:");
-            if proxy.running {
-                ui.label(RichText::new("● Active").color(theme::color(ui, Tone::Success)).strong());
-            } else {
-                ui.label(RichText::new("○ Stopped").weak());
-            }
-            ui.end_row();
-
-            ui.strong("Active Listeners:");
-            ui.label(&proxy.active_summary);
-            ui.end_row();
-
-            ui.strong("Total Flows in Memory:");
-            ui.label(format!("{}/{}", traffic.flows.len(), traffic.max_flows));
-            ui.end_row();
-
-            ui.strong("Database Location:");
-            ui.label(db_path.to_string_lossy());
-            ui.end_row();
+            let status = if proxy.running { "Running" } else { "Stopped" };
+            detail_row(ui, "Proxy", status, false);
+            detail_row(ui, "Listening on", &proxy.active_summary, false);
+            detail_row(ui, "Flows in memory", &format!("{} / {}", format_count(traffic.flows.len()), format_count(traffic.max_flows)), false);
+            detail_row(ui, "Database", &db_path.to_string_lossy(), true);
         });
 }
 
