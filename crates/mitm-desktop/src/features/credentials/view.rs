@@ -159,8 +159,8 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                         (None, Some(params)) => {
                             ui.horizontal(|ui| {
                                 ui.vertical(|ui| show_code(ui, &params, 16.0));
-                                if ui.small_button("✏").on_hover_text("Replace secret").clicked() {
-                                    state.totp_draft = Some((id.clone(), key.clone(), String::new()));
+                                if ui.small_button("✏").on_hover_text("Edit secret").clicked() {
+                                    state.totp_draft = Some((id.clone(), key.clone(), field.value.clone()));
                                 }
                             });
                         }
@@ -168,9 +168,10 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                             let mut text = draft.unwrap_or_default();
                             let (edit, scanned) = ui
                                 .horizontal(|ui| {
+                                    let eye = ui.add(egui::Button::new("👁").sense(egui::Sense::drag())).on_hover_text("Hold to reveal");
                                     let edit = ui.add(
                                         egui::TextEdit::singleline(&mut text)
-                                            .password(true)
+                                            .password(!eye.is_pointer_button_down_on())
                                             .hint_text("secret or otpauth://…")
                                             .desired_width(220.0),
                                     );
@@ -184,8 +185,12 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                                 Some(Err(e)) => state.error = Some(e),
                                 None => {}
                             }
-                            let commit = (edit.lost_focus() || was_scanned) && !text.trim().is_empty();
-                            if commit {
+                            let has_saved = totp::parse_secret(&field.value).is_ok();
+                            let escaped = edit.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape));
+                            let unchanged = text.trim().is_empty() || text.trim() == field.value;
+                            if has_saved && (escaped || (edit.lost_focus() && unchanged)) {
+                                state.totp_draft = None;
+                            } else if (edit.lost_focus() || was_scanned) && !text.trim().is_empty() {
                                 match totp::parse_secret(&text) {
                                     Ok(_) => {
                                         field.value = text.trim().to_string();
