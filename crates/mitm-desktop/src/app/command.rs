@@ -59,19 +59,12 @@ pub enum AppCommand {
     RecomputeHmac { secret: String, payload: String },
 
     SelectWorkspace(String),
-    SelectEnvironment(Option<String>),
     CreateWorkspace(String),
-    RenameWorkspace { id: String, name: String },
-    UpdateWorkspaceDescription { id: String, description: Option<String> },
     DeleteWorkspace(String),
 
-    CreateEnvironment { workspace_id: String, name: String },
-    RenameEnvironment { id: String, name: String },
-    DuplicateEnvironment(String),
-    DeleteEnvironment(String),
+    Environments(crate::features::environments::Cmd),
     MoveToCredentials { env_id: String, var_idx: usize, entry: String, field: String },
-    LockCredentials,
-    CopyTotp(String),
+    Credentials(crate::features::credentials::Cmd),
     PickCredentialsJson,
     PickQrImage(QrTarget),
 
@@ -87,15 +80,10 @@ impl AppCommand {
         matches!(
             self,
             AppCommand::SelectWorkspace(_)
-                | AppCommand::SelectEnvironment(_)
                 | AppCommand::CreateWorkspace(_)
                 | AppCommand::DeleteWorkspace(_)
-                | AppCommand::CreateEnvironment { .. }
-                | AppCommand::RenameEnvironment { .. }
-                | AppCommand::DuplicateEnvironment(_)
-                | AppCommand::DeleteEnvironment(_)
                 | AppCommand::ImportWorkspace { .. }
-        )
+        ) || matches!(self, AppCommand::Environments(cmd) if cmd.reloads())
     }
 }
 

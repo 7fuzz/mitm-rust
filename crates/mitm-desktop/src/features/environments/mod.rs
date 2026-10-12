@@ -1,3 +1,4 @@
+mod commands;
 mod export;
 mod import;
 mod quick;
@@ -14,6 +15,7 @@ use crate::widgets::split;
 use crate::ui::icons;
 
 
+pub use commands::{handle, Cmd};
 pub use export::show as show_export;
 pub use import::{file_label, is_json_file, show as show_import};
 pub use quick::{show as show_quick_vars, Scope as QuickVarScope};
@@ -214,7 +216,7 @@ fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
             } else if resp.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 let trimmed = state.rename_workspace_name.trim().to_string();
                 if !trimmed.is_empty() && trimmed != ws.name {
-                    cmds.push(AppCommand::RenameWorkspace {
+                    cmds.push(Cmd::RenameWorkspace {
                         id: ws.id.clone(),
                         name: trimmed,
                     });
@@ -262,7 +264,7 @@ fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
             let trimmed = state.description_text.trim();
             let new_desc = if trimmed.is_empty() { None } else { Some(trimmed.to_string()) };
             if new_desc != ws.description {
-                cmds.push(AppCommand::UpdateWorkspaceDescription {
+                cmds.push(Cmd::DescribeWorkspace {
                     id: ws.id.clone(),
                     description: new_desc,
                 });
@@ -314,7 +316,7 @@ fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
         ui.strong("Environments");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.button(icons::PLUS).on_hover_text("Add environment").clicked() {
-                cmds.push(AppCommand::CreateEnvironment {
+                cmds.push(Cmd::Create {
                     workspace_id: state.active_workspace_id.clone(),
                     name: "New Environment".to_string(),
                 });
@@ -370,11 +372,11 @@ fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
                 resp.context_menu(|ui| {
                     if is_active {
                         if ui.button("Deactivate").clicked() {
-                            cmds.push(AppCommand::SelectEnvironment(None));
+                            cmds.push(Cmd::Select(None));
                             ui.close();
                         }
                     } else if ui.button("Set active").clicked() {
-                        cmds.push(AppCommand::SelectEnvironment(Some(env.id.clone())));
+                        cmds.push(Cmd::Select(Some(env.id.clone())));
                         ui.close();
                     }
                     if ui.button("Rename").clicked() {
@@ -383,12 +385,12 @@ fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
                         ui.close();
                     }
                     if ui.button("Duplicate").clicked() {
-                        cmds.push(AppCommand::DuplicateEnvironment(env.id.clone()));
+                        cmds.push(Cmd::Duplicate(env.id.clone()));
                         ui.close();
                     }
                     ui.separator();
                     if ui.button("Delete").clicked() {
-                        cmds.push(AppCommand::DeleteEnvironment(env.id.clone()));
+                        cmds.push(Cmd::Delete(env.id.clone()));
                         ui.close();
                     }
                 });
@@ -396,7 +398,7 @@ fn environment_list(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
         }
 
         if let Some((id, name)) = rename_commit {
-            cmds.push(AppCommand::RenameEnvironment { id, name });
+            cmds.push(Cmd::Rename { id, name });
             state.renaming_env_id = None;
             state.rename_text.clear();
         }

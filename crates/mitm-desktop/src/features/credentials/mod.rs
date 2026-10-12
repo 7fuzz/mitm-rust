@@ -1,3 +1,4 @@
+mod commands;
 mod json_import;
 mod lock;
 mod view;
@@ -7,6 +8,7 @@ use std::path::Path;
 use mitm_core::credentials::{self, Credential, CredentialSummary, Field, FieldKind};
 use serde::{Deserialize, Serialize};
 
+pub use commands::{handle, Cmd};
 pub use json_import::show as show_json_import;
 pub use lock::{settings_section, show_unlock};
 pub use view::show;

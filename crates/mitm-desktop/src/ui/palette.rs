@@ -39,13 +39,13 @@ pub fn palette_items(state: &AppState, ctx: &egui::Context) -> Vec<PaletteItem> 
         if entry.fields.iter().any(|f| f.kind == mitm_core::credentials::FieldKind::Totp) {
             items.push(PaletteItem {
                 label: format!("Copy TOTP: {}", entry.name),
-                command: AppCommand::CopyTotp(entry.id.clone()),
+                command: crate::features::credentials::Cmd::CopyTotp(entry.id.clone()).into(),
                 shortcut: None,
             });
         }
     }
     if state.credentials.has_password && !state.credentials.locked {
-        items.push(PaletteItem { label: "Lock credentials".to_string(), command: AppCommand::LockCredentials, shortcut: None });
+        items.push(PaletteItem { label: "Lock credentials".to_string(), command: crate::features::credentials::Cmd::Lock.into(), shortcut: None });
     }
 
     for ws in &state.environments.workspaces {
@@ -60,7 +60,7 @@ pub fn palette_items(state: &AppState, ctx: &egui::Context) -> Vec<PaletteItem> 
     let is_none_active = state.environments.active_environment_id.is_none();
     items.push(PaletteItem {
         label: format!("Switch environment: No environment{}", if is_none_active { " (current)" } else { "" }),
-        command: AppCommand::SelectEnvironment(None),
+        command: crate::features::environments::Cmd::Select(None).into(),
         shortcut: None,
     });
 
@@ -68,7 +68,7 @@ pub fn palette_items(state: &AppState, ctx: &egui::Context) -> Vec<PaletteItem> 
         let is_active = Some(&env.id) == state.environments.active_environment_id.as_ref();
         items.push(PaletteItem {
             label: format!("Switch environment: {}{}", env.name, if is_active { " (current)" } else { "" }),
-            command: AppCommand::SelectEnvironment(Some(env.id.clone())),
+            command: crate::features::environments::Cmd::Select(Some(env.id.clone())).into(),
             shortcut: None,
         });
     }

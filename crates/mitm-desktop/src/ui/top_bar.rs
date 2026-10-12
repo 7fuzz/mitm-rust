@@ -97,7 +97,7 @@ fn workspace_menu(ui: &mut egui::Ui, ws_state: &mut EnvironmentsState, cmds: &mu
 fn environment_menu(ui: &mut egui::Ui, ws_state: &EnvironmentsState, cmds: &mut Commands) {
     let is_none_active = ws_state.active_environment_id.is_none();
     if ui.selectable_label(is_none_active, "No environment").clicked() {
-        cmds.push(AppCommand::SelectEnvironment(None));
+        cmds.push(crate::features::environments::Cmd::Select(None));
         ui.close();
     }
     if !ws_state.environments.is_empty() {
@@ -106,7 +106,7 @@ fn environment_menu(ui: &mut egui::Ui, ws_state: &EnvironmentsState, cmds: &mut 
     for env in &ws_state.environments {
         let is_active = Some(&env.id) == ws_state.active_environment_id.as_ref();
         if ui.selectable_label(is_active, &env.name).clicked() && !is_active {
-            cmds.push(AppCommand::SelectEnvironment(Some(env.id.clone())));
+            cmds.push(crate::features::environments::Cmd::Select(Some(env.id.clone())));
             ui.close();
         }
     }
