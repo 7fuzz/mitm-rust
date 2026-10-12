@@ -44,7 +44,6 @@ pub struct MitmApp {
     qr_images: Jobs<Option<(crate::app::command::QrTarget, Result<String, String>)>>,
     file_saves: Jobs<Option<Result<String, String>>>,
     har_index: Jobs<Result<Vec<mitm_core::HistoryEntry>, String>>,
-    fuzz_search: Jobs<(i64, String, Vec<u32>)>,
     factory_resets: Jobs<Result<Option<MitmCore>, String>>,
     history_limits: Jobs<(mitm_core::state::HistorySettings, Result<(), String>)>,
 }
@@ -70,7 +69,6 @@ impl MitmApp {
             qr_images: Jobs::default(),
             file_saves: Jobs::default(),
             har_index: Jobs::default(),
-            fuzz_search: Jobs::default(),
             factory_resets: Jobs::default(),
             history_limits: Jobs::default(),
         }
@@ -264,69 +262,15 @@ impl MitmApp {
                     });
                 }
             }
-            AppCommand::StartFuzzer(config) => {
-                let start = self.rt.block_on(self.core.start_fuzz(config));
-                self.state.fuzzer.started(start);
-            }
-            AppCommand::StopFuzzer => self.core.stop_fuzz(),
-            AppCommand::SelectFuzzResult { run_id, idx } => {
-                self.state.fuzzer.select_result(run_id, idx, db_path);
+            AppCommand::Fuzzer(cmd) => {
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                crate::features::fuzzer::handle(&mut self.state.fuzzer, &cx, cmd);
             }
             AppCommand::SendFuzzResultToRepeater { run_id, idx } => {
-                let result = if self.state.fuzzer.selected_result.as_ref().is_some_and(|r| r.idx == idx && self.state.fuzzer.run_id == Some(run_id)) {
-                    self.state.fuzzer.selected_result.clone()
-                } else {
-                    mitm_core::fuzzer::get_result_db(db_path, run_id, idx).ok().flatten()
-                };
-                if let Some(result) = result {
+                if let Some(result) = self.state.fuzzer.result(run_id, idx, db_path) {
                     self.state.repeater.create_from_fuzz_result(&result, db_path);
                     dock::open_tab(&mut self.dock, Tab::Repeater);
                 }
-            }
-            AppCommand::CopyFuzzCurl { run_id, idx } => {
-                let result = if self.state.fuzzer.selected_result.as_ref().is_some_and(|r| r.idx == idx && self.state.fuzzer.run_id == Some(run_id)) {
-                    self.state.fuzzer.selected_result.clone()
-                } else {
-                    mitm_core::fuzzer::get_result_db(db_path, run_id, idx).ok().flatten()
-                };
-                if let Some(result) = result {
-                    ctx.copy_text(crate::util::format::Exchange::from_fuzz_result(&result).curl());
-                }
-            }
-            AppCommand::SaveFuzzRun { run_id, name } => {
-                match self.core.save_fuzz_run(run_id, &name) {
-                    Ok(()) => {
-                        if self.state.fuzzer.run_id == Some(run_id) {
-                            self.state.fuzzer.is_saved = true;
-                            self.state.fuzzer.run_name = Some(name);
-                        }
-                        self.state.fuzzer.load_saved_runs(db_path);
-                    }
-                    Err(e) => {
-                        self.state.fuzzer.error = Some(e);
-                    }
-                }
-            }
-            AppCommand::LoadFuzzRun(id) => {
-                match self.core.load_fuzz_run(id) {
-                    Ok(loaded) => {
-                        self.state.fuzzer.load_run(loaded);
-                    }
-                    Err(e) => {
-                        self.state.fuzzer.error = Some(e);
-                    }
-                }
-            }
-            AppCommand::DeleteFuzzRun(id) => {
-                let _ = self.core.delete_fuzz_run(id);
-                if self.state.fuzzer.run_id == Some(id) {
-                    self.state.fuzzer.is_saved = false;
-                    self.state.fuzzer.run_name = None;
-                }
-                self.state.fuzzer.load_saved_runs(db_path);
-            }
-            AppCommand::ReloadSavedFuzzRuns => {
-                self.state.fuzzer.load_saved_runs(db_path);
             }
 
             AppCommand::Intercept(cmd) => {
@@ -643,10 +587,6 @@ impl eframe::App for MitmApp {
             top_bar::flash(ui, Err(error));
         }
         self.state.traffic.sync_header_search(&self.core.db_path);
-        for (run_id, query, matches) in self.fuzz_search.drain() {
-            self.state.fuzzer.set_response_search_results(run_id, &query, matches);
-        }
-        self.state.fuzzer.sync_response_search(&self.rt, ui.ctx(), &self.core, &self.fuzz_search);
         for (target, decoded) in self.qr_images.drain().flatten() {
             use crate::app::command::QrTarget;
             match (target, decoded) {
@@ -702,6 +642,7 @@ impl eframe::App for MitmApp {
             crate::features::settings::poll(self.state.settings(), &cx);
             crate::features::rewrite::poll(&mut self.state.rewrite, &cx, now);
             crate::features::intercept::poll(&mut self.state.intercept, &cx);
+            crate::features::fuzzer::poll(&mut self.state.fuzzer, &cx);
         }
         crate::features::utilities::hashing::poll(&mut self.state.hashing);
         let palette = crate::ui::theme::Palette::of(ui.visuals());

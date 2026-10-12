@@ -1,3 +1,4 @@
+mod commands;
 mod view;
 
 use std::collections::HashMap;
@@ -12,6 +13,7 @@ use crate::features::request_editor::captured::CapturedRequest;
 use crate::widgets::tri_state::TriState;
 
 pub use mitm_core::fuzzer::MatchRule;
+pub use commands::{handle, poll, Cmd};
 pub use view::show;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -269,6 +271,8 @@ pub struct FuzzerState {
     pub save_name_input: String,
     pub saved_runs: Vec<mitm_core::fuzzer::FuzzRunMeta>,
     pub error: Option<String>,
+    pub starting: bool,
+    jobs: commands::FuzzJobs,
 }
 
 impl Default for FuzzerState {
@@ -313,6 +317,8 @@ impl Default for FuzzerState {
             save_name_input: String::new(),
             saved_runs: Vec::new(),
             error: None,
+            starting: false,
+            jobs: Default::default(),
         }
     }
 }
@@ -612,13 +618,7 @@ impl FuzzerState {
         self.selected_result = mitm_core::fuzzer::get_result_db(db_path, run_id, idx).ok().flatten();
     }
 
-    pub fn sync_response_search(
-        &mut self,
-        rt: &tokio::runtime::Runtime,
-        ctx: &eframe::egui::Context,
-        core: &std::sync::Arc<mitm_core::MitmCore>,
-        jobs: &crate::app::jobs::Jobs<(i64, String, Vec<u32>)>,
-    ) {
+    pub fn sync_response_search(&mut self, cx: &crate::app::cx::Cx) {
         let query = self.search_query.trim();
         if self.search_scope != FuzzSearchScope::Response || query.is_empty() {
             if self.response_matches.is_some() || self.pending_search_key.is_some() {
@@ -641,9 +641,9 @@ impl FuzzerState {
             return;
         }
         self.pending_search_key = Some(key.clone());
-        let core = std::sync::Arc::clone(core);
+        let core = std::sync::Arc::clone(cx.core);
         let q = query.to_string();
-        jobs.spawn(rt, ctx, async move {
+        self.jobs.search.spawn(cx.rt, cx.ctx, async move {
             let matches = core.search_fuzz_responses(run_id, &q).unwrap_or_default();
             (run_id, q, matches)
         });

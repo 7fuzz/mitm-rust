@@ -1,5 +1,4 @@
 use mitm_core::http::curl::ParsedCurl;
-use mitm_core::fuzzer::FuzzConfig;
 use mitm_core::state::HistorySettings;
 use crate::ui::dock::Tab;
 use crate::features::collections::{CollectionsCmd, SaveTarget};
@@ -46,15 +45,8 @@ pub enum AppCommand {
     RepeaterSelect(String),
     RepeaterDelete(String),
     RepeaterSend(String),
-    StartFuzzer(FuzzConfig),
-    StopFuzzer,
-    SelectFuzzResult { run_id: i64, idx: u32 },
+    Fuzzer(crate::features::fuzzer::Cmd),
     SendFuzzResultToRepeater { run_id: i64, idx: u32 },
-    CopyFuzzCurl { run_id: i64, idx: u32 },
-    SaveFuzzRun { run_id: i64, name: String },
-    LoadFuzzRun(i64),
-    DeleteFuzzRun(i64),
-    ReloadSavedFuzzRuns,
 
     Intercept(crate::features::intercept::Cmd),
     Rewrite(crate::features::rewrite::Cmd),

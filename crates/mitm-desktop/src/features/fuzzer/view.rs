@@ -12,7 +12,7 @@ use crate::ui::theme::{self, Tone};
 use crate::widgets::pills::render_status_pill;
 use crate::widgets::tri_state::tri_state_button;
 use crate::widgets::{split, template};
-use super::{AttackType, ConfigTab, FuzzSearchScope, FuzzSortColumn, FuzzerState, MatchRule, PayloadConfig, PayloadKind, RequestTab, RunStatus};
+use super::{Cmd, AttackType, ConfigTab, FuzzSearchScope, FuzzSortColumn, FuzzerState, MatchRule, PayloadConfig, PayloadKind, RequestTab, RunStatus};
 use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
@@ -30,13 +30,13 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
         ui.set_min_height(28.0);
         if fuzzer.status == RunStatus::Running {
             if ui.button(RichText::new("Stop").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
-                cmds.push(AppCommand::StopFuzzer);
+                cmds.push(Cmd::Stop);
             }
             ui.spinner();
         } else {
             let start = RichText::new("Start").color(theme::color(ui, Tone::Success)).strong();
             if ui.button(start).clicked() {
-                cmds.push(AppCommand::StartFuzzer(fuzzer.config()));
+                cmds.push(Cmd::Start(fuzzer.config()));
             }
         }
         runs_popover(ui, fuzzer, cmds);
@@ -78,7 +78,7 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
                         } else {
                             fuzzer.save_name_input.trim().to_string()
                         };
-                        cmds.push(AppCommand::SaveFuzzRun { run_id, name });
+                        cmds.push(Cmd::SaveRun { run_id, name });
                         fuzzer.saving_run = false;
                     }
                     if ui.button(icons::X).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -143,15 +143,15 @@ fn runs_popover(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands
                 ui.separator();
             }
             if let Some(id) = to_load {
-                cmds.push(AppCommand::LoadFuzzRun(id));
+                cmds.push(Cmd::LoadRun(id));
             }
             if let Some(id) = to_delete {
-                cmds.push(AppCommand::DeleteFuzzRun(id));
+                cmds.push(Cmd::DeleteRun(id));
             }
         });
     });
     if menu.response.clicked() {
-        cmds.push(AppCommand::ReloadSavedFuzzRuns);
+        cmds.push(Cmd::ReloadSavedRuns);
     }
     menu.response.on_hover_text("Saved runs");
 }
@@ -573,7 +573,7 @@ fn results_table(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Command
                 let response = text_cells.into_iter().fold(row.response(), |acc, resp| acc | resp);
                 if (response.clicked() || response.secondary_clicked()) && fuzzer.selected_idx != Some(r.idx) {
                     if let Some(run_id) = fuzzer.run_id {
-                        cmds.push(AppCommand::SelectFuzzResult { run_id, idx: r.idx });
+                        cmds.push(Cmd::SelectResult { run_id, idx: r.idx });
                     }
                 }
                 response.context_menu(|ui| {
@@ -594,7 +594,7 @@ fn results_table(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Command
                     }
                     if let Some(run_id) = fuzzer.run_id {
                         if ui.button("Copy cURL").clicked() {
-                            cmds.push(AppCommand::CopyFuzzCurl { run_id, idx: r.idx });
+                            cmds.push(Cmd::CopyCurl { run_id, idx: r.idx });
                             ui.close();
                         }
                     }
