@@ -1,11 +1,11 @@
 use eframe::egui::{self, RichText};
 use crate::ui::theme::{self, Tone};
-use crate::app::command::{AppCommand, Commands};
+use crate::app::command::Commands;
 use crate::widgets::pills::{badge, render_method_pill};
 use crate::widgets::{source_scope, split};
 use mitm_core::state::ListenerConfig;
 use crate::features::request_editor::kv_table::{self, KvLabels};
-use super::InterceptState;
+use super::{Cmd, InterceptState};
 use crate::ui::icons;
 
 pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[ListenerConfig], cmds: &mut Commands) {
@@ -23,7 +23,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[Listener
         if ui.selectable_label(enabled, toggle_label).clicked() {
             enabled = !enabled;
             state.enabled = enabled;
-            cmds.push(AppCommand::ConfigureInterceptor {
+            cmds.push(Cmd::Configure {
                 enabled,
                 mode: state.mode.clone(),
             });
@@ -43,7 +43,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[Listener
 
         if mode != state.mode {
             state.mode = mode.clone();
-            cmds.push(AppCommand::ConfigureInterceptor {
+            cmds.push(Cmd::Configure {
                 enabled: state.enabled,
                 mode,
             });
@@ -54,7 +54,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[Listener
         ui.toggle_value(&mut state.prefs.raise_window, icons::BELL).on_hover_text("Bring the window forward when a flow pauses");
         ui.separator();
         if source_scope::chips(ui, &mut state.source_scope, listeners) {
-            cmds.push(AppCommand::SetInterceptScope(state.source_scope.clone()));
+            cmds.push(Cmd::SetScope(state.source_scope.clone()));
         }
         ui.separator();
 
@@ -65,10 +65,10 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[Listener
                 .strong();
             ui.label(badge);
             if ui.button("Forward all").clicked() {
-                cmds.push(AppCommand::ForwardAllIntercepts);
+                cmds.push(Cmd::ForwardAll);
             }
             if ui.button(RichText::new("Drop all").color(theme::color(ui, Tone::Danger))).clicked() {
-                cmds.push(AppCommand::DropAllIntercepts);
+                cmds.push(Cmd::DropAll);
             }
         }
     });
@@ -152,13 +152,13 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
 
     ui.horizontal(|ui| {
         if ui.button(RichText::new("Forward (with changes)").color(theme::color(ui, Tone::Success)).strong()).clicked() {
-            cmds.push(AppCommand::ForwardActiveIntercept { modified: true });
+            cmds.push(Cmd::ForwardActive { modified: true });
         }
         if ui.button("Forward Unmodified").clicked() {
-            cmds.push(AppCommand::ForwardActiveIntercept { modified: false });
+            cmds.push(Cmd::ForwardActive { modified: false });
         }
         if ui.button(RichText::new("Drop Flow").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
-            cmds.push(AppCommand::DropActiveIntercept);
+            cmds.push(Cmd::DropActive);
         }
 
         ui.separator();
@@ -280,7 +280,7 @@ fn render_rules_manager(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mu
         for (index, rule) in rules.iter_mut().enumerate() {
             rule.order_index = index as i32;
         }
-        cmds.push(AppCommand::SaveInterceptRules(rules.clone()));
+        cmds.push(Cmd::SaveRules(rules.clone()));
     }
 }
 

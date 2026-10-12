@@ -1,5 +1,4 @@
 use mitm_core::http::curl::ParsedCurl;
-use mitm_core::db::InterceptRule;
 use mitm_core::fuzzer::FuzzConfig;
 use mitm_core::state::HistorySettings;
 use crate::ui::dock::Tab;
@@ -57,24 +56,9 @@ pub enum AppCommand {
     DeleteFuzzRun(i64),
     ReloadSavedFuzzRuns,
 
-    ForwardIntercept {
-        flow_id: String,
-        url: Option<String>,
-        method: Option<String>,
-        headers: Option<Vec<(String, String)>>,
-        body: Option<Vec<u8>>,
-    },
-    DropIntercept { flow_id: String },
-    ForwardAllIntercepts,
-    ForwardActiveIntercept { modified: bool },
-    DropActiveIntercept,
-    DropAllIntercepts,
-    ConfigureInterceptor { enabled: bool, mode: String },
-    SetInterceptScope(mitm_core::state::SourceScope),
+    Intercept(crate::features::intercept::Cmd),
     Rewrite(crate::features::rewrite::Cmd),
     ShowRewriteFor(i64),
-    ToggleInterceptor,
-    SaveInterceptRules(Vec<InterceptRule>),
 
     Collections(CollectionsCmd),
     WebSockets(crate::features::websockets::Cmd),

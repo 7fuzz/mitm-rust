@@ -9,7 +9,6 @@ use std::sync::Arc;
 use crossbeam_channel::Receiver;
 use eframe::egui;
 use egui_dock::{DockArea, DockState};
-use mitm_core::db::InterceptRule;
 use mitm_core::events::CoreEvent;
 use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
@@ -218,23 +217,8 @@ impl MitmApp {
                 });
             }
             AppCommand::AddInterceptRuleForHost(host) => {
-                let rules = &mut self.state.intercept.rules;
-                rules.push(InterceptRule {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    is_enabled: true,
-                    target_phase: "request".to_string(),
-                    match_field: "host".to_string(),
-                    operator: "equals".to_string(),
-                    match_value: host,
-                    order_index: rules.len() as i32,
-                    created_at_ms: chrono::Utc::now().timestamp_millis(),
-                    action: "intercept".to_string(),
-                });
-                let rules = rules.clone();
-                let core = Arc::clone(&self.core);
-                self.rt.spawn(async move {
-                    let _ = core.update_intercept_rules(rules).await;
-                });
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                crate::features::intercept::handle(&mut self.state.intercept, &cx, crate::features::intercept::Cmd::AddRuleForHost(host));
                 dock::open_tab(&mut self.dock, Tab::Intercept);
             }
             AppCommand::SendFlowToRepeater(id) => {
@@ -345,46 +329,9 @@ impl MitmApp {
                 self.state.fuzzer.load_saved_runs(db_path);
             }
 
-            AppCommand::ForwardIntercept { flow_id, url, method, headers, body } => {
-                let _ = self.core.forward_intercepted_flow(&flow_id, url, method, headers, body);
-                self.state.intercept.remove_pending(&flow_id);
-            }
-            AppCommand::DropIntercept { flow_id } => {
-                let _ = self.core.drop_intercepted_flow(&flow_id);
-                self.state.intercept.remove_pending(&flow_id);
-            }
-            AppCommand::ForwardActiveIntercept { modified } => {
-                let intercept = &self.state.intercept;
-                if let Some(flow_id) = intercept.active_id.clone() {
-                    let edit = &intercept.edit;
-                    let cmd = AppCommand::ForwardIntercept {
-                        flow_id,
-                        url: modified.then(|| edit.url.clone()),
-                        method: modified.then(|| edit.method.clone()),
-                        headers: modified.then(|| intercept.edited_headers()),
-                        body: modified.then(|| edit.body.as_bytes().to_vec()),
-                    };
-                    self.run_command(ctx, cmd);
-                }
-            }
-            AppCommand::DropActiveIntercept => {
-                if let Some(flow_id) = self.state.intercept.active_id.clone() {
-                    self.run_command(ctx, AppCommand::DropIntercept { flow_id });
-                }
-            }
-            AppCommand::ForwardAllIntercepts => {
-                self.core.forward_all_intercepted();
-                self.state.intercept.clear_pending();
-            }
-            AppCommand::DropAllIntercepts => {
-                self.core.drop_all_intercepted();
-                self.state.intercept.clear_pending();
-            }
-            AppCommand::ConfigureInterceptor { enabled, mode } => {
-                let core = Arc::clone(&self.core);
-                self.rt.spawn(async move {
-                    let _ = core.toggle_interceptor(enabled, mode).await;
-                });
+            AppCommand::Intercept(cmd) => {
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                crate::features::intercept::handle(&mut self.state.intercept, &cx, cmd);
             }
             AppCommand::Rewrite(cmd) => {
                 let cx = Cx { rt: &self.rt, core: &self.core, ctx };
@@ -396,24 +343,6 @@ impl MitmApp {
                     rewrite.show_log_entry_for(&flow, db_path);
                     dock::open_tab(&mut self.dock, Tab::Rewrite);
                 }
-            }
-            AppCommand::SetInterceptScope(scope) => {
-                let core = Arc::clone(&self.core);
-                self.rt.spawn(async move {
-                    let _ = core.set_intercept_source_scope(scope).await;
-                });
-            }
-            AppCommand::ToggleInterceptor => {
-                let intercept = &mut self.state.intercept;
-                intercept.enabled = !intercept.enabled;
-                let cmd = AppCommand::ConfigureInterceptor { enabled: intercept.enabled, mode: intercept.mode.clone() };
-                self.run_command(ctx, cmd);
-            }
-            AppCommand::SaveInterceptRules(rules) => {
-                let core = Arc::clone(&self.core);
-                self.rt.spawn(async move {
-                    let _ = core.update_intercept_rules(rules).await;
-                });
             }
 
             AppCommand::Collections(CollectionsCmd::Execute(id)) => {
@@ -772,6 +701,7 @@ impl eframe::App for MitmApp {
             crate::features::websockets::poll(&mut self.state.websockets, &cx);
             crate::features::settings::poll(self.state.settings(), &cx);
             crate::features::rewrite::poll(&mut self.state.rewrite, &cx, now);
+            crate::features::intercept::poll(&mut self.state.intercept, &cx);
         }
         crate::features::utilities::hashing::poll(&mut self.state.hashing);
         let palette = crate::ui::theme::Palette::of(ui.visuals());

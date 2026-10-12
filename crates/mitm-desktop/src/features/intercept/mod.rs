@@ -1,3 +1,4 @@
+mod commands;
 mod view;
 
 use serde::{Deserialize, Serialize};
@@ -6,6 +7,7 @@ use mitm_core::state::{PendingFlowPayload, SourceScope};
 use mitm_core::repeater::HeaderItem;
 use crate::features::request_editor::captured::header_items;
 
+pub use commands::{handle, poll, Cmd};
 pub use view::show;
 
 pub struct RuleDraft {
@@ -61,6 +63,7 @@ pub struct InterceptState {
     pub rules: Vec<InterceptRule>,
     pub edit: FlowEdit,
     pub new_rule: RuleDraft,
+    jobs: crate::app::jobs::Jobs<Result<(), String>>,
 }
 
 impl Default for InterceptState {
@@ -78,6 +81,7 @@ impl Default for InterceptState {
                 ..Default::default()
             },
             new_rule: RuleDraft::default(),
+            jobs: Default::default(),
         }
     }
 }

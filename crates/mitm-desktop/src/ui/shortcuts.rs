@@ -2,6 +2,7 @@ use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
 use crate::app::command::{AppCommand, Commands};
 use mitm_core::state::ProxyMode;
 use crate::ui::dock::Tab;
+use crate::features::intercept;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -55,16 +56,16 @@ impl Action {
             Action::ImportWorkspace => AppCommand::OpenImport,
             Action::ExportWorkspace => AppCommand::ExportWorkspace,
             Action::ImportCurl => AppCommand::OpenCurlImport,
-            Action::InterceptForward => AppCommand::ForwardActiveIntercept { modified: true },
-            Action::InterceptForwardUnmodified => AppCommand::ForwardActiveIntercept { modified: false },
-            Action::InterceptDrop => AppCommand::DropActiveIntercept,
+            Action::InterceptForward => intercept::Cmd::ForwardActive { modified: true }.into(),
+            Action::InterceptForwardUnmodified => intercept::Cmd::ForwardActive { modified: false }.into(),
+            Action::InterceptDrop => intercept::Cmd::DropActive.into(),
             Action::OpenTab(tab) => AppCommand::OpenTab(tab),
             Action::FocusTabAt(index) => AppCommand::FocusTabAt(index),
             Action::NextTab => AppCommand::CycleTab { forward: true },
             Action::PreviousTab => AppCommand::CycleTab { forward: false },
             Action::ToggleProxy => crate::features::settings::Cmd::ToggleProxy.into(),
             Action::SetProxyMode(mode) => crate::features::settings::Cmd::SetProxyMode(mode).into(),
-            Action::ToggleInterceptor => AppCommand::ToggleInterceptor,
+            Action::ToggleInterceptor => intercept::Cmd::Toggle.into(),
             Action::ClearTraffic => AppCommand::ClearTraffic,
             Action::FocusSearch => AppCommand::FocusSearch,
         }
