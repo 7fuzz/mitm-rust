@@ -10,6 +10,8 @@ use crate::widgets::diff::{self, DiffLine};
 use crate::widgets::split;
 use super::{action_tone, RewriteState};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
+use crate::widgets::section::section;
 
 const LOG_LIMIT: u32 = 2000;
 
@@ -30,7 +32,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, db_path: &Path, cmds: &
     }
     ui.horizontal(|ui| {
         ui.label(RichText::new(format!("{} entries", state.log.len())).weak());
-        if ui.small_button("⟳").on_hover_text("Reload the log").clicked() {
+        if icon_button(ui, icons::ARROW_CLOCKWISE, "Reload the log").clicked() {
             reload(state, db_path);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -39,7 +41,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, db_path: &Path, cmds: &
             }
         });
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     let Some(selected) = state.selected_log.and_then(|id| state.log.iter().position(|e| e.id == id)) else {
         list(ui, state);
@@ -67,7 +69,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, db_path: &Path, cmds: &
 fn list(ui: &mut egui::Ui, state: &mut RewriteState) {
     let mut clicked = None;
     TableBuilder::new(ui)
-        .striped(true)
+        .striped(false)
         .resizable(true)
         .sense(egui::Sense::click())
         .auto_shrink([false, false])
@@ -78,7 +80,7 @@ fn list(ui: &mut egui::Ui, state: &mut RewriteState) {
         .header(22.0, |mut header| {
             for title in ["Time", "Rule", "Method", "URL"] {
                 header.col(|ui| {
-                    ui.strong(title);
+                    ui.label(RichText::new(title).small().weak());
                 });
             }
         })
@@ -123,9 +125,9 @@ fn detail(ui: &mut egui::Ui, entry: &RewriteHistoryEntry, entry_diff: &EntryDiff
         ui.label(RichText::new(format!("→ {}", entry.rewritten_url)).monospace().color(theme::color(ui, theme::Tone::Success)));
     }
     ui.add_space(6.0);
-    ui.strong("Headers");
+    section(ui, "Headers");
     diff::show(ui, "rewrite_headers_diff", &entry_diff.headers);
     ui.add_space(6.0);
-    ui.strong("Body");
+    section(ui, "Body");
     diff::show(ui, "rewrite_body_diff", &entry_diff.body);
 }

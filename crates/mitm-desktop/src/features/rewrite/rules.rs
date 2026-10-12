@@ -6,11 +6,16 @@ use crate::widgets::{source_scope, split};
 use std::path::Path;
 use super::{action_label, action_tone, editor, log, RewriteState, RewriteView};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
+use crate::widgets::search::search_field_sized;
+use crate::widgets::section::section_with;
+use crate::widgets::subtabs::subtabs;
+use crate::widgets::toggle::labelled_toggle;
 
 pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerConfig], db_path: &Path, cmds: &mut Commands) {
     let now = ui.input(|i| i.time);
     toolbar(ui, state, listeners, cmds, now);
-    ui.separator();
+    ui.add_space(4.0);
     if state.prefs.view == RewriteView::Log {
         log::show(ui, state, db_path, cmds);
         return;
@@ -24,15 +29,11 @@ pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerCo
     state.prefs.list_fraction = fraction;
     list(&mut list_ui, state, now);
     egui::ScrollArea::vertical().id_salt("rewrite_editor").auto_shrink([false, false]).show(&mut editor_ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.strong("Rule");
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button(icons::X).on_hover_text("Close editor").clicked() {
-                    state.selected = None;
-                }
-            });
+        section_with(ui, "Rule", |ui| {
+            if icon_button(ui, icons::X, "Close editor").clicked() {
+                state.selected = None;
+            }
         });
-        ui.separator();
         let Some(rule) = state.rules.get_mut(index) else { return };
         if state.mock_headers.as_ref().is_none_or(|(id, _)| *id != rule.id) {
             state.mock_headers = Some((rule.id.clone(), editor::mock_header_rows(rule)));
@@ -54,21 +55,20 @@ fn list(ui: &mut egui::Ui, state: &mut RewriteState, now: f64) {
 
 fn toolbar(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerConfig], cmds: &mut Commands, now: f64) {
     ui.horizontal(|ui| {
-        let label = if state.enabled { "● Rewrite ON" } else { "○ Rewrite OFF" };
-        if ui.toggle_value(&mut state.enabled, label).changed() {
+        if labelled_toggle(ui, &mut state.enabled, "Rewrite").changed() {
             cmds.push(super::Cmd::SetEnabled(state.enabled));
         }
-        ui.separator();
+        ui.add_space(12.0);
         if source_scope::chips(ui, &mut state.scope, listeners) {
             cmds.push(super::Cmd::SetScope(state.scope.clone()));
         }
-        ui.separator();
-        ui.selectable_value(&mut state.prefs.view, RewriteView::Rules, "Rules");
-        ui.selectable_value(&mut state.prefs.view, RewriteView::Log, "Log");
+        ui.add_space(12.0);
+        subtabs(ui, &mut state.prefs.view, &[(RewriteView::Rules, "Rules", Some(state.rules.len())), (RewriteView::Log, "Log", None)]);
         if state.prefs.view == RewriteView::Rules {
-            crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut state.search).hint_text(format!("{} Search rules", icons::MAGNIFYING_GLASS)).desired_width(180.0)));
+            ui.add_space(8.0);
+            search_field_sized(ui, &mut state.search, "Search rules", 200.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(icons::PLUS).on_hover_text("Add rule").clicked() {
+                if icon_button(ui, icons::PLUS, "Add rule").clicked() {
                     state.add_rule(now);
                 }
             });
@@ -81,7 +81,7 @@ fn rules_table(ui: &mut egui::Ui, state: &mut RewriteState, now: f64) {
     let count = state.rules.len();
     let mut action = None;
 
-    egui::Grid::new("rewrite_rules_grid").striped(true).num_columns(5).spacing([10.0, 6.0]).show(ui, |ui| {
+    egui::Grid::new("rewrite_rules_grid").striped(false).num_columns(5).spacing([10.0, 6.0]).show(ui, |ui| {
         for (index, rule) in state.rules.iter_mut().enumerate() {
             if !search.is_empty() && !rule_text(rule).contains(&search) {
                 continue;

@@ -8,6 +8,7 @@ use mitm_core::proxy::rewrite::preview_rewrite;
 use crate::ui::theme::{self, Tone};
 use super::ACTIONS;
 use crate::ui::icons;
+use crate::widgets::section::section;
 
 const MATCH_FIELDS: [(&str, &str); 6] =
     [("all", "All traffic"), ("url", "URL"), ("host", "Host"), ("path", "Path"), ("method", "Method"), ("header", "Header")];
@@ -75,7 +76,7 @@ fn mock_fields(ui: &mut egui::Ui, rule: &mut RewriteRule, headers: &mut Vec<Head
         }
     });
     ui.add_space(4.0);
-    ui.strong("Headers");
+    section(ui, "Headers");
     let labels = KvLabels { key: "Header Name", value: "Header Value" };
     if kv_table::show(ui, "rewrite_mock_headers", headers, labels, &[]) {
         let pairs: Vec<(String, String)> =
@@ -84,7 +85,7 @@ fn mock_fields(ui: &mut egui::Ui, rule: &mut RewriteRule, headers: &mut Vec<Head
         changed = true;
     }
     ui.add_space(4.0);
-    ui.strong("Body");
+    section(ui, "Body");
     ui.allocate_ui(egui::vec2(ui.available_width(), 220.0), |ui| {
         changed |= code_editor(ui, "rewrite_mock_body", rule.mock_body.get_or_insert_with(String::new));
     });
@@ -164,7 +165,7 @@ fn combo(ui: &mut egui::Ui, id: &str, value: &mut String, options: &[(&str, &str
 /// A sample of the rule's target, with the pattern's matches highlighted, and what the rule turns it into.
 pub fn preview(ui: &mut egui::Ui, rule: &RewriteRule, sample: &mut String) {
     ui.add_space(8.0);
-    ui.strong("Preview");
+    section(ui, "Preview");
     let highlight_rule = rule.clone();
     let mut layouter = move |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap_width: f32| {
         let text = buf.as_str();
