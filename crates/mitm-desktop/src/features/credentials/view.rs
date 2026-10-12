@@ -8,6 +8,10 @@ use crate::widgets::{confirm, split};
 use super::lock::unlock_form;
 use super::{CredentialsState, Rename};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
+use crate::widgets::list_row::list_row;
+use crate::widgets::search::search_field;
+use crate::widgets::section::section_with;
 
 pub fn show(ui: &mut egui::Ui, state: &mut CredentialsState, workspace_id: &str, db_path: &Path, cmds: &mut Commands) {
     state.sync(db_path, workspace_id);
@@ -18,38 +22,33 @@ pub fn show(ui: &mut egui::Ui, state: &mut CredentialsState, workspace_id: &str,
 }
 
 fn entry_list(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path) {
-    ui.horizontal(|ui| {
-        let search = ui.add(
-            egui::TextEdit::singleline(&mut state.search)
-                .hint_text("Search")
-                .desired_width((ui.available_width() - 64.0).max(60.0)),
-        );
-        crate::widgets::search::claim_focus(&search);
-        if ui.add_enabled(!state.locked, egui::Button::new(icons::PLUS)).on_hover_text("Add credential").clicked() {
-            state.create(db_path);
-        }
-        if ui.add_enabled(!state.locked, egui::Button::new(icons::DOWNLOAD_SIMPLE)).on_hover_text("Import from JSON…").clicked() {
-            state.json_import.start();
-        }
+    section_with(ui, "Credentials", |ui| {
+        ui.add_enabled_ui(!state.locked, |ui| {
+            if icon_button(ui, icons::DOWNLOAD_SIMPLE, "Import from JSON…").clicked() {
+                state.json_import.start();
+            }
+            if icon_button(ui, icons::PLUS, "Add credential").clicked() {
+                state.create(db_path);
+            }
+        });
     });
-    ui.separator();
+    search_field(ui, &mut state.search, "Search");
+    ui.add_space(4.0);
 
     let filter = state.search.trim().to_lowercase();
     let mut delete = None;
     egui::ScrollArea::vertical().id_salt("credential_list").show(ui, |ui| {
         for entry in state.summaries.iter().filter(|e| filter.is_empty() || e.name.to_lowercase().contains(&filter)) {
             let selected = state.selected.as_deref() == Some(entry.id.as_str());
-            let row = ui
-                .horizontal(|ui| {
-                    let item = ui.selectable_label(selected, &entry.name);
-                    if let Some(code) = state.entries.iter().find(|e| e.id == entry.id).and_then(first_code) {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(RichText::new(group_code(&code)).monospace().weak());
-                        });
-                    }
-                    item
-                })
-                .inner;
+            let code = state.entries.iter().find(|e| e.id == entry.id).and_then(first_code);
+            let row = list_row(ui, selected, |ui| {
+                ui.label(&entry.name);
+                if let Some(code) = code {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(RichText::new(group_code(&code)).monospace().weak());
+                    });
+                }
+            });
             if row.clicked() {
                 state.selected = Some(entry.id.clone());
             }
@@ -84,7 +83,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
     }
     if state.has_password {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-            if ui.small_button("Lock").clicked() {
+            if icon_button(ui, icons::LOCK, "Lock credentials").clicked() {
                 state.lock(db_path);
             }
         });
@@ -107,12 +106,12 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
     if let Some(error) = state.error.clone() {
         ui.horizontal(|ui| {
             ui.colored_label(ui.visuals().error_fg_color, error);
-            if ui.small_button(icons::X).clicked() {
+            if icon_button(ui, icons::X, "Dismiss").clicked() {
                 state.error = None;
             }
         });
     }
-    ui.separator();
+    ui.add_space(6.0);
     if state.selected.as_deref() != Some(id.as_str()) {
         return;
     }
@@ -138,7 +137,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                 FieldKind::Text => {
                     ui.horizontal(|ui| {
                         changed |= ui.add(egui::TextEdit::singleline(&mut field.value).desired_width(260.0)).changed();
-                        if ui.small_button(icons::COPY).on_hover_text("Copy").clicked() {
+                        if icon_button(ui, icons::COPY, "Copy").clicked() {
                             ui.ctx().copy_text(field.value.clone());
                         }
                     });
@@ -149,7 +148,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                         let revealed = eye.is_pointer_button_down_on();
                         let edit = egui::TextEdit::singleline(&mut field.value).password(!revealed).desired_width(230.0);
                         changed |= ui.add(edit).changed();
-                        if ui.small_button(icons::COPY).on_hover_text("Copy").clicked() {
+                        if icon_button(ui, icons::COPY, "Copy").clicked() {
                             crate::util::clipboard::copy_secret(ui.ctx(), &field.value);
                         }
                     });
@@ -160,7 +159,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                         (None, Some(params)) => {
                             ui.horizontal(|ui| {
                                 ui.vertical(|ui| show_code(ui, &params, 16.0));
-                                if ui.small_button(icons::PENCIL_SIMPLE).on_hover_text("Edit secret").clicked() {
+                                if icon_button(ui, icons::PENCIL_SIMPLE, "Edit secret").clicked() {
                                     state.totp_draft = Some((id.clone(), key.clone(), field.value.clone()));
                                 }
                             });
@@ -210,7 +209,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                     }
                 }
             }
-            if ui.small_button(icons::X).on_hover_text("Remove field").clicked() {
+            if icon_button(ui, icons::X, "Remove field").clicked() {
                 remove = Some(i);
             }
             ui.end_row();

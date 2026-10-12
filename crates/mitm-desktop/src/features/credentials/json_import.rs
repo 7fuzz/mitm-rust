@@ -253,12 +253,11 @@ pub fn show(ctx: &egui::Context, state: &mut CredentialsState, db_path: &Path, c
             }
         } else {
             egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
-                egui::Grid::new("credentials_json_rows").num_columns(5).striped(true).spacing([8.0, 4.0]).show(ui, |ui| {
+                egui::Grid::new("credentials_json_rows").num_columns(5).striped(false).spacing([8.0, 4.0]).show(ui, |ui| {
                     ui.label("");
-                    ui.strong("Path");
-                    ui.strong("Entry");
-                    ui.strong("Field");
-                    ui.strong("Kind");
+                    for title in ["Path", "Entry", "Field", "Kind"] {
+                        ui.label(egui::RichText::new(title).small().weak());
+                    }
                     ui.end_row();
                     for (i, row) in form.rows.iter_mut().enumerate() {
                         ui.checkbox(&mut row.picked, "");
