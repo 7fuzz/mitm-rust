@@ -6,6 +6,9 @@ use crate::features::traffic::TrafficState;
 use crate::widgets::split;
 use super::{CertificateState, DataSectionState, ListenerForm, ProxyState, SettingsPrefs, SettingsSection};
 use crate::ui::icons;
+use crate::widgets::button::icon_button;
+use crate::widgets::card::card;
+use crate::widgets::section::{section, section_with};
 
 #[allow(clippy::too_many_arguments)]
 pub fn show(
@@ -42,7 +45,7 @@ pub fn show(
 }
 
 fn appearance_section(ui: &mut egui::Ui) {
-    ui.strong("Theme");
+    section(ui, "Theme");
     ui.horizontal(|ui| {
         let current_theme = ui.ctx().options(|opt| opt.theme_preference);
         for (preference, label) in [
@@ -56,11 +59,7 @@ fn appearance_section(ui: &mut egui::Ui) {
         }
     });
 
-    ui.add_space(12.0);
-    ui.separator();
-    ui.add_space(8.0);
-
-    ui.strong("Zoom");
+    section(ui, "Zoom");
     ui.horizontal(|ui| {
         egui::gui_zoom::zoom_menu_buttons(ui);
     });
@@ -83,13 +82,11 @@ fn shortcuts_section(ui: &mut egui::Ui) {
 }
 
 fn data_section(ui: &mut egui::Ui, data: &mut DataSectionState, cmds: &mut Commands) {
-    ui.horizontal(|ui| {
-        ui.strong("Stored Data");
-        if ui.small_button("⟳").on_hover_text("Refresh row counts").clicked() {
+    section_with(ui, "Stored data", |ui| {
+        if icon_button(ui, icons::ARROW_CLOCKWISE, "Refresh row counts").clicked() {
             cmds.push(AppCommand::RefreshDataCounts);
         }
     });
-    ui.add_space(4.0);
 
     if let Some((msg, tone)) = &data.status {
         ui.label(RichText::new(msg).color(theme::color(ui, *tone)));
@@ -126,12 +123,7 @@ fn data_section(ui: &mut egui::Ui, data: &mut DataSectionState, cmds: &mut Comma
             }
         });
 
-    ui.add_space(16.0);
-    ui.separator();
-    ui.add_space(12.0);
-
-    ui.strong("Danger Zone");
-    ui.add_space(6.0);
+    section(ui, "Danger zone");
 
     let reset = egui::Button::new(RichText::new("Factory Reset…").color(theme::color(ui, Tone::Danger)));
     if ui.add_enabled(!data.resetting, reset).clicked() {
@@ -180,8 +172,7 @@ fn certificate_section(
     cert: &CertificateState,
     cmds: &mut Commands,
 ) {
-    ui.strong("Root Certificate Authority (CA)");
-    ui.add_space(8.0);
+    section(ui, "Root certificate");
 
     ui.horizontal(|ui| {
         ui.menu_button(format!("Save certificate… {}", icons::CARET_DOWN), |ui| {
@@ -232,12 +223,7 @@ fn certificate_section(
         ui.label(RichText::new(msg).color(theme::color(ui, *tone)));
     }
 
-    ui.add_space(12.0);
-    ui.separator();
-    ui.add_space(8.0);
-
-    ui.strong("Certificate Details");
-    ui.add_space(4.0);
+    section(ui, "Details");
 
     if let Some(info) = &cert.info {
         egui::Grid::new("ca_details_grid")
@@ -281,12 +267,7 @@ fn certificate_section(
             });
     }
 
-    ui.add_space(12.0);
-    ui.separator();
-    ui.add_space(8.0);
-
-    ui.strong("Install & Trust Certificate");
-    ui.add_space(6.0);
+    section(ui, "Install and trust");
 
     let os = std::env::consts::OS;
     let cert_path = cert.info.as_ref().map_or("~/.local/share/mitm/ca/ca.crt", |i| i.cert_path.as_str());
@@ -362,8 +343,7 @@ fn proxy_section(
     db_path: &Path,
     cmds: &mut Commands,
 ) {
-    ui.strong("Configured Listeners (Multi-Source)");
-    ui.add_space(6.0);
+    section(ui, "Listeners");
 
     let mut modified = false;
     let mut to_remove = None;
@@ -431,12 +411,8 @@ fn proxy_section(
         modified = true;
     }
 
-    ui.add_space(8.0);
-    ui.separator();
-    ui.add_space(6.0);
-
-    ui.strong("Add New Listener");
-    ui.horizontal(|ui| {
+    section(ui, "Add listener");
+    card(ui, |ui| ui.horizontal_wrapped(|ui| {
         ui.label("Label:");
         ui.add(egui::TextEdit::singleline(&mut form.label).hint_text("e.g. Mobile, Docker").desired_width(110.0));
 
@@ -463,7 +439,7 @@ fn proxy_section(
         }
 
         let can_add = !form.label.trim().is_empty() && port_num.is_some() && overlap.is_none();
-        if ui.add_enabled(can_add, egui::Button::new("Add Listener")).clicked() {
+        if ui.add_enabled(can_add, crate::widgets::button::primary(ui, "Add")).clicked() {
             let port = port_num.unwrap();
             let effective_host = match form.host.trim() {
                 "" => "0.0.0.0",
@@ -485,7 +461,7 @@ fn proxy_section(
             form.label.clear();
             modified = true;
         }
-    });
+    }));
 
     if modified {
         cmds.push(AppCommand::SaveListeners(proxy.listeners.clone()));
@@ -536,11 +512,7 @@ fn proxy_section(
                 });
         });
 
-    ui.add_space(12.0);
-    ui.separator();
-    ui.add_space(6.0);
-
-    ui.strong("System Info");
+    section(ui, "System");
     egui::Grid::new("system_info_grid")
         .num_columns(2)
         .spacing([12.0, 6.0])

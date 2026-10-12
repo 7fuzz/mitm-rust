@@ -3,6 +3,7 @@
 #![allow(dead_code)] // the set we draw from, not a list of glyphs in use
 
 pub const ARROW_BEND_UP_RIGHT: &str = "\u{E026}";
+pub const ARROW_CLOCKWISE: &str = "\u{E036}";
 pub const ARROW_DOWN_LEFT: &str = "\u{E040}";
 pub const ARROW_RIGHT: &str = "\u{E06C}";
 pub const ARROW_SQUARE_IN: &str = "\u{E5DC}";

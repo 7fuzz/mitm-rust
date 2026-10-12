@@ -4,6 +4,7 @@ use mitm_core::credentials;
 use crate::app::command::AppCommand;
 use crate::widgets::confirm;
 use super::{AutoLock, CredentialsState};
+use crate::widgets::section::section;
 
 /// Asked for when a send needs locked credentials; the send goes out once unlocked.
 #[derive(Default)]
@@ -76,8 +77,7 @@ pub fn show_unlock(ctx: &egui::Context, state: &mut CredentialsState, db_path: &
 }
 
 pub fn settings_section(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path) {
-    ui.strong("Master password");
-    ui.add_space(4.0);
+    section(ui, "Master password");
     let form = &mut state.master;
     let password = |text: &mut String, hint: &str, ui: &mut egui::Ui| {
         ui.add(egui::TextEdit::singleline(text).password(true).hint_text(hint).desired_width(220.0));
@@ -119,9 +119,7 @@ pub fn settings_section(ui: &mut egui::Ui, state: &mut CredentialsState, db_path
     if !state.has_password {
         return;
     }
-    ui.add_space(12.0);
-    ui.strong("Auto-lock");
-    ui.add_space(4.0);
+    section(ui, "Auto-lock");
     let mut minutes = match state.prefs.auto_lock {
         AutoLock::AfterIdleMinutes(m) => m,
         AutoLock::Never => 15,
