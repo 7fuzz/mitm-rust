@@ -343,3 +343,46 @@ mod tests {
         assert_eq!(leaf.tabs[leaf.active.0], Tab::Repeater);
     }
 }
+
+#[cfg(test)]
+mod render_tests {
+    use super::*;
+    use egui_dock::TabViewer as _;
+
+    /// Draws the shell and every tab on an empty database, in both themes, to catch panics in view code.
+    #[test]
+    fn every_tab_and_the_shell_render_in_both_themes() {
+        let dir = std::env::temp_dir().join(format!("mitm-render-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = Db::new(dir.join("test.db"));
+        mitm_core::db::init_database(&db, None).unwrap();
+        let mut state = AppState::load(&db);
+        let dock = DockState::new(vec![Tab::Traffic]);
+        let ctx = egui::Context::default();
+        crate::ui::theme::install_fonts(&ctx);
+        crate::ui::theme::apply_style(&ctx);
+        let input = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))),
+            ..Default::default()
+        };
+
+        for theme in [egui::Theme::Dark, egui::Theme::Light] {
+            ctx.set_theme(theme);
+            // The second frame lays out with sizes measured in the first.
+            for _ in 0..2 {
+                let mut cmds = Commands::default();
+                let mut output = ctx.run_ui(input(), |ui| {
+                    crate::ui::top_bar::show(ui, &mut state, &dock, &mut cmds);
+                    crate::ui::status_bar::show(ui, &state);
+                    for mut tab in Tab::ALL {
+                        let visuals = ui.visuals().clone();
+                        let mut viewer = TabViewer { state: &mut state, cmds: &mut cmds, db: &db, focus_search: None, focused: None, visuals };
+                        ui.push_id(tab, |ui| viewer.ui(ui, &mut tab));
+                    }
+                });
+                output.textures_delta.clear();
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
