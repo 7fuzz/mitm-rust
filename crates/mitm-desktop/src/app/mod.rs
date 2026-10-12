@@ -329,7 +329,9 @@ impl MitmApp {
             }
             AppCommand::RepeaterSelect(id) => self.state.repeater.select(id, db_path),
             AppCommand::RepeaterDelete(id) => self.state.repeater.delete(&id, db_path),
+            AppCommand::LockCredentials => self.state.credentials.lock(db_path),
             AppCommand::RepeaterSend(id) => {
+                self.state.credentials.touch(ctx.input(|i| i.time));
                 let repeater = &mut self.state.repeater;
                 repeater.flush(db_path);
                 if let Some(tab) = repeater.tabs.iter().find(|t| t.id == id).cloned() {
@@ -485,6 +487,7 @@ impl MitmApp {
             }
 
             AppCommand::Collections(CollectionsCmd::Execute(id)) => {
+                self.state.credentials.touch(ctx.input(|i| i.time));
                 if self.state.collections.start_run(&id, db_path) {
                     let db_path = db_path.clone();
                     self.collection_runs.spawn(&self.rt, ctx, async move {
@@ -831,19 +834,33 @@ impl eframe::App for MitmApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         crate::widgets::template::set_active_env(self.state.environments.active_environment());
         self.state.credentials.sync(&self.core.db_path, &self.state.environments.active_workspace_id);
+        let now = ui.input(|i| i.time);
+        self.state.credentials.tick(ui.ctx(), &self.core.db_path, now);
+        if let Some(retry) = crate::features::credentials::show_unlock(ui.ctx(), &mut self.state.credentials, &self.core.db_path) {
+            self.cmds.push(retry);
+        }
         while let Ok(event) = self.core_events.try_recv() {
             self.apply_core_event(ui.ctx(), event);
         }
         let focused_tab = self.dock.find_active_focused().map(|(_, tab)| *tab);
         shortcuts::consume(ui.ctx(), focused_tab, &mut self.cmds);
-        let now = ui.input(|i| i.time);
         for (id, result) in self.repeater_runs.drain() {
+            if is_locked_error(&result) {
+                self.state.repeater.executing.remove(&id);
+                self.state.credentials.ask_unlock(Some(AppCommand::RepeaterSend(id)));
+                continue;
+            }
             self.state.repeater.finish_run(&id, result, &self.core.db_path);
             self.state.environments.refresh(&self.core.db_path);
             self.state.credentials.mark_stale();
         }
         self.state.repeater.flush_if_idle(&self.core.db_path, now);
         for (id, result) in self.collection_runs.drain() {
+            if is_locked_error(&result) {
+                self.state.collections.finish_run(&id, result, &self.core.db_path);
+                self.state.credentials.ask_unlock(Some(AppCommand::Collections(CollectionsCmd::Execute(id))));
+                continue;
+            }
             self.state.collections.finish_run(&id, result, &self.core.db_path);
             self.state.environments.refresh(&self.core.db_path);
             self.state.credentials.mark_stale();
@@ -1017,4 +1034,8 @@ fn forward_core_events(rt: &Runtime, core: &MitmCore, ctx: &egui::Context) -> Re
         }
     });
     rx
+}
+
+fn is_locked_error<T>(result: &Result<T, String>) -> bool {
+    matches!(result, Err(e) if e == mitm_core::credentials::LOCKED)
 }

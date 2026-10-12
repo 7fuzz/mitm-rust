@@ -35,6 +35,10 @@ pub fn palette_items(state: &AppState, ctx: &egui::Context) -> Vec<PaletteItem> 
         });
     }
 
+    if state.credentials.has_password && !state.credentials.locked {
+        items.push(PaletteItem { label: "Lock credentials".to_string(), command: AppCommand::LockCredentials, shortcut: None });
+    }
+
     for ws in &state.environments.workspaces {
         let is_active = ws.id == state.environments.active_workspace_id;
         items.push(PaletteItem {

@@ -220,6 +220,7 @@ impl TabViewer<'_> {
                 &mut state.database,
                 &mut state.listener_form,
                 &state.traffic,
+                &mut state.credentials,
                 self.db_path,
                 cmds,
             ),

@@ -4,6 +4,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use crate::ui::dock::{self, Tab};
 use crate::features::collections::CollectionsPrefs;
+use crate::features::credentials::CredentialsPrefs;
 use crate::features::utilities::cvss::CvssPrefs;
 use crate::features::utilities::encoding::EncodingPrefs;
 use crate::features::fuzzer::{FuzzerConfig, FuzzerPrefs};
@@ -97,6 +98,10 @@ impl Section for JsonDiffPrefs {
     const KEY: &'static str = "json_diff";
 }
 
+impl Section for CredentialsPrefs {
+    const KEY: &'static str = "credentials";
+}
+
 impl Section for JsonToolsPrefs {
     const KEY: &'static str = "json_tools";
 }
@@ -127,6 +132,7 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     state.traffic.prefs = load(storage);
     state.intercept.prefs = load(storage);
     state.rewrite.prefs = load(storage);
+    state.credentials.prefs = load(storage);
     load::<DockLayout>(storage).0.unwrap_or_else(dock::initial_layout)
 }
 
@@ -147,6 +153,7 @@ pub fn carry_over(from: &mut AppState, to: &mut AppState) {
     to.traffic.prefs = std::mem::take(&mut from.traffic.prefs);
     to.intercept.prefs = std::mem::take(&mut from.intercept.prefs);
     to.rewrite.prefs = std::mem::take(&mut from.rewrite.prefs);
+    to.credentials.prefs = std::mem::take(&mut from.credentials.prefs);
 }
 
 pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppState) {
@@ -168,4 +175,5 @@ pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppStat
     save(storage, &state.traffic.prefs);
     save(storage, &state.intercept.prefs);
     save(storage, &state.rewrite.prefs);
+    save(storage, &state.credentials.prefs);
 }

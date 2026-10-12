@@ -4,6 +4,7 @@ use mitm_core::credentials::{Credential, FieldKind};
 use mitm_core::utils::totp;
 use crate::features::utilities::totp::{group_code, show_code};
 use crate::widgets::{confirm, split};
+use super::lock::unlock_form;
 use super::{CredentialsState, Rename};
 
 pub fn show(ui: &mut egui::Ui, state: &mut CredentialsState, workspace_id: &str, db_path: &Path) {
@@ -22,7 +23,7 @@ fn entry_list(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path) {
                 .desired_width((ui.available_width() - 32.0).max(60.0)),
         );
         crate::widgets::search::claim_focus(&search);
-        if ui.button("➕").on_hover_text("Add credential").clicked() {
+        if ui.add_enabled(!state.locked, egui::Button::new("➕")).on_hover_text("Add credential").clicked() {
             state.create(db_path);
         }
     });
@@ -31,12 +32,12 @@ fn entry_list(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path) {
     let filter = state.search.trim().to_lowercase();
     let mut delete = None;
     egui::ScrollArea::vertical().id_salt("credential_list").show(ui, |ui| {
-        for entry in state.entries.iter().filter(|e| filter.is_empty() || e.name.to_lowercase().contains(&filter)) {
+        for entry in state.summaries.iter().filter(|e| filter.is_empty() || e.name.to_lowercase().contains(&filter)) {
             let selected = state.selected.as_deref() == Some(entry.id.as_str());
             let row = ui
                 .horizontal(|ui| {
                     let item = ui.selectable_label(selected, &entry.name);
-                    if let Some(code) = first_code(entry) {
+                    if let Some(code) = state.entries.iter().find(|e| e.id == entry.id).and_then(first_code) {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.label(RichText::new(group_code(&code)).monospace().weak());
                         });
@@ -71,6 +72,18 @@ fn first_code(entry: &Credential) -> Option<String> {
 }
 
 fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path, now: f64) {
+    if state.locked {
+        ui.add_space(8.0);
+        unlock_form(ui, state, db_path);
+        return;
+    }
+    if state.has_password {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+            if ui.small_button("🔒 Lock").clicked() {
+                state.lock(db_path);
+            }
+        });
+    }
     let Some(id) = state.selected.clone() else { return };
     let Some(index) = state.entries.iter().position(|e| e.id == id) else { return };
 

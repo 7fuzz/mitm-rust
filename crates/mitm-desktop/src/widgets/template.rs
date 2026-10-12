@@ -24,11 +24,14 @@ pub fn set_active_env(env: Option<&Environment>) {
 
 thread_local! {
     static CREDENTIALS: RefCell<Vec<Credential>> = const { RefCell::new(Vec::new()) };
+    static CREDENTIALS_LOCKED: Cell<bool> = const { Cell::new(false) };
 }
 
 /// The active workspace's credentials, for `{{$cred:entry.field}}` highlights, hovers and completion.
-pub fn set_credentials(entries: &[Credential]) {
+/// While `locked` the entries carry no values.
+pub fn set_credentials(entries: &[Credential], locked: bool) {
     CREDENTIALS.with(|cell| *cell.borrow_mut() = entries.to_vec());
+    CREDENTIALS_LOCKED.with(|c| c.set(locked));
 }
 
 fn cred_field(name: &str) -> Option<(FieldKind, String)> {
@@ -84,6 +87,7 @@ fn hover_value(name: &str) -> String {
         return live_code(&params);
     }
     match cred_field(name) {
+        Some(_) if CREDENTIALS_LOCKED.with(|c| c.get()) => return "🔒 locked".to_string(),
         Some((FieldKind::Secret, _)) => return "••••••".to_string(),
         Some((_, value)) => return value,
         None if mitm_core::credentials::parse_ref(name).is_some() => return "undefined".to_string(),
@@ -622,7 +626,7 @@ mod tests {
             order_index: 0,
             created_at_ms: 0,
             updated_at_ms: 0,
-        }]);
+        }], false);
         assert_eq!(hover_value("$cred:dgAdmin.user"), "admin@x");
         assert_eq!(hover_value("$cred:DGADMIN.password"), "••••••");
         assert!(hover_value("$cred:dgAdmin.totp").ends_with('s'));
@@ -631,6 +635,6 @@ mod tests {
         assert!(resolve_var("$cred:other.password").is_none());
         assert_eq!(matching_keys("$cred:dg").len(), 3);
         assert!(matching_keys("dg").iter().all(|k| !k.starts_with('$')));
-        set_credentials(&[]);
+        set_credentials(&[], false);
     }
 }

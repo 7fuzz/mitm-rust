@@ -16,6 +16,7 @@ pub fn show(
     database: &mut crate::features::database::DatabaseState,
     form: &mut ListenerForm,
     traffic: &TrafficState,
+    credentials: &mut crate::features::credentials::CredentialsState,
     db_path: &Path,
     cmds: &mut Commands,
 ) {
@@ -32,6 +33,7 @@ pub fn show(
             SettingsSection::Appearance => appearance_section(ui),
             SettingsSection::Shortcuts => shortcuts_section(ui),
             SettingsSection::Data => data_section(ui, data, cmds),
+            SettingsSection::Credentials => crate::features::credentials::settings_section(ui, credentials, db_path),
             SettingsSection::Database => crate::features::database::show(ui, database, db_path),
         });
 }
