@@ -67,7 +67,7 @@ Every module is a dock tab. Tabs can be split, moved or floated, and the layout 
 | Settings | Proxy mode and listeners, certificate, appearance, shortcuts, data and a database browser. |
 | Utilities ▸ | JSON Diff, JSON Tools, CVSS (3.1 and 4.0), Encoding, Hashing, HMAC signature. |
 
-Keyboard shortcuts are listed in [shortcut.md](shortcut.md) and under **Settings ▸ Shortcuts**.
+Keyboard shortcuts are listed in [docs/SHORTCUTS.md](docs/SHORTCUTS.md) and under **Settings ▸ Shortcuts**.
 
 ## Differences from the Tauri app (0.2.1)
 
@@ -106,4 +106,4 @@ crates/
     └── util/           # File dialogs, copy-as formats
 ```
 
-More docs: [WORKSPACE_FILE.md](WORKSPACE_FILE.md) (the import/export format), [API.md](API.md) (the `MitmCore` API), [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md).
+More docs: [docs/WORKSPACE_FILE.md](docs/WORKSPACE_FILE.md) (the import/export format), [docs/API.md](docs/API.md) (the `MitmCore` API), [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md).

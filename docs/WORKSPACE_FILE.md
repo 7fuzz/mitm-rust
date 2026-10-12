@@ -2,7 +2,7 @@
 
 A workspace file holds one workspace's **environments** and **collections**: everything needed to share a set of requests or keep them in git. Export writes one, and import reads one back, either as a new workspace or into the current one.
 
-Workspace files are JSON with the extension `.mitm.json`. A complete example is in [`examples/online-store.mitm.json`](examples/online-store.mitm.json).
+Workspace files are JSON with the extension `.mitm.json`. A complete example is in [`examples/online-store.mitm.json`](../examples/online-store.mitm.json).
 
 Not included: Repeater tabs, intercept and rewrite rules, history, and fuzzer runs.
 
@@ -35,7 +35,7 @@ Not included: Repeater tabs, intercept and rewrite rules, history, and fuzzer ru
 - **Unknown fields are errors.** A typo like `"header"` instead of `"headers"` is reported, not silently dropped.
 - **Defaults can be left out.** Export leaves them out too: `enabled` is `true`, `method` is `GET`, and empty lists and text are omitted.
 - **Export is deterministic.** Exporting the same workspace twice gives the same file, with no database ids or timestamps, so it diffs cleanly in git.
-- **`$schema` is allowed** at the top level, so editors can validate the file against [`schemas/mitm-workspace-v1.schema.json`](schemas/mitm-workspace-v1.schema.json).
+- **`$schema` is allowed** at the top level, so editors can validate the file against [`schemas/mitm-workspace-v1.schema.json`](../schemas/mitm-workspace-v1.schema.json).
 
 ## `workspace`
 

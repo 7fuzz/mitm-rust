@@ -1,5 +1,5 @@
 //! The `mitm-workspace` file: a workspace's environments and collections, as written by export and read
-//! by import. Field names are the documented file format (see `WORKSPACE_FILE.md`), so renaming one
+//! by import. Field names are the documented file format (see `docs/WORKSPACE_FILE.md`), so renaming one
 //! breaks existing files and needs a new `version`.
 
 use serde::{Deserialize, Serialize};
