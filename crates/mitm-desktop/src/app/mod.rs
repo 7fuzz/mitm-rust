@@ -330,6 +330,11 @@ impl MitmApp {
             AppCommand::RepeaterSelect(id) => self.state.repeater.select(id, db_path),
             AppCommand::RepeaterDelete(id) => self.state.repeater.delete(&id, db_path),
             AppCommand::LockCredentials => self.state.credentials.lock(db_path),
+            AppCommand::CopyTotp(id) => {
+                if let Some(code) = self.state.credentials.current_code(&id) {
+                    crate::util::clipboard::copy_secret(ctx, &code);
+                }
+            }
             AppCommand::RepeaterSend(id) => {
                 self.state.credentials.touch(ctx.input(|i| i.time));
                 let repeater = &mut self.state.repeater;

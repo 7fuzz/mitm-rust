@@ -133,7 +133,9 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                 FieldKind::Text => {
                     ui.horizontal(|ui| {
                         changed |= ui.add(egui::TextEdit::singleline(&mut field.value).desired_width(260.0)).changed();
-                        copy_button(ui, &field.value);
+                        if ui.small_button("📋").on_hover_text("Copy").clicked() {
+                            ui.ctx().copy_text(field.value.clone());
+                        }
                     });
                 }
                 FieldKind::Secret => {
@@ -142,7 +144,9 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                         let revealed = eye.is_pointer_button_down_on();
                         let edit = egui::TextEdit::singleline(&mut field.value).password(!revealed).desired_width(230.0);
                         changed |= ui.add(edit).changed();
-                        copy_button(ui, &field.value);
+                        if ui.small_button("📋").on_hover_text("Copy").clicked() {
+                            crate::util::clipboard::copy_secret(ui.ctx(), &field.value);
+                        }
                     });
                 }
                 FieldKind::Totp => {
@@ -241,10 +245,4 @@ fn rename_field(
         edit.request_focus();
     }
     true
-}
-
-fn copy_button(ui: &mut egui::Ui, value: &str) {
-    if ui.small_button("📋").on_hover_text("Copy").clicked() {
-        ui.ctx().copy_text(value.to_string());
-    }
 }

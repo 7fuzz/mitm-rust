@@ -35,6 +35,15 @@ pub fn palette_items(state: &AppState, ctx: &egui::Context) -> Vec<PaletteItem> 
         });
     }
 
+    for entry in &state.credentials.entries {
+        if entry.fields.iter().any(|f| f.kind == mitm_core::credentials::FieldKind::Totp) {
+            items.push(PaletteItem {
+                label: format!("Copy TOTP: {}", entry.name),
+                command: AppCommand::CopyTotp(entry.id.clone()),
+                shortcut: None,
+            });
+        }
+    }
     if state.credentials.has_password && !state.credentials.locked {
         items.push(PaletteItem { label: "Lock credentials".to_string(), command: AppCommand::LockCredentials, shortcut: None });
     }

@@ -116,6 +116,7 @@ pub enum AppCommand {
     DeleteEnvironment(String),
     MoveToCredentials { env_id: String, var_idx: usize, entry: String, field: String },
     LockCredentials,
+    CopyTotp(String),
 
     OpenImport,
     ExportWorkspace,

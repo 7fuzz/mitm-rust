@@ -140,6 +140,15 @@ impl CredentialsState {
         self.stale = true;
     }
 
+    /// The code of the entry's first `totp` field right now.
+    pub fn current_code(&self, id: &str) -> Option<String> {
+        use mitm_core::utils::totp;
+        let entry = self.entries.iter().find(|e| e.id == id)?;
+        let field = entry.fields.iter().find(|f| f.kind == FieldKind::Totp)?;
+        let params = totp::parse_secret(&field.value).ok()?;
+        Some(totp::code_at(&params, totp::now_unix()))
+    }
+
     pub fn touch(&mut self, now: f64) {
         self.last_activity = now;
     }

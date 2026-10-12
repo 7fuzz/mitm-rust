@@ -23,4 +23,6 @@ rfd = "0.17"
 open = "5"
 http = "1"
 similar = "2"
+arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
+zeroize = "1"
 egui_commonmark = { version = "0.25", default-features = false, features = ["pulldown_cmark"] }

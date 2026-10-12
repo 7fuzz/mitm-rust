@@ -44,7 +44,7 @@ pub fn show_code(ui: &mut egui::Ui, params: &TotpParams, size: f32) {
     ui.horizontal(|ui| {
         ui.label(RichText::new(group_code(&code)).monospace().size(size).strong());
         if ui.small_button("📋").on_hover_text("Copy").clicked() {
-            ui.ctx().copy_text(code.clone());
+            crate::util::clipboard::copy_secret(ui.ctx(), &code);
         }
     });
     ui.horizontal(|ui| {
