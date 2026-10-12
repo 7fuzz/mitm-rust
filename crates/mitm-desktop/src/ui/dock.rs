@@ -148,7 +148,7 @@ pub fn panel_menu(ui: &mut egui::Ui, is_open: impl Fn(Tab) -> bool) -> Option<Ta
         }
         ui.separator();
     }
-    ui.menu_button("Utilities ▸", |ui| {
+    ui.menu_button("Utilities", |ui| {
         for &tab in Tab::UTILITIES {
             item(ui, tab);
         }

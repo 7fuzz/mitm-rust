@@ -80,7 +80,7 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
                         cmds.push(AppCommand::SaveFuzzRun { run_id, name });
                         fuzzer.saving_run = false;
                     }
-                    if ui.button("✕").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    if ui.button("✖").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                         fuzzer.saving_run = false;
                     }
                 } else if ui.button("Save run…").clicked() {
@@ -465,7 +465,7 @@ fn results_toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
         crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut fuzzer.search_query).hint_text("Search…").desired_width(110.0)));
         ui.selectable_value(&mut fuzzer.search_scope, FuzzSearchScope::Payload, "Payload");
         ui.selectable_value(&mut fuzzer.search_scope, FuzzSearchScope::Response, "Response");
-        if !fuzzer.search_query.is_empty() && ui.small_button("✕").on_hover_text("Clear search").clicked() {
+        if !fuzzer.search_query.is_empty() && ui.small_button("✖").on_hover_text("Clear search").clicked() {
             fuzzer.search_query.clear();
         }
 
@@ -623,7 +623,7 @@ fn response_pane(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Command
             ui.label(RichText::new(err).color(theme::color(ui, Tone::Danger)));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("✕").on_hover_text("Close response").clicked() {
+            if ui.small_button("✖").on_hover_text("Close response").clicked() {
                 close = true;
             }
             ui.add(egui::Label::new(RichText::new(&result.url).monospace()).truncate());

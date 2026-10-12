@@ -116,8 +116,8 @@ fn bcrypt(ui: &mut egui::Ui, state: &mut HashingState, cmds: &mut Commands) {
         }
         if let Some(result) = &state.verify_result {
             match result {
-                Ok(true) => ui.colored_label(theme::color(ui, Tone::Success), "✓"),
-                Ok(false) => ui.colored_label(theme::color(ui, Tone::Danger), "✗"),
+                Ok(true) => ui.colored_label(theme::color(ui, Tone::Success), "✔"),
+                Ok(false) => ui.colored_label(theme::color(ui, Tone::Danger), "✖"),
                 Err(e) => ui.colored_label(theme::color(ui, Tone::Danger), e),
             };
         }

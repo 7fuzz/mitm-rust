@@ -549,7 +549,7 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
                                 let label = ui
                                     .add(egui::Label::new(RichText::new(format!("🔒 {entry} · {field}")).monospace()).sense(egui::Sense::click()))
                                     .on_hover_text(&current);
-                                if ui.small_button("✕").on_hover_text("Unlink").clicked() {
+                                if ui.small_button("✖").on_hover_text("Unlink").clicked() {
                                     set_active_value(var, String::new());
                                     changed = true;
                                 }

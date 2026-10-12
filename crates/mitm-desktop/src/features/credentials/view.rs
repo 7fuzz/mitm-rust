@@ -106,7 +106,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
     if let Some(error) = state.error.clone() {
         ui.horizontal(|ui| {
             ui.colored_label(ui.visuals().error_fg_color, error);
-            if ui.small_button("✕").clicked() {
+            if ui.small_button("✖").clicked() {
                 state.error = None;
             }
         });
@@ -209,7 +209,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path,
                     }
                 }
             }
-            if ui.small_button("✕").on_hover_text("Remove field").clicked() {
+            if ui.small_button("✖").on_hover_text("Remove field").clicked() {
                 remove = Some(i);
             }
             ui.end_row();

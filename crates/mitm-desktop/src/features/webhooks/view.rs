@@ -121,7 +121,7 @@ fn endpoints_list(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comma
                         secret: draft.secret.clone(),
                     });
                 }
-                if ui.button("✕").on_hover_text("Cancel").clicked() {
+                if ui.button("✖").on_hover_text("Cancel").clicked() {
                     cancel = true;
                 }
             });
@@ -145,7 +145,7 @@ fn deliveries(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands)
             ) {
                 cmds.push(AppCommand::ClearWebhookDeliveries);
             }
-            if !state.search.is_empty() && ui.small_button("✕").on_hover_text("Clear search").clicked() {
+            if !state.search.is_empty() && ui.small_button("✖").on_hover_text("Clear search").clicked() {
                 state.search.clear();
             }
             crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut state.search).hint_text("Search").desired_width(140.0)));
@@ -330,8 +330,8 @@ fn endpoint_matches(filter: &EndpointFilter, delivery: &WebhookDelivery) -> bool
 
 fn signature_chip(ui: &mut egui::Ui, status: &str) {
     let (text, tone) = match status {
-        "valid" => ("✓", Tone::Success),
-        "invalid" => ("✗", Tone::Danger),
+        "valid" => ("✔", Tone::Success),
+        "invalid" => ("✖", Tone::Danger),
         _ => ("–", Tone::Neutral),
     };
     ui.label(RichText::new(text).color(theme::color(ui, tone)));

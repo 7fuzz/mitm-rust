@@ -98,7 +98,7 @@ fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, prefs: &mu
                 prefs.open = false;
             }
             let hint = if prefs.popped_out { "Dock back into the main window" } else { "Open in its own window" };
-            if ui.small_button("⧉").on_hover_text(hint).clicked() {
+            if ui.small_button("🗗").on_hover_text(hint).clicked() {
                 prefs.popped_out = !prefs.popped_out;
             }
             if !flags.is_pending() {

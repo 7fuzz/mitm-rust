@@ -60,7 +60,7 @@ fn diff_pane(ui: &mut egui::Ui, status: &DiffStatus) {
         ui.label("Diff");
         match status {
             DiffStatus::Identical => {
-                ui.label(RichText::new("✓").color(theme::color(ui, Tone::Success)).strong());
+                ui.label(RichText::new("✔").color(theme::color(ui, Tone::Success)).strong());
             }
             DiffStatus::Diff { added, removed, .. } => {
                 ui.label(RichText::new(format!("+{added} -{removed}")).weak());

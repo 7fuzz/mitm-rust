@@ -253,7 +253,7 @@ fn render_detail(ui: &mut egui::Ui, state: &mut DatabaseState) {
     ui.horizontal(|ui| {
         ui.strong("Row Details");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            close = ui.small_button("✕").clicked();
+            close = ui.small_button("✖").clicked();
             if ui.button("Copy row as JSON").clicked() {
                 let obj: serde_json::Map<_, _> = columns.iter().cloned().zip(values.iter().cloned()).collect();
                 if let Ok(json) = serde_json::to_string_pretty(&serde_json::Value::Object(obj)) {

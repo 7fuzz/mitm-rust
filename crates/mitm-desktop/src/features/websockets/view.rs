@@ -154,7 +154,7 @@ fn frames_table(ui: &mut egui::Ui, state: &mut WebSocketsState) {
         ui.selectable_value(&mut state.direction_filter, "OUT".to_string(), "▲ Client");
         ui.separator();
         crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut state.frame_search).hint_text("Search frames").desired_width(140.0)));
-        if !state.frame_search.is_empty() && ui.small_button("✕").on_hover_text("Clear search").clicked() {
+        if !state.frame_search.is_empty() && ui.small_button("✖").on_hover_text("Clear search").clicked() {
             state.frame_search.clear();
         }
     });
