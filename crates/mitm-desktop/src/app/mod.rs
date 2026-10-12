@@ -687,6 +687,10 @@ impl MitmApp {
                 }
             }
             AppCommand::ExportWorkspaceFile { options, passphrase } => {
+                if passphrase.is_some() && mitm_core::credentials::is_locked(db_path) {
+                    self.state.credentials.ask_unlock(Some(AppCommand::ExportWorkspaceFile { options, passphrase }));
+                    return;
+                }
                 let Some(workspace) = self.state.environments.active_workspace().cloned() else { return };
                 // Export reads the database, so edits still waiting for their debounced save go first.
                 self.state.environments.flush(db_path);
@@ -724,6 +728,10 @@ impl MitmApp {
                         self.state.environments.import = Default::default();
                         self.state.environments.load(db_path);
                         self.run_command(ctx, AppCommand::SelectWorkspace(summary.workspace_id));
+                    }
+                    Err(e) if e == mitm_core::credentials::LOCKED => {
+                        let retry = AppCommand::ImportWorkspace { json, target, name, passphrase };
+                        self.state.credentials.ask_unlock(Some(retry));
                     }
                     Err(e) => self.state.environments.import.error = Some(e),
                 }
@@ -858,10 +866,6 @@ impl eframe::App for MitmApp {
         self.state.credentials.sync(&self.core.db_path, &self.state.environments.active_workspace_id);
         let now = ui.input(|i| i.time);
         self.state.credentials.tick(ui.ctx(), &self.core.db_path, now);
-        if let Some(retry) = crate::features::credentials::show_unlock(ui.ctx(), &mut self.state.credentials, &self.core.db_path) {
-            self.cmds.push(retry);
-        }
-        crate::features::credentials::show_json_import(ui.ctx(), &mut self.state.credentials, &self.core.db_path, &mut self.cmds);
         while let Ok(event) = self.core_events.try_recv() {
             self.apply_core_event(ui.ctx(), event);
         }
@@ -989,6 +993,11 @@ impl eframe::App for MitmApp {
             &self.core.db_path,
             &mut self.cmds,
         );
+        crate::features::credentials::show_json_import(ui.ctx(), &mut self.state.credentials, &self.core.db_path, &mut self.cmds);
+        // Last, so it sits above the dialog whose action asked for it.
+        if let Some(retry) = crate::features::credentials::show_unlock(ui.ctx(), &mut self.state.credentials, &self.core.db_path) {
+            self.cmds.push(retry);
+        }
 
         let cmds = self.cmds.take();
         if !cmds.is_empty() {
