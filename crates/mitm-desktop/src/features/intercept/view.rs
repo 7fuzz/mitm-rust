@@ -317,7 +317,7 @@ fn combo(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debug, value: &
 fn action_chip(ui: &mut egui::Ui, action: &mut String) -> bool {
     let pass = action == "pass";
     let (label, tone) = if pass { ("PASS", Tone::Success) } else { ("PAUSE", Tone::Warn) };
-    let chip = egui::Button::new(RichText::new(label).color(theme::color(ui, tone)).strong().size(11.0))
+    let chip = egui::Button::new(RichText::new(label).color(theme::color(ui, tone)).strong().small())
         .fill(tone.tint(ui.visuals(), 36));
     let clicked = ui.add(chip).on_hover_text("Click to switch between pause and pass").clicked();
     if clicked {

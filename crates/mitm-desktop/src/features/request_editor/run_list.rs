@@ -115,7 +115,7 @@ pub fn show<R: Run>(
             let response = ui
                 .add(
                     egui::Button::selectable(selected == Some(run.id()), text)
-                        .right_text(RichText::new(local_time(run.executed_at_ms())).weak().size(11.0))
+                        .right_text(RichText::new(local_time(run.executed_at_ms())).weak().small())
                         .truncate()
                         .min_size(egui::vec2(ui.available_width(), 22.0)),
                 )

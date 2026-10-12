@@ -86,7 +86,7 @@ fn list(ui: &mut egui::Ui, state: &mut RewriteState) {
                 let entry = &state.log[row.index()];
                 row.set_selected(state.selected_log == Some(entry.id));
                 row.col(|ui| {
-                    ui.label(RichText::new(&entry.created_at).weak().size(11.0));
+                    ui.label(RichText::new(&entry.created_at).weak().small());
                 });
                 row.col(|ui| {
                     let tone = action_tone(entry.action_type.split(' ').next().unwrap_or_default());

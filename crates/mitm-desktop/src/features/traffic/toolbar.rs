@@ -148,7 +148,7 @@ fn filter_row(ui: &mut egui::Ui, state: &mut TrafficState, listeners: &[Listener
 }
 
 fn group_label(ui: &mut egui::Ui, text: &str) {
-    ui.label(RichText::new(text).weak().size(10.0).strong());
+    ui.label(RichText::new(text).weak().small().strong());
 }
 
 fn source_combo(ui: &mut egui::Ui, filter: &mut Option<String>, listeners: &[ListenerConfig]) {

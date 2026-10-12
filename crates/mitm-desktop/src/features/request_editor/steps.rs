@@ -17,7 +17,7 @@ fn step_list(ui: &mut egui::Ui, title: &str, id_salt: &str, ids: &mut Vec<String
     let label_of = |id: &str| options.iter().find(|o| o.id == id).map_or(id.to_string(), |o| o.label.clone());
     let mut action: Option<(usize, isize)> = None;
 
-    ui.label(RichText::new(title).weak().size(10.0).strong());
+    ui.label(RichText::new(title).weak().small().strong());
     for (index, id) in ids.iter().enumerate() {
         ui.push_id((id_salt, index), |ui| {
             ui.horizontal(|ui| {

@@ -111,5 +111,5 @@ fn chip_row(ui: &mut egui::Ui, label: &str, values: &BTreeMap<String, usize>, fi
 }
 
 fn group_label(ui: &mut egui::Ui, text: &str) {
-    ui.label(RichText::new(text).weak().size(10.0).strong());
+    ui.label(RichText::new(text).weak().small().strong());
 }

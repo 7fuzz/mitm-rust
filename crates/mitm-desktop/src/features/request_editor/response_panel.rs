@@ -193,5 +193,5 @@ fn copy_menu(
 }
 
 fn section(ui: &mut egui::Ui, text: &str) {
-    ui.label(RichText::new(text).weak().size(10.0).strong());
+    ui.label(RichText::new(text).weak().small().strong());
 }

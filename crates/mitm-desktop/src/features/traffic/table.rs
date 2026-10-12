@@ -20,6 +20,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], fold
     let visuals = ui.visuals().clone();
     let ctx = ui.ctx().clone();
     let mut near_end = false;
+    // Row pitch stays as before the global spacing change until the table itself is restyled.
+    ui.spacing_mut().item_spacing.y = 3.0;
     let held_offset = offset_holding_rows_in_place(state, visible, ROW_HEIGHT + ui.spacing().item_spacing.y);
     egui::ScrollArea::horizontal()
         .id_salt("traffic_table_hscroll")
@@ -164,7 +166,7 @@ fn aligned(ui: &mut egui::Ui, align: egui::Align, add: impl FnOnce(&mut egui::Ui
 fn cell(ui: &mut egui::Ui, col: ColumnId, flow: &HistoryEntry, flags: &FlowFlags) -> Option<egui::Response> {
     let weak = ui.visuals().weak_text_color();
     match col {
-        ColumnId::Id => Some(ui.label(RichText::new(flow.id.to_string()).color(weak).size(10.0))),
+        ColumnId::Id => Some(ui.label(RichText::new(flow.id.to_string()).color(weak).small())),
         ColumnId::Method => {
             render_method_pill(ui, &flow.method);
             if flags.intercepted || flags.pending_intercept {
@@ -177,7 +179,7 @@ fn cell(ui: &mut egui::Ui, col: ColumnId, flow: &HistoryEntry, flags: &FlowFlags
         }
         ColumnId::Source => {
             if flow.listener_label.is_empty() || flow.listener_label == "Default" {
-                ui.add(egui::Label::new(RichText::new("Default").monospace().size(10.0).color(weak)).selectable(false));
+                ui.add(egui::Label::new(RichText::new("Default").small().family(egui::FontFamily::Monospace).color(weak)).selectable(false));
             } else {
                 render_source_pill(ui, &flow.listener_label);
             }
@@ -191,16 +193,16 @@ fn cell(ui: &mut egui::Ui, col: ColumnId, flow: &HistoryEntry, flags: &FlowFlags
         }
         ColumnId::ContentType => {
             let text = if flow.content_type.is_empty() { "-" } else { &flow.content_type };
-            Some(ui.add(egui::Label::new(RichText::new(text).color(weak).size(11.0)).truncate()))
+            Some(ui.add(egui::Label::new(RichText::new(text).color(weak).small()).truncate()))
         }
         ColumnId::Size => {
             let text = if flags.is_pending() { "-".to_string() } else { format_bytes(flow.response_size) };
-            Some(ui.label(RichText::new(text).color(weak).size(11.0)))
+            Some(ui.label(RichText::new(text).color(weak).small()))
         }
         ColumnId::Duration => Some(if flags.is_pending() {
             pending_dots(ui, flags)
         } else {
-            ui.label(RichText::new(format_duration(flow.duration_ms)).color(weak).size(11.0))
+            ui.label(RichText::new(format_duration(flow.duration_ms)).color(weak).small())
         }),
         ColumnId::RequestAt => Some(clock_cell(ui, flow.request_at.as_deref())),
         ColumnId::ResponseAt => Some(if flags.is_pending() {
@@ -219,7 +221,7 @@ fn pending_dots(ui: &mut egui::Ui, flags: &FlowFlags) -> egui::Response {
 fn clock_cell(ui: &mut egui::Ui, at: Option<&str>) -> egui::Response {
     let weak = ui.visuals().weak_text_color();
     match local_clock(at) {
-        Some((short, full)) => ui.label(RichText::new(short).color(weak).size(11.0)).on_hover_text(full),
+        Some((short, full)) => ui.label(RichText::new(short).color(weak).small()).on_hover_text(full),
         None => ui.label(RichText::new("-").color(weak)),
     }
 }
@@ -243,7 +245,7 @@ fn remember_width(widths: &mut HashMap<ColumnId, f32>, col: ColumnId, width: f32
 /// and whether **Reset columns** was picked, carried along in `reset`.
 fn header_cell(ui: &mut egui::Ui, col: ColumnId, layout: &mut ColumnLayout, mut reset: bool) -> (egui::Rect, bool) {
     aligned(ui, col.align(), |ui| {
-        ui.add(egui::Label::new(RichText::new(col.label()).strong().size(11.0)).selectable(false));
+        ui.add(egui::Label::new(RichText::new(col.label()).strong().small()).selectable(false));
     });
     let rect = ui.max_rect();
     let response = ui.interact(rect, ui.id().with(("traffic_header", col)), egui::Sense::click_and_drag());
@@ -276,7 +278,7 @@ fn column_menu(ui: &mut egui::Ui, layout: &mut ColumnLayout, clicked: Option<Col
         }
         ui.separator();
     }
-    ui.label(RichText::new("COLUMNS").weak().size(10.0).strong());
+    ui.label(RichText::new("COLUMNS").weak().small().strong());
     let visible_count = layout.visible().len();
     for col in ColumnId::ALL {
         let mut shown = layout.is_shown(col);

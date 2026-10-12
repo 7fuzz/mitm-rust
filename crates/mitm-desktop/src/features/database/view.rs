@@ -201,7 +201,7 @@ fn grid(
                                 Some(false) => " ▲",
                                 None => "",
                             };
-                            let resp = ui.selectable_label(direction.is_some(), RichText::new(format!("{name}{arrow}")).strong().size(11.0));
+                            let resp = ui.selectable_label(direction.is_some(), RichText::new(format!("{name}{arrow}")).strong().small());
                             if resp.clicked() {
                                 click = Some(GridClick::Sort(name.clone()));
                             }

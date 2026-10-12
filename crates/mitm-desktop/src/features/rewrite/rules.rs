@@ -115,7 +115,7 @@ fn rules_table(ui: &mut egui::Ui, state: &mut RewriteState, now: f64) {
             });
             ui.add(egui::Label::new(RichText::new(match_text(rule)).monospace().weak()).truncate());
             let tone = action_tone(&rule.action_type);
-            ui.label(RichText::new(action_label(&rule.action_type)).color(theme::color(ui, tone)).strong().size(11.0));
+            ui.label(RichText::new(action_label(&rule.action_type)).color(theme::color(ui, tone)).strong().small());
             ui.end_row();
         }
     });

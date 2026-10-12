@@ -131,7 +131,7 @@ fn response(ui: &mut egui::Ui, state: &mut CollectionsState, request_id: &str, c
             if ui.small_button("Latest").on_hover_text("Show the latest run").clicked() {
                 show_latest = true;
             }
-            ui.label(RichText::new(format!("🕘 Run {} · {}", number, time)).color(theme::color(ui, Tone::Warn)).size(11.0));
+            ui.label(RichText::new(format!("🕘 Run {} · {}", number, time)).color(theme::color(ui, Tone::Warn)).small());
         }
     });
     state.prefs.history_open = history_open;

@@ -185,7 +185,7 @@ fn proxy_controls(ui: &mut egui::Ui, state: &AppState, cmds: &mut Commands) {
     ui.separator();
 
     if proxy.running && !proxy.active_summary.is_empty() {
-        ui.label(RichText::new(&proxy.active_summary).monospace().size(11.0));
+        ui.label(RichText::new(&proxy.active_summary).small().family(egui::FontFamily::Monospace));
         ui.separator();
     }
 }

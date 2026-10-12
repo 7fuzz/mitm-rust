@@ -82,8 +82,36 @@ impl Palette {
 
 /// Styles both themes up front, so the System/Light/Dark switch needs no extra plumbing.
 pub fn apply_style(ctx: &egui::Context) {
-    ctx.style_mut_of(egui::Theme::Dark, |s| set_visuals(&mut s.visuals, &Palette::dark()));
-    ctx.style_mut_of(egui::Theme::Light, |s| set_visuals(&mut s.visuals, &Palette::light()));
+    ctx.style_mut_of(egui::Theme::Dark, |s| set_style(s, &Palette::dark()));
+    ctx.style_mut_of(egui::Theme::Light, |s| set_style(s, &Palette::light()));
+}
+
+fn set_style(style: &mut egui::Style, palette: &Palette) {
+    set_visuals(&mut style.visuals, palette);
+    set_spacing(&mut style.spacing);
+    set_text_styles(style);
+}
+
+fn set_spacing(s: &mut egui::style::Spacing) {
+    s.item_spacing = egui::vec2(8.0, 6.0);
+    s.button_padding = egui::vec2(8.0, 4.0);
+    s.interact_size.y = 24.0;
+    s.window_margin = egui::Margin::same(12);
+    s.indent = 16.0;
+    s.combo_width = 160.0;
+    s.scroll = egui::style::ScrollStyle::floating();
+}
+
+fn set_text_styles(style: &mut egui::Style) {
+    use egui::{FontFamily, FontId, TextStyle};
+    style.text_styles = [
+        (TextStyle::Small, FontId::new(11.0, FontFamily::Proportional)),
+        (TextStyle::Body, FontId::new(13.0, FontFamily::Proportional)),
+        (TextStyle::Button, FontId::new(13.0, FontFamily::Proportional)),
+        (TextStyle::Monospace, FontId::new(12.5, FontFamily::Monospace)),
+        (TextStyle::Heading, FontId::new(15.0, FontFamily::Proportional)),
+    ]
+    .into();
 }
 
 fn set_visuals(v: &mut Visuals, p: &Palette) {

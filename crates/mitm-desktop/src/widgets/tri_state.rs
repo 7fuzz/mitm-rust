@@ -25,17 +25,17 @@ pub fn tri_state_button(ui: &mut egui::Ui, label: &str, state: &mut TriState) ->
         TriState::Neutral => (
             visuals.widgets.inactive.weak_bg_fill,
             visuals.widgets.inactive.bg_stroke.color,
-            RichText::new(label).color(visuals.weak_text_color()).size(11.0),
+            RichText::new(label).color(visuals.weak_text_color()).small(),
         ),
         TriState::Include => (
             Tone::Success.tint(visuals, 38),
             Tone::Success.color(visuals),
-            RichText::new(label).color(Tone::Success.color(visuals)).size(11.0).strong(),
+            RichText::new(label).color(Tone::Success.color(visuals)).small().strong(),
         ),
         TriState::Exclude => (
             Tone::Danger.tint(visuals, 38),
             Tone::Danger.color(visuals),
-            RichText::new(label).color(Tone::Danger.color(visuals)).size(11.0).strikethrough().strong(),
+            RichText::new(label).color(Tone::Danger.color(visuals)).small().strikethrough().strong(),
         ),
     };
 
