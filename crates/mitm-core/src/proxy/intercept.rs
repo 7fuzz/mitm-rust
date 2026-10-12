@@ -1,10 +1,11 @@
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 use crate::events::EventBus;
 
 use crate::proxy::rules::should_intercept;
-use crate::state::{AppState, HistoryEntry, InterceptAction, InterceptPhase, PendingFlow, PendingFlowPayload, TrafficCapturedEvent};
+use crate::state::{AppState, HistoryEntry, TrafficCapturedEvent};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_intercept_hook(
@@ -109,4 +110,44 @@ pub async fn handle_intercept_hook(
         Ok(action) => Some(action),
         Err(_) => Some(InterceptAction::Drop),
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InterceptPhase {
+    Request,
+    Response,
+}
+
+#[derive(Debug)]
+pub enum InterceptAction {
+    Forward {
+        modified_url: Option<String>,
+        modified_method: Option<String>,
+        modified_headers: Option<Vec<(String, String)>>,
+        modified_body: Option<Vec<u8>>,
+    },
+    Drop,
+}
+
+pub struct PendingFlow {
+    pub flow_id: String,
+    pub phase: InterceptPhase,
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+    pub tx: oneshot::Sender<InterceptAction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingFlowPayload {
+    pub flow_id: String,
+    pub phase: String,
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+    pub body_text: String,
 }
