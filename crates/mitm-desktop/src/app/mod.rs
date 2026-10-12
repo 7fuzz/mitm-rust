@@ -1,4 +1,5 @@
 pub mod command;
+pub mod cx;
 pub mod jobs;
 pub mod prefs;
 pub mod state;
@@ -15,6 +16,7 @@ use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
 use tokio::sync::broadcast::error::RecvError;
 use command::{AppCommand, Commands};
+use cx::Cx;
 use crate::ui::dock::{self, Tab, TabViewer};
 use mitm_core::collections::execute::ExecutionResult;
 use mitm_core::repeater::RepeaterExecutionResult;
@@ -49,11 +51,8 @@ pub struct MitmApp {
     fuzz_search: Jobs<(i64, String, Vec<u32>)>,
     ws_connects: Jobs<Result<mitm_core::state::WebSocketConn, String>>,
     ws_actions: Jobs<Result<(), String>>,
-    webhook_actions: Jobs<Result<(), String>>,
-    webhook_replays: Jobs<(i64, Result<mitm_core::webhook::WebhookReplayResult, String>)>,
     bcrypt_jobs: Jobs<crate::features::utilities::hashing::BcryptOutcome>,
     proxy_jobs: Jobs<(ProxyChange, Vec<mitm_core::state::ListenerStatus>)>,
-    webhook_receiver: Jobs<(Result<(), String>, bool)>,
     factory_resets: Jobs<Result<Option<MitmCore>, String>>,
     history_limits: Jobs<(mitm_core::state::HistorySettings, Result<(), String>)>,
 }
@@ -83,11 +82,8 @@ impl MitmApp {
             fuzz_search: Jobs::default(),
             ws_connects: Jobs::default(),
             ws_actions: Jobs::default(),
-            webhook_actions: Jobs::default(),
-            webhook_replays: Jobs::default(),
             bcrypt_jobs: Jobs::default(),
             proxy_jobs: Jobs::default(),
-            webhook_receiver: Jobs::default(),
             factory_resets: Jobs::default(),
             history_limits: Jobs::default(),
         }
@@ -535,33 +531,10 @@ impl MitmApp {
                     self.ws_actions.reply(ctx).send(Err(e));
                 }
             }
-            AppCommand::StartWebhookReceiver | AppCommand::StopWebhookReceiver if self.state.webhooks.switching => {}
-            AppCommand::StartWebhookReceiver => {
-                let port = self.state.webhooks.port;
-                self.switch_webhook_receiver(ctx, move |core| async move { core.start_webhook_receiver(port).await });
+            AppCommand::Webhooks(cmd) => {
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                crate::features::webhooks::handle(&mut self.state.webhooks, &cx, cmd);
             }
-            AppCommand::StopWebhookReceiver => {
-                self.switch_webhook_receiver(ctx, |core| async move { core.stop_webhook_receiver().await });
-            }
-            AppCommand::SetWebhookPort(port) => {
-                if let Err(e) = self.rt.block_on(self.core.set_webhook_port(port)) {
-                    self.webhook_actions.reply(ctx).send(Err(e));
-                }
-            }
-            AppCommand::CreateWebhookEndpoint { name, path, secret } => {
-                match self.core.create_webhook_endpoint(name, path, secret) {
-                    Ok(endpoint) => self.state.webhooks.created(endpoint),
-                    Err(e) => self.webhook_actions.reply(ctx).send(Err(e)),
-                }
-            }
-            AppCommand::DeleteWebhookEndpoint(id) => match self.core.delete_webhook_endpoint(&id) {
-                Ok(()) => self.state.webhooks.removed(&id),
-                Err(e) => self.webhook_actions.reply(ctx).send(Err(e)),
-            },
-            AppCommand::ClearWebhookDeliveries => match self.core.clear_webhook_deliveries() {
-                Ok(()) => self.state.webhooks.deliveries_cleared(),
-                Err(e) => self.webhook_actions.reply(ctx).send(Err(e)),
-            },
             AppCommand::DecodeInEncodingTool(text) => {
                 self.state.encoding.load_for_decode(text);
                 dock::open_tab(&mut self.dock, Tab::Encoding);
@@ -587,29 +560,6 @@ impl MitmApp {
                         .unwrap_or_else(|e| Err(e.to_string()));
                     BcryptOutcome::Verify(result)
                 });
-            }
-            AppCommand::ReplayWebhook { id, url } => {
-                if let Some(delivery) = self.state.webhooks.deliveries.iter().find(|d| d.id == id).cloned() {
-                    let core = Arc::clone(&self.core);
-                    self.webhook_replays.spawn(&self.rt, ctx, async move {
-                        (id, core.replay_webhook(delivery, &url).await)
-                    });
-                }
-            }
-            AppCommand::CopyWebhookTestCurl(id) => {
-                if let Some(endpoint) = self.state.webhooks.endpoints.iter().find(|e| e.id == id) {
-                    let body = r#"{"event":"test","message":"hello"}"#;
-                    let mut curl = format!(
-                        "curl -X POST '{}' \\\n  -H 'Content-Type: application/json'",
-                        self.state.webhooks.endpoint_url(&endpoint.path)
-                    );
-                    if !endpoint.secret_key.trim().is_empty() {
-                        let sig = self.core.calculate_webhook_signature(&endpoint.secret_key, body, "github");
-                        curl.push_str(&format!(" \\\n  -H '{}: {}'", sig.header_name, sig.header_value));
-                    }
-                    curl.push_str(&format!(" \\\n  -d '{}'", body));
-                    ctx.copy_text(curl);
-                }
             }
             AppCommand::SelectWorkspace(id) => {
                 let _ = mitm_core::workspace::set_active_workspace_db(db_path, &id);
@@ -869,20 +819,6 @@ impl MitmApp {
         proxy.apply_statuses(statuses);
     }
 
-    fn switch_webhook_receiver<F, Fut>(&mut self, ctx: &egui::Context, switch: F)
-    where
-        F: FnOnce(Arc<MitmCore>) -> Fut,
-        Fut: std::future::Future<Output = Result<(), String>> + Send + 'static,
-    {
-        self.state.webhooks.switching = true;
-        let core = Arc::clone(&self.core);
-        let job = switch(Arc::clone(&core));
-        self.webhook_receiver.spawn(&self.rt, ctx, async move {
-            let result = job.await;
-            (result, core.webhook_status().await.is_running)
-        });
-    }
-
     fn save_rewrite_rules(&mut self, now: f64, force: bool) {
         if let Some(rules) = self.state.rewrite.take_save(now, force) {
             let _ = self.rt.block_on(self.core.save_rewrite_rules(rules));
@@ -997,9 +933,6 @@ impl eframe::App for MitmApp {
         for error in self.ws_actions.drain().filter_map(Result::err) {
             top_bar::flash(ui, Err(error));
         }
-        for error in self.webhook_actions.drain().filter_map(Result::err) {
-            top_bar::flash(ui, Err(error));
-        }
         let resets: Vec<_> = self.factory_resets.drain().collect();
         for result in resets {
             self.finish_factory_reset(ui.ctx(), result);
@@ -1017,15 +950,9 @@ impl eframe::App for MitmApp {
         for (change, statuses) in proxy_results {
             self.apply_proxy_change(change, &statuses);
         }
-        for (result, running) in self.webhook_receiver.drain() {
-            self.state.webhooks.switching = false;
-            self.state.webhooks.running = running;
-            if let Err(e) = result {
-                top_bar::flash(ui, Err(e));
-            }
-        }
-        for (id, result) in self.webhook_replays.drain() {
-            self.state.webhooks.replay_done(id, result);
+        {
+            let cx = Cx { rt: &self.rt, core: &self.core, ctx: ui.ctx() };
+            crate::features::webhooks::poll(&mut self.state.webhooks, &cx);
         }
         for outcome in self.bcrypt_jobs.drain() {
             self.state.hashing.bcrypt_done(outcome);

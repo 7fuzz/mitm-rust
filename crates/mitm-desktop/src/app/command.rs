@@ -97,14 +97,7 @@ pub enum AppCommand {
     DeleteWsSession(i64),
     SetWsMitm(bool),
 
-    StartWebhookReceiver,
-    StopWebhookReceiver,
-    SetWebhookPort(u16),
-    CreateWebhookEndpoint { name: String, path: String, secret: String },
-    DeleteWebhookEndpoint(String),
-    CopyWebhookTestCurl(String),
-    ClearWebhookDeliveries,
-    ReplayWebhook { id: i64, url: String },
+    Webhooks(crate::features::webhooks::Cmd),
     DecodeInEncodingTool(String),
     GenerateBcrypt { password: String, cost: u32 },
     VerifyBcrypt { password: String, hash: String },
@@ -155,8 +148,8 @@ impl AppCommand {
 pub struct Commands(Vec<AppCommand>);
 
 impl Commands {
-    pub fn push(&mut self, cmd: AppCommand) {
-        self.0.push(cmd);
+    pub fn push(&mut self, cmd: impl Into<AppCommand>) {
+        self.0.push(cmd.into());
     }
 
     pub fn take(&mut self) -> Vec<AppCommand> {

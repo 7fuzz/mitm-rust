@@ -1,3 +1,4 @@
+mod commands;
 mod view;
 
 use std::collections::HashMap;
@@ -6,6 +7,7 @@ use mitm_core::state::{WebhookDelivery, WebhookDeliveryCapturedEvent, WebhookEnd
 use mitm_core::webhook::WebhookReplayResult;
 use serde::{Deserialize, Serialize};
 
+pub use commands::{handle, poll, Cmd};
 pub use view::show;
 
 /// Cap on deliveries held in memory, so a busy receiver can't grow RAM without bound.
@@ -52,6 +54,7 @@ pub struct WebhooksState {
     pub selected_delivery: Option<i64>,
     pub detail_pane: crate::widgets::message_pane::PaneState,
     pub replay_result: Option<(i64, Result<WebhookReplayResult, String>)>,
+    jobs: commands::WebhookJobs,
 }
 
 impl Default for WebhooksState {
@@ -69,6 +72,7 @@ impl Default for WebhooksState {
             selected_delivery: None,
             detail_pane: Default::default(),
             replay_result: None,
+            jobs: Default::default(),
         }
     }
 }

@@ -2,6 +2,7 @@ use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use mitm_core::state::WebhookDelivery;
 use crate::app::command::{AppCommand, Commands};
+use super::Cmd;
 use crate::util::format::format_bytes;
 use crate::ui::theme::{self, Tone};
 use crate::widgets::confirm::confirm_button;
@@ -30,9 +31,9 @@ fn toolbar(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
             .on_hover_text("Accept incoming webhook deliveries");
         if toggle.changed() {
             cmds.push(if state.running {
-                AppCommand::StartWebhookReceiver
+                Cmd::StartReceiver
             } else {
-                AppCommand::StopWebhookReceiver
+                Cmd::StopReceiver
             });
         }
 
@@ -41,7 +42,7 @@ fn toolbar(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands) {
                 .add(egui::DragValue::new(&mut state.port).range(1..=65535))
                 .on_hover_text("Stop the receiver to change the port");
             if port.changed() {
-                cmds.push(AppCommand::SetWebhookPort(state.port));
+                cmds.push(Cmd::SetPort(state.port));
             }
         });
 
@@ -88,12 +89,12 @@ fn endpoints_list(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comma
                 ui.close();
             }
             if ui.button("Copy test cURL").clicked() {
-                action = Some(AppCommand::CopyWebhookTestCurl(endpoint.id.clone()));
+                action = Some(Cmd::CopyTestCurl(endpoint.id.clone()));
                 ui.close();
             }
             ui.separator();
             if ui.button(RichText::new("Delete").color(theme::color(ui, Tone::Danger))).clicked() {
-                action = Some(AppCommand::DeleteWebhookEndpoint(endpoint.id.clone()));
+                action = Some(Cmd::DeleteEndpoint(endpoint.id.clone()));
                 ui.close();
             }
         });
@@ -117,7 +118,7 @@ fn endpoints_list(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comma
                     .on_disabled_hover_text("Name and a /path are required")
                     .clicked()
                 {
-                    cmds.push(AppCommand::CreateWebhookEndpoint {
+                    cmds.push(Cmd::CreateEndpoint {
                         name: draft.name.trim().to_string(),
                         path: draft.path.trim().to_string(),
                         secret: draft.secret.clone(),
@@ -145,7 +146,7 @@ fn deliveries(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Commands)
                 "Clear all?",
                 "Delete every delivery",
             ) {
-                cmds.push(AppCommand::ClearWebhookDeliveries);
+                cmds.push(Cmd::ClearDeliveries);
             }
             if !state.search.is_empty() && ui.small_button(icons::X).on_hover_text("Clear search").clicked() {
                 state.search.clear();
@@ -253,7 +254,7 @@ fn delivery_detail(ui: &mut egui::Ui, state: &mut WebhooksState, cmds: &mut Comm
         ui.add(egui::TextEdit::singleline(url).hint_text("Replay to URL").desired_width(240.0));
         let can_replay = url.trim_start().starts_with("http");
         if ui.add_enabled(can_replay, egui::Button::new("Replay")).clicked() {
-            cmds.push(AppCommand::ReplayWebhook { id, url: url.trim().to_string() });
+            cmds.push(Cmd::Replay { id, url: url.trim().to_string() });
         }
         if let Some((_, result)) = replay_result.as_ref().filter(|(rid, _)| *rid == id) {
             match result {
