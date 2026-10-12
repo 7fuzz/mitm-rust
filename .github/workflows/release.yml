@@ -45,6 +45,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
 
+      - name: test
+        if: matrix.platform == 'ubuntu-22.04'
+        run: cargo test --workspace
+
       - name: build release binary
         run: cargo build --release --target ${{ matrix.target }} -p mitm-desktop
 
