@@ -382,6 +382,30 @@ mod tests {
     }
 
     #[test]
+    fn connections_are_only_opened_here() {
+        fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
+            for entry in std::fs::read_dir(dir).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    rust_files(&path, out);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    out.push(path);
+                }
+            }
+        }
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let this_file = src.join("db").join("mod.rs");
+        let needle = ["Connection", "::open("].concat();
+        let mut files = Vec::new();
+        rust_files(&src, &mut files);
+        let offenders: Vec<_> = files
+            .iter()
+            .filter(|f| **f != this_file && std::fs::read_to_string(f).unwrap().contains(&needle))
+            .collect();
+        assert!(offenders.is_empty(), "use db::open instead: {offenders:?}");
+    }
+
+    #[test]
     fn counts_and_clears_per_data_category() {
         let (db, dir) = temp_db();
         let counts = get_data_category_counts(&db).unwrap();
