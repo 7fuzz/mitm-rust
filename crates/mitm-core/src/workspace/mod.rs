@@ -173,6 +173,7 @@ pub fn delete_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
     let _ = conn.execute("PRAGMA foreign_keys = ON;", []);
 
     let _ = conn.execute("DELETE FROM environments WHERE workspace_id = ?", params![id]);
+    let _ = conn.execute("DELETE FROM credentials WHERE workspace_id = ?", params![id]);
 
     let mut stmt = conn.prepare("SELECT id FROM collections WHERE workspace_id = ?").map_err(|e| e.to_string())?;
     let col_ids: Vec<String> = stmt
