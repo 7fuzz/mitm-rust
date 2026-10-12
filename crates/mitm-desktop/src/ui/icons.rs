@@ -46,3 +46,41 @@ pub const SUN: &str = "\u{E472}";
 pub const TRASH: &str = "\u{E4A6}";
 pub const WARNING: &str = "\u{E4E0}";
 pub const X: &str = "\u{E4F6}";
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+
+    fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                rust_files(&path, out);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
+    fn is_emoji(c: char) -> bool {
+        matches!(c as u32, 0x1F300..=0x1FAFF | 0x2600..=0x27BF)
+    }
+
+    #[test]
+    fn ui_strings_use_icons_not_emoji() {
+        let mut files = Vec::new();
+        rust_files(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut files);
+        let offenders: Vec<String> = files
+            .iter()
+            .flat_map(|file| {
+                let text = std::fs::read_to_string(file).unwrap();
+                text.lines()
+                    .enumerate()
+                    .filter(|(_, line)| !line.trim_start().starts_with("//") && line.chars().any(is_emoji))
+                    .map(|(n, line)| format!("{}:{}: {}", file.display(), n + 1, line.trim()))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert!(offenders.is_empty(), "use ui::icons instead of emoji:\n{}", offenders.join("\n"));
+    }
+}
