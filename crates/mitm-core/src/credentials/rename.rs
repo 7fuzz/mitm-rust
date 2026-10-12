@@ -17,6 +17,9 @@ const REQUEST_COLUMNS: [&str; 8] = [
     "extract_rules_json",
 ];
 
+/// Maps a ref's `(entry, field)` to its new names, or `None` to leave it.
+pub type RefMap<'a> = &'a dyn Fn(&str, &str) -> Option<(String, String)>;
+
 fn ref_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -26,7 +29,7 @@ fn ref_regex() -> &'static Regex {
 }
 
 /// Rewrites `{{$cred:e.f}}` (padded or not) and bare `$cred:e.f` refs that `map` renames; `None` when nothing changed.
-pub fn rewrite_refs(text: &str, map: &dyn Fn(&str, &str) -> Option<(String, String)>) -> Option<String> {
+pub fn rewrite_refs(text: &str, map: RefMap) -> Option<String> {
     if !text.contains(':') {
         return None;
     }
@@ -49,7 +52,7 @@ pub fn rewrite_refs(text: &str, map: &dyn Fn(&str, &str) -> Option<(String, Stri
     changed.then(|| out.into_owned())
 }
 
-fn rewrite_workspace(conn: &mut Connection, workspace_id: &str, map: &dyn Fn(&str, &str) -> Option<(String, String)>) -> Result<(), String> {
+fn rewrite_workspace(conn: &mut Connection, workspace_id: &str, map: RefMap) -> Result<(), String> {
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     let envs: Vec<(String, String)> = {
         let mut stmt = tx

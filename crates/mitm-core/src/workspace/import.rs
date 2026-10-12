@@ -214,7 +214,7 @@ pub fn preview_workspace_import_db(db_path: &PathBuf, json_content: &str) -> Res
 }
 
 /// Fetched before the import transaction: creating the data key writes through its own connection.
-fn credential_import(db_path: &PathBuf, json_content: &str, passphrase: Option<&str>) -> Result<Option<CredentialImport>, String> {
+fn credential_import(db_path: &std::path::Path, json_content: &str, passphrase: Option<&str>) -> Result<Option<CredentialImport>, String> {
     let Ok(file) = WorkspaceFile::parse(json_content) else { return Ok(None) };
     if file.credentials.is_empty() {
         return Ok(None);
