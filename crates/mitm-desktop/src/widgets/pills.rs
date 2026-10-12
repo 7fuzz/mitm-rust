@@ -21,11 +21,13 @@ pub fn badge(ui: &mut egui::Ui, text: &str, tone: Tone) -> egui::Response {
 
 fn pill(ui: &mut egui::Ui, style: impl FnOnce(RichText) -> RichText, label: &str, tone: Tone) -> egui::Response {
     let visuals = ui.visuals().clone();
-    let text = style(RichText::new(format!(" {} ", label))).color(tone.color(&visuals));
+    let text = style(RichText::new(label)).color(tone.color(&visuals));
+    let (fill, stroke) = if visuals.dark_mode { (30, 70) } else { (24, 80) };
     egui::Frame::NONE
-        .fill(tone.tint(&visuals, 38))
-        .stroke(egui::Stroke::new(1.0, tone.tint(&visuals, 90)))
-        .corner_radius(CornerRadius::same(3))
+        .fill(tone.tint(&visuals, fill))
+        .stroke(egui::Stroke::new(1.0, tone.tint(&visuals, stroke)))
+        .corner_radius(CornerRadius::same(4))
+        .inner_margin(egui::Margin::symmetric(6, 2))
         .show(ui, |ui| {
             ui.add(egui::Label::new(text).selectable(false));
         })
