@@ -46,7 +46,6 @@ pub struct MitmApp {
     file_saves: Jobs<Option<Result<String, String>>>,
     har_index: Jobs<Result<Vec<mitm_core::HistoryEntry>, String>>,
     fuzz_search: Jobs<(i64, String, Vec<u32>)>,
-    bcrypt_jobs: Jobs<crate::features::utilities::hashing::BcryptOutcome>,
     factory_resets: Jobs<Result<Option<MitmCore>, String>>,
     history_limits: Jobs<(mitm_core::state::HistorySettings, Result<(), String>)>,
 }
@@ -73,7 +72,6 @@ impl MitmApp {
             file_saves: Jobs::default(),
             har_index: Jobs::default(),
             fuzz_search: Jobs::default(),
-            bcrypt_jobs: Jobs::default(),
             factory_resets: Jobs::default(),
             history_limits: Jobs::default(),
         }
@@ -452,23 +450,9 @@ impl MitmApp {
                 self.state.hmac_tool.prefill(secret, payload);
                 dock::open_tab(&mut self.dock, Tab::HmacTool);
             }
-            AppCommand::GenerateBcrypt { password, cost } => {
-                use crate::features::utilities::hashing::BcryptOutcome;
-                self.bcrypt_jobs.spawn(&self.rt, ctx, async move {
-                    let result = tokio::task::spawn_blocking(move || mitm_core::utils::hashing::bcrypt_hash(&password, cost))
-                        .await
-                        .unwrap_or_else(|e| Err(e.to_string()));
-                    BcryptOutcome::Hash(result)
-                });
-            }
-            AppCommand::VerifyBcrypt { password, hash } => {
-                use crate::features::utilities::hashing::BcryptOutcome;
-                self.bcrypt_jobs.spawn(&self.rt, ctx, async move {
-                    let result = tokio::task::spawn_blocking(move || mitm_core::utils::hashing::bcrypt_verify(&password, &hash))
-                        .await
-                        .unwrap_or_else(|e| Err(e.to_string()));
-                    BcryptOutcome::Verify(result)
-                });
+            AppCommand::Hashing(cmd) => {
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                crate::features::utilities::hashing::handle(&mut self.state.hashing, &cx, cmd);
             }
             AppCommand::SelectWorkspace(id) => {
                 let _ = mitm_core::workspace::set_active_workspace_db(db_path, &id);
@@ -796,9 +780,7 @@ impl eframe::App for MitmApp {
             crate::features::websockets::poll(&mut self.state.websockets, &cx);
             crate::features::settings::poll(self.state.settings(), &cx);
         }
-        for outcome in self.bcrypt_jobs.drain() {
-            self.state.hashing.bcrypt_done(outcome);
-        }
+        crate::features::utilities::hashing::poll(&mut self.state.hashing);
         let palette = crate::ui::theme::Palette::of(ui.visuals());
         egui::Panel::top("top_panel")
             .frame(egui::Frame::new().fill(palette.base).inner_margin(egui::Margin::symmetric(8, 5)))

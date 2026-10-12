@@ -1,6 +1,6 @@
 use eframe::egui::{self, RichText};
 use mitm_core::utils::hashing::{self, HmacAlgo};
-use crate::app::command::{AppCommand, Commands};
+use crate::app::command::Commands;
 use crate::ui::theme::{self, Tone};
 use super::{HashingState, Mode};
 use crate::ui::icons;
@@ -76,7 +76,7 @@ fn bcrypt(ui: &mut egui::Ui, state: &mut HashingState, cmds: &mut Commands) {
         ui.label("Cost");
         ui.add(egui::DragValue::new(&mut state.prefs.bcrypt_cost).range(4..=15));
         if ui.button("Generate ⟳").on_hover_text("Each run uses a fresh random salt").clicked() {
-            cmds.push(AppCommand::GenerateBcrypt {
+            cmds.push(super::Cmd::GenerateBcrypt {
                 password: state.bcrypt_password.clone(),
                 cost: state.prefs.bcrypt_cost,
             });
@@ -110,7 +110,7 @@ fn bcrypt(ui: &mut egui::Ui, state: &mut HashingState, cmds: &mut Commands) {
     });
     ui.horizontal(|ui| {
         if ui.add_enabled(!state.verify_hash.trim().is_empty(), egui::Button::new("Verify")).clicked() {
-            cmds.push(AppCommand::VerifyBcrypt {
+            cmds.push(super::Cmd::VerifyBcrypt {
                 password: state.verify_password.clone(),
                 hash: state.verify_hash.trim().to_string(),
             });

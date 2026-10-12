@@ -83,8 +83,7 @@ pub enum AppCommand {
 
     Webhooks(crate::features::webhooks::Cmd),
     DecodeInEncodingTool(String),
-    GenerateBcrypt { password: String, cost: u32 },
-    VerifyBcrypt { password: String, hash: String },
+    Hashing(crate::features::utilities::hashing::Cmd),
     RecomputeHmac { secret: String, payload: String },
 
     SelectWorkspace(String),

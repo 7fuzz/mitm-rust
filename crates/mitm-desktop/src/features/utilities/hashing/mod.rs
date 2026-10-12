@@ -1,7 +1,9 @@
+mod commands;
 mod view;
 
 use serde::{Deserialize, Serialize};
 
+pub use commands::{handle, poll, Cmd};
 pub use view::show;
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq)]
@@ -9,12 +11,6 @@ pub enum Mode {
     Digest,
     Hmac,
     Bcrypt,
-}
-
-/// The result of a bcrypt job, which runs off the UI thread because it is slow.
-pub enum BcryptOutcome {
-    Hash(Result<String, String>),
-    Verify(Result<bool, String>),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -41,13 +37,6 @@ pub struct HashingState {
     pub verify_password: String,
     pub verify_hash: String,
     pub verify_result: Option<Result<bool, String>>,
+    jobs: crate::app::jobs::Jobs<commands::BcryptOutcome>,
 }
 
-impl HashingState {
-    pub fn bcrypt_done(&mut self, outcome: BcryptOutcome) {
-        match outcome {
-            BcryptOutcome::Hash(result) => self.bcrypt_hash = Some(result),
-            BcryptOutcome::Verify(result) => self.verify_result = Some(result),
-        }
-    }
-}
