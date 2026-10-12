@@ -283,9 +283,9 @@ pub fn show(ctx: &egui::Context, state: &mut CredentialsState, db_path: &Path, c
             ui.colored_label(ui.visuals().error_fg_color, error);
         }
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let picked = form.rows.iter().filter(|r| r.picked).count();
-            if ui.add_enabled(picked > 0, egui::Button::new(format!("Import {picked}"))).clicked() {
+            if ui.add_enabled(picked > 0, crate::widgets::button::primary(ui, &format!("Import {picked}"))).clicked() {
                 import = true;
             }
             if ui.button("Cancel").clicked() {

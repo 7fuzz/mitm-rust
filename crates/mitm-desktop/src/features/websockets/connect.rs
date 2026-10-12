@@ -23,7 +23,7 @@ pub fn show(ctx: &egui::Context, state: &mut WsConnect, cmds: &mut Commands) {
     }
     let mut close = false;
     let modal = egui::Modal::new(egui::Id::new("ws_connect")).show(ctx, |ui| {
-        ui.set_width(520.0);
+        ui.set_width(480.0);
         ui.heading("Connect WebSocket");
         ui.add_space(6.0);
         let edit = ui.add(
@@ -43,8 +43,8 @@ pub fn show(ctx: &egui::Context, state: &mut WsConnect, cmds: &mut Commands) {
 
         ui.add_space(8.0);
         let valid = is_ws_url(&state.url);
-        ui.horizontal(|ui| {
-            if ui.add_enabled(valid, egui::Button::new("Connect")).clicked() || (valid && submitted) {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.add_enabled(valid, crate::widgets::button::primary(ui, "Connect")).clicked() || (valid && submitted) {
                 cmds.push(super::Cmd::Connect { url: state.url.trim().to_string(), headers: enabled_headers(&state.headers) });
                 close = true;
             }

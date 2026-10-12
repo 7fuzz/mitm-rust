@@ -60,6 +60,7 @@ pub fn show_unlock(ctx: &egui::Context, state: &mut CredentialsState, db_path: &
     let mut cancel = false;
     let mut retry = None;
     let modal = egui::Modal::new(egui::Id::new("credentials_unlock")).show(ctx, |ui| {
+        ui.set_width(360.0);
         ui.heading("Credentials locked");
         ui.add_space(6.0);
         if unlock_form(ui, state, db_path) {

@@ -37,7 +37,7 @@ pub fn show(ctx: &egui::Context, state: &mut ImportState, current_workspace: (&s
     let (current_id, current_name) = current_workspace;
     let mut close = false;
     let modal = egui::Modal::new(egui::Id::new("workspace_import")).show(ctx, |ui| {
-        ui.set_width(460.0);
+        ui.set_width(480.0);
         ui.heading("Import workspace");
         ui.add_space(6.0);
 
@@ -110,8 +110,8 @@ pub fn show(ctx: &egui::Context, state: &mut ImportState, current_workspace: (&s
         ui.radio_value(&mut state.into_current, true, format!("Into {current_name}"));
 
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            if ui.add_enabled(ready, egui::Button::new("Import")).clicked() {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.add_enabled(ready, crate::widgets::button::primary(ui, "Import")).clicked() {
                 let name = state.name.trim();
                 cmds.push(AppCommand::ImportWorkspace {
                     json: state.json.clone(),

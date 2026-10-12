@@ -117,8 +117,8 @@ fn new_workspace_modal(ctx: &egui::Context, state: &mut AppState, cmds: &mut Com
         return;
     }
     egui::Modal::new(egui::Id::new("new_workspace_modal")).show(ctx, |ui| {
-        ui.set_width(300.0);
-        ui.heading("New Workspace");
+        ui.set_width(360.0);
+        ui.heading("New workspace");
         ui.add_space(6.0);
         let resp = ui.add(
             egui::TextEdit::singleline(&mut state.environments.new_workspace_name)
@@ -132,9 +132,9 @@ fn new_workspace_modal(ctx: &egui::Context, state: &mut AppState, cmds: &mut Com
             state.environments.new_workspace_modal = false;
         }
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let can_create = !name.is_empty();
-            if ui.add_enabled(can_create, egui::Button::new("Create")).clicked() {
+            if ui.add_enabled(can_create, crate::widgets::button::primary(ui, "Create")).clicked() {
                 cmds.push(AppCommand::CreateWorkspace(name));
                 state.environments.new_workspace_name.clear();
                 state.environments.new_workspace_modal = false;

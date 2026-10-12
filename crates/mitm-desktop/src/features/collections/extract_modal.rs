@@ -41,8 +41,8 @@ pub fn show(ctx: &egui::Context, state: &mut CollectionsState, cmds: &mut Comman
         });
 
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            if ui.button("Save Rules").clicked() {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.add(crate::widgets::button::primary(ui, "Save")).clicked() {
                 cmds.push(AppCommand::Collections(CollectionsCmd::SaveExtractRules {
                     request_id: modal.selected.clone(),
                     rules: modal.rules.clone(),

@@ -23,7 +23,7 @@ pub fn show(ctx: &egui::Context, state: &mut CurlImport, cmds: &mut Commands) {
     }
     let mut close = false;
     let modal = egui::Modal::new(egui::Id::new("curl_import")).show(ctx, |ui| {
-        ui.set_width(520.0);
+        ui.set_width(480.0);
         ui.heading("Import cURL");
         ui.add_space(6.0);
         let edit = ui.add(
@@ -53,9 +53,9 @@ pub fn show(ctx: &egui::Context, state: &mut CurlImport, cmds: &mut Commands) {
         }
 
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let parsed = state.parsed.as_ref().and_then(|p| p.as_ref().ok());
-            if ui.add_enabled(parsed.is_some(), egui::Button::new("Import")).clicked() {
+            if ui.add_enabled(parsed.is_some(), crate::widgets::button::primary(ui, "Import")).clicked() {
                 if let Some(curl) = parsed {
                     cmds.push(AppCommand::RepeaterImportCurl(curl.clone()));
                 }

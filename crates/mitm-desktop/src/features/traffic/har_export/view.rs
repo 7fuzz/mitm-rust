@@ -12,7 +12,7 @@ pub fn show(ctx: &egui::Context, export: &mut HarExport, cmds: &mut Commands) {
     }
     let mut close = false;
     let modal = egui::Modal::new(egui::Id::new("har_export")).show(ctx, |ui| {
-        ui.set_width(560.0);
+        ui.set_width(640.0);
         ui.heading("Export HAR");
         ui.add_space(6.0);
         if let Some(error) = &export.error {

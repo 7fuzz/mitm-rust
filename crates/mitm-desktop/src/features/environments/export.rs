@@ -39,6 +39,7 @@ pub fn show(ctx: &egui::Context, prompt: &mut ExportPrompt, cmds: &mut Commands)
     }
     let mut close = false;
     let modal = egui::Modal::new(egui::Id::new("workspace_export")).show(ctx, |ui| {
+        ui.set_width(480.0);
         ui.heading("Export workspace");
         ui.add_space(6.0);
         if prompt.has_secrets {
@@ -57,8 +58,8 @@ pub fn show(ctx: &egui::Context, prompt: &mut ExportPrompt, cmds: &mut Commands)
         }
         let passphrase_ok = !prompt.include_credentials || (!prompt.passphrase.is_empty() && prompt.passphrase == prompt.repeat);
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            if ui.add_enabled(passphrase_ok, egui::Button::new("Export…")).clicked() {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.add_enabled(passphrase_ok, crate::widgets::button::primary(ui, "Export…")).clicked() {
                 cmds.push(AppCommand::ExportWorkspaceFile {
                     options: prompt.options,
                     passphrase: prompt.include_credentials.then(|| prompt.passphrase.clone()),

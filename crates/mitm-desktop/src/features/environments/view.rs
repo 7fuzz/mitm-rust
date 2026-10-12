@@ -113,14 +113,14 @@ fn workspace_header(ui: &mut egui::Ui, state: &mut EnvironmentsState, cmds: &mut
 
     if state.confirm_delete_workspace {
         egui::Modal::new(egui::Id::new("delete_workspace_confirm_modal")).show(ui.ctx(), |ui| {
-            ui.set_width(320.0);
-            ui.heading("Delete Workspace");
+            ui.set_width(360.0);
+            ui.heading("Delete workspace");
             ui.add_space(6.0);
             ui.label(format!("Are you sure you want to delete \"{}\"?", ws.name));
             ui.weak("All collections and environments in this workspace will be deleted.");
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                if ui.button(RichText::new("Delete").color(ui.visuals().error_fg_color)).clicked() {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.add(crate::widgets::button::danger_filled(ui, "Delete")).clicked() {
                     cmds.push(AppCommand::DeleteWorkspace(ws.id.clone()));
                     state.confirm_delete_workspace = false;
                 }
@@ -594,7 +594,7 @@ fn move_modal(ctx: &egui::Context, state: &mut EnvironmentsState, credentials: &
     let Some(modal) = &mut state.move_modal else { return };
     let mut close = false;
     egui::Modal::new(egui::Id::new("move_to_credentials")).show(ctx, |ui| {
-        ui.set_width(300.0);
+        ui.set_width(360.0);
         ui.heading("Move to credentials");
         ui.add_space(6.0);
         egui::Grid::new("move_to_credentials_grid").num_columns(2).show(ui, |ui| {
@@ -621,8 +621,8 @@ fn move_modal(ctx: &egui::Context, state: &mut EnvironmentsState, credentials: &
             ui.colored_label(ui.visuals().error_fg_color, error);
         }
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            if ui.button("Move").clicked() {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.add(crate::widgets::button::primary(ui, "Move")).clicked() {
                 cmds.push(AppCommand::MoveToCredentials {
                     env_id: modal.env_id.clone(),
                     var_idx: modal.var_idx,
@@ -664,9 +664,9 @@ fn variant_modal(ctx: &egui::Context, state: &mut EnvironmentsState, env_idx: us
             close = true;
         }
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let can_commit = !name.is_empty();
-            if ui.add_enabled(can_commit, egui::Button::new(if modal_state.is_rename { "Rename" } else { "Add" })).clicked() {
+            if ui.add_enabled(can_commit, crate::widgets::button::primary(ui, if modal_state.is_rename { "Rename" } else { "Add" })).clicked() {
                 commit = true;
             }
             if ui.button("Cancel").clicked() {
