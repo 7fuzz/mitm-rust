@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+use super::listener::default_true;
 use std::sync::Arc;
 use regex::Regex;
 use crate::db::InterceptRule;
@@ -162,5 +164,23 @@ mod tests {
     fn path_is_not_the_full_url() {
         assert!(matches_response(&rule("both", "path", "equals", "/api/stuff?x=1")));
         assert!(!matches_response(&rule("both", "path", "contains", "example.com")));
+    }
+}
+
+/// Restricts a feature to traffic from selected proxy listeners (sources).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceScope {
+    /// When true every source matches and `ids` is ignored
+    #[serde(default = "default_true")]
+    pub all: bool,
+    /// Listener ids that match when `all` is false
+    #[serde(default)]
+    pub ids: Vec<u32>,
+}
+
+impl Default for SourceScope {
+    fn default() -> Self {
+        Self { all: true, ids: Vec::new() }
     }
 }

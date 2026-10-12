@@ -1,8 +1,9 @@
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use crate::events::EventBus;
 use regex::Regex;
 use hyper::Uri;
-use crate::state::{AppState, RewriteRule, RewriteHistoryEntry};
+use crate::state::AppState;
 
 #[derive(Debug, Clone)]
 pub struct MockResponse {
@@ -567,4 +568,51 @@ mod tests {
         let redirect = rule("redirect", "url", "", "https://elsewhere", false);
         assert_eq!(preview_rewrite(&redirect, "https://here").unwrap().output, "https://elsewhere");
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RewriteRule {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub action_type: String, // "partial_request" | "full_request" | "partial_response" | "full_response"
+    pub match_field: String, // "all" | "url" | "host" | "path" | "method" | "header"
+    pub match_operator: String, // "contains" | "equals" | "regex" | "starts_with"
+    pub match_value: String,
+    pub target_part: String, // "url" | "query" | "header" | "body" | "method" | "status"
+    pub target_header: Option<String>,
+    pub match_pattern: String,
+    pub replacement_value: String,
+    pub is_regex: bool,
+    pub mock_status_code: Option<u16>,
+    pub mock_headers_json: Option<String>,
+    pub mock_body: Option<String>,
+    pub order_index: i32,
+    pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RewriteHistoryEntry {
+    pub id: i64,
+    pub rule_id: Option<String>,
+    pub rule_name: String,
+    pub action_type: String,
+    pub method: String,
+    pub original_url: String,
+    pub rewritten_url: String,
+    pub original_headers: Vec<(String, String)>,
+    pub rewritten_headers: Vec<(String, String)>,
+    pub original_body: String,
+    pub rewritten_body: String,
+    pub status_code: Option<u16>,
+    pub duration_ms: Option<u64>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RewriteCapturedEvent {
+    pub entry: RewriteHistoryEntry,
 }

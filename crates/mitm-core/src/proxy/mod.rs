@@ -3,6 +3,7 @@ pub mod host_ips;
 pub mod mitm;
 pub mod history;
 pub mod intercept;
+pub mod listener;
 pub mod rules;
 pub mod rewrite;
 
