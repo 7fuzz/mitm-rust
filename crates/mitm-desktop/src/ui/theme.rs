@@ -264,6 +264,7 @@ pub fn install_fonts(ctx: &egui::Context) {
         fonts.font_data.insert(name.to_string(), std::sync::Arc::new(egui::FontData::from_static(bytes)));
     }
     // Phosphor comes after the text font: it maps a-z to the blank glyphs its ligatures are built from.
+    // The text fonts ship with their Private Use Area removed, so they can't shadow Phosphor's codepoints.
     // Hack covers arrows, triangles and dots the text fonts lack; the emoji fonts cover user data.
     let fallback = ["Hack", "NotoEmoji-Regular", "emoji-icon-font"];
     let chain = |first: &[&str]| first.iter().chain(&fallback).map(|s| s.to_string()).collect::<Vec<_>>();
