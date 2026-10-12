@@ -374,7 +374,15 @@ async fn run_repeater_tab(
 
     let mut sent = send_tab_request_with(client, &filled).await?;
     let extract_rules_json = serde_json::to_string(&tab.extract_rules).unwrap_or_default();
-    perform_auto_extraction_db(db_path, REPEATER_WORKSPACE_ID, &extract_rules_json, &sent.response_body, &sent.response_headers);
+    let credentials_workspace_id = credential_workspace_id(db_path);
+    perform_auto_extraction_db(
+        db_path,
+        REPEATER_WORKSPACE_ID,
+        credentials_workspace_id.as_deref(),
+        &extract_rules_json,
+        &sent.response_body,
+        &sent.response_headers,
+    );
     mask_sent(&mut sent, &record);
     Ok(record_run(db_path, tab, sent))
 }

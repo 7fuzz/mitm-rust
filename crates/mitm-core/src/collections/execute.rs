@@ -295,7 +295,7 @@ async fn send_collection_request(
 
     let executed_at = now_ms();
 
-    perform_auto_extraction_db(db_path, &workspace_id, &extract_rules_json, &decoded_body, &response_headers);
+    perform_auto_extraction_db(db_path, &workspace_id, Some(&workspace_id), &extract_rules_json, &decoded_body, &response_headers);
 
     let history_id = {
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
@@ -494,9 +494,13 @@ pub fn evaluate_rust_extract_rule(
     }
 }
 
+/// Writes extracted values into `(auto)` variants of the env workspace's active environment. A target that is a
+/// `$cred:entry.field` ref, or a variable whose `(auto)` variant links to one, is written into that credential
+/// (looked up in `credentials_workspace_id`) instead, so the variant keeps its link.
 pub fn perform_auto_extraction_db(
     db_path: &PathBuf,
     workspace_id: &str,
+    credentials_workspace_id: Option<&str>,
     extract_rules_json: &str,
     response_body: &str,
     response_headers: &[HeaderItem],
@@ -514,17 +518,15 @@ pub fn perform_auto_extraction_db(
         return;
     }
 
-    let mut envs = match crate::workspace::get_workspace_environments_db(db_path, workspace_id) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
-
-    let active_env = match envs.iter_mut().find(|e| e.is_active) {
-        Some(e) => e,
-        None => return,
-    };
-
+    let mut envs = crate::workspace::get_workspace_environments_db(db_path, workspace_id).unwrap_or_default();
+    let mut active_env = envs.iter_mut().find(|e| e.is_active);
     let mut modified = false;
+    let write_credential = |entry: &str, field: &str, value: &str| {
+        let Some(credentials_workspace_id) = credentials_workspace_id else { return };
+        if let Err(e) = crate::credentials::write_extracted(db_path, credentials_workspace_id, entry, field, value) {
+            eprintln!("[extract] skipped $cred:{entry}.{field}: {e}");
+        }
+    };
 
     for rule in rules {
         if !rule.enabled || rule.target_variable.trim().is_empty() || rule.expression.trim().is_empty() {
@@ -549,6 +551,12 @@ pub fn perform_auto_extraction_db(
                 continue;
             }
 
+            if let Some((entry, field)) = crate::credentials::parse_ref(target_var_name) {
+                write_credential(entry, field, &val_str);
+                continue;
+            }
+            let Some(active_env) = active_env.as_deref_mut() else { continue };
+
             let var_entry = active_env
                 .variables
                 .iter_mut()
@@ -563,6 +571,10 @@ pub fn perform_auto_extraction_db(
 
                     match auto_idx {
                         Some(idx) => {
+                            if let Some((entry, field)) = crate::credentials::link_target(&v.variants[idx].value) {
+                                write_credential(entry, field, &val_str);
+                                continue;
+                            }
                             v.variants[idx].value = val_str.clone();
                             if v.active_index == idx {
                                 v.value = val_str;
@@ -602,7 +614,7 @@ pub fn perform_auto_extraction_db(
         }
     }
 
-    if modified {
+    if let (true, Some(active_env)) = (modified, active_env) {
         let _ = crate::workspace::save_workspace_environment_db(db_path, active_env.clone());
     }
 }
@@ -799,5 +811,112 @@ pub(crate) mod tests {
         assert_eq!(parts[2], "admin@x");
         assert_eq!(parts[3].len(), 36);
         assert!(result.response_body.ends_with(&format!("|{}|admin@x|{}", parts[1], parts[3])), "history matches what was sent");
+    }
+
+    fn rule(target: &str) -> ExtractRuleItem {
+        ExtractRuleItem {
+            id: "r".into(),
+            r#type: "json".into(),
+            expression: "access_token".into(),
+            target_variable: target.into(),
+            enabled: true,
+        }
+    }
+
+    fn linked_env(ws: &str, variants: Vec<(&str, &str)>) -> crate::workspace::Environment {
+        crate::workspace::Environment {
+            id: "env".into(),
+            workspace_id: ws.into(),
+            name: "dev".into(),
+            is_active: true,
+            variables: vec![crate::workspace::EnvironmentVariable {
+                key: "accessToken".into(),
+                value: variants[0].1.into(),
+                enabled: true,
+                r#type: "default".into(),
+                active_index: 0,
+                variants: variants
+                    .into_iter()
+                    .map(|(name, value)| crate::workspace::VariableVariant { name: name.into(), value: value.into() })
+                    .collect(),
+            }],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        }
+    }
+
+    fn setup_extract() -> (PathBuf, String) {
+        let db = crate::credentials::tests_support::temp_db();
+        let ws = crate::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
+        crate::credentials::create_credential(&db, &ws, "dgAdmin").unwrap();
+        (db, ws)
+    }
+
+    fn extract(db: &PathBuf, ws: &str, target: &str) {
+        let rules = serde_json::to_string(&[rule(target)]).unwrap();
+        perform_auto_extraction_db(db, ws, Some(ws), &rules, r#"{"access_token": "eyJtoken"}"#, &[]);
+    }
+
+    #[test]
+    fn extract_writes_through_a_linked_auto_variant() {
+        let (db, ws) = setup_extract();
+        crate::workspace::save_workspace_environment_db(&db, linked_env(&ws, vec![("(auto)", "{{$cred:dgAdmin.accessToken}}")])).unwrap();
+        extract(&db, &ws, "accessToken");
+
+        let cred = crate::credentials::find_credential(&db, &ws, "dgAdmin").unwrap().unwrap();
+        let field = cred.field("accessToken").unwrap();
+        assert_eq!((field.value.as_str(), field.kind, field.extracted), ("eyJtoken", crate::credentials::FieldKind::Secret, true));
+        let env = crate::workspace::active_environment_db(&db, &ws).unwrap();
+        assert_eq!(env.variables[0].variants[0].value, "{{$cred:dgAdmin.accessToken}}");
+        assert_eq!(env.variables[0].value, "{{$cred:dgAdmin.accessToken}}");
+        let _ = std::fs::remove_file(&db);
+    }
+
+    #[test]
+    fn extract_writes_a_direct_cred_target_and_skips_a_missing_entry() {
+        let (db, ws) = setup_extract();
+        extract(&db, &ws, "$cred:dgAdmin.token");
+        extract(&db, &ws, "{{$cred:nobody.token}}");
+        let cred = crate::credentials::find_credential(&db, &ws, "dgAdmin").unwrap().unwrap();
+        assert_eq!(cred.field("token").unwrap().value, "eyJtoken");
+        assert!(crate::credentials::find_credential(&db, &ws, "nobody").unwrap().is_none());
+        let _ = std::fs::remove_file(&db);
+    }
+
+    #[test]
+    fn extract_never_touches_a_linked_variant_other_than_auto() {
+        let (db, ws) = setup_extract();
+        let env = linked_env(&ws, vec![("(auto)", ""), ("manual", "{{$cred:dgAdmin.accessToken}}")]);
+        crate::workspace::save_workspace_environment_db(&db, env).unwrap();
+        extract(&db, &ws, "accessToken");
+
+        let env = crate::workspace::active_environment_db(&db, &ws).unwrap();
+        assert_eq!(env.variables[0].variants[0].value, "eyJtoken");
+        assert_eq!(env.variables[0].variants[1].value, "{{$cred:dgAdmin.accessToken}}");
+        let cred = crate::credentials::find_credential(&db, &ws, "dgAdmin").unwrap().unwrap();
+        assert!(cred.field("accessToken").is_none());
+        let _ = std::fs::remove_file(&db);
+    }
+
+    #[tokio::test]
+    async fn an_extracted_token_is_masked_in_the_next_request() {
+        let (db, ws) = setup_extract();
+        crate::workspace::save_workspace_environment_db(&db, linked_env(&ws, vec![("(auto)", "{{$cred:dgAdmin.accessToken}}")])).unwrap();
+        extract(&db, &ws, "accessToken");
+
+        let base = serve_echo().await;
+        let col = crate::collections::create_collection_db(&db, ws.clone(), None, "c".into()).unwrap();
+        let mut req = crate::collections::create_request_db(&db, col.id, "me".into()).unwrap();
+        req.url = format!("{base}/me");
+        req.headers = vec![HeaderItem { id: "h".into(), key: "Authorization".into(), value: "Bearer {{accessToken}}".into(), enabled: true }];
+        crate::collections::update_request_db(&db, req.clone()).unwrap();
+
+        let result = execute_collection_request_db(&db, &req.id).await.unwrap();
+        let history = crate::collections::get_request_histories_db(&db, &req.id).unwrap();
+        let _ = std::fs::remove_file(&db);
+
+        assert!(result.response_body.contains("authorization: Bearer eyJtoken"), "{}", result.response_body);
+        let auth = history[0].request_headers.iter().find(|h| h.key == "Authorization").unwrap();
+        assert_eq!(auth.value, "Bearer ••••");
     }
 }

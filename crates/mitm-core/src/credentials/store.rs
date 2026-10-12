@@ -300,6 +300,20 @@ fn write(conn: &Connection, key: &crypto::DataKey, credential: &Credential, inse
     Ok(())
 }
 
+/// Stores an extracted value (a token) in `entry.field`. A missing field is created as an extracted secret;
+/// a missing entry is an error, since entries are never created implicitly.
+pub fn write_extracted(db_path: &Path, workspace_id: &str, entry: &str, field: &str, value: &str) -> Result<(), String> {
+    let mut credential = find_credential(db_path, workspace_id, entry)?.ok_or_else(|| format!("no credential named \"{entry}\""))?;
+    match credential.field_mut(field) {
+        Some(existing) => existing.value = value.to_string(),
+        None => {
+            validate_name(field)?;
+            credential.fields.push(Field { key: field.to_string(), kind: FieldKind::Secret, extracted: true, value: value.to_string() });
+        }
+    }
+    save_credential(db_path, &credential)
+}
+
 pub fn delete_credential(db_path: &Path, id: &str) -> Result<(), String> {
     open(db_path)?
         .execute("DELETE FROM credentials WHERE id = ?", [id])
