@@ -1,4 +1,5 @@
 mod api;
+pub mod types;
 pub mod client_session;
 pub mod proxy_pipe;
 
