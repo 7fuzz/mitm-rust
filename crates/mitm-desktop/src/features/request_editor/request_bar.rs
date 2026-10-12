@@ -1,4 +1,4 @@
-use eframe::egui::{self, Align, Layout, RichText};
+use eframe::egui::{self, Align, Layout};
 use crate::widgets::template;
 use super::method::method_combo;
 
@@ -16,7 +16,7 @@ pub struct RequestBar {
 pub fn show(ui: &mut egui::Ui, id_salt: &str, method: &mut String, url: &mut String, hint: &str, executing: bool) -> RequestBar {
     ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
         let label = if executing { "Sending..." } else { "Send" };
-        let button = egui::Button::new(RichText::new(label).strong()).fill(ui.visuals().selection.bg_fill);
+        let button = crate::widgets::button::primary(ui, label);
         let send = ui.add_enabled(!executing, button).on_hover_text("Ctrl+Enter").clicked();
         let (method_changed, url) = ui
             .with_layout(Layout::left_to_right(Align::Min), |ui| {

@@ -46,6 +46,7 @@ pub struct Palette {
     pub text_strong: Color32,
     pub text_weak: Color32,
     pub accent: Color32,
+    pub accent_text: Color32,
 }
 
 impl Palette {
@@ -61,6 +62,7 @@ impl Palette {
             text_strong: Color32::from_rgb(0xF3, 0xF4, 0xF7),
             text_weak: Color32::from_rgb(0x8A, 0x90, 0x9B),
             accent: Color32::from_rgb(0x6E, 0x8B, 0xFF),
+            accent_text: Color32::from_rgb(0x0B, 0x0E, 0x14),
         }
     }
 
@@ -76,6 +78,7 @@ impl Palette {
             text_strong: Color32::from_rgb(0x0B, 0x0D, 0x10),
             text_weak: Color32::from_rgb(0x69, 0x70, 0x7C),
             accent: Color32::from_rgb(0x3B, 0x5B, 0xDB),
+            accent_text: Color32::from_rgb(0xFF, 0xFF, 0xFF),
         }
     }
 

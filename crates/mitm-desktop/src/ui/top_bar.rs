@@ -200,7 +200,7 @@ fn theme_toggle(ui: &mut egui::Ui) {
     } else {
         (icons::MOON, "Dark theme", egui::ThemePreference::Dark)
     };
-    if ui.add(egui::Button::new(icon).frame_when_inactive(false)).on_hover_text(hint).clicked() {
+    if crate::widgets::button::icon_button(ui, icon, hint).clicked() {
         ui.ctx().set_theme(next);
     }
 }

@@ -13,3 +13,4 @@ pub mod message_pane;
 pub mod search;
 pub mod source_scope;
 pub mod toast;
+pub mod button;
