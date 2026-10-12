@@ -118,9 +118,9 @@ pub enum AppCommand {
 
     OpenImport,
     ExportWorkspace,
-    ExportWorkspaceFile(mitm_core::workspace::file::ExportOptions),
+    ExportWorkspaceFile { options: mitm_core::workspace::file::ExportOptions, passphrase: Option<String> },
     PickImportFile,
-    ImportWorkspace { json: String, target: Option<String>, name: Option<String> },
+    ImportWorkspace { json: String, target: Option<String>, name: Option<String>, passphrase: Option<String> },
 }
 
 impl AppCommand {

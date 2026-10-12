@@ -657,15 +657,16 @@ impl MitmApp {
             }
             AppCommand::ExportWorkspace => {
                 let environments = &mut self.state.environments;
-                if let Some(options) = environments.export.ask(&environments.environments) {
-                    self.run_command(ctx, AppCommand::ExportWorkspaceFile(options));
+                if let Some(options) = environments.export.ask(&environments.environments, &self.state.credentials.entries) {
+                    self.run_command(ctx, AppCommand::ExportWorkspaceFile { options, passphrase: None });
                 }
             }
-            AppCommand::ExportWorkspaceFile(options) => {
+            AppCommand::ExportWorkspaceFile { options, passphrase } => {
                 let Some(workspace) = self.state.environments.active_workspace().cloned() else { return };
                 // Export reads the database, so edits still waiting for their debounced save go first.
                 self.state.environments.flush(db_path);
                 self.state.collections.flush(db_path);
+                self.state.credentials.flush(db_path);
                 let db_path = db_path.clone();
                 self.file_saves.spawn(&self.rt, ctx, async move {
                     let name = format!("{}.mitm.json", workspace.name);
@@ -675,13 +676,20 @@ impl MitmApp {
                         &workspace.id,
                         &path.to_string_lossy(),
                         options,
-                        None,
+                        passphrase.as_deref(),
                     );
                     Some(result.map(|_| format!("Exported {}", crate::util::files::file_name(&path))))
                 });
             }
-            AppCommand::ImportWorkspace { json, target, name } => {
-                match mitm_core::workspace::import::import_workspace_json_db(db_path, &json, target.as_deref(), name.as_deref(), None) {
+            AppCommand::ImportWorkspace { json, target, name, passphrase } => {
+                let imported = mitm_core::workspace::import::import_workspace_json_db(
+                    db_path,
+                    &json,
+                    target.as_deref(),
+                    name.as_deref(),
+                    passphrase.as_deref(),
+                );
+                match imported {
                     Ok(_) if target.is_some() => {
                         self.state.environments.import = Default::default();
                         self.state.environments.refresh(db_path);

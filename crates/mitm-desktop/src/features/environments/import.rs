@@ -13,6 +13,7 @@ pub struct ImportState {
     stale: bool,
     into_current: bool,
     name: String,
+    passphrase: String,
     pub error: Option<String>,
 }
 
@@ -65,13 +66,25 @@ pub fn show(ctx: &egui::Context, state: &mut ImportState, current_workspace: (&s
         let ready = match &state.preview {
             Some(Ok(preview)) => {
                 let s = &preview.summary;
-                ui.label(format!(
+                let mut line = format!(
                     "{} · {} collections · {} requests · {} environments",
                     preview.format.label(),
                     s.collections_imported,
                     s.requests_imported,
                     s.environments_imported
-                ));
+                );
+                if s.credentials_imported > 0 {
+                    line.push_str(&format!(" · {} credentials", s.credentials_imported));
+                }
+                ui.label(line);
+                if preview.credentials_sealed {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut state.passphrase)
+                            .password(true)
+                            .hint_text("Credentials passphrase (empty: names only)")
+                            .desired_width(280.0),
+                    );
+                }
                 true
             }
             Some(Err(e)) => {
@@ -103,6 +116,7 @@ pub fn show(ctx: &egui::Context, state: &mut ImportState, current_workspace: (&s
                     json: state.json.clone(),
                     target: state.into_current.then(|| current_id.to_string()),
                     name: (!state.into_current && !name.is_empty()).then(|| name.to_string()),
+                    passphrase: (!state.passphrase.is_empty()).then(|| state.passphrase.clone()),
                 });
             }
             if ui.button("Cancel").clicked() {
