@@ -372,10 +372,21 @@ async fn run_repeater_tab(
         }
     }
 
-    let sent = send_tab_request_with(client, &filled).await?;
+    let mut sent = send_tab_request_with(client, &filled).await?;
     let extract_rules_json = serde_json::to_string(&tab.extract_rules).unwrap_or_default();
     perform_auto_extraction_db(db_path, REPEATER_WORKSPACE_ID, &extract_rules_json, &sent.response_body, &sent.response_headers);
+    mask_sent(&mut sent, &record);
     Ok(record_run(db_path, tab, sent))
+}
+
+/// The logged copy never holds credential secrets; the response is left as the server sent it.
+fn mask_sent(sent: &mut SentRequest, record: &Interpolation) {
+    sent.final_url = record.mask(&sent.final_url);
+    for header in &mut sent.request_headers {
+        header.key = record.mask(&header.key);
+        header.value = record.mask(&header.value);
+    }
+    sent.request_body = sent.request_body.as_deref().map(|b| record.mask(b));
 }
 
 fn record_run(db_path: &PathBuf, tab: &RepeaterTab, sent: SentRequest) -> RepeaterExecutionResult {
@@ -574,5 +585,33 @@ mod tests {
         assert_eq!(logout_runs.len(), 1);
         let echoed = logout_runs[0].response_body.clone().unwrap_or_default().to_lowercase();
         assert!(echoed.starts_with("get /logout") && echoed.contains("cookie: sid=abc"), "{}", echoed);
+    }
+
+    #[tokio::test]
+    async fn history_masks_secrets_from_the_active_workspace_credentials() {
+        use crate::credentials::{create_credential, save_credential, Field, FieldKind};
+        let db_path = crate::credentials::tests_support::temp_db();
+        let ws = crate::workspace::create_workspace_db(&db_path, "W".into(), None).unwrap().id;
+        crate::workspace::set_active_workspace_db(&db_path, &ws).unwrap();
+        let mut cred = create_credential(&db_path, &ws, "dgAdmin").unwrap();
+        cred.fields = vec![Field { key: "password".into(), kind: FieldKind::Secret, extracted: false, value: "hunter2".into() }];
+        save_credential(&db_path, &cred).unwrap();
+
+        let base = crate::collections::execute::tests::serve_echo().await;
+        let mut signin = tab("signin", format!("{base}/signin?pw={{{{$cred:dgAdmin.password}}}}"));
+        signin.method = "POST".into();
+        signin.headers = vec![HeaderItem { id: "h".into(), key: "X-Pass".into(), value: "{{$cred:dgAdmin.password}}".into(), enabled: true }];
+        signin.body_type = "raw".into();
+        signin.body_content = Some("pw={{$cred:dgAdmin.password}}".into());
+        create_repeater_tab_db(&db_path, &signin).unwrap();
+
+        let result = execute_repeater_tab(&db_path, &signin).await.unwrap();
+        let history = crate::repeater::get_repeater_history_db(&db_path, "signin", 1, 10).unwrap();
+        let _ = std::fs::remove_file(&db_path);
+
+        assert!(result.response_body.contains("x-pass: hunter2"), "{}", result.response_body);
+        let logged = format!("{} {:?} {:?}", history[0].url, history[0].request_headers, history[0].request_body);
+        assert!(!logged.contains("hunter2"), "{logged}");
+        assert_eq!(history[0].request_body.as_deref(), Some("pw=••••"));
     }
 }

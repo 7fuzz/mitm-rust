@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::http::body::{build_multipart_payload, build_urlencoded_payload, format_body_for_ui};
 use crate::http::steps::{jar_cookie, pre_request_failure, request_steps};
 use crate::repeater::HeaderItem;
-use crate::workspace::interpolate_variables;
+use crate::workspace::{active_environment_db, interpolate, CredentialScope, Interpolation};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -108,7 +108,7 @@ async fn send_collection_request(
     jar: &Jar,
 ) -> Result<ExecutionResult, String> {
     // Scoped so the Connection is dropped before the .await below.
-    let (id, workspace_id, raw_method, target_url, mut logged_req_headers, final_body, mut req_headers_map, body_type, extract_rules_json) = {
+    let (id, workspace_id, raw_method, target_url, mut logged_req_headers, final_body, mut req_headers_map, body_type, extract_rules_json, record) = {
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
         let mut stmt = conn
@@ -150,8 +150,13 @@ async fn send_collection_request(
             _ => None,
         };
 
-        let interpolated_url = interpolate_variables(db_path, &workspace_id, &raw_url);
-        let interpolated_body = raw_body.map(|b| interpolate_variables(db_path, &workspace_id, &b));
+        let env = active_environment_db(db_path, &workspace_id);
+        let scope = CredentialScope { db_path, workspace_id: &workspace_id };
+        let mut record = Interpolation::default();
+        let mut fill = |text: &str| interpolate(env.as_ref(), Some(scope), text, &mut record);
+
+        let interpolated_url = fill(&raw_url);
+        let interpolated_body = raw_body.map(|b| fill(&b));
 
         let headers_list: Vec<HeaderItem> = serde_json::from_str(&headers_json).unwrap_or_default();
         let params_list: Vec<crate::repeater::ParamItem> = serde_json::from_str(&params_json).unwrap_or_default();
@@ -164,8 +169,8 @@ async fn send_collection_request(
                 .map(|p| {
                     format!(
                         "{}={}",
-                        url_encode_str(&interpolate_variables(db_path, &workspace_id, &p.key)),
-                        url_encode_str(&interpolate_variables(db_path, &workspace_id, &p.value))
+                        url_encode_str(&fill(&p.key)),
+                        url_encode_str(&fill(&p.value))
                     )
                 })
                 .collect();
@@ -194,8 +199,8 @@ async fn send_collection_request(
                     continue;
                 }
 
-                let interpolated_k = interpolate_variables(db_path, &workspace_id, &h.key);
-                let interpolated_v = interpolate_variables(db_path, &workspace_id, &h.value);
+                let interpolated_k = fill(&h.key);
+                let interpolated_v = fill(&h.value);
 
                 if let (Ok(hn), Ok(hv)) = (
                     HeaderName::from_bytes(interpolated_k.as_bytes()),
@@ -215,7 +220,7 @@ async fn send_collection_request(
         let final_body = if body_type != "none" { interpolated_body } else { None };
         let extract_rules_json = raw_extract_rules.unwrap_or_else(|| "[]".to_string());
 
-        (id, workspace_id, raw_method, url, logged_req_headers, final_body, req_headers_map, body_type, extract_rules_json)
+        (id, workspace_id, raw_method, url, logged_req_headers, final_body, req_headers_map, body_type, extract_rules_json, record)
     };
 
     if !req_headers_map.contains_key(reqwest::header::COOKIE) {
@@ -294,6 +299,10 @@ async fn send_collection_request(
 
     let history_id = {
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+        for header in &mut logged_req_headers {
+            header.key = record.mask(&header.key);
+            header.value = record.mask(&header.value);
+        }
         let req_headers_json = serde_json::to_string(&logged_req_headers).unwrap_or_else(|_| "[]".to_string());
         let res_headers_json = serde_json::to_string(&response_headers).unwrap_or_else(|_| "[]".to_string());
 
@@ -308,9 +317,9 @@ async fn send_collection_request(
         insert_stmt.execute(params![
             id,
             raw_method,
-            target_url,
+            record.mask(&target_url),
             req_headers_json,
-            final_body,
+            final_body.as_deref().map(|b| record.mask(b)),
             status_code,
             res_headers_json,
             decoded_body,
@@ -599,7 +608,7 @@ pub fn perform_auto_extraction_db(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::repeater::ExtractRuleItem;
 
@@ -698,5 +707,97 @@ mod tests {
         assert_eq!(result.status_code, 0);
         assert!(result.response_body.starts_with("Pre-request \"Get CSRF Token\" failed:"), "{}", result.response_body);
         assert_eq!(history.len(), 1);
+    }
+
+    /// Answers every request with the bytes it received, so a test can see what was actually sent.
+    pub(crate) async fn serve_echo() -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let (mut sock, _) = listener.accept().await.unwrap();
+                let mut received = Vec::new();
+                let mut buf = vec![0u8; 8192];
+                loop {
+                    let n = sock.read(&mut buf).await.unwrap_or(0);
+                    received.extend_from_slice(&buf[..n]);
+                    let text = String::from_utf8_lossy(&received);
+                    let Some(end) = text.find("\r\n\r\n") else {
+                        if n == 0 { break } else { continue }
+                    };
+                    let length = text[..end]
+                        .lines()
+                        .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)))
+                        .unwrap_or(0);
+                    if n == 0 || received.len() >= end + 4 + length {
+                        break;
+                    }
+                }
+                let head = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", received.len());
+                let _ = sock.write_all(head.as_bytes()).await;
+                let _ = sock.write_all(&received).await;
+            }
+        });
+        format!("http://{}", addr)
+    }
+
+    #[tokio::test]
+    async fn history_masks_credential_secrets_but_keeps_codes_and_dynamic_values() {
+        use crate::credentials::{create_credential, save_credential, Field, FieldKind};
+        use crate::workspace::{save_workspace_environment_db, Environment, EnvironmentVariable, VariableVariant};
+
+        let db_path = crate::credentials::tests_support::temp_db();
+        let ws = crate::workspace::create_workspace_db(&db_path, "W".into(), None).unwrap().id;
+        let mut cred = create_credential(&db_path, &ws, "dgAdmin").unwrap();
+        let field = |key: &str, kind, value: &str| Field { key: key.into(), kind, extracted: false, value: value.into() };
+        cred.fields = vec![field("password", FieldKind::Secret, "hunter2!"), field("totp", FieldKind::Totp, "MZXW6"), field("user", FieldKind::Text, "admin@x")];
+        save_credential(&db_path, &cred).unwrap();
+        save_workspace_environment_db(&db_path, Environment {
+            id: "env".into(),
+            workspace_id: ws.clone(),
+            name: "dev".into(),
+            is_active: true,
+            variables: vec![EnvironmentVariable {
+                key: "adminPassword".into(),
+                value: String::new(),
+                enabled: true,
+                r#type: "default".into(),
+                active_index: 0,
+                variants: vec![VariableVariant { name: "dev".into(), value: "{{$cred:dgAdmin.password}}".into() }],
+            }],
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        })
+        .unwrap();
+
+        let base = serve_echo().await;
+        let col = crate::collections::create_collection_db(&db_path, ws.clone(), None, "c".into()).unwrap();
+        let mut req = crate::collections::create_request_db(&db_path, col.id, "signin".into()).unwrap();
+        req.method = "POST".into();
+        req.url = format!("{base}/signin");
+        req.params = vec![crate::repeater::ParamItem { id: "p".into(), key: "pw".into(), value: "{{adminPassword}}".into(), enabled: true }];
+        req.headers = vec![HeaderItem { id: "h".into(), key: "X-Pass".into(), value: "{{$cred:dgAdmin.password}}".into(), enabled: true }];
+        req.body_type = "raw".into();
+        req.body_raw = Some("{{adminPassword}}|{{$cred:dgAdmin.totp}}|{{$cred:dgAdmin.user}}|{{$uuid}}".into());
+        crate::collections::update_request_db(&db_path, req.clone()).unwrap();
+
+        let result = execute_collection_request_db(&db_path, &req.id).await.unwrap();
+        let history = crate::collections::get_request_histories_db(&db_path, &req.id).unwrap();
+        let _ = std::fs::remove_file(&db_path);
+
+        assert!(result.response_body.contains("x-pass: hunter2!"), "{}", result.response_body);
+        assert!(result.response_body.contains("pw=hunter2%21"), "{}", result.response_body);
+        let logged = &history[0];
+        let everything = format!("{} {:?} {:?}", logged.url, logged.request_headers, logged.request_body);
+        assert!(!everything.contains("hunter2"), "{everything}");
+        assert!(logged.url.ends_with("pw=••••"), "{}", logged.url);
+        let body = logged.request_body.as_deref().unwrap();
+        let parts: Vec<&str> = body.split('|').collect();
+        assert_eq!(parts[0], "••••");
+        assert_eq!(parts[1].len(), 6);
+        assert_eq!(parts[2], "admin@x");
+        assert_eq!(parts[3].len(), 36);
+        assert!(result.response_body.ends_with(&format!("|{}|admin@x|{}", parts[1], parts[3])), "history matches what was sent");
     }
 }

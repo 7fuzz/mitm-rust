@@ -684,6 +684,29 @@ pub struct Interpolation {
     pub locked: bool,
 }
 
+pub const MASK: &str = "••••";
+
+impl Interpolation {
+    /// Replaces every secret this interpolation substituted, raw or URL-encoded, so it can be logged.
+    pub fn mask(&self, text: &str) -> String {
+        if self.secrets.is_empty() {
+            return text.to_string();
+        }
+        let mut needles: Vec<String> = self
+            .secrets
+            .iter()
+            .flat_map(|s| {
+                let form: String = url::form_urlencoded::byte_serialize(s.as_bytes()).collect();
+                [s.clone(), urlencoding::encode(s).into_owned(), form]
+            })
+            .filter(|n| !n.is_empty())
+            .collect();
+        needles.sort_by_key(|n| std::cmp::Reverse(n.len()));
+        needles.dedup();
+        needles.iter().fold(text.to_string(), |out, needle| out.replace(needle.as_str(), MASK))
+    }
+}
+
 pub fn interpolate_variables_with_env(env: &Environment, text: &str) -> String {
     interpolate(Some(env), None, text, &mut Interpolation::default())
 }
@@ -970,6 +993,13 @@ mod tests {
         assert_eq!(interpolate(Some(&env), scope, missing, &mut Interpolation::default()), missing);
         assert_eq!(interpolate(None, None, "{{$cred:dgAdmin.password}}", &mut record), "{{$cred:dgAdmin.password}}");
         let _ = std::fs::remove_file(&db);
+    }
+
+    #[test]
+    fn mask_hides_raw_and_url_encoded_secrets() {
+        let record = Interpolation { secrets: vec!["p@ss word".into()], locked: false };
+        assert_eq!(record.mask("a=p@ss word&b=p%40ss%20word&c=p%40ss+word"), "a=••••&b=••••&c=••••");
+        assert_eq!(Interpolation::default().mask("p@ss"), "p@ss");
     }
 
     #[test]
