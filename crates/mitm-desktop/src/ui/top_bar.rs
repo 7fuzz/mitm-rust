@@ -1,4 +1,4 @@
-use eframe::egui::{self, RichText};
+use eframe::egui::{self, CornerRadius, RichText};
 use mitm_core::state::ProxyMode;
 use crate::ui::theme::{self, Tone};
 use egui_dock::DockState;
@@ -7,6 +7,9 @@ use crate::ui::dock::{self, Tab};
 use crate::app::state::AppState;
 use crate::widgets::flash;
 use crate::ui::icons;
+use crate::features::environments::EnvironmentsState;
+use crate::util::format::format_count;
+use crate::widgets::pills::badge;
 
 const FLASH_OK: &str = "top_bar_flash_ok";
 const FLASH_ERR: &str = "top_bar_flash_err";
@@ -19,110 +22,105 @@ pub fn flash(ui: &egui::Ui, result: Result<String, String>) {
     }
 }
 
+const GROUP_GAP: f32 = 16.0;
+
 pub fn show(ui: &mut egui::Ui, state: &mut AppState, dock: &DockState<Tab>, cmds: &mut Commands) {
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
         proxy_controls(ui, state, cmds);
-
-        let paused = state.intercept.pending.len();
-        if paused > 0 {
-            let badge = RichText::new(format!("{} {} Paused Flow(s)", icons::WARNING, paused))
-                .color(theme::color(ui, Tone::Warn))
-                .strong();
-            ui.label(badge);
-            ui.separator();
-        }
-
-        workspace_and_env_combos(ui, state, cmds);
+        ui.add_space(GROUP_GAP);
+        breadcrumb(ui, state, cmds);
         for (id, tone) in [(FLASH_OK, Tone::Success), (FLASH_ERR, Tone::Danger)] {
             if let Some(message) = flash::current(ui, egui::Id::new(id)) {
+                ui.add_space(GROUP_GAP);
                 ui.label(RichText::new(message).color(theme::color(ui, tone)));
             }
         }
-        ui.separator();
-
-        add_panel_menu(ui, dock, cmds);
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            egui::widgets::global_theme_preference_switch(ui);
-            ui.label(RichText::new(format!("{} flows in memory", state.traffic.flows.len())).weak());
+            theme_toggle(ui);
+            add_panel_menu(ui, dock, cmds);
+            let paused = state.intercept.pending.len();
+            if paused > 0 {
+                ui.add_space(GROUP_GAP);
+                let pill = badge(ui, &format!("{} paused", format_count(paused)), Tone::Warn).interact(egui::Sense::click());
+                if pill.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Show paused flows").clicked() {
+                    cmds.push(AppCommand::OpenTab(Tab::Intercept));
+                }
+            }
         });
     });
 
     new_workspace_modal(ui.ctx(), state, cmds);
 }
 
-fn workspace_and_env_combos(ui: &mut egui::Ui, state: &mut AppState, cmds: &mut Commands) {
+/// Flat text with a caret; the frame only shows on hover.
+fn flat_menu(ui: &mut egui::Ui, text: &str, content: impl FnOnce(&mut egui::Ui)) {
+    let button = egui::Button::new((text, RichText::new(icons::CARET_DOWN).weak())).frame_when_inactive(false);
+    egui::containers::menu::MenuButton::from_button(button).ui(ui, content);
+}
+
+fn breadcrumb(ui: &mut egui::Ui, state: &mut AppState, cmds: &mut Commands) {
     let ws_state = &mut state.environments;
-    let active_ws_name = ws_state
-        .active_workspace()
-        .map(|w| w.name.as_str())
-        .unwrap_or("No workspace");
+    let ws_name = ws_state.active_workspace().map_or("No workspace", |w| w.name.as_str()).to_string();
+    let env_name = ws_state.active_environment().map_or("No environment", |e| e.name.as_str()).to_string();
+    flat_menu(ui, &ws_name, |ui| workspace_menu(ui, ws_state, cmds));
+    ui.weak("/");
+    flat_menu(ui, &env_name, |ui| environment_menu(ui, ws_state, cmds));
+}
 
-    egui::ComboBox::from_id_salt("top_bar_workspace_combo")
-        .selected_text(active_ws_name)
-        .show_ui(ui, |ui| {
-            if ws_state.workspaces.len() > 8 {
-                ui.add(egui::TextEdit::singleline(&mut ws_state.workspace_search).hint_text("Search…"));
-                ui.separator();
-            }
-            let search_lower = ws_state.workspace_search.trim().to_lowercase();
-            for ws in &ws_state.workspaces {
-                if !search_lower.is_empty() && !ws.name.to_lowercase().contains(&search_lower) {
-                    continue;
-                }
-                let is_active = ws.id == ws_state.active_workspace_id;
-                if ui.selectable_label(is_active, &ws.name).clicked() && !is_active {
-                    cmds.push(AppCommand::SelectWorkspace(ws.id.clone()));
-                }
-            }
-            ui.separator();
-            if ui.button("New…").clicked() {
-                ws_state.new_workspace_modal = true;
-                ws_state.new_workspace_name.clear();
-                ui.close();
-            }
-            if ui.button("Import…").clicked() {
-                cmds.push(AppCommand::OpenImport);
-                ui.close();
-            }
-            if ui.button("Export…").clicked() {
-                cmds.push(AppCommand::ExportWorkspace);
-                ui.close();
-            }
-            if ui.button("Manage").clicked() {
-                cmds.push(AppCommand::OpenTab(Tab::Environments));
-                ui.close();
-            }
-        });
+fn workspace_menu(ui: &mut egui::Ui, ws_state: &mut EnvironmentsState, cmds: &mut Commands) {
+    if ws_state.workspaces.len() > 8 {
+        ui.add(egui::TextEdit::singleline(&mut ws_state.workspace_search).hint_text("Search…"));
+        ui.separator();
+    }
+    let search_lower = ws_state.workspace_search.trim().to_lowercase();
+    for ws in &ws_state.workspaces {
+        if !search_lower.is_empty() && !ws.name.to_lowercase().contains(&search_lower) {
+            continue;
+        }
+        let is_active = ws.id == ws_state.active_workspace_id;
+        if ui.selectable_label(is_active, &ws.name).clicked() && !is_active {
+            cmds.push(AppCommand::SelectWorkspace(ws.id.clone()));
+            ui.close();
+        }
+    }
+    ui.separator();
+    if ui.button("New…").clicked() {
+        ws_state.new_workspace_modal = true;
+        ws_state.new_workspace_name.clear();
+        ui.close();
+    }
+    if ui.button("Import…").clicked() {
+        cmds.push(AppCommand::OpenImport);
+        ui.close();
+    }
+    if ui.button("Export…").clicked() {
+        cmds.push(AppCommand::ExportWorkspace);
+        ui.close();
+    }
+    if ui.button("Manage").clicked() {
+        cmds.push(AppCommand::OpenTab(Tab::Environments));
+        ui.close();
+    }
+}
 
-    let active_env_name = ws_state
-        .active_environment()
-        .map(|e| e.name.as_str())
-        .unwrap_or("No environment");
-
-    egui::ComboBox::from_id_salt("top_bar_environment_combo")
-        .selected_text(active_env_name)
-        .show_ui(ui, |ui| {
-            let is_none_active = ws_state.active_environment_id.is_none();
-            let none_label = if is_none_active { "● No environment" } else { "No environment" };
-            if ui.selectable_label(is_none_active, none_label).clicked() {
-                cmds.push(AppCommand::SelectEnvironment(None));
-            }
-            if !ws_state.environments.is_empty() {
-                ui.separator();
-            }
-            for env in &ws_state.environments {
-                let is_active = Some(&env.id) == ws_state.active_environment_id.as_ref();
-                let label = if is_active {
-                    format!("● {}", env.name)
-                } else {
-                    env.name.clone()
-                };
-                if ui.selectable_label(is_active, label).clicked() && !is_active {
-                    cmds.push(AppCommand::SelectEnvironment(Some(env.id.clone())));
-                }
-            }
-        });
+fn environment_menu(ui: &mut egui::Ui, ws_state: &EnvironmentsState, cmds: &mut Commands) {
+    let is_none_active = ws_state.active_environment_id.is_none();
+    if ui.selectable_label(is_none_active, "No environment").clicked() {
+        cmds.push(AppCommand::SelectEnvironment(None));
+        ui.close();
+    }
+    if !ws_state.environments.is_empty() {
+        ui.separator();
+    }
+    for env in &ws_state.environments {
+        let is_active = Some(&env.id) == ws_state.active_environment_id.as_ref();
+        if ui.selectable_label(is_active, &env.name).clicked() && !is_active {
+            cmds.push(AppCommand::SelectEnvironment(Some(env.id.clone())));
+            ui.close();
+        }
+    }
 }
 
 fn new_workspace_modal(ctx: &egui::Context, state: &mut AppState, cmds: &mut Commands) {
@@ -164,12 +162,17 @@ fn proxy_controls(ui: &mut egui::Ui, state: &AppState, cmds: &mut Commands) {
     let proxy = &state.proxy;
     let toggle_hint = if proxy.mode.is_enabled() { "Turn the proxy off" } else { "Turn the proxy on" };
     ui.add_enabled_ui(!proxy.busy(), |ui| {
-        if ui.button(mode_text(ui, proxy.mode).strong()).on_hover_text(toggle_hint).clicked() {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        let left = CornerRadius { nw: 4, sw: 4, ne: 0, se: 0 };
+        let right = CornerRadius { nw: 0, sw: 0, ne: 4, se: 4 };
+        let dot = RichText::new("●").color(mode_tone(proxy.mode).color(ui.visuals()));
+        if ui.add(egui::Button::new((dot, mode_label(proxy.mode))).corner_radius(left)).on_hover_text(toggle_hint).clicked() {
             cmds.push(AppCommand::ToggleProxy);
         }
-        ui.menu_button(icons::CARET_DOWN, |ui| {
+        let caret = egui::Button::new(icons::CARET_DOWN).corner_radius(right);
+        egui::containers::menu::MenuButton::from_button(caret).ui(ui, |ui| {
             for mode in ProxyMode::ALL {
-                if ui.selectable_label(proxy.mode == mode, mode_text(ui, mode)).clicked() {
+                if ui.selectable_label(proxy.mode == mode, mode_label(mode)).clicked() {
                     cmds.push(AppCommand::SetProxyMode(mode));
                     ui.close();
                 }
@@ -178,16 +181,10 @@ fn proxy_controls(ui: &mut egui::Ui, state: &AppState, cmds: &mut Commands) {
     });
     let problems = proxy.problems();
     if !problems.is_empty() {
-        let warning = egui::Label::new(RichText::new(icons::WARNING).color(theme::color(ui, Tone::Danger)).strong()).sense(egui::Sense::click());
+        let warning = egui::Label::new(RichText::new(icons::WARNING).color(theme::color(ui, Tone::Danger))).sense(egui::Sense::click());
         if ui.add(warning).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(problems.join("\n")).clicked() {
             cmds.push(AppCommand::OpenSettings(crate::features::settings::SettingsSection::Proxy));
         }
-    }
-    ui.separator();
-
-    if proxy.running && !proxy.active_summary.is_empty() {
-        ui.label(RichText::new(&proxy.active_summary).small().family(egui::FontFamily::Monospace));
-        ui.separator();
     }
 }
 
@@ -200,20 +197,32 @@ pub fn mode_label(mode: ProxyMode) -> &'static str {
     }
 }
 
-fn mode_text(ui: &egui::Ui, mode: ProxyMode) -> RichText {
-    let (dot, color) = match mode {
-        ProxyMode::On => ("●", theme::color(ui, Tone::Success)),
-        ProxyMode::Off => ("○", ui.visuals().weak_text_color()),
-        ProxyMode::BlockClient => ("●", theme::color(ui, Tone::Warn)),
-        ProxyMode::BlockAll => ("●", theme::color(ui, Tone::Danger)),
+fn mode_tone(mode: ProxyMode) -> Tone {
+    match mode {
+        ProxyMode::On => Tone::Success,
+        ProxyMode::Off => Tone::Neutral,
+        ProxyMode::BlockClient => Tone::Caution,
+        ProxyMode::BlockAll => Tone::Danger,
+    }
+}
+
+fn theme_toggle(ui: &mut egui::Ui) {
+    let (icon, hint, next) = if ui.visuals().dark_mode {
+        (icons::SUN, "Light theme", egui::ThemePreference::Light)
+    } else {
+        (icons::MOON, "Dark theme", egui::ThemePreference::Dark)
     };
-    RichText::new(format!("{} {}", dot, mode_label(mode))).color(color)
+    if ui.add(egui::Button::new(icon).frame_when_inactive(false)).on_hover_text(hint).clicked() {
+        ui.ctx().set_theme(next);
+    }
 }
 
 fn add_panel_menu(ui: &mut egui::Ui, dock: &DockState<Tab>, cmds: &mut Commands) {
-    ui.menu_button(format!("Add Panel {}", icons::CARET_DOWN), |ui| {
+    let button = egui::Button::new(icons::PLUS).frame_when_inactive(false);
+    let (response, _) = egui::containers::menu::MenuButton::from_button(button).ui(ui, |ui| {
         if let Some(tab) = dock::panel_menu(ui, |tab| dock.find_tab(&tab).is_some()) {
             cmds.push(AppCommand::OpenTab(tab));
         }
     });
+    response.on_hover_text("Add panel");
 }

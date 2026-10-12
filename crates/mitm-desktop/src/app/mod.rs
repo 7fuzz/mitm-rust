@@ -1037,9 +1037,16 @@ impl eframe::App for MitmApp {
             });
         }
 
-        egui::Panel::top("top_panel").show(ui, |ui| {
-            top_bar::show(ui, &mut self.state, &self.dock, &mut self.cmds);
-        });
+        let palette = crate::ui::theme::Palette::of(ui.visuals());
+        egui::Panel::top("top_panel")
+            .frame(egui::Frame::new().fill(palette.base).inner_margin(egui::Margin::symmetric(8, 5)))
+            .show(ui, |ui| {
+                top_bar::show(ui, &mut self.state, &self.dock, &mut self.cmds);
+            });
+        egui::Panel::bottom("status_bar")
+            .exact_size(22.0)
+            .frame(egui::Frame::new().fill(palette.base).inner_margin(egui::Margin::symmetric(8, 0)))
+            .show(ui, |ui| crate::ui::status_bar::show(ui, &self.state));
 
         if let Some((path, tab)) = dock::tab_bar_menus(ui, &self.dock) {
             dock::open_in_leaf(&mut self.dock, path, tab);

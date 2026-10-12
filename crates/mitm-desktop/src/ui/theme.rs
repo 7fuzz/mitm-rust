@@ -78,6 +78,10 @@ impl Palette {
             accent: Color32::from_rgb(0x3B, 0x5B, 0xDB),
         }
     }
+
+    pub fn of(visuals: &Visuals) -> Self {
+        if visuals.dark_mode { Self::dark() } else { Self::light() }
+    }
 }
 
 /// Styles both themes up front, so the System/Light/Dark switch needs no extra plumbing.
@@ -169,7 +173,7 @@ fn set_visuals(v: &mut Visuals, p: &Palette) {
 }
 
 pub fn dock_style(style: &egui::Style) -> egui_dock::Style {
-    let p = if style.visuals.dark_mode { Palette::dark() } else { Palette::light() };
+    let p = Palette::of(&style.visuals);
     let mut s = egui_dock::Style::from_egui(style);
     s.main_surface_border_stroke = Stroke::NONE;
 
