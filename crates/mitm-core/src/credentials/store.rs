@@ -121,7 +121,7 @@ fn validate_fields(fields: &[Field]) -> Result<(), String> {
 }
 
 fn open(db_path: &Path) -> Result<Connection, String> {
-    Connection::open(db_path).map_err(|e| e.to_string())
+    crate::db::open(db_path).map_err(|e| e.to_string())
 }
 
 fn name_taken(conn: &Connection, workspace_id: &str, name: &str, except_id: &str) -> Result<bool, String> {
@@ -356,7 +356,7 @@ pub(crate) mod tests {
         let listed = list_credentials(&db, &ws).unwrap();
         assert_eq!(listed[0].fields[1], FieldMeta { key: "password".into(), kind: FieldKind::Secret, extracted: false });
 
-        let raw: Vec<u8> = Connection::open(&db)
+        let raw: Vec<u8> = crate::db::open(&db)
             .unwrap()
             .query_row("SELECT ciphertext FROM credentials", [], |r| r.get(0))
             .unwrap();
@@ -393,7 +393,7 @@ pub(crate) mod tests {
         let ws = workspace(&db, "W");
         create_credential(&db, &ws, "dgAdmin").unwrap();
         crate::workspace::delete_workspace_db(&db, &ws).unwrap();
-        let count: i64 = Connection::open(&db).unwrap().query_row("SELECT COUNT(*) FROM credentials", [], |r| r.get(0)).unwrap();
+        let count: i64 = crate::db::open(&db).unwrap().query_row("SELECT COUNT(*) FROM credentials", [], |r| r.get(0)).unwrap();
         assert_eq!(count, 0);
         let _ = std::fs::remove_file(&db);
     }

@@ -20,7 +20,7 @@ struct KeyRow {
 }
 
 fn open(db_path: &Path) -> Result<Connection, String> {
-    Connection::open(db_path).map_err(|e| e.to_string())
+    crate::db::open(db_path).map_err(|e| e.to_string())
 }
 
 fn key_row(conn: &Connection) -> Result<Option<KeyRow>, String> {

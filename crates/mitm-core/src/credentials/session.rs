@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, OptionalExtension};
 use super::crypto::{self, DataKey};
 use super::LOCKED;
 
@@ -45,7 +45,7 @@ pub(crate) fn data_key(db_path: &Path) -> Result<Option<DataKey>, String> {
     if let Some(key) = cached(db_path) {
         return Ok(Some(key));
     }
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let row: Option<(Option<String>, Vec<u8>)> = conn
         .query_row("SELECT kdf, wrapped_key FROM credential_keys WHERE id = 1", [], |r| Ok((r.get(0)?, r.get(1)?)))
         .optional()
@@ -67,7 +67,7 @@ pub(crate) fn data_key_or_create(db_path: &Path) -> Result<DataKey, String> {
         return Ok(key);
     }
     let key = crypto::generate_key();
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let inserted = conn
         .execute(
             "INSERT OR IGNORE INTO credential_keys (id, kdf, wrapped_key, updated_at_ms) VALUES (1, NULL, ?, ?)",

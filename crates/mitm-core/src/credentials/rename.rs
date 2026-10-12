@@ -90,7 +90,7 @@ fn rewrite_workspace(conn: &mut Connection, workspace_id: &str, map: RefMap) -> 
 
 pub fn rename_credential(db_path: &Path, id: &str, new_name: &str) -> Result<(), String> {
     validate_name(new_name)?;
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let (workspace_id, old_name): (String, String) = conn
         .query_row("SELECT workspace_id, name FROM credentials WHERE id = ?", [id], |r| Ok((r.get(0)?, r.get(1)?)))
         .map_err(|e| e.to_string())?;
@@ -128,7 +128,7 @@ pub fn rename_field(db_path: &Path, id: &str, old_key: &str, new_key: &str) -> R
     field.key = new_key.to_string();
     save_credential(db_path, &credential)?;
 
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let (name, old_key, new_key) = (credential.name.clone(), old_key.to_string(), new_key.to_string());
     rewrite_workspace(&mut conn, &credential.workspace_id, &|entry, field| {
         (entry.eq_ignore_ascii_case(&name) && field.eq_ignore_ascii_case(&old_key)).then(|| (name.clone(), new_key.clone()))
@@ -193,7 +193,7 @@ mod tests {
     }
 
     fn snapshot(db: &std::path::PathBuf, env: &Environment, req: &crate::collections::RequestItem) -> String {
-        let conn = Connection::open(db).unwrap();
+        let conn = crate::db::open(db).unwrap();
         let vars: String = conn.query_row("SELECT variables_json FROM environments WHERE id = ?", [&env.id], |r| r.get(0)).unwrap();
         let row: String = conn
             .query_row(
