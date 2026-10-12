@@ -203,6 +203,8 @@ struct Picker {
     matches: Vec<String>,
     selected: usize,
     accept: Option<usize>,
+    /// Set when the selection moves by keyboard; scrolling every frame would undo mouse-wheel scrolling.
+    scroll: bool,
 }
 
 /// The `{{` the user pressed Esc on, so the picker stays closed until the cursor leaves it.
@@ -243,6 +245,7 @@ fn handle_picker_keys(ui: &mut Ui, owner: Id, text: &mut String) -> bool {
     if up {
         picker.selected = (picker.selected + count - 1) % count;
     }
+    picker.scroll |= down || up;
     let accept = picker.accept.or(enter.then_some(picker.selected));
     let Some(key) = accept.and_then(|i| picker.matches.get(i)) else {
         ui.data_mut(|d| d.insert_temp(picker_id(), picker));
@@ -291,12 +294,11 @@ fn update_picker(ui: &mut Ui, output: &TextEditOutput) {
         }
         return;
     }
-    let selected = previous
-        .as_ref()
-        .filter(|p| p.trigger.start == trigger.start)
-        .map_or(0, |p| p.selected.min(matches.len() - 1));
+    let same = previous.as_ref().filter(|p| p.trigger.start == trigger.start);
+    let selected = same.map_or(0, |p| p.selected.min(matches.len() - 1));
+    let scroll = same.is_none_or(|p| p.scroll);
     let anchor = output.galley.pos_from_cursor(CCursor::new(trigger.start));
-    let mut picker = Picker { owner, trigger, matches, selected, accept: None };
+    let mut picker = Picker { owner, trigger, matches, selected, accept: None, scroll };
 
     egui::Area::new(owner.with("var_picker"))
         .order(egui::Order::Foreground)
@@ -307,7 +309,7 @@ fn update_picker(ui: &mut Ui, output: &TextEditOutput) {
                     for (index, key) in picker.matches.iter().enumerate() {
                         let selected = index == picker.selected;
                         let item = ui.add(egui::Button::selectable(selected, RichText::new(key).monospace()).frame_when_inactive(false));
-                        if selected {
+                        if selected && scroll {
                             item.scroll_to_me(None);
                         }
                         if item.clicked() {
@@ -320,6 +322,7 @@ fn update_picker(ui: &mut Ui, output: &TextEditOutput) {
     if picker.accept.is_some() {
         ui.memory_mut(|m| m.request_focus(owner));
     }
+    picker.scroll = false;
     ui.data_mut(|d| d.insert_temp(picker_id(), picker));
 }
 
