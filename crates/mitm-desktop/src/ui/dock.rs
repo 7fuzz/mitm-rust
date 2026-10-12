@@ -385,4 +385,44 @@ mod render_tests {
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// Side panels grow to fit their content, so content that is wider than its space every frame makes
+    /// the sidebar creep wider on each repaint.
+    #[test]
+    fn sidebars_keep_their_width_across_frames() {
+        let dir = std::env::temp_dir().join(format!("mitm-sidebar-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = Db::new(dir.join("test.db"));
+        mitm_core::db::init_database(&db, None).unwrap();
+        let workspace = mitm_core::workspace::create_workspace_db(&db, "W".into(), None).unwrap();
+        let folder = mitm_core::collections::create_collection_db(&db, workspace.id.clone(), None, "Folder".into()).unwrap();
+        mitm_core::collections::create_request_db(&db, folder.id, "Request".into()).unwrap();
+        let mut state = AppState::load(&db);
+        state.collections.load(&db, workspace.id);
+        state.repeater.create_blank(&db);
+        let ctx = egui::Context::default();
+        crate::ui::theme::install_fonts(&ctx);
+        crate::ui::theme::apply_style(&ctx);
+
+        for (mut tab, panel) in [(Tab::Repeater, "repeater_sidebar"), (Tab::Collections, "collections_sidebar")] {
+            let mut widths = Vec::new();
+            for frame in 0..6 {
+                let input = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))),
+                    events: vec![egui::Event::PointerMoved(egui::pos2(100.0 + frame as f32 * 40.0, 300.0))],
+                    ..Default::default()
+                };
+                let mut cmds = Commands::default();
+                let mut output = ctx.run_ui(input, |ui| {
+                    let visuals = ui.visuals().clone();
+                    let mut viewer = TabViewer { state: &mut state, cmds: &mut cmds, db: &db, focus_search: None, focused: None, visuals };
+                    viewer.ui(ui, &mut tab);
+                });
+                output.textures_delta.clear();
+                widths.push(egui::containers::panel::PanelState::load(&ctx, egui::Id::new(panel)).unwrap().size().x);
+            }
+            assert!(widths[1..].windows(2).all(|w| (w[0] - w[1]).abs() < 0.01), "{panel} width changed: {widths:?}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
