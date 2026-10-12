@@ -1,3 +1,4 @@
+mod commands;
 mod docs;
 mod editor;
 mod extract_modal;
@@ -8,8 +9,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use mitm_core::collections::execute::ExecutionResult;
-use mitm_core::collections::preview::{preview_request_db, RequestPreview};
-use mitm_core::collections::{self as core_collections, Collection, CollectionTreeItem, RequestHistoryItem, RequestItem};
+use mitm_core::collections::preview::RequestPreview;
+use mitm_core::collections::{self as core_collections, CollectionTreeItem, RequestHistoryItem, RequestItem};
 use mitm_core::repeater::ExtractRuleItem;
 use crate::util::save_queue::SaveQueue;
 use crate::features::request_editor::body::{is_multipart, is_urlencoded};
@@ -202,137 +203,6 @@ impl CollectionsState {
                     patch_tree(&mut self.trees, request);
                 }
                 Err(e) => self.saves.failed(id, format!("Couldn't save request: {e}")),
-            }
-        }
-    }
-
-    pub fn apply(&mut self, cmd: CollectionsCmd, db_path: &PathBuf) {
-        let ws = self.active_workspace_id.clone();
-        match cmd {
-            CollectionsCmd::SelectWorkspace(id) => {
-                self.flush(db_path);
-                self.active_workspace_id = id;
-                self.open.clear();
-                self.active_id = None;
-                self.reload_tree(db_path);
-            }
-            CollectionsCmd::CreateFolder { parent, name } => {
-                let _ = core_collections::create_collection_db(db_path, ws, parent.clone(), name);
-                if let Some(parent) = parent {
-                    self.reveal.insert(parent);
-                }
-                self.reload_tree(db_path);
-            }
-            CollectionsCmd::CreateRequest { collection_id, name } => {
-                let created = core_collections::create_request_db(db_path, collection_id.clone(), name);
-                self.reveal.insert(collection_id.clone());
-                self.reload_tree(db_path);
-                if let Ok(request) = created {
-                    self.open_request(request.id, db_path);
-                }
-            }
-            CollectionsCmd::RenameFolder { id, name } => {
-                if let Some(folder) = find_folder(&self.trees, &id) {
-                    let collection = Collection {
-                        id: folder.id.clone(),
-                        workspace_id: folder.workspace_id.clone(),
-                        parent_id: folder.parent_id.clone(),
-                        name,
-                        description: folder.description.clone(),
-                        order_index: folder.order_index,
-                        created_at_ms: folder.created_at_ms,
-                        updated_at_ms: chrono::Utc::now().timestamp_millis(),
-                    };
-                    let _ = core_collections::update_collection_db(db_path, collection);
-                }
-                self.reload_tree(db_path);
-            }
-            CollectionsCmd::RenameRequest { id, name } => {
-                self.flush(db_path);
-                if let Some(mut request) = self.find_request(&id).cloned() {
-                    request.name = name;
-                    let _ = core_collections::update_request_db(db_path, request);
-                }
-                self.reload_tree(db_path);
-            }
-            CollectionsCmd::DeleteFolder(id) => {
-                let _ = core_collections::delete_collection_db(db_path, &id);
-                self.reload_tree(db_path);
-            }
-            CollectionsCmd::DeleteRequest(id) => {
-                self.saves.remove(&id);
-                let _ = core_collections::delete_request_db(db_path, &id);
-                self.reload_tree(db_path);
-            }
-            CollectionsCmd::DuplicateFolder(id) => {
-                let _ = core_collections::duplicate_collection_db(db_path, &id);
-                self.reload_tree(db_path);
-            }
-            CollectionsCmd::DuplicateRequest(id) => {
-                self.flush(db_path);
-                let _ = core_collections::duplicate_request_db(db_path, &id);
-                self.reload_tree(db_path);
-            }
-            CollectionsCmd::MoveFolder { id, parent } => {
-                let into_itself = parent.as_ref().is_some_and(|p| p == &id || folder_contains(&self.trees, &id, p));
-                if !into_itself {
-                    let _ = core_collections::move_collection_db(db_path, &id, parent.clone());
-                    if let Some(parent) = parent {
-                        self.reveal.insert(parent);
-                    }
-                    self.reload_tree(db_path);
-                }
-            }
-            CollectionsCmd::MoveRequest { id, collection_id } => {
-                let target = match collection_id {
-                    Some(target) => Some(target),
-                    None => self.first_root_folder_or_create(db_path),
-                };
-                if let Some(target) = target {
-                    self.flush(db_path);
-                    let _ = core_collections::move_request_db(db_path, &id, &target);
-                    self.reveal.insert(target.clone());
-                    self.reload_tree(db_path);
-                }
-            }
-            CollectionsCmd::Open(id) => self.open_request(id, db_path),
-            CollectionsCmd::Activate(id) => {
-                self.reload_runs(&id, db_path);
-                self.active_id = Some(id);
-            }
-            CollectionsCmd::Close(id) => {
-                self.flush(db_path);
-                let index = self.open.iter().position(|r| r.id == id);
-                self.open.retain(|r| r.id != id);
-                if self.active_id.as_deref() == Some(id.as_str()) {
-                    let next = index.and_then(|i| self.open.get(i.min(self.open.len().saturating_sub(1))));
-                    self.active_id = next.map(|r| r.id.clone());
-                    if let Some(next) = self.active_id.clone() {
-                        self.reload_runs(&next, db_path);
-                    }
-                }
-            }
-            CollectionsCmd::Execute(_) => {}
-            CollectionsCmd::RefreshPreview(id) => {
-                self.flush(db_path);
-                self.previews.insert(id.clone(), preview_request_db(db_path, &id));
-            }
-            CollectionsCmd::ClearRuns(id) => {
-                let _ = core_collections::clear_request_histories_db(db_path, &id);
-                self.selected_run.remove(&id);
-                self.latest.remove(&id);
-                self.reload_runs(&id, db_path);
-            }
-            CollectionsCmd::SaveExtractRules { request_id, rules } => {
-                self.flush(db_path);
-                if let Some(open) = self.open.iter_mut().find(|r| r.id == request_id) {
-                    open.extract_rules = rules.clone();
-                }
-                if let Some(mut request) = self.find_request(&request_id).cloned() {
-                    request.extract_rules = rules;
-                    let _ = core_collections::update_request_db(db_path, request);
-                }
-                self.reload_tree(db_path);
             }
         }
     }

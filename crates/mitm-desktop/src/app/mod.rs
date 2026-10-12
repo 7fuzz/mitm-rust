@@ -159,7 +159,8 @@ impl MitmApp {
                     let detail = mitm_core::db::get_history_detail(db_path, flow_id).ok().flatten();
                     let captured = CapturedRequest::from_flow(flow, detail.as_ref());
                     let name = format!("{} {}", flow.method, if flow.path.is_empty() { &flow.url } else { &flow.path });
-                    let _ = self.state.collections.save_captured(db_path, target, name, captured);
+                    let saved = self.state.collections.save_captured(db_path, target, name, captured);
+                    crate::widgets::toast::push(ctx, saved.map(|_| "Saved to collection".to_string()));
                 }
             }
             AppCommand::SelectFlow(id) => {
@@ -299,7 +300,10 @@ impl MitmApp {
                     });
                 }
             }
-            AppCommand::Collections(cmd) => self.state.collections.apply(cmd, db_path),
+            AppCommand::Collections(cmd) => {
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                self.state.collections.apply(cmd, &cx);
+            }
             AppCommand::WebSockets(cmd) => {
                 let cx = Cx { rt: &self.rt, core: &self.core, ctx };
                 crate::features::websockets::handle(&mut self.state.websockets, &cx, cmd);
@@ -324,7 +328,8 @@ impl MitmApp {
                 let _ = mitm_core::workspace::set_active_workspace_db(db_path, &id);
                 self.state.environments.active_workspace_id = id.clone();
                 self.state.environments.reload_environments(db_path);
-                self.state.collections.apply(CollectionsCmd::SelectWorkspace(id), db_path);
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                self.state.collections.apply(CollectionsCmd::SelectWorkspace(id), &cx);
             }
             AppCommand::SelectEnvironment(env_id) => {
                 let ws_id = self.state.environments.active_workspace_id.clone();
