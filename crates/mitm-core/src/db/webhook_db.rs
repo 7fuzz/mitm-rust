@@ -1,9 +1,9 @@
 use std::path::PathBuf;
-use rusqlite::{params, Connection};
+use rusqlite::params;
 use crate::state::{WebhookDelivery, WebhookEndpoint};
 
 pub fn load_webhook_endpoints(db_path: &PathBuf) -> Result<Vec<WebhookEndpoint>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, name, path, secret_key, created_at, hit_count FROM webhook_endpoints ORDER BY created_at ASC")
         .map_err(|e| e.to_string())?;
@@ -27,7 +27,7 @@ pub fn load_webhook_endpoints(db_path: &PathBuf) -> Result<Vec<WebhookEndpoint>,
 }
 
 pub fn get_webhook_endpoint_by_path(db_path: &PathBuf, path: &str) -> Result<Option<WebhookEndpoint>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, name, path, secret_key, created_at, hit_count FROM webhook_endpoints WHERE path = ? LIMIT 1")
         .map_err(|e| e.to_string())?;
@@ -53,7 +53,7 @@ pub fn get_webhook_endpoint_by_path(db_path: &PathBuf, path: &str) -> Result<Opt
 }
 
 pub fn save_webhook_endpoint(db_path: &PathBuf, endpoint: &WebhookEndpoint) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR REPLACE INTO webhook_endpoints (id, name, path, secret_key, created_at, hit_count)
          VALUES (?, ?, ?, ?, ?, ?)",
@@ -70,7 +70,7 @@ pub fn save_webhook_endpoint(db_path: &PathBuf, endpoint: &WebhookEndpoint) -> R
 }
 
 pub fn delete_webhook_endpoint(db_path: &PathBuf, id: &str) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM webhook_endpoints WHERE id = ?", params![id])
         .map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM webhook_deliveries WHERE endpoint_id = ?", params![id])
@@ -79,7 +79,7 @@ pub fn delete_webhook_endpoint(db_path: &PathBuf, id: &str) -> Result<(), String
 }
 
 pub fn increment_webhook_endpoint_hits(db_path: &PathBuf, id: &str) -> Result<u64, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     conn.execute(
         "UPDATE webhook_endpoints SET hit_count = hit_count + 1 WHERE id = ?",
         params![id],
@@ -95,7 +95,7 @@ pub fn increment_webhook_endpoint_hits(db_path: &PathBuf, id: &str) -> Result<u6
 }
 
 pub fn load_webhook_deliveries(db_path: &PathBuf, limit: Option<u32>) -> Result<Vec<WebhookDelivery>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let limit_val = limit.unwrap_or(500);
 
     let mut stmt = conn
@@ -128,7 +128,7 @@ pub fn load_webhook_deliveries(db_path: &PathBuf, limit: Option<u32>) -> Result<
 }
 
 pub fn save_webhook_delivery(db_path: &PathBuf, delivery: &WebhookDelivery) -> Result<i64, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let headers_json = serde_json::to_string(&delivery.headers).unwrap_or_else(|_| "[]".to_string());
 
     conn.execute(
@@ -149,7 +149,7 @@ pub fn save_webhook_delivery(db_path: &PathBuf, delivery: &WebhookDelivery) -> R
 }
 
 pub fn clear_webhook_deliveries(db_path: &PathBuf) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM webhook_deliveries", []).map_err(|e| e.to_string())?;
     Ok(())
 }

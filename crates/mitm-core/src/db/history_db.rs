@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use rusqlite::Connection;
 use crate::state::{HistoryDetail, HistoryEntry};
 
 pub fn get_history_logs(
@@ -11,7 +10,7 @@ pub fn get_history_logs(
     status_range: Option<&str>,
     include_bodies: bool,
 ) -> Result<Vec<HistoryEntry>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
 
     let select_fields = if include_bodies { FULL_FIELDS } else { SUMMARY_FIELDS };
 
@@ -153,7 +152,7 @@ pub fn get_history_page(
     before_id: Option<i64>,
     limit: u32,
 ) -> Result<Vec<HistoryEntry>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let (clause, pattern) = search_clause(search, include_headers);
     let sql = format!(
         "SELECT {SUMMARY_FIELDS} FROM history WHERE id < ?2{clause} ORDER BY id DESC LIMIT ?3"
@@ -166,7 +165,7 @@ pub fn get_history_page(
 }
 
 pub fn get_history_count(db_path: &PathBuf, search: Option<&str>, include_headers: bool) -> Result<u64, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let (clause, pattern) = search_clause(search, include_headers);
     let sql = format!("SELECT COUNT(*) FROM history WHERE 1=1{clause}");
     let count = match pattern {
@@ -178,7 +177,7 @@ pub fn get_history_count(db_path: &PathBuf, search: Option<&str>, include_header
 
 /// Every stored flow without headers or bodies, newest first.
 pub fn get_history_summaries(db_path: &PathBuf) -> Result<Vec<HistoryEntry>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(&format!("SELECT {SUMMARY_FIELDS} FROM history ORDER BY id DESC"))
         .map_err(|e| e.to_string())?;
@@ -189,7 +188,7 @@ pub fn get_history_summaries(db_path: &PathBuf) -> Result<Vec<HistoryEntry>, Str
 /// Full flows with headers and bodies, oldest first.
 pub fn get_history_by_ids(db_path: &PathBuf, ids: &[i64]) -> Result<Vec<HistoryEntry>, String> {
     const CHUNK: usize = 500;
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let mut entries = Vec::with_capacity(ids.len());
     for chunk in ids.chunks(CHUNK) {
         let placeholders = vec!["?"; chunk.len()].join(",");
@@ -209,7 +208,7 @@ pub fn get_history_detail(
     db_path: &PathBuf,
     id: i64,
 ) -> Result<Option<HistoryDetail>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, request_headers, response_headers, request_body, response_body FROM history WHERE id = ?")
         .map_err(|e| e.to_string())?;
@@ -243,7 +242,7 @@ pub fn get_history_detail(
 }
 
 pub fn clear_history(db_path: &PathBuf) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     conn.execute_batch(
         "DELETE FROM history;
          DELETE FROM sqlite_sequence WHERE name = 'history';"
@@ -252,7 +251,7 @@ pub fn clear_history(db_path: &PathBuf) -> Result<(), String> {
 }
 
 pub fn delete_history_entry(db_path: &PathBuf, id: i64) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM history WHERE id = ?1", [id])
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -267,7 +266,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let db = dir.join("test.db");
         crate::db::init_database(&db, None).unwrap();
-        let conn = Connection::open(&db).unwrap();
+        let conn = crate::db::open(&db).unwrap();
         for id in 1..=count {
             let host = if id % 2 == 0 { "even.test" } else { "odd_test" };
             let headers = if id == 3 { r#"[["X-Trace","needle"]]"# } else { "[]" };

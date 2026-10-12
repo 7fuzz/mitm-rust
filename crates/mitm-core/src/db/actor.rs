@@ -77,7 +77,7 @@ fn flush_rewrite_history_batch(db_path: &PathBuf, buffer: &mut Vec<RewriteHistor
         return;
     }
 
-    match rusqlite::Connection::open(db_path) {
+    match crate::db::open(db_path) {
         Ok(mut conn) => {
             match conn.transaction() {
                 Ok(tx) => {
@@ -129,7 +129,7 @@ fn flush_history_batch(db_path: &PathBuf, buffer: &mut Vec<HistoryEntry>) {
         return;
     }
 
-    match rusqlite::Connection::open(db_path) {
+    match crate::db::open(db_path) {
         Ok(mut conn) => {
             match conn.transaction() {
                 Ok(tx) => {

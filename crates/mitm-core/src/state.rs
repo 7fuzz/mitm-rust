@@ -494,7 +494,7 @@ pub struct AppState {
 
 /// Highest id in `table`, so in-memory id counters resume after it
 fn max_id(db_path: &PathBuf, table: &str) -> u64 {
-    rusqlite::Connection::open(db_path)
+    crate::db::open(db_path)
         .and_then(|conn| {
             conn.query_row(&format!("SELECT COALESCE(MAX(id), 0) FROM {}", table), [], |row| row.get::<_, i64>(0))
         })

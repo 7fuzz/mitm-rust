@@ -76,7 +76,7 @@ mod tests {
         let backup = backup_and_reset(&db, None).unwrap().unwrap();
         assert_eq!(std::fs::read(&backup).unwrap(), b"not a database");
         assert!(backup.file_name().unwrap().to_string_lossy().starts_with("mitm.db.bak_"));
-        assert!(rusqlite::Connection::open(&db).unwrap().prepare("SELECT 1 FROM requests").is_ok());
+        assert!(crate::db::open(&db).unwrap().prepare("SELECT 1 FROM requests").is_ok());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -101,14 +101,14 @@ mod tests {
         assert!(ca_dir.join("ca.crt").exists());
 
         crate::db::init_database(&db, None).unwrap();
-        rusqlite::Connection::open(&db)
+        crate::db::open(&db)
             .unwrap()
             .execute("INSERT INTO history (id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase) VALUES (1, 'GET', 'http://a', 'a', 200, '[]', '[]', '', '', 'done')", [])
             .unwrap();
 
         factory_reset_with_ca(&db, Some(ca_dir.clone()), None).unwrap();
         assert!(ca_dir.join("ca.crt").exists());
-        let count: u64 = rusqlite::Connection::open(&db)
+        let count: u64 = crate::db::open(&db)
             .unwrap()
             .query_row("SELECT count(*) FROM history", [], |r| r.get(0))
             .unwrap();

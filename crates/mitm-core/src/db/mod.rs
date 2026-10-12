@@ -65,7 +65,7 @@ pub fn init_database(db_path: &PathBuf, event_bus: Option<&crate::events::EventB
 }
 
 pub fn get_preference(db_path: &PathBuf, key: &str) -> Option<String> {
-    let conn = Connection::open(db_path).ok()?;
+    let conn = open(db_path).ok()?;
     conn.query_row(
         "SELECT value FROM app_preferences WHERE key = ?",
         [key],
@@ -74,7 +74,7 @@ pub fn get_preference(db_path: &PathBuf, key: &str) -> Option<String> {
 }
 
 pub fn set_preference(db_path: &PathBuf, key: &str, value: &str) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = open(db_path).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR REPLACE INTO app_preferences (key, value) VALUES (?, ?)",
         params![key, value],
@@ -93,12 +93,12 @@ pub fn prune_history_logs_conn(conn: &Connection, max_rows: u32) -> Result<usize
 }
 
 pub fn prune_history_logs(db_path: &PathBuf, max_rows: u32) -> Result<usize, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = open(db_path).map_err(|e| e.to_string())?;
     prune_history_logs_conn(&conn, max_rows)
 }
 
 pub fn load_intercept_rules(db_path: &PathBuf) -> Result<Vec<InterceptRule>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, is_enabled, target_phase, match_field, operator, match_value, order_index, created_at_ms, COALESCE(action, 'intercept') FROM intercept_rules ORDER BY order_index ASC")
         .map_err(|e| e.to_string())?;
@@ -126,7 +126,7 @@ pub fn load_intercept_rules(db_path: &PathBuf) -> Result<Vec<InterceptRule>, Str
 }
 
 pub fn save_intercept_rules(db_path: &PathBuf, rules: &[InterceptRule]) -> Result<(), String> {
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = open(db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
     tx.execute("DELETE FROM intercept_rules", []).map_err(|e| e.to_string())?;
@@ -154,7 +154,7 @@ pub fn save_intercept_rules(db_path: &PathBuf, rules: &[InterceptRule]) -> Resul
 }
 
 pub fn load_rewrite_rules(db_path: &PathBuf) -> Result<Vec<crate::state::RewriteRule>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, name, enabled, action_type, match_field, match_operator, match_value, target_part, target_header, match_pattern, replacement_value, is_regex, mock_status_code, mock_headers_json, mock_body, order_index, created_at_ms FROM rewrite_rules ORDER BY order_index ASC")
         .map_err(|e| e.to_string())?;
@@ -191,7 +191,7 @@ pub fn load_rewrite_rules(db_path: &PathBuf) -> Result<Vec<crate::state::Rewrite
 }
 
 pub fn save_rewrite_rules(db_path: &PathBuf, rules: &[crate::state::RewriteRule]) -> Result<(), String> {
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = open(db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
     tx.execute("DELETE FROM rewrite_rules", []).map_err(|e| e.to_string())?;
@@ -227,7 +227,7 @@ pub fn save_rewrite_rules(db_path: &PathBuf, rules: &[crate::state::RewriteRule]
 }
 
 pub fn get_rewrite_history_logs(db_path: &PathBuf, limit: u32) -> Result<Vec<crate::state::RewriteHistoryEntry>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, rule_id, rule_name, action_type, method, original_url, rewritten_url, original_headers, rewritten_headers, original_body, rewritten_body, status_code, duration_ms, created_at FROM rewrite_history ORDER BY id DESC LIMIT ?")
         .map_err(|e| e.to_string())?;
@@ -265,7 +265,7 @@ pub fn get_rewrite_history_logs(db_path: &PathBuf, limit: u32) -> Result<Vec<cra
 }
 
 pub fn clear_rewrite_history_logs(db_path: &PathBuf) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = open(db_path).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM rewrite_history", []).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -323,7 +323,7 @@ impl DataCategoryCounts {
 }
 
 pub fn get_data_category_counts(db_path: &PathBuf) -> Result<DataCategoryCounts, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = open(db_path).map_err(|e| e.to_string())?;
     let traffic = conn.query_row("SELECT COUNT(*) FROM history", [], |r| r.get(0)).unwrap_or(0);
     let webhook_deliveries = conn.query_row("SELECT COUNT(*) FROM webhook_deliveries", [], |r| r.get(0)).unwrap_or(0);
     let ws_messages = conn.query_row("SELECT COUNT(*) FROM ws_messages", [], |r| r.get(0)).unwrap_or(0);
@@ -387,7 +387,7 @@ mod tests {
         let counts = get_data_category_counts(&db).unwrap();
         assert_eq!(counts, DataCategoryCounts::default());
 
-        let conn = Connection::open(&db).unwrap();
+        let conn = open(&db).unwrap();
         conn.execute("INSERT INTO history (id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase) VALUES (1, 'GET', 'http://a', 'a', 200, '[]', '[]', '', '', 'done')", []).unwrap();
         conn.execute("INSERT INTO webhook_deliveries (endpoint_id, endpoint_path, headers, payload, signature_status, computed_hmac, provided_hmac, timestamp) VALUES ('e1', '/w', '[]', '', 'none', '', '', 1000)", []).unwrap();
         conn.execute("INSERT INTO ws_connections (id, url, status, handshake_time) VALUES (1, 'ws://localhost', 'open', 1000)", []).unwrap();

@@ -275,7 +275,7 @@ mod tests {
         assert!(tables.iter().any(|t| t.name == "history"));
         assert!(tables.iter().any(|t| t.name == "intercept_rules"));
 
-        let conn = Connection::open(&db).unwrap();
+        let conn = crate::db::open(&db).unwrap();
         conn.execute("INSERT INTO history (id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase) VALUES (1, 'GET', 'http://example.com/test', 'example.com', 200, '[]', '[]', '', '', 'done')", []).unwrap();
         conn.execute("INSERT INTO history (id, method, url, host, status_code, request_headers, response_headers, request_body, response_body, phase) VALUES (2, 'POST', 'http://example.com/api', 'example.com', 201, '[]', '[]', '', '', 'done')", []).unwrap();
 
