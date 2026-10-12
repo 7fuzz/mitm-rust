@@ -20,11 +20,14 @@ fn entry_list(ui: &mut egui::Ui, state: &mut CredentialsState, db_path: &Path) {
         let search = ui.add(
             egui::TextEdit::singleline(&mut state.search)
                 .hint_text("Search")
-                .desired_width((ui.available_width() - 32.0).max(60.0)),
+                .desired_width((ui.available_width() - 64.0).max(60.0)),
         );
         crate::widgets::search::claim_focus(&search);
         if ui.add_enabled(!state.locked, egui::Button::new("➕")).on_hover_text("Add credential").clicked() {
             state.create(db_path);
+        }
+        if ui.add_enabled(!state.locked, egui::Button::new("⇩")).on_hover_text("Import from JSON…").clicked() {
+            state.json_import.start();
         }
     });
     ui.separator();

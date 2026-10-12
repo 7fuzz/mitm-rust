@@ -42,6 +42,7 @@ pub struct MitmApp {
     collection_runs: Jobs<(String, Result<ExecutionResult, String>)>,
     ca_jobs: Jobs<Option<Result<PathBuf, String>>>,
     import_files: Jobs<Option<Result<(String, String), String>>>,
+    credential_files: Jobs<Option<Result<String, String>>>,
     file_saves: Jobs<Option<Result<String, String>>>,
     har_index: Jobs<Result<Vec<mitm_core::HistoryEntry>, String>>,
     fuzz_search: Jobs<(i64, String, Vec<u32>)>,
@@ -68,6 +69,7 @@ impl MitmApp {
             collection_runs: Jobs::default(),
             ca_jobs: Jobs::default(),
             import_files: Jobs::default(),
+            credential_files: Jobs::default(),
             file_saves: Jobs::default(),
             har_index: Jobs::default(),
             fuzz_search: Jobs::default(),
@@ -656,6 +658,12 @@ impl MitmApp {
                 }
             }
             AppCommand::OpenImport => self.state.environments.import.open_with(None, String::new()),
+            AppCommand::PickCredentialsJson => {
+                self.credential_files.spawn(&self.rt, ctx, async {
+                    let path = crate::util::files::pick_open(&[("JSON", &["json"])]).await?;
+                    Some(std::fs::read_to_string(&path).map_err(|e| e.to_string()))
+                });
+            }
             AppCommand::PickImportFile => {
                 self.import_files.spawn(&self.rt, ctx, async {
                     let path = crate::util::files::pick_open(&[("JSON", &["json"])]).await?;
@@ -844,6 +852,7 @@ impl eframe::App for MitmApp {
         if let Some(retry) = crate::features::credentials::show_unlock(ui.ctx(), &mut self.state.credentials, &self.core.db_path) {
             self.cmds.push(retry);
         }
+        crate::features::credentials::show_json_import(ui.ctx(), &mut self.state.credentials, &self.core.db_path, &mut self.cmds);
         while let Ok(event) = self.core_events.try_recv() {
             self.apply_core_event(ui.ctx(), event);
         }
@@ -879,6 +888,13 @@ impl eframe::App for MitmApp {
             self.state.fuzzer.set_response_search_results(run_id, &query, matches);
         }
         self.state.fuzzer.sync_response_search(&self.rt, ui.ctx(), &self.core, &self.fuzz_search);
+        for result in self.credential_files.drain().flatten() {
+            let import = &mut self.state.credentials.json_import;
+            match result {
+                Ok(json) => import.open_with(json),
+                Err(e) => import.failed(e),
+            }
+        }
         for result in self.import_files.drain().flatten() {
             let import = &mut self.state.environments.import;
             match result {

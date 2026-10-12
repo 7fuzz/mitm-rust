@@ -117,6 +117,7 @@ pub enum AppCommand {
     MoveToCredentials { env_id: String, var_idx: usize, entry: String, field: String },
     LockCredentials,
     CopyTotp(String),
+    PickCredentialsJson,
 
     OpenImport,
     ExportWorkspace,

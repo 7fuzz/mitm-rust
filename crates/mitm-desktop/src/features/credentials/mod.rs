@@ -1,3 +1,4 @@
+mod json_import;
 mod lock;
 mod view;
 
@@ -6,6 +7,7 @@ use std::path::Path;
 use mitm_core::credentials::{self, Credential, CredentialSummary, Field, FieldKind};
 use serde::{Deserialize, Serialize};
 
+pub use json_import::show as show_json_import;
 pub use lock::{settings_section, show_unlock};
 pub use view::show;
 
@@ -48,6 +50,7 @@ pub struct CredentialsState {
     pub locked: bool,
     unlock: lock::UnlockPrompt,
     master: lock::MasterForm,
+    pub json_import: json_import::JsonImport,
     last_activity: f64,
     pub selected: Option<String>,
     pub search: String,
@@ -72,6 +75,7 @@ impl Default for CredentialsState {
             locked: false,
             unlock: lock::UnlockPrompt::default(),
             master: lock::MasterForm::default(),
+            json_import: json_import::JsonImport::default(),
             last_activity: 0.0,
             selected: None,
             search: String::new(),
