@@ -2794,6 +2794,7 @@ dependencies = [
  "bytes",
  "chrono",
  "dashmap",
+ "data-encoding",
  "dirs",
  "flate2",
  "futures-util",
