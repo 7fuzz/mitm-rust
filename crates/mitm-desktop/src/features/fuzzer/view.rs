@@ -14,10 +14,16 @@ use crate::widgets::tri_state::tri_state_button;
 use crate::widgets::{split, template};
 use super::{Cmd, AttackType, ConfigTab, FuzzSearchScope, FuzzSortColumn, FuzzerState, MatchRule, PayloadConfig, PayloadKind, RequestTab, RunStatus};
 use crate::ui::icons;
+use crate::util::format::format_count;
+use crate::widgets::button::{icon_button, primary};
+use crate::widgets::card::card;
+use crate::widgets::search::search_field_sized;
+use crate::widgets::segmented::segmented;
+use crate::widgets::subtabs::subtabs;
 
 pub fn show(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     toolbar(ui, fuzzer, cmds);
-    ui.separator();
+    ui.add_space(4.0);
     let [mut top, mut bottom] = split::stacked(ui, "fuzzer_split", &mut fuzzer.prefs.split);
     config(&mut top, fuzzer);
     results(&mut bottom, fuzzer, cmds);
@@ -29,19 +35,18 @@ fn toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
     ui.horizontal(|ui| {
         ui.set_min_height(28.0);
         if fuzzer.status == RunStatus::Running {
-            if ui.button(RichText::new("Stop").color(theme::color(ui, Tone::Danger)).strong()).clicked() {
+            if ui.button(RichText::new("Stop").color(theme::color(ui, Tone::Danger))).clicked() {
                 cmds.push(Cmd::Stop);
             }
             ui.spinner();
         } else {
-            let start = RichText::new("Start").color(theme::color(ui, Tone::Success)).strong();
-            if ui.button(start).clicked() {
+            if ui.add_enabled(!fuzzer.starting, primary(ui, "Start")).clicked() {
                 cmds.push(Cmd::Start(fuzzer.config()));
             }
         }
         runs_popover(ui, fuzzer, cmds);
         if fuzzer.status != RunStatus::Idle {
-            ui.label(format!("{}/{}", fuzzer.results.len(), fuzzer.total));
+            ui.label(RichText::new(format!("{} / {}", format_count(fuzzer.results.len()), format_count(fuzzer.total))).monospace());
         } else if !fuzzer.variable_names().is_empty() {
             let estimate = fuzzer.request_estimate();
             let label = if estimate == 1 {
@@ -124,14 +129,14 @@ fn runs_popover(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands
             for run in &fuzzer.saved_runs {
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
-                        ui.strong(&run.name);
+                        ui.label(&run.name);
                         let date = chrono::DateTime::from_timestamp_millis(run.created_at_ms)
                             .map(|at| at.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string())
                             .unwrap_or_default();
                         ui.weak(format!("{} · {} reqs · {}", run.attack_type, run.total, date));
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button(icons::TRASH).on_hover_text("Delete run").clicked() {
+                        if icon_button(ui, icons::TRASH, "Delete run").clicked() {
                             to_delete = Some(run.id);
                         }
                         if ui.button("Open").clicked() {
@@ -140,7 +145,7 @@ fn runs_popover(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands
                         }
                     });
                 });
-                ui.separator();
+                ui.add_space(4.0);
             }
             if let Some(id) = to_load {
                 cmds.push(Cmd::LoadRun(id));
@@ -158,16 +163,17 @@ fn runs_popover(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands
 
 fn config(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
     ui.horizontal(|ui| {
-        for (value, label) in [
-            (ConfigTab::Request, "Request"),
-            (ConfigTab::Payloads, "Payloads"),
-            (ConfigTab::Match, "Match"),
-            (ConfigTab::Options, "Options"),
-        ] {
-            ui.selectable_value(&mut fuzzer.config_tab, value, label);
-        }
+        let variables = fuzzer.variable_names().len();
+        let rules = fuzzer.match_rules.len();
+        let tabs = [
+            (ConfigTab::Request, "Request", None),
+            (ConfigTab::Payloads, "Payloads", Some(variables)),
+            (ConfigTab::Match, "Match", Some(rules)),
+            (ConfigTab::Options, "Options", None),
+        ];
+        subtabs(ui, &mut fuzzer.config_tab, &tabs);
     });
-    ui.separator();
+    ui.add_space(4.0);
     match fuzzer.config_tab {
         ConfigTab::Request => request_tab(ui, fuzzer),
         ConfigTab::Payloads => payloads_tab(ui, fuzzer),
@@ -178,7 +184,7 @@ fn config(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
 
 fn match_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
     ui.horizontal(|ui| {
-        if ui.button("Add rule").clicked() {
+        if icon_button(ui, icons::PLUS, "Add match rule").clicked() {
             let next_idx = fuzzer.match_rules.len() + 1;
             fuzzer.match_rules.push(MatchRule {
                 name: format!("match{}", next_idx),
@@ -187,7 +193,6 @@ fn match_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
             });
         }
     });
-    ui.separator();
 
     if fuzzer.match_rules.is_empty() {
         ui.weak("No match rules");
@@ -198,22 +203,18 @@ fn match_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
     egui::ScrollArea::vertical().id_salt("fuzzer_match_scroll").auto_shrink([false, false]).show(ui, |ui| {
         TableBuilder::new(ui)
             .id_salt("fuzzer_match_table")
-            .striped(true)
+            .striped(false)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
             .column(Column::initial(130.0).at_least(80.0))
             .column(Column::exact(130.0))
             .column(Column::remainder())
             .column(Column::exact(28.0))
             .header(20.0, |mut header| {
-                header.col(|ui| {
-                    ui.strong("Name");
-                });
-                header.col(|ui| {
-                    ui.strong("Type");
-                });
-                header.col(|ui| {
-                    ui.strong("Pattern");
-                });
+                for title in ["Name", "Type", "Pattern"] {
+                    header.col(|ui| {
+                        ui.label(RichText::new(title).small().weak());
+                    });
+                }
                 header.col(|_ui| {});
             })
             .body(|body| {
@@ -233,7 +234,7 @@ fn match_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
                         ui.add(egui::TextEdit::singleline(&mut rule.pattern).hint_text(hint).desired_width(f32::INFINITY));
                     });
                     row.col(|ui| {
-                        if ui.small_button(icons::TRASH).on_hover_text("Remove rule").clicked() {
+                        if icon_button(ui, icons::TRASH, "Remove rule").clicked() {
                             remove_idx = Some(idx);
                         }
                     });
@@ -281,16 +282,15 @@ fn request_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
             fuzzer.params = parse_query(&fuzzer.url, &fuzzer.params);
         }
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     ui.horizontal(|ui| {
         let params = fuzzer.params.iter().filter(|p| p.enabled && !p.key.trim().is_empty()).count();
         let headers = fuzzer.headers.iter().filter(|h| h.enabled && !h.key.trim().is_empty()).count();
-        ui.selectable_value(&mut fuzzer.request_tab, RequestTab::Params, format!("Params ({})", params));
-        ui.selectable_value(&mut fuzzer.request_tab, RequestTab::Headers, format!("Headers ({})", headers));
-        ui.selectable_value(&mut fuzzer.request_tab, RequestTab::Body, "Body");
+        let tabs = [(RequestTab::Params, "Params", Some(params)), (RequestTab::Headers, "Headers", Some(headers)), (RequestTab::Body, "Body", None)];
+        subtabs(ui, &mut fuzzer.request_tab, &tabs);
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     match fuzzer.request_tab {
         RequestTab::Body => {
@@ -370,7 +370,7 @@ fn payloads_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
                 .on_hover_text(attack.tooltip());
         }
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     let names = fuzzer.variable_names();
     if names.is_empty() {
@@ -387,9 +387,9 @@ fn payloads_tab(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
 }
 
 fn payload_set(ui: &mut egui::Ui, name: &str, cfg: &mut PayloadConfig) {
-    egui::Frame::group(ui.style()).show(ui, |ui| {
+    card(ui, |ui| {
         ui.horizontal(|ui| {
-            ui.strong(RichText::new(format!("{{{{{name}}}}}")).monospace());
+            ui.label(RichText::new(format!("{{{{{name}}}}}")).monospace().strong());
             ui.selectable_value(&mut cfg.kind, PayloadKind::List, "List");
             ui.selectable_value(&mut cfg.kind, PayloadKind::Numbers, "Numbers");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -437,7 +437,7 @@ fn results(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Commands) {
         fuzzer.selected_result = None;
     }
     results_toolbar(ui, fuzzer);
-    ui.separator();
+    ui.add_space(4.0);
     if fuzzer.selected_idx.is_some() {
         let [mut left, mut right] = split::side_by_side(ui, "fuzzer_results_split", &mut fuzzer.prefs.detail_split);
         results_table(&mut left, fuzzer, cmds);
@@ -453,7 +453,7 @@ fn results_toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
             let state = fuzzer.status_filters.entry(group.to_string()).or_default();
             tri_state_button(ui, group, state);
         }
-        ui.separator();
+        ui.add_space(8.0);
         if ui
             .selectable_label(fuzzer.hide_common_size, "Hide most frequent length")
             .on_hover_text("Hide responses with the most frequent response size")
@@ -461,14 +461,9 @@ fn results_toolbar(ui: &mut egui::Ui, fuzzer: &mut FuzzerState) {
         {
             fuzzer.hide_common_size = !fuzzer.hide_common_size;
         }
-        ui.separator();
-
-        crate::widgets::search::claim_focus(&ui.add(egui::TextEdit::singleline(&mut fuzzer.search_query).hint_text("Search…").desired_width(110.0)));
-        ui.selectable_value(&mut fuzzer.search_scope, FuzzSearchScope::Payload, "Payload");
-        ui.selectable_value(&mut fuzzer.search_scope, FuzzSearchScope::Response, "Response");
-        if !fuzzer.search_query.is_empty() && ui.small_button(icons::X).on_hover_text("Clear search").clicked() {
-            fuzzer.search_query.clear();
-        }
+        ui.add_space(8.0);
+        search_field_sized(ui, &mut fuzzer.search_query, "Search", 180.0);
+        segmented(ui, &mut fuzzer.search_scope, &[(FuzzSearchScope::Payload, "Payload"), (FuzzSearchScope::Response, "Response")]);
 
         if fuzzer.has_active_filters() && ui.small_button("Reset").on_hover_text("Reset filters").clicked() {
             fuzzer.reset_filters();
@@ -492,7 +487,7 @@ fn results_table(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Command
 
     let mut builder = TableBuilder::new(ui)
         .id_salt("fuzzer_results")
-        .striped(true)
+        .striped(false)
         .resizable(true)
         .sense(egui::Sense::click())
         .auto_shrink([false, false])
@@ -618,13 +613,13 @@ fn response_pane(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Command
     let mut close = false;
     ui.horizontal(|ui| {
         render_status_pill(ui, result.status_code);
-        ui.label(format_bytes(result.response_size));
-        ui.label(format_duration(Some(result.duration_ms)));
+        let stats = format!("{} · {}", format_duration(Some(result.duration_ms)), format_bytes(result.response_size));
+        ui.label(RichText::new(stats).monospace().weak());
         if let Some(err) = &result.error {
             ui.label(RichText::new(err).color(theme::color(ui, Tone::Danger)));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button(icons::X).on_hover_text("Close response").clicked() {
+            if icon_button(ui, icons::X, "Close response").clicked() {
                 close = true;
             }
             ui.add(egui::Label::new(RichText::new(&result.url).monospace()).truncate());
@@ -635,7 +630,7 @@ fn response_pane(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Command
         fuzzer.selected_result = None;
         return;
     }
-    ui.separator();
+    ui.add_space(4.0);
 
     let headers: Vec<(String, String)> = result
         .response_headers
