@@ -92,7 +92,7 @@ fn ensure_schema_columns(conn: &Connection) {
 }
 
 pub fn get_workspaces_db(db_path: &PathBuf) -> Result<Vec<Workspace>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
     let mut stmt = conn
         .prepare("SELECT id, name, description, active_environment_id, created_at_ms, updated_at_ms FROM workspaces WHERE id != ? ORDER BY updated_at_ms DESC")
@@ -122,7 +122,7 @@ pub fn create_workspace_db(
     name: String,
     description: Option<String>,
 ) -> Result<Workspace, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let ts = now_ms();
     let id = Uuid::new_v4().to_string();
 
@@ -144,7 +144,7 @@ pub fn create_workspace_db(
 }
 
 pub fn update_workspace_db(db_path: &PathBuf, workspace: Workspace) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let ts = now_ms();
 
     if workspace.id == REPEATER_WORKSPACE_ID {
@@ -169,9 +169,7 @@ pub fn delete_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
     if id == REPEATER_WORKSPACE_ID {
         return Err("The Repeater workspace can't be deleted.".to_string());
     }
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    let _ = conn.execute("PRAGMA foreign_keys = ON;", []);
-
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let _ = conn.execute("DELETE FROM environments WHERE workspace_id = ?", params![id]);
     let _ = conn.execute("DELETE FROM credentials WHERE workspace_id = ?", params![id]);
 
@@ -204,7 +202,7 @@ pub fn delete_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
 }
 
 pub fn get_workspace_db(db_path: &PathBuf, id: &str) -> Result<Option<Workspace>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
     let mut stmt = conn
         .prepare("SELECT id, name, description, active_environment_id, created_at_ms, updated_at_ms FROM workspaces WHERE id = ?")
@@ -243,7 +241,7 @@ pub fn get_active_workspace_db(db_path: &PathBuf) -> Result<Option<Workspace>, S
 }
 
 pub fn set_active_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let ts = now_ms();
 
     conn.execute(
@@ -257,7 +255,7 @@ pub fn set_active_workspace_db(db_path: &PathBuf, id: &str) -> Result<(), String
 }
 
 pub fn rename_workspace_db(db_path: &PathBuf, id: &str, new_name: &str) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let ts = now_ms();
     conn.execute(
         "UPDATE workspaces SET name = ?, updated_at_ms = ? WHERE id = ?",
@@ -268,7 +266,7 @@ pub fn rename_workspace_db(db_path: &PathBuf, id: &str, new_name: &str) -> Resul
 }
 
 pub fn update_workspace_description_db(db_path: &PathBuf, id: &str, description: Option<&str>) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let ts = now_ms();
     conn.execute(
         "UPDATE workspaces SET description = ?, updated_at_ms = ? WHERE id = ?",
@@ -282,7 +280,7 @@ pub fn get_workspace_environments_db(
     db_path: &PathBuf,
     workspace_id: &str,
 ) -> Result<Vec<Environment>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
     let active_id: Option<String> = conn
         .query_row(
@@ -329,7 +327,7 @@ pub fn save_workspace_environment_db(
     db_path: &PathBuf,
     env: Environment,
 ) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let ts = now_ms();
     let vars_json = serde_json::to_string(&env.variables).unwrap_or_else(|_| "[]".to_string());
     let is_active_int = if env.is_active { 1 } else { 0 };
@@ -362,7 +360,7 @@ pub fn save_workspace_environment_db(
 
 /// Deleting the active environment hands "active" to the oldest remaining one, if any.
 pub fn delete_workspace_environment_db(db_path: &PathBuf, id: &str) -> Result<(), String> {
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
     let (workspace_id, was_active): (String, bool) = tx
@@ -402,7 +400,7 @@ pub fn get_workspace_environment_db(
     db_path: &PathBuf,
     id: &str,
 ) -> Result<Option<Environment>, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     ensure_schema_columns(&conn);
     let mut stmt = conn
         .prepare("SELECT e.id, e.workspace_id, e.name, e.is_active, e.variables_json, e.created_at_ms, e.updated_at_ms, w.active_environment_id FROM environments e LEFT JOIN workspaces w ON e.workspace_id = w.id WHERE e.id = ?")
@@ -444,7 +442,7 @@ pub fn set_active_environment_db(
     workspace_id: &str,
     env_id: Option<&str>,
 ) -> Result<(), String> {
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     let ts = now_ms();
 

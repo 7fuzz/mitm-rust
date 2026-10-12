@@ -195,7 +195,7 @@ pub fn import_workspace_json_db(
     credentials_passphrase: Option<&str>,
 ) -> Result<ImportSummary, String> {
     let credentials = credential_import(db_path, json_content, credentials_passphrase)?;
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     let summary = import_into(&tx, json_content, target_workspace_id, custom_workspace_name, credentials.as_ref())?;
     tx.commit().map_err(|e| e.to_string())?;
@@ -204,7 +204,7 @@ pub fn import_workspace_json_db(
 
 /// Runs the real import as a new workspace and rolls it back, so the counts match what an import would do.
 pub fn preview_workspace_import_db(db_path: &PathBuf, json_content: &str) -> Result<ImportPreview, String> {
-    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     let summary = import_into(&tx, json_content, None, None, None)?;
     tx.rollback().map_err(|e| e.to_string())?;
@@ -678,7 +678,7 @@ mod tests {
     }
 
     fn workspace_count(db: &PathBuf) -> i64 {
-        Connection::open(db).unwrap().query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0)).unwrap()
+        crate::db::open(db).unwrap().query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0)).unwrap()
     }
 
     #[test]

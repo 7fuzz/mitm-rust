@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use rusqlite::{params, Connection};
+use rusqlite::params;
 
 use crate::collections::{get_collections_db, CollectionTreeItem, RequestItem};
 use crate::http::body::{MultipartBodySpec, MultipartFieldSpec, UrlEncodedParamSpec};
@@ -18,7 +18,7 @@ pub fn export_workspace_json_db(
     options: ExportOptions,
     credentials_passphrase: Option<&str>,
 ) -> Result<String, String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = crate::db::open(db_path).map_err(|e| e.to_string())?;
     let (name, description): (String, Option<String>) = conn
         .query_row("SELECT name, description FROM workspaces WHERE id = ?", params![workspace_id], |row| {
             Ok((row.get(0)?, row.get(1)?))
