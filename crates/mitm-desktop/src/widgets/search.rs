@@ -1,4 +1,4 @@
-use eframe::egui;
+use eframe::egui::{self, RichText};
 use crate::ui::icons;
 
 fn armed_id() -> egui::Id {
@@ -17,14 +17,50 @@ pub fn claim_focus(response: &egui::Response) {
     }
 }
 
-pub fn search_field(ui: &mut egui::Ui, query: &mut String, hint: &str) {
-    let has_text = !query.is_empty();
-    let (_, clear) = egui::Sides::new().shrink_left().show(
-        ui,
-        |ui| claim_focus(&ui.add(egui::TextEdit::singleline(query).hint_text(format!("{} {}", icons::MAGNIFYING_GLASS, hint)).desired_width(f32::INFINITY))),
-        |ui| has_text && ui.small_button(icons::X).on_hover_text("Clear").clicked(),
-    );
+pub fn search_field(ui: &mut egui::Ui, query: &mut String, hint: &str) -> egui::Response {
+    search_field_sized(ui, query, hint, f32::INFINITY)
+}
+
+/// A `base` well with the search glyph and, once there's text, a clear button inside it.
+pub fn search_field_sized(ui: &mut egui::Ui, query: &mut String, hint: &str, width: f32) -> egui::Response {
+    let id = ui.id().with(("search_field", hint));
+    let visuals = ui.visuals().clone();
+    let focused = ui.memory(|m| m.has_focus(id));
+    let stroke = if focused { visuals.selection.stroke } else { visuals.widgets.inactive.bg_stroke };
+    let row = ui.text_style_height(&egui::TextStyle::Body);
+    let pad_y = ((ui.spacing().interact_size.y - row) / 2.0).max(1.0).round() as i8;
+    let width = if width.is_finite() { width } else { ui.available_width() };
+    let mut clear = false;
+    let edit = egui::Frame::new()
+        .fill(visuals.extreme_bg_color)
+        .stroke(stroke)
+        .corner_radius(visuals.widgets.inactive.corner_radius)
+        .inner_margin(egui::Margin::symmetric(6, 0))
+        .show(ui, |ui| {
+            ui.set_width(width - 12.0);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.label(RichText::new(icons::MAGNIFYING_GLASS).weak());
+                let clear_width = if query.is_empty() { 0.0 } else { row + 4.0 };
+                let edit = ui.add(
+                    egui::TextEdit::singleline(query)
+                        .id(id)
+                        .hint_text(hint)
+                        .frame(egui::Frame::NONE)
+                        .margin(egui::Margin::symmetric(0, pad_y))
+                        .desired_width(ui.available_width() - clear_width),
+                );
+                claim_focus(&edit);
+                if !query.is_empty() {
+                    clear = ui.add(egui::Button::new(RichText::new(icons::X).weak()).frame(false)).on_hover_text("Clear").clicked();
+                }
+                edit
+            })
+            .inner
+        })
+        .inner;
     if clear {
         query.clear();
     }
+    edit
 }
