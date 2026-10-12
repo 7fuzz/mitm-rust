@@ -56,8 +56,64 @@ pub fn decode_base32(input: &str) -> Result<Vec<u8>, String> {
         .map_err(|_| "invalid base32 secret".to_string())
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OtpAuth {
+    pub params: TotpParams,
+    pub label: String,
+    pub issuer: Option<String>,
+}
+
+pub fn parse_otpauth(uri: &str) -> Result<OtpAuth, String> {
+    let url = url::Url::parse(uri.trim()).map_err(|_| "invalid otpauth URI".to_string())?;
+    if !url.scheme().eq_ignore_ascii_case("otpauth") {
+        return Err("not an otpauth URI".into());
+    }
+    match url.host_str().map(|h| h.to_ascii_lowercase()) {
+        Some(h) if h == "totp" => {}
+        Some(h) if h == "hotp" => return Err("HOTP is not supported".into()),
+        _ => return Err("otpauth URI must be totp".into()),
+    }
+
+    let path = url.path().trim_start_matches('/');
+    let path = urlencoding::decode(path).map(|p| p.into_owned()).unwrap_or_else(|_| path.to_string());
+    let (label_issuer, label) = match path.split_once(':') {
+        Some((issuer, account)) => (Some(issuer.trim().to_string()), account.trim().to_string()),
+        None => (None, path.trim().to_string()),
+    };
+
+    let mut secret = None;
+    let mut issuer = None;
+    let mut params = TotpParams::new(Vec::new());
+    for (key, value) in url.query_pairs() {
+        match key.to_ascii_lowercase().as_str() {
+            "secret" => secret = Some(decode_base32(&value)?),
+            "issuer" => issuer = Some(value.trim().to_string()),
+            "digits" => {
+                params.digits = value.parse().ok().filter(|d| (6..=9).contains(d)).ok_or("invalid digits")?;
+            }
+            "period" => params.period = value.parse().ok().filter(|p| *p > 0).ok_or("invalid period")?,
+            "algorithm" => {
+                params.algo = match value.to_ascii_uppercase().as_str() {
+                    "SHA1" => TotpAlgo::Sha1,
+                    "SHA256" => TotpAlgo::Sha256,
+                    "SHA512" => TotpAlgo::Sha512,
+                    _ => return Err("unsupported algorithm".into()),
+                }
+            }
+            _ => {}
+        }
+    }
+    params.secret = secret.ok_or("otpauth URI has no secret")?;
+    let issuer = issuer.filter(|i| !i.is_empty()).or(label_issuer.filter(|i| !i.is_empty()));
+    Ok(OtpAuth { params, label, issuer })
+}
+
 pub fn parse_secret(input: &str) -> Result<TotpParams, String> {
-    decode_base32(input.trim()).map(TotpParams::new)
+    let input = input.trim();
+    if input.len() >= 10 && input[..10].eq_ignore_ascii_case("otpauth://") {
+        return parse_otpauth(input).map(|o| o.params);
+    }
+    decode_base32(input).map(TotpParams::new)
 }
 
 pub fn now_unix() -> u64 {
@@ -118,6 +174,46 @@ mod tests {
         assert_eq!(decode_base32("gezd gnbv gy3t qojq gezd gnbv gy3t qojq").unwrap(), expected);
         assert_eq!(decode_base32("MZXW6===").unwrap(), b"foo");
         assert_eq!(decode_base32("mzxw6").unwrap(), b"foo");
+    }
+
+    #[test]
+    fn otpauth_reads_label_issuer_and_defaults() {
+        let o = parse_otpauth("otpauth://totp/ACME%20Co:john.doe%40email.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ").unwrap();
+        assert_eq!(o.label, "john.doe@email.com");
+        assert_eq!(o.issuer.as_deref(), Some("ACME Co"));
+        assert_eq!(o.params, TotpParams::new(b"12345678901234567890".to_vec()));
+    }
+
+    #[test]
+    fn otpauth_issuer_param_wins_over_label_prefix() {
+        let o = parse_otpauth("otpauth://totp/Old:alice?secret=MZXW6&issuer=New&digits=8&period=60&algorithm=SHA256")
+            .unwrap();
+        assert_eq!(o.issuer.as_deref(), Some("New"));
+        assert_eq!(o.label, "alice");
+        assert_eq!(o.params.digits, 8);
+        assert_eq!(o.params.period, 60);
+        assert_eq!(o.params.algo, TotpAlgo::Sha256);
+    }
+
+    #[test]
+    fn otpauth_without_issuer_keeps_plain_label() {
+        let o = parse_otpauth("otpauth://totp/alice?secret=MZXW6").unwrap();
+        assert_eq!(o.label, "alice");
+        assert_eq!(o.issuer, None);
+    }
+
+    #[test]
+    fn otpauth_rejects_hotp_and_missing_secret() {
+        assert!(parse_otpauth("otpauth://hotp/x?secret=MZXW6&counter=1").is_err());
+        assert!(parse_otpauth("otpauth://totp/x?digits=6").is_err());
+        assert!(parse_otpauth("otpauth://totp/x?secret=MZXW6&algorithm=MD5").is_err());
+    }
+
+    #[test]
+    fn parse_secret_accepts_base32_or_uri() {
+        assert_eq!(parse_secret(" mzxw6 ").unwrap().secret, b"foo");
+        let p = parse_secret("otpauth://totp/x?secret=MZXW6&digits=8").unwrap();
+        assert_eq!((p.secret.as_slice(), p.digits), (b"foo".as_slice(), 8));
     }
 
     #[test]
