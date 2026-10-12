@@ -1,5 +1,6 @@
 pub mod ca;
 pub mod collections;
+pub mod credentials;
 pub mod db;
 pub mod events;
 pub mod fuzzer;

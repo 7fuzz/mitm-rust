@@ -2823,6 +2823,7 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid",
+ "zeroize",
  "zstd 0.13.3",
 ]
 
