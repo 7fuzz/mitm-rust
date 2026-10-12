@@ -10,6 +10,19 @@ pub fn format_bytes(bytes: u64) -> String {
     }
 }
 
+/// 12345 → "12,345"
+pub fn format_count(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
 pub fn format_duration(ms: Option<u64>) -> String {
     match ms {
         Some(m) if m < 1000 => format!("{}ms", m),
@@ -268,6 +281,14 @@ pub fn local_clock(rfc3339: Option<&str>) -> Option<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn counts_group_thousands() {
+        assert_eq!(format_count(0), "0");
+        assert_eq!(format_count(999), "999");
+        assert_eq!(format_count(1000), "1,000");
+        assert_eq!(format_count(1234567), "1,234,567");
+    }
 
     #[test]
     fn decodes_padded_unpadded_url_safe_and_data_urls() {

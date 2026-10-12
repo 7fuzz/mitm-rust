@@ -5,6 +5,8 @@ use crate::app::command::Commands;
 use crate::features;
 use crate::widgets::template;
 use crate::app::state::AppState;
+use crate::ui::theme;
+use crate::util::format::format_count;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Tab {
@@ -201,6 +203,7 @@ pub struct TabViewer<'a> {
     pub db_path: &'a Path,
     pub focus_search: Option<Tab>,
     pub focused: Option<Tab>,
+    pub visuals: egui::Visuals,
 }
 
 impl TabViewer<'_> {
@@ -263,16 +266,24 @@ impl egui_dock::TabViewer for TabViewer<'_> {
             Tab::Intercept => Some(self.state.intercept.pending.len()).filter(|&n| n > 0),
             _ => None,
         };
-        match count {
-            Some(n) => format!("{} ({})", tab.name(), n).into(),
-            None => tab.name().into(),
-        }
+        let Some(count) = count else { return tab.name().into() };
+        let count_color = match tab {
+            Tab::Intercept => theme::Tone::Warn.color(&self.visuals),
+            _ => self.visuals.weak_text_color(),
+        };
+        let mut job = egui::text::LayoutJob::default();
+        // Placeholder colour lets the dock paint the name in its active/inactive tab colour.
+        let name = egui::TextFormat::simple(egui::FontId::proportional(theme::BODY_SIZE), egui::Color32::PLACEHOLDER);
+        job.append(tab.name(), 0.0, name);
+        let count_format = egui::TextFormat::simple(egui::FontId::monospace(theme::SMALL_SIZE), count_color);
+        job.append(&format_count(count), 6.0, count_format);
+        job.into()
     }
 
     fn on_tab_button(&mut self, tab: &mut Tab, response: &egui::Response) {
         if self.focused == Some(*tab) {
             let rect = response.rect;
-            let accent = response.ctx.global_style().visuals.selection.stroke.color;
+            let accent = self.visuals.selection.stroke.color;
             response.ctx.layer_painter(response.layer_id).hline(rect.x_range(), rect.bottom() - 1.0, egui::Stroke::new(2.0, accent));
         }
     }

@@ -1050,6 +1050,7 @@ impl eframe::App for MitmApp {
             db_path: &self.core.db_path,
             focus_search: self.focus_search.take(),
             focused: focused_tab,
+            visuals: ui.visuals().clone(),
         };
         DockArea::new(&mut self.dock).style(crate::ui::theme::dock_style(ui.style())).show_inside(ui, &mut viewer);
         if let Some(text) = crate::widgets::template::take_decode_request() {

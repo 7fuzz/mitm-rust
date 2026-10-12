@@ -105,12 +105,12 @@ fn set_spacing(s: &mut egui::style::Spacing) {
 fn set_text_styles(style: &mut egui::Style) {
     use egui::{FontFamily, FontId, TextStyle};
     style.text_styles = [
-        (TextStyle::Small, FontId::new(11.0, FontFamily::Proportional)),
-        (TextStyle::Body, FontId::new(13.0, FontFamily::Proportional)),
-        (TextStyle::Button, FontId::new(13.0, FontFamily::Proportional)),
-        (TextStyle::Monospace, FontId::new(12.5, FontFamily::Monospace)),
+        (TextStyle::Small, FontId::new(SMALL_SIZE, FontFamily::Proportional)),
+        (TextStyle::Body, FontId::new(BODY_SIZE, FontFamily::Proportional)),
+        (TextStyle::Button, FontId::new(BODY_SIZE, FontFamily::Proportional)),
+        (TextStyle::Monospace, FontId::new(MONO_SIZE, FontFamily::Monospace)),
         (TextStyle::Heading, FontId::new(15.0, strong_family())),
-        (TextStyle::Name("section".into()), FontId::new(11.0, strong_family())),
+        (TextStyle::Name("section".into()), FontId::new(SMALL_SIZE, strong_family())),
     ]
     .into();
 }
@@ -237,6 +237,9 @@ pub fn status_tone(code: u16) -> Tone {
 }
 
 pub const STRONG_FAMILY: &str = "strong";
+pub const BODY_SIZE: f32 = 13.0;
+pub const SMALL_SIZE: f32 = 11.0;
+pub const MONO_SIZE: f32 = 12.5;
 
 pub fn strong_family() -> egui::FontFamily {
     egui::FontFamily::Name(STRONG_FAMILY.into())
