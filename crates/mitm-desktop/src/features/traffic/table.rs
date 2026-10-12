@@ -8,7 +8,7 @@ use crate::features::collections::SaveTarget;
 use crate::util::format::{format_bytes, format_duration, local_clock, CopyFormat};
 use crate::ui::theme::{self, Tone};
 use crate::widgets::copy_custom;
-use crate::widgets::pills::{badge, render_method_pill, render_source_pill};
+use crate::widgets::pills::{badge, method_text, render_source_pill, status_text};
 use super::{flow_status_badge, ColumnId, ColumnLayout, FlowFlags, TrafficState};
 
 const ROW_HEIGHT: f32 = 26.0;
@@ -20,8 +20,12 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], fold
     let visuals = ui.visuals().clone();
     let ctx = ui.ctx().clone();
     let mut near_end = false;
-    // Row pitch stays as before the global spacing change until the table itself is restyled.
-    ui.spacing_mut().item_spacing.y = 3.0;
+    // Rows pack edge to edge; ROW_HEIGHT holds the air, and hover/selection fills meet without gaps.
+    ui.spacing_mut().item_spacing.y = 0.0;
+    let accent = visuals.selection.stroke.color;
+    let visuals_mut = ui.visuals_mut();
+    visuals_mut.selection.bg_fill = accent.gamma_multiply(0.2);
+    visuals_mut.selection.stroke.color = theme::Palette::of(&visuals).text_strong;
     let held_offset = offset_holding_rows_in_place(state, visible, ROW_HEIGHT + ui.spacing().item_spacing.y);
     egui::ScrollArea::horizontal()
         .id_salt("traffic_table_hscroll")
@@ -30,7 +34,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], fold
             let mut builder = TableBuilder::new(ui)
                 // egui keeps resized widths per column index, so key them by the visible column set.
                 .id_salt(("traffic_table", &columns, state.width_epoch))
-                .striped(true)
+                .striped(false)
                 .resizable(true)
                 .sense(egui::Sense::click())
                 .auto_shrink([false, false])
@@ -79,7 +83,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut TrafficState, visible: &[usize], fold
     if visible.is_empty() {
         ui.vertical_centered(|ui| {
             ui.add_space(24.0);
-            ui.label(RichText::new("No traffic matches the current filters").weak().italics());
+            ui.label(RichText::new("No traffic matches the current filters").weak());
         });
     }
 
@@ -113,8 +117,12 @@ fn flow_row(
     let tint = if selected { None } else { row_tint(visuals, &flags) };
     let mut text_cells: Vec<egui::Response> = Vec::new();
 
-    for &col in columns {
+    for (index, &col) in columns.iter().enumerate() {
         row.col(|ui| {
+            if selected && index == 0 {
+                let rect = ui.max_rect();
+                ui.painter().vline(rect.left() + 1.0, rect.y_range(), egui::Stroke::new(2.0, visuals.selection.stroke.color));
+            }
             if let Some(color) = tint {
                 let half_gap = 0.5 * ui.spacing().item_spacing;
                 let painter = ui.painter().with_clip_rect(ui.clip_rect().expand2(half_gap));
@@ -168,7 +176,7 @@ fn cell(ui: &mut egui::Ui, col: ColumnId, flow: &HistoryEntry, flags: &FlowFlags
     match col {
         ColumnId::Id => Some(ui.label(RichText::new(flow.id.to_string()).color(weak).small())),
         ColumnId::Method => {
-            render_method_pill(ui, &flow.method);
+            ui.add(egui::Label::new(method_text(ui.visuals(), &flow.method)).selectable(false));
             if flags.intercepted || flags.pending_intercept {
                 badge(ui, "INT", Tone::Warn);
             }
@@ -185,10 +193,10 @@ fn cell(ui: &mut egui::Ui, col: ColumnId, flow: &HistoryEntry, flags: &FlowFlags
             }
             None
         }
-        ColumnId::Host => Some(ui.add(egui::Label::new(RichText::new(&flow.host).strong()).truncate())),
-        ColumnId::Path => Some(ui.add(egui::Label::new(RichText::new(&flow.path).color(weak)).truncate())),
+        ColumnId::Host => Some(ui.add(egui::Label::new(RichText::new(&flow.host).color(weak)).truncate())),
+        ColumnId::Path => Some(ui.add(egui::Label::new(RichText::new(&flow.path)).truncate())),
         ColumnId::Status => {
-            flow_status_badge(ui, flow.status_code, flags);
+            status_cell(ui, flow.status_code, flags);
             None
         }
         ColumnId::ContentType => {
@@ -197,12 +205,12 @@ fn cell(ui: &mut egui::Ui, col: ColumnId, flow: &HistoryEntry, flags: &FlowFlags
         }
         ColumnId::Size => {
             let text = if flags.is_pending() { "-".to_string() } else { format_bytes(flow.response_size) };
-            Some(ui.label(RichText::new(text).color(weak).small()))
+            Some(ui.label(mono_small(text).color(weak)))
         }
         ColumnId::Duration => Some(if flags.is_pending() {
             pending_dots(ui, flags)
         } else {
-            ui.label(RichText::new(format_duration(flow.duration_ms)).color(weak).small())
+            ui.label(mono_small(format_duration(flow.duration_ms)).color(weak))
         }),
         ColumnId::RequestAt => Some(clock_cell(ui, flow.request_at.as_deref())),
         ColumnId::ResponseAt => Some(if flags.is_pending() {
@@ -213,6 +221,24 @@ fn cell(ui: &mut egui::Ui, col: ColumnId, flow: &HistoryEntry, flags: &FlowFlags
     }
 }
 
+fn mono_small(text: impl Into<String>) -> RichText {
+    RichText::new(text).small().family(egui::FontFamily::Monospace)
+}
+
+/// Coloured code in the table; waiting states keep their badge, since they need to stand out.
+fn status_cell(ui: &mut egui::Ui, code: u16, flags: &FlowFlags) {
+    if flags.is_pending() {
+        flow_status_badge(ui, code, flags);
+        return;
+    }
+    let text = if flags.failed && code != 0 {
+        mono_small(code.to_string()).strong().color(theme::color(ui, Tone::Danger))
+    } else {
+        status_text(ui.visuals(), code)
+    };
+    ui.add(egui::Label::new(text).selectable(false));
+}
+
 fn pending_dots(ui: &mut egui::Ui, flags: &FlowFlags) -> egui::Response {
     let color = theme::color(ui, if flags.pending_intercept { Tone::Warn } else { Tone::Danger });
     ui.label(RichText::new("...").monospace().strong().color(color))
@@ -221,7 +247,7 @@ fn pending_dots(ui: &mut egui::Ui, flags: &FlowFlags) -> egui::Response {
 fn clock_cell(ui: &mut egui::Ui, at: Option<&str>) -> egui::Response {
     let weak = ui.visuals().weak_text_color();
     match local_clock(at) {
-        Some((short, full)) => ui.label(RichText::new(short).color(weak).small()).on_hover_text(full),
+        Some((short, full)) => ui.label(mono_small(short).color(weak)).on_hover_text(full),
         None => ui.label(RichText::new("-").color(weak)),
     }
 }
@@ -245,7 +271,7 @@ fn remember_width(widths: &mut HashMap<ColumnId, f32>, col: ColumnId, width: f32
 /// and whether **Reset columns** was picked, carried along in `reset`.
 fn header_cell(ui: &mut egui::Ui, col: ColumnId, layout: &mut ColumnLayout, mut reset: bool) -> (egui::Rect, bool) {
     aligned(ui, col.align(), |ui| {
-        ui.add(egui::Label::new(RichText::new(col.label()).strong().small()).selectable(false));
+        ui.add(egui::Label::new(RichText::new(col.label()).small().weak()).selectable(false));
     });
     let rect = ui.max_rect();
     let response = ui.interact(rect, ui.id().with(("traffic_header", col)), egui::Sense::click_and_drag());
