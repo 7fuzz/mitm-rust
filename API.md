@@ -113,10 +113,27 @@ Errors are `Result<_, String>` with a message meant for the UI.
 | `create_workspace` / `rename_workspace` / `update_workspace_description` / `delete_workspace` | |
 | `get_workspace_environments(ws)` / `get_workspace_environment(id)` / `save_workspace_environment(env)` / `delete_workspace_environment(id)` / `duplicate_workspace_environment(id, name)` | Environments hold variables with variants. |
 | `set_active_environment(ws, env)` / `get_active_environment()` | |
-| `resolve_vars(text)` / `variable_value(name)` | `{{var}}` substitution against the active environment. Returns the unresolved names too. |
+| `resolve_vars(text)` / `variable_value(name)` | `{{var}}` substitution against the active environment and workspace credentials. Returns the unresolved names too. `{{$totp:var}}` is a fresh code from a secret held in `var`. |
+| `workspace::interpolate(env, creds, text, record)` | The substitution itself. `record` collects the credential secrets it used, so a logged copy can be masked with `record.mask(text)`. |
 | `workspace::import::import_workspace_json_db` / `workspace::export::export_workspace_file_db` | Workspace files (`mitm-workspace` v1, or Postman v2.1 on import). `workspace::file` holds the format types. See [WORKSPACE_FILE.md](WORKSPACE_FILE.md). |
 
 Each method also exists as a `workspace::*_db(db_path, …)` function. The desktop uses those directly.
+
+## Credentials
+
+Per workspace, under `credentials`. Entries have `text`, `secret` and `totp` fields, referenced as `{{$cred:entry.field}}` (a `totp` field gives its current code). Values and notes are AES-256-GCM encrypted with one data key, stored raw or wrapped by an optional master password (argon2id). Calls that need values return `Err(credentials::LOCKED)` while it is locked.
+
+| Function | Notes |
+| --- | --- |
+| `list_credentials(db, ws)` | Names and field keys only, so it works while locked. |
+| `create_credential` / `load_credential` / `find_credential` / `save_credential` / `delete_credential` | `save_credential` never renames. |
+| `rename_credential` / `rename_field` | Rewrite every ref to them in the workspace's environments and requests. |
+| `resolve(db, ws, entry, field)` | `Value(text, kind)`, `Locked` or `Missing`. |
+| `write_extracted(db, ws, entry, field, value)` | Where extract rules put tokens that target a credential, directly or through a linked `(auto)` variant. |
+| `set_master_password` / `remove_master_password` / `unlock` / `lock` / `is_locked` / `reset_credentials` | The password only rewraps the data key. `reset_credentials` wipes values and keeps names. |
+| `export_credentials` / `open_sealed` | The `credentials` and `credentialsSealed` parts of a workspace file. |
+
+Collections and Repeater runs mask `secret` values in their history, and abort with `LOCKED` (no history row) when a ref or an extract target needs locked credentials.
 
 ## Requests, history and data
 
@@ -140,3 +157,4 @@ Pure functions under `utils`, with no state or IO.
 | `utils::hashing` | `md5_hex`, `sha1_hex`, `sha256_hex`, `sha512_hex`, `hmac_hex`, `bcrypt_hash`, `bcrypt_verify`. |
 | `utils::json` | `format(indent, sort_keys)`, `minify`, `escape`, `canonicalize`. |
 | `utils::cvss` | `CvssV3Base` and `CvssV4Base`: `calculate`, `to_vector`, `from_vector`. |
+| `utils::totp` | RFC 6238 `code_at`, `code_for_send` (next window under 2s left), `remaining`, `parse_secret` (base32 or `otpauth://`), `parse_otpauth`. |
