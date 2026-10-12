@@ -1,4 +1,5 @@
 mod api;
+pub mod types;
 pub mod hmac;
 pub mod replay;
 pub mod server;
