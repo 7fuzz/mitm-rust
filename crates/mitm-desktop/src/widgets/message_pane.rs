@@ -127,7 +127,7 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, pane: &mut PaneState, data: &PaneD
                     if ui.small_button("Open").on_hover_text("Open in the default app").clicked() {
                         open_externally(data, id_salt, ext);
                     }
-                    ui.separator();
+                    ui.add_space(8.0);
                 }
                 let choices = [
                     (BodyFormat::Hex, "Hex", true),

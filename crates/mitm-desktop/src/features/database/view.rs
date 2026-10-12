@@ -11,14 +11,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
     state.ensure_loaded(db);
 
     ui.horizontal(|ui| {
-        if ui.selectable_label(state.tab == DatabaseTab::Tables, "Tables").clicked() {
-            state.tab = DatabaseTab::Tables;
-        }
-        if ui.selectable_label(state.tab == DatabaseTab::Query, "SQL Query").clicked() {
-            state.tab = DatabaseTab::Query;
-        }
+        crate::widgets::subtabs::subtabs(ui, &mut state.tab, &[(DatabaseTab::Tables, "Tables", None), (DatabaseTab::Query, "SQL query", None)]);
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     match state.tab {
         DatabaseTab::Tables => tables_view(ui, state, db),
@@ -93,7 +88,7 @@ fn table_content(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
             state.load_current_page(db);
         }
 
-        ui.separator();
+        ui.add_space(8.0);
 
         let total = state.current_rows.as_ref().map(|r| r.total).unwrap_or(0);
         let total_pages = ((total + state.page_size - 1) / state.page_size).max(1);
@@ -263,7 +258,7 @@ fn render_detail(ui: &mut egui::Ui, state: &mut DatabaseState) {
             }
         });
     });
-    ui.separator();
+    ui.add_space(4.0);
 
     egui::ScrollArea::vertical()
         .id_salt("db_row_detail_scroll")

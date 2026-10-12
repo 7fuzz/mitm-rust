@@ -400,7 +400,7 @@ pub fn show(
 ) {
     let visible = state.filtered_indices();
     toolbar::show(ui, state, listeners, visible.len(), cmds);
-    ui.separator();
+    ui.add_space(4.0);
 
     if !inspector.prefs.open || inspector.prefs.popped_out || state.selected_flow().is_none() {
         table::show(ui, state, &visible, folders, cmds);
