@@ -3,6 +3,9 @@ pub mod cx;
 pub mod jobs;
 pub mod prefs;
 pub mod state;
+mod poll;
+mod startup;
+mod workspace;
 
 use std::sync::Arc;
 use crossbeam_channel::Receiver;
@@ -11,8 +14,8 @@ use egui_dock::{DockArea, DockState};
 use mitm_core::events::CoreEvent;
 use mitm_core::MitmCore;
 use tokio::runtime::Runtime;
-use tokio::sync::broadcast::error::RecvError;
 use command::{AppCommand, Commands};
+use startup::{forward_core_events, startup_state};
 use cx::Cx;
 use crate::ui::dock::{self, Tab, TabViewer};
 use mitm_core::collections::execute::ExecutionResult;
@@ -23,7 +26,6 @@ use crate::features::environments::{self, QuickVarScope};
 use jobs::Jobs;
 use state::AppState;
 use crate::ui::palette::{self, PaletteState};
-use crate::ui::theme::Tone;
 use crate::ui::{shortcuts, top_bar};
 
 pub struct MitmApp {
@@ -275,162 +277,22 @@ impl MitmApp {
                 let cx = Cx { rt: &self.rt, core: &self.core, ctx };
                 crate::features::utilities::hashing::handle(&mut self.state.hashing, &cx, cmd);
             }
-            AppCommand::SelectWorkspace(id) => {
-                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
-                cx.report(mitm_core::workspace::set_active_workspace_db(db_path, &id));
-                self.state.environments.active_workspace_id = id.clone();
-                self.state.environments.reload_environments(db_path);
-                self.state.collections.apply(CollectionsCmd::SelectWorkspace(id), &cx);
-            }
+            AppCommand::SelectWorkspace(id) => self.select_workspace(ctx, id),
             AppCommand::Environments(cmd) => {
                 let cx = Cx { rt: &self.rt, core: &self.core, ctx };
                 crate::features::environments::handle(&mut self.state.environments, &cx, cmd);
             }
-            AppCommand::CreateWorkspace(name) => {
-                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
-                if let Some(ws) = cx.report(mitm_core::workspace::create_workspace_db(db_path, name, None)) {
-                    self.state.environments.workspaces.push(ws.clone());
-                    self.run_command(ctx, AppCommand::SelectWorkspace(ws.id));
-                }
-            }
-            AppCommand::DeleteWorkspace(id) => {
-                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
-                if cx.report(mitm_core::workspace::delete_workspace_db(db_path, &id)).is_none() {
-                    return;
-                }
-                self.state.environments.workspaces.retain(|w| w.id != id);
-                if self.state.environments.active_workspace_id == id {
-                    if let Some(first) = self.state.environments.workspaces.first().cloned() {
-                        self.run_command(ctx, AppCommand::SelectWorkspace(first.id));
-                    } else if let Ok(ws) = mitm_core::workspace::create_workspace_db(db_path, "Default Workspace".to_string(), None) {
-                        self.state.environments.workspaces.push(ws.clone());
-                        self.run_command(ctx, AppCommand::SelectWorkspace(ws.id));
-                    }
-                }
-            }
+            AppCommand::CreateWorkspace(name) => self.create_workspace(ctx, name),
+            AppCommand::DeleteWorkspace(id) => self.delete_workspace(ctx, id),
             AppCommand::OpenImport => self.state.environments.import.open_with(None, String::new()),
-            AppCommand::PickQrImage(target) => {
-                self.qr_images.spawn(&self.rt, ctx, async move {
-                    let path = crate::util::files::pick_open(&[("Image", &["png", "jpg", "jpeg", "gif", "webp"])]).await?;
-                    let decoded = std::fs::read(&path).map_err(|e| e.to_string()).and_then(|b| crate::util::qr::decode_file(&b));
-                    Some((target, decoded))
-                });
-            }
-            AppCommand::PickCredentialsJson => {
-                self.credential_files.spawn(&self.rt, ctx, async {
-                    let path = crate::util::files::pick_open(&[("JSON", &["json"])]).await?;
-                    Some(std::fs::read_to_string(&path).map_err(|e| e.to_string()))
-                });
-            }
-            AppCommand::PickImportFile => {
-                self.import_files.spawn(&self.rt, ctx, async {
-                    let path = crate::util::files::pick_open(&[("JSON", &["json"])]).await?;
-                    let name = path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-                    Some(std::fs::read_to_string(&path).map(|json| (name, json)).map_err(|e| e.to_string()))
-                });
-            }
-            AppCommand::ExportWorkspace => {
-                let environments = &mut self.state.environments;
-                if let Some(options) = environments.export.ask(&environments.environments, &self.state.credentials.entries) {
-                    self.run_command(ctx, AppCommand::ExportWorkspaceFile { options, passphrase: None });
-                }
-            }
-            AppCommand::ExportWorkspaceFile { options, passphrase } => {
-                if passphrase.is_some() && mitm_core::credentials::is_locked(db_path) {
-                    self.state.credentials.ask_unlock(Some(AppCommand::ExportWorkspaceFile { options, passphrase }));
-                    return;
-                }
-                let Some(workspace) = self.state.environments.active_workspace().cloned() else { return };
-                // Export reads the database, so edits still waiting for their debounced save go first.
-                self.state.environments.flush(db_path);
-                self.state.collections.flush(db_path);
-                self.state.credentials.flush(db_path);
-                let db_path = db_path.clone();
-                self.file_saves.spawn(&self.rt, ctx, async move {
-                    let name = format!("{}.mitm.json", workspace.name);
-                    let path = crate::util::files::pick_save(&name, &[("Workspace file", &["json"])]).await?;
-                    let result = mitm_core::workspace::export::export_workspace_file_db(
-                        &db_path,
-                        &workspace.id,
-                        &path.to_string_lossy(),
-                        options,
-                        passphrase.as_deref(),
-                    );
-                    Some(result.map(|_| format!("Exported {}", crate::util::files::file_name(&path))))
-                });
-            }
-            AppCommand::ImportWorkspace { json, target, name, passphrase } => {
-                let imported = mitm_core::workspace::import::import_workspace_json_db(
-                    db_path,
-                    &json,
-                    target.as_deref(),
-                    name.as_deref(),
-                    passphrase.as_deref(),
-                );
-                match imported {
-                    Ok(_) if target.is_some() => {
-                        self.state.environments.import = Default::default();
-                        self.state.environments.refresh(db_path);
-                        self.state.collections.reload_tree(db_path);
-                    }
-                    Ok(summary) => {
-                        self.state.environments.import = Default::default();
-                        self.state.environments.load(db_path);
-                        self.run_command(ctx, AppCommand::SelectWorkspace(summary.workspace_id));
-                    }
-                    Err(e) if e == mitm_core::credentials::LOCKED => {
-                        let retry = AppCommand::ImportWorkspace { json, target, name, passphrase };
-                        self.state.credentials.ask_unlock(Some(retry));
-                    }
-                    Err(e) => self.state.environments.import.error = Some(e),
-                }
-            }
-            AppCommand::MoveToCredentials { env_id, var_idx, entry, field } => {
-                let workspace_id = self.state.environments.active_workspace_id.clone();
-                let environments = &mut self.state.environments;
-                let Some(env) = environments.environments.iter_mut().find(|e| e.id == env_id) else { return };
-                let Some(var) = env.variables.get_mut(var_idx) else { return };
-                match crate::features::credentials::move_value(db_path, &workspace_id, &entry, &field, var.current_value().to_string()) {
-                    Ok(link) => {
-                        if var.variants.is_empty() {
-                            var.value = link;
-                        } else {
-                            let idx = var.active_index.min(var.variants.len() - 1);
-                            var.variants[idx].value = link.clone();
-                            var.value = link;
-                        }
-                        environments.move_modal = None;
-                        environments.mark_dirty(&env_id, ctx.input(|i| i.time));
-                        environments.flush(db_path);
-                        self.state.credentials.mark_stale();
-                    }
-                    Err(e) => {
-                        if let Some(modal) = environments.move_modal.as_mut() {
-                            modal.error = Some(e);
-                        }
-                    }
-                }
-            }
+            AppCommand::PickQrImage(target) => self.pick_qr_image(ctx, target),
+            AppCommand::PickCredentialsJson => self.pick_credentials_json(ctx),
+            AppCommand::PickImportFile => self.pick_import_file(ctx),
+            AppCommand::ExportWorkspace => self.export_workspace(ctx),
+            AppCommand::ExportWorkspaceFile { options, passphrase } => self.export_workspace_file(ctx, options, passphrase),
+            AppCommand::ImportWorkspace { json, target, name, passphrase } => self.import_workspace(ctx, json, target, name, passphrase),
+            AppCommand::MoveToCredentials { env_id, var_idx, entry, field } => self.move_to_credentials(ctx, env_id, var_idx, entry, field),
         }
-    }
-
-    fn finish_factory_reset(&mut self, ctx: &egui::Context, result: Result<Option<MitmCore>, String>) {
-        let fresh = match result {
-            Ok(fresh) => fresh,
-            Err(e) => {
-                self.state.data.resetting = false;
-                self.state.data.status = Some((e, Tone::Danger));
-                return;
-            }
-        };
-        if let Some(core) = fresh {
-            self.core = Arc::new(core);
-            self.core_events = forward_core_events(&self.rt, &self.core, ctx);
-        }
-        let mut state = startup_state(&self.rt, &self.core);
-        prefs::carry_over(&mut self.state, &mut state);
-        self.state = state;
-        self.state.data.status = Some(("Factory reset complete".to_string(), Tone::Success));
     }
 
     fn save_rewrite_rules_now(&mut self) {
@@ -464,87 +326,7 @@ impl eframe::App for MitmApp {
         }
         let focused_tab = self.dock.find_active_focused().map(|(_, tab)| *tab);
         shortcuts::consume(ui.ctx(), focused_tab, &mut self.cmds);
-        for (id, result) in self.repeater_runs.drain() {
-            if is_locked_error(&result) {
-                self.state.repeater.executing.remove(&id);
-                self.state.credentials.ask_unlock(Some(AppCommand::RepeaterSend(id)));
-                continue;
-            }
-            self.state.repeater.finish_run(&id, result, &self.core.db_path);
-            self.state.environments.refresh(&self.core.db_path);
-            self.state.credentials.mark_stale();
-        }
-        self.state.repeater.flush_if_idle(&self.core.db_path, now);
-        for (id, result) in self.collection_runs.drain() {
-            if is_locked_error(&result) {
-                self.state.collections.finish_run(&id, result, &self.core.db_path);
-                self.state.credentials.ask_unlock(Some(AppCommand::Collections(CollectionsCmd::Execute(id))));
-                continue;
-            }
-            self.state.collections.finish_run(&id, result, &self.core.db_path);
-            self.state.environments.refresh(&self.core.db_path);
-            self.state.credentials.mark_stale();
-        }
-        self.state.collections.flush_if_idle(&self.core.db_path, now);
-        self.state.environments.flush_if_idle(&self.core.db_path, now);
-        self.state.credentials.flush_if_idle(&self.core.db_path, now);
-        let save_errors = [
-            self.state.repeater.take_save_errors(),
-            self.state.collections.take_save_errors(),
-            self.state.environments.take_save_errors(),
-            self.state.credentials.take_save_errors(),
-        ];
-        for error in save_errors.into_iter().flatten() {
-            top_bar::flash(ui, Err(error));
-        }
-        self.state.traffic.sync_header_search(&self.core.db_path);
-        for (target, decoded) in self.qr_images.drain().flatten() {
-            use crate::app::command::QrTarget;
-            match (target, decoded) {
-                (QrTarget::TotpTool, Ok(text)) => {
-                    self.state.totp.input = text;
-                    self.state.totp.qr_error = None;
-                }
-                (QrTarget::TotpTool, Err(e)) => self.state.totp.qr_error = Some(e),
-                (QrTarget::CredentialField { id, key }, Ok(text)) => self.state.credentials.set_totp_secret(&id, &key, text, now),
-                (QrTarget::CredentialField { .. }, Err(e)) => self.state.credentials.show_error(e),
-            }
-        }
-        for result in self.credential_files.drain().flatten() {
-            let import = &mut self.state.credentials.json_import;
-            match result {
-                Ok(json) => import.open_with(json),
-                Err(e) => import.failed(e),
-            }
-        }
-        for result in self.import_files.drain().flatten() {
-            let import = &mut self.state.environments.import;
-            match result {
-                Ok((name, json)) => import.open_with(Some(environments::file_label(&name, json.len())), json),
-                Err(e) => import.error = Some(e),
-            }
-        }
-        if let Some((name, json)) = dropped_json(ui.ctx()) {
-            self.state.environments.import.open_with(Some(environments::file_label(&name, json.len())), json);
-        }
-        for result in self.file_saves.drain().flatten() {
-            top_bar::flash(ui, result);
-        }
-        let resets: Vec<_> = self.factory_resets.drain().collect();
-        for result in resets {
-            self.finish_factory_reset(ui.ctx(), result);
-        }
-        {
-            let cx = Cx { rt: &self.rt, core: &self.core, ctx: ui.ctx() };
-            crate::features::traffic::poll(&mut self.state.traffic, &cx);
-            crate::features::webhooks::poll(&mut self.state.webhooks, &cx);
-            crate::features::websockets::poll(&mut self.state.websockets, &cx);
-            crate::features::settings::poll(self.state.settings(), &cx);
-            crate::features::rewrite::poll(&mut self.state.rewrite, &cx, now);
-            crate::features::intercept::poll(&mut self.state.intercept, &cx);
-            crate::features::fuzzer::poll(&mut self.state.fuzzer, &cx);
-        }
-        crate::features::utilities::hashing::poll(&mut self.state.hashing);
+        self.poll_jobs(ui, now);
         let palette = crate::ui::theme::Palette::of(ui.visuals());
         egui::Panel::top("top_panel")
             .frame(egui::Frame::new().fill(palette.base).inner_margin(egui::Margin::symmetric(8, 5)))
@@ -605,59 +387,6 @@ impl eframe::App for MitmApp {
     }
 }
 
-fn dropped_json(ctx: &egui::Context) -> Option<(String, String)> {
-    let file = ctx.input(|i| i.raw.dropped_files.first().cloned())?;
-    let name = file.path().file_name()?.to_string_lossy().into_owned();
-    if !environments::is_json_file(&name) {
-        return None;
-    }
-    let bytes = file.bytes().ok()?;
-    Some((name, String::from_utf8_lossy(&bytes).into_owned()))
-}
 
-fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {
-    let mut state = AppState::load(&core.db_path);
-    state.traffic.set_history_limit(rt.block_on(core.get_history_settings()));
-    state.proxy.mode = rt.block_on(core.proxy_mode());
-    if state.proxy.mode.is_enabled() {
-        state.proxy.set_started(rt.block_on(core.start_all_listeners()));
-    }
-    state.proxy.apply_statuses(&rt.block_on(core.listener_status()));
-    state.proxy.reload_host_ips();
-    state.certificate.info = core.ca_info().ok();
-    let (enabled, mode, scope) = rt.block_on(core.intercept_config());
-    state.intercept.enabled = enabled;
-    state.intercept.mode = mode;
-    state.intercept.source_scope = scope;
-    state.rewrite.rules = rt.block_on(core.rewrite_rules());
-    state.rewrite.enabled = core.rewrite_enabled();
-    state.rewrite.scope = rt.block_on(core.rewrite_source_scope());
-    state.websockets.mitm_enabled = rt.block_on(core.ws_mitm_enabled());
-    let webhook = rt.block_on(core.webhook_status());
-    state.webhooks.running = webhook.is_running;
-    state.webhooks.port = webhook.port;
-    state
-}
 
-fn forward_core_events(rt: &Runtime, core: &MitmCore, ctx: &egui::Context) -> Receiver<CoreEvent> {
-    let (tx, rx) = crossbeam_channel::unbounded();
-    let mut core_rx = core.event_bus.subscribe();
-    let ctx = ctx.clone();
-    rt.spawn(async move {
-        loop {
-            match core_rx.recv().await {
-                Ok(event) => {
-                    let _ = tx.send(event);
-                    ctx.request_repaint();
-                }
-                Err(RecvError::Lagged(_)) => continue,
-                Err(RecvError::Closed) => break,
-            }
-        }
-    });
-    rx
-}
 
-fn is_locked_error<T>(result: &Result<T, String>) -> bool {
-    matches!(result, Err(e) if e == mitm_core::credentials::LOCKED)
-}
