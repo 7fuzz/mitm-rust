@@ -1,3 +1,4 @@
+mod api;
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair, Certificate
 };
