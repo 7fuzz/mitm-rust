@@ -646,8 +646,8 @@ fn variant_modal(ctx: &egui::Context, state: &mut EnvironmentsState, env_idx: us
     let mut commit = false;
 
     egui::Modal::new(egui::Id::new("variant_modal")).show(ctx, |ui| {
-        ui.set_width(260.0);
-        let title = if modal_state.is_rename { "Rename Variant" } else { "Add Variant" };
+        ui.set_width(360.0);
+        let title = if modal_state.is_rename { "Rename variant" } else { "Add variant" };
         ui.heading(title);
         ui.add_space(6.0);
         let resp = ui.add(
