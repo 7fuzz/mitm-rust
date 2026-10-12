@@ -10,7 +10,8 @@ pub mod ws_db;
 pub use error::InitError;
 pub use history_db::*;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
@@ -43,19 +44,22 @@ pub fn get_default_db_path() -> PathBuf {
     app_dir.join("mitm.db")
 }
 
+/// Opens a connection with the settings SQLite keeps per connection; journal_mode lives in the file.
+pub fn open(path: &Path) -> rusqlite::Result<Connection> {
+    let conn = Connection::open(path)?;
+    conn.busy_timeout(Duration::from_secs(5))?;
+    conn.execute_batch("PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;")?;
+    Ok(conn)
+}
+
 pub fn init_database(db_path: &PathBuf, event_bus: Option<&crate::events::EventBus>) -> Result<(), InitError> {
     if let Some(parent) = db_path.parent() {
         if !parent.exists() {
             std::fs::create_dir_all(parent).map_err(|e| InitError::Io(e.to_string()))?;
         }
     }
-    let conn = Connection::open(db_path).map_err(InitError::from)?;
-
-    conn.execute_batch(
-        "PRAGMA journal_mode = WAL;
-         PRAGMA synchronous = NORMAL;
-         PRAGMA foreign_keys = ON;"
-    ).map_err(InitError::from)?;
+    let conn = open(db_path).map_err(InitError::from)?;
+    conn.execute_batch("PRAGMA journal_mode = WAL;").map_err(InitError::from)?;
 
     migrations::run_all(event_bus, &conn).map_err(InitError::migration)
 }
