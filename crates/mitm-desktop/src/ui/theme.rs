@@ -201,20 +201,22 @@ pub fn strong_family() -> egui::FontFamily {
 
 pub fn install_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
-    let embedded: [(&str, &'static [u8]); 3] = [
+    let embedded: [(&str, &'static [u8]); 4] = [
         ("Inter", include_bytes!("../../assets/fonts/Inter-Regular.ttf")),
         ("Inter-SemiBold", include_bytes!("../../assets/fonts/Inter-SemiBold.ttf")),
         ("JetBrainsMono", include_bytes!("../../assets/fonts/JetBrainsMono-Regular.ttf")),
+        ("Phosphor", include_bytes!("../../assets/fonts/Phosphor-Regular.ttf")),
     ];
     for (name, bytes) in embedded {
         fonts.font_data.insert(name.to_string(), std::sync::Arc::new(egui::FontData::from_static(bytes)));
     }
+    // Phosphor comes after the text font: it maps a-z to the blank glyphs its ligatures are built from.
     // Hack covers arrows, triangles and dots the text fonts lack; the emoji fonts cover user data.
     let fallback = ["Hack", "NotoEmoji-Regular", "emoji-icon-font"];
     let chain = |first: &[&str]| first.iter().chain(&fallback).map(|s| s.to_string()).collect::<Vec<_>>();
-    fonts.families.insert(egui::FontFamily::Proportional, chain(&["Inter"]));
-    fonts.families.insert(egui::FontFamily::Monospace, chain(&["JetBrainsMono"]));
-    fonts.families.insert(strong_family(), chain(&["Inter-SemiBold", "Inter"]));
+    fonts.families.insert(egui::FontFamily::Proportional, chain(&["Inter", "Phosphor"]));
+    fonts.families.insert(egui::FontFamily::Monospace, chain(&["JetBrainsMono", "Phosphor"]));
+    fonts.families.insert(strong_family(), chain(&["Inter-SemiBold", "Phosphor", "Inter"]));
     ctx.set_fonts(fonts);
 }
 
@@ -229,6 +231,7 @@ mod tests {
         apply_style(&ctx);
         let mut output = ctx.run_ui(Default::default(), |ui| {
             ui.heading("Traffic");
+            ui.label(crate::ui::icons::COPY);
             ui.label(egui::RichText::new("GET /v1/users").monospace());
             ui.label(egui::RichText::new("PROXY").text_style(egui::TextStyle::Name("section".into())));
         });
