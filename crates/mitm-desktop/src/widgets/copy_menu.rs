@@ -63,7 +63,7 @@ fn settings_menu(ui: &mut egui::Ui) {
     let config = MenuConfig::new().close_behavior(PopupCloseBehavior::CloseOnClickOutside);
     SubMenuButton::new("Copy Options").config(config).ui(ui, |ui| {
         ui.checkbox(&mut settings.markdown_fence, "Wrap in ``` for Markdown");
-        ui.checkbox(&mut settings.pretty_json, "Pretty JSON");
+        ui.checkbox(&mut settings.pretty, "Prettify JSON and HTML");
         ui.checkbox(&mut settings.truncate, "Truncate long values");
         ui.add_enabled_ui(settings.truncate, |ui| {
             ui.horizontal(|ui| {

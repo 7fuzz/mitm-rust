@@ -61,7 +61,8 @@ impl Default for CopyParts {
 #[serde(default)]
 pub struct CopySettings {
     pub markdown_fence: bool,
-    pub pretty_json: bool,
+    #[serde(alias = "pretty_json")]
+    pub pretty: bool,
     pub truncate: bool,
     pub max_chars: usize,
     pub show_truncated_size: bool,
@@ -69,7 +70,7 @@ pub struct CopySettings {
 
 impl Default for CopySettings {
     fn default() -> Self {
-        Self { markdown_fence: false, pretty_json: true, truncate: false, max_chars: 200, show_truncated_size: true }
+        Self { markdown_fence: false, pretty: true, truncate: false, max_chars: 200, show_truncated_size: true }
     }
 }
 
@@ -288,24 +289,26 @@ impl Copier<'_> {
             }
             None => match boundary {
                 Some(boundary) => self.multipart(body.as_bytes(), &boundary),
-                None => self.text_body(body),
+                None => self.text_body(body, content_type),
             },
         }
     }
 
-    fn text_body(&self, body: &str) -> String {
+    fn text_body(&self, body: &str, content_type: &str) -> String {
         let settings = self.settings;
-        if settings.pretty_json || settings.truncate {
+        if settings.pretty || settings.truncate {
             if let Ok(mut value) = serde_json::from_str::<Value>(body) {
                 if settings.truncate {
                     self.shorten_json(&mut value);
                 }
-                let text = if settings.pretty_json { serde_json::to_string_pretty(&value) } else { serde_json::to_string(&value) };
+                let text = if settings.pretty { serde_json::to_string_pretty(&value) } else { serde_json::to_string(&value) };
                 if let Ok(text) = text {
                     return text;
                 }
             }
         }
+        let markup = settings.pretty.then(|| super::markup::pretty(body, content_type)).flatten();
+        let body = markup.as_deref().unwrap_or(body);
         if settings.truncate {
             body.lines().map(|line| self.shorten(line)).collect::<Vec<_>>().join("\n")
         } else {
@@ -475,7 +478,7 @@ mod tests {
     #[test]
     fn markdown_fence_and_raw_json_apply_to_every_format() {
         let exchange = sample();
-        let settings = CopySettings { markdown_fence: true, pretty_json: false, ..CopySettings::default() };
+        let settings = CopySettings { markdown_fence: true, pretty: false, ..CopySettings::default() };
         assert_eq!(copy(&exchange, CopyFormat::RequestBody, settings.clone()), "```\n{\"a\":1}\n```");
         assert_eq!(copy(&exchange, CopyFormat::Url, settings), "```\nhttps://api.test/u\n```");
     }
@@ -490,7 +493,7 @@ mod tests {
             ..sample()
         };
         assert_eq!(copy(&exchange, CopyFormat::RequestHeaders, truncating(10)), "Authorization: xxxxxxxxxx…(1.0 KB)");
-        let body = copy(&exchange, CopyFormat::ResponseBody, CopySettings { pretty_json: false, ..truncating(4) });
+        let body = copy(&exchange, CopyFormat::ResponseBody, CopySettings { pretty: false, ..truncating(4) });
         assert_eq!(body, r#"{"token":"xxxx…(1.0 KB)","n":1}"#);
         let quiet = CopySettings { show_truncated_size: false, ..truncating(4) };
         assert_eq!(copy(&exchange, CopyFormat::RequestHeaders, quiet), "Authorization: xxxx…");
@@ -547,7 +550,7 @@ mod tests {
             matches: vec![],
         };
         let exchange = Exchange::from_fuzz_result(&result);
-        let curl = copy(&exchange, CopyFormat::Curl, CopySettings { pretty_json: false, ..CopySettings::default() });
+        let curl = copy(&exchange, CopyFormat::Curl, CopySettings { pretty: false, ..CopySettings::default() });
         assert!(curl.starts_with("curl -X POST 'https://example.com/login'"));
         assert!(curl.contains("-H 'Content-Type: application/json'"));
         assert!(!curl.contains("Disabled"));

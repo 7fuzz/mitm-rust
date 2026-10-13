@@ -77,7 +77,9 @@ pub fn display_body(body: &str, content_type: &str) -> String {
         let mime = if content_type.is_empty() { "application/octet-stream" } else { content_type };
         return format!("[Binary Content ({}): {} chars base64]", mime, b64.len());
     }
-    pretty_json(body).unwrap_or_else(|| body.to_string())
+    pretty_json(body)
+        .or_else(|| super::markup::pretty(body, content_type))
+        .unwrap_or_else(|| body.to_string())
 }
 
 pub fn body_bytes(body: &str) -> Vec<u8> {
