@@ -63,6 +63,37 @@ pub fn storage_stats(db: &Db) -> Result<StorageStats, String> {
     Ok(StorageStats { file_bytes, wal_bytes, free_bytes, tables })
 }
 
+/// Free space worth returning to the disk; smaller amounts are left for SQLite to reuse.
+const RECLAIM_MIN_BYTES: i64 = 1024 * 1024;
+
+/// Returns free pages to the disk after a delete, once there's enough of them. Needs `auto_vacuum = INCREMENTAL`,
+/// which `init_database` sets; does nothing otherwise. Returns how many bytes it freed.
+pub fn reclaim(conn: &rusqlite::Connection) -> Result<u64, String> {
+    let pragma = |name: &str| conn.query_row(&format!("PRAGMA {name}"), [], |r| r.get::<_, i64>(0)).map_err(|e| e.to_string());
+    if pragma("auto_vacuum")? != 2 {
+        return Ok(0);
+    }
+    let free = pragma("freelist_count")? * pragma("page_size")?;
+    if free < RECLAIM_MIN_BYTES {
+        return Ok(0);
+    }
+    // Frees a page per step, so it has to be stepped to the end.
+    let mut stmt = conn.prepare("PRAGMA incremental_vacuum").map_err(|e| e.to_string())?;
+    let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
+    while rows.next().map_err(|e| e.to_string())?.is_some() {}
+    Ok(free as u64)
+}
+
+/// Switches an older file to incremental auto-vacuum. The mode only takes effect through a full `VACUUM`, which
+/// also drops whatever free space the file had piled up; it runs once per file.
+pub(crate) fn enable_auto_vacuum(conn: &rusqlite::Connection) -> Result<(), String> {
+    let mode: i64 = conn.query_row("PRAGMA auto_vacuum", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    if mode != 2 {
+        conn.execute_batch("PRAGMA auto_vacuum = INCREMENTAL; VACUUM;").map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Rewrites the file without its free pages and empties the WAL. Returns the file size before and after.
 pub fn vacuum(db: &Db) -> Result<(u64, u64), String> {
     let size = || std::fs::metadata(db.path()).map_or(0, |m| m.len()) + std::fs::metadata(wal_path(db)).map_or(0, |m| m.len());
@@ -81,6 +112,29 @@ fn wal_path(db: &Db) -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn files_switch_to_incremental_vacuum_and_deletes_give_space_back() {
+        let db = Db::new(std::env::temp_dir().join(format!("mitm-reclaim-{}.db", uuid::Uuid::new_v4())));
+        {
+            let conn = crate::db::open(db.path()).unwrap();
+            conn.execute_batch("CREATE TABLE old (data BLOB); INSERT INTO old VALUES (zeroblob(1000));").unwrap();
+        }
+        crate::db::init_database(&db, None).unwrap();
+        let conn = db.conn().unwrap();
+        assert_eq!(conn.query_row("PRAGMA auto_vacuum", [], |r| r.get::<_, i64>(0)).unwrap(), 2);
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM old", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
+
+        conn.execute_batch("CREATE TABLE blobs (data BLOB)").unwrap();
+        for _ in 0..100 {
+            conn.execute("INSERT INTO blobs VALUES (zeroblob(50000))", []).unwrap();
+        }
+        conn.execute("DELETE FROM blobs", []).unwrap();
+        assert!(reclaim(&conn).unwrap() > 4_000_000);
+        assert!(storage_stats(&db).unwrap().free_bytes < 100_000);
+        assert_eq!(reclaim(&conn).unwrap(), 0, "nothing left to give back");
+        let _ = std::fs::remove_file(db.path());
+    }
 
     #[test]
     fn stats_show_freed_pages_and_vacuum_returns_them() {
@@ -109,3 +163,4 @@ mod tests {
         let _ = std::fs::remove_file(db.path());
     }
 }
+

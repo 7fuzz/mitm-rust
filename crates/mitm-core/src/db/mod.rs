@@ -96,7 +96,12 @@ pub fn init_database(db: &Db, event_bus: Option<&crate::events::EventBus>) -> Re
     let conn = db.conn().map_err(InitError::from)?;
     conn.execute_batch("PRAGMA journal_mode = WAL;").map_err(InitError::from)?;
 
-    migrations::run_all(event_bus, &conn).map_err(InitError::migration)
+    migrations::run_all(event_bus, &conn).map_err(InitError::migration)?;
+    // Only shrinks the file; a failure (e.g. no disk space for the copy) leaves it working as before.
+    if let Err(e) = storage::enable_auto_vacuum(&conn) {
+        eprintln!("[DB] Couldn't switch to incremental vacuum: {e}");
+    }
+    Ok(())
 }
 
 pub fn get_preference(db: &Db, key: &str) -> Option<String> {
@@ -121,10 +126,14 @@ pub fn prune_history_logs_conn(conn: &Connection, max_rows: u32) -> Result<usize
     if max_rows == 0 {
         return Ok(0);
     }
-    conn.execute(
+    let pruned = conn.execute(
         "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY id DESC LIMIT ?)",
         params![max_rows],
-    ).map_err(|e| e.to_string())
+    ).map_err(|e| e.to_string())?;
+    if pruned > 0 {
+        storage::reclaim(conn)?;
+    }
+    Ok(pruned)
 }
 
 pub fn prune_history_logs(db: &Db, max_rows: u32) -> Result<usize, String> {
@@ -302,6 +311,7 @@ pub fn get_rewrite_history_logs(db: &Db, limit: u32) -> Result<Vec<crate::proxy:
 pub fn clear_rewrite_history_logs(db: &Db) -> Result<(), String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM rewrite_history", []).map_err(|e| e.to_string())?;
+    storage::reclaim(&conn)?;
     Ok(())
 }
 

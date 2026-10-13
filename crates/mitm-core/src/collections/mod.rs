@@ -388,6 +388,7 @@ pub fn clear_request_histories_db(db: &Db, request_id: &str) -> Result<(), Strin
     let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM request_histories WHERE request_id = ?", params![request_id])
         .map_err(|e| e.to_string())?;
+    crate::db::storage::reclaim(&conn)?;
     Ok(())
 }
 

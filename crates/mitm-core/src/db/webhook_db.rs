@@ -151,6 +151,7 @@ pub fn save_webhook_delivery(db: &Db, delivery: &WebhookDelivery) -> Result<i64,
 pub fn clear_webhook_deliveries(db: &Db) -> Result<(), String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM webhook_deliveries", []).map_err(|e| e.to_string())?;
+    super::storage::reclaim(&conn)?;
     Ok(())
 }
 

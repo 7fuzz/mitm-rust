@@ -247,6 +247,7 @@ pub fn clear_history(db: &Db) -> Result<(), String> {
         "DELETE FROM history;
          DELETE FROM sqlite_sequence WHERE name = 'history';"
     ).map_err(|e| e.to_string())?;
+    super::storage::reclaim(&conn)?;
     Ok(())
 }
 
@@ -254,6 +255,7 @@ pub fn delete_history_entry(db: &Db, id: i64) -> Result<(), String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM history WHERE id = ?1", [id])
         .map_err(|e| e.to_string())?;
+    super::storage::reclaim(&conn)?;
     Ok(())
 }
 

@@ -637,6 +637,7 @@ pub fn delete_run_db(db: &Db, id: i64) -> Result<(), String> {
     tx.execute("DELETE FROM fuzz_runs WHERE id = ?", params![id])
         .map_err(|e| e.to_string())?;
     tx.commit().map_err(|e| e.to_string())?;
+    crate::db::storage::reclaim(&conn)?;
     Ok(())
 }
 
@@ -646,6 +647,7 @@ pub fn clear_fuzz_runs(db: &Db) -> Result<(), String> {
     tx.execute("DELETE FROM fuzz_results", []).map_err(|e| e.to_string())?;
     tx.execute("DELETE FROM fuzz_runs", []).map_err(|e| e.to_string())?;
     tx.commit().map_err(|e| e.to_string())?;
+    crate::db::storage::reclaim(&conn)?;
     Ok(())
 }
 

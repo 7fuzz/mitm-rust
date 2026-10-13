@@ -123,7 +123,7 @@ pub fn delete_workspace_db(db: &Db, id: &str) -> Result<(), String> {
 
     let _ = conn.execute("DELETE FROM collections WHERE workspace_id = ?", params![id]);
     conn.execute("DELETE FROM workspaces WHERE id = ?", params![id]).map_err(|e| e.to_string())?;
-
+    crate::db::storage::reclaim(&conn)?;
     Ok(())
 }
 

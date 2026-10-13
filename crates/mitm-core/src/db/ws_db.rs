@@ -175,6 +175,7 @@ pub fn clear_ws_messages(db: &Db, connection_id: Option<i64>) -> Result<(), Stri
         conn.execute("UPDATE ws_connections SET message_count = 0", [])
             .map_err(|e| e.to_string())?;
     }
+    super::storage::reclaim(&conn)?;
     Ok(())
 }
 
