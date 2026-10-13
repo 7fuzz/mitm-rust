@@ -321,7 +321,7 @@ fn column_menu(ui: &mut egui::Ui, layout: &mut ColumnLayout, clicked: Option<Col
     reset
 }
 
-fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, folders: &[CollectionTreeItem], cmds: &mut Commands) {
+pub fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, folders: &[CollectionTreeItem], cmds: &mut Commands) {
     menu_item(ui, "Send to Repeater", AppCommand::SendFlowToRepeater(flow.id), cmds);
     menu_item(ui, "Send to Fuzzer", AppCommand::SendFlowToFuzzer(flow.id), cmds);
     menu_item(ui, "Add to Intercept Rules", AppCommand::AddInterceptRuleForHost(flow.host.clone()), cmds);

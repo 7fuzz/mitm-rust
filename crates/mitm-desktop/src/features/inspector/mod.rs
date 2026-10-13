@@ -4,12 +4,14 @@ use serde::{Deserialize, Serialize};
 use crate::features::request_editor::url_params::decode;
 use crate::widgets::message_pane::PaneState;
 
-pub use view::{show, show_window};
+pub use view::show;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct InspectorPrefs {
     pub open: bool,
+    /// Mirrors whether the dock holds the Inspector panel.
+    #[serde(skip)]
     pub popped_out: bool,
     pub table_fraction: f32,
     pub split: f32,

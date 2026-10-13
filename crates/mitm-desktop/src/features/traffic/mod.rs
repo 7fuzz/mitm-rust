@@ -14,6 +14,7 @@ use mitm_core::db::Db;
 pub use columns::{ColumnId, ColumnLayout};
 pub use commands::{handle, poll, Cmd};
 pub use har_export::{show as show_har_export, HarExport};
+pub use table::flow_menu;
 
 const PAGE_SIZE: usize = 200;
 
@@ -409,7 +410,7 @@ pub fn show(
     let [mut table_ui, mut inspector_ui] =
         crate::widgets::split::stacked(ui, "traffic_inspector_split", &mut inspector.prefs.table_fraction);
     table::show(&mut table_ui, state, &visible, folders, cmds);
-    crate::features::inspector::show(&mut inspector_ui, inspector, state, cmds);
+    crate::features::inspector::show(&mut inspector_ui, inspector, state, folders, cmds);
 }
 
 #[cfg(test)]

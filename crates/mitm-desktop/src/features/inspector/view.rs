@@ -1,11 +1,12 @@
 use eframe::egui::{self, RichText};
 use mitm_core::proxy::history::HistoryEntry;
 use crate::app::command::{AppCommand, Commands};
-use crate::features::traffic::{Cmd, FlowFlags, TrafficState};
+use eframe::egui::containers::menu::MenuButton;
+use mitm_core::collections::CollectionTreeItem;
+use crate::features::traffic::{flow_menu, FlowFlags, TrafficState};
 use crate::util::format::{format_bytes, format_duration};
 use crate::ui::theme::Tone;
 use crate::widgets::button::icon_button;
-use crate::widgets::copy_menu;
 use crate::widgets::pills::{badge, render_method_pill, render_status_pill};
 use crate::widgets::split;
 use crate::widgets::message_pane::{self as pane, PaneData};
@@ -13,14 +14,13 @@ use crate::features::request_editor::body::captured_form;
 use super::{header_values, query_params, request_cookies, response_cookies, InspectorPrefs, InspectorState};
 use crate::ui::icons;
 
-pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficState, cmds: &mut Commands) {
+pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficState, folders: &[CollectionTreeItem], cmds: &mut Commands) {
     let Some(flow) = traffic.selected_flow() else { return };
 
     let detail = traffic.selected_detail.as_ref().filter(|d| d.id == flow.id);
     let flags = FlowFlags::of(flow);
 
-    summary(ui, flow, &flags, &mut state.prefs, cmds);
-    url_bar(ui, &flow.url);
+    summary(ui, flow, &flags, &mut state.prefs, folders, cmds);
     ui.add_space(4.0);
 
     let request_headers = detail.map_or(&flow.request_headers, |d| &d.request_headers);
@@ -56,78 +56,54 @@ pub fn show(ui: &mut egui::Ui, state: &mut InspectorState, traffic: &TrafficStat
     }
 }
 
-/// The inspector in its own OS window, e.g. on a second monitor; closing it docks the inspector back.
-pub fn show_window(ctx: &egui::Context, state: &mut InspectorState, traffic: &TrafficState, cmds: &mut Commands) {
-    if !state.prefs.popped_out {
-        return;
-    }
-    let builder = egui::ViewportBuilder::default().with_title("Inspector").with_inner_size([960.0, 720.0]);
-    ctx.show_viewport_immediate(egui::ViewportId::from_hash_of("inspector_window"), builder, |ui, _| {
-        egui::Frame::central_panel(ui.style()).show(ui, |ui| {
-            ui.set_min_size(ui.available_size());
-            show(ui, state, traffic, cmds);
-        });
-        if ui.ctx().input(|i| i.viewport().close_requested()) {
-            state.prefs.popped_out = false;
+/// Method, status and stats, then the URL filling the space up to the controls.
+fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, prefs: &mut InspectorPrefs, folders: &[CollectionTreeItem], cmds: &mut Commands) {
+    ui.horizontal(|ui| {
+        render_method_pill(ui, &flow.method);
+        match (flags.pending_intercept, flags.pending_response) {
+            (true, _) => {
+                badge(ui, "Paused in interceptor", Tone::Warn);
+            }
+            (_, true) => {
+                badge(ui, "Waiting for response", Tone::Danger);
+            }
+            _ => render_status_pill(ui, flow.status_code),
         }
-    });
-}
-
-fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, prefs: &mut InspectorPrefs, cmds: &mut Commands) {
-    egui::Sides::new().shrink_left().truncate().show(
-        ui,
-        |ui| {
-            render_method_pill(ui, &flow.method);
-            match (flags.pending_intercept, flags.pending_response) {
-                (true, _) => {
-                    badge(ui, "Paused in interceptor", Tone::Warn);
-                }
-                (_, true) => {
-                    badge(ui, "Waiting for response", Tone::Danger);
-                }
-                _ => render_status_pill(ui, flow.status_code),
-            }
-            if flags.failed {
-                badge(ui, "Failed", Tone::Danger);
-            }
-            if flags.intercepted {
-                badge(ui, "Intercepted", Tone::Warn);
-            }
-            if flags.rewritten {
-                badge(ui, "Rewritten", Tone::Info);
-            }
-            if !flags.is_pending() {
-                let stats = format!("{} · {}", format_duration(flow.duration_ms), format_bytes(flow.response_size));
-                ui.label(RichText::new(stats).small().family(egui::FontFamily::Monospace).weak());
-            }
-            if !flow.listener_label.is_empty() && flow.listener_label != "Default" {
-                ui.weak(format!("via {}", flow.listener_label));
-            }
-        },
-        |ui| {
+        if flags.failed {
+            badge(ui, "Failed", Tone::Danger);
+        }
+        if flags.intercepted {
+            badge(ui, "Intercepted", Tone::Warn);
+        }
+        if flags.rewritten {
+            badge(ui, "Rewritten", Tone::Info);
+        }
+        if !flags.is_pending() {
+            let stats = format!("{} · {}", format_duration(flow.duration_ms), format_bytes(flow.response_size));
+            ui.label(RichText::new(stats).small().family(egui::FontFamily::Monospace).weak());
+        }
+        if !flow.listener_label.is_empty() && flow.listener_label != "Default" {
+            ui.weak(format!("via {}", flow.listener_label));
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if !prefs.popped_out && icon_button(ui, icons::X, "Hide inspector").clicked() {
                 prefs.open = false;
             }
             let (icon, hint) = if prefs.popped_out {
-                (icons::ARROW_SQUARE_IN, "Dock back into the main window")
+                (icons::ARROW_SQUARE_IN, "Put back into Traffic")
             } else {
-                (icons::ARROW_SQUARE_OUT, "Open in its own window")
+                (icons::ARROW_SQUARE_OUT, "Detach into its own panel")
             };
             if icon_button(ui, icon, hint).clicked() {
-                prefs.popped_out = !prefs.popped_out;
+                cmds.push(AppCommand::DetachInspector(!prefs.popped_out));
             }
-            copy_menu::button(ui, "inspector", |ui| {
-                let action = copy_menu::items(ui, !flags.is_pending());
-                action.map(|action| cmds.push(Cmd::Copy(flow.id, action))).is_some()
-            });
-            if ui.button("Fuzzer").on_hover_text("Send to Fuzzer").clicked() {
-                cmds.push(AppCommand::SendFlowToFuzzer(flow.id));
-            }
-            if ui.button("Repeater").on_hover_text("Send to Repeater").clicked() {
-                cmds.push(AppCommand::SendFlowToRepeater(flow.id));
-            }
-        },
-    );
+            let side = ui.spacing().interact_size.y;
+            let dots = egui::Button::new(icons::DOTS_THREE).frame_when_inactive(false).min_size(egui::vec2(side, side));
+            let (response, _) = MenuButton::from_button(dots).ui(ui, |ui| flow_menu(ui, flow, folders, cmds));
+            response.on_hover_text("Actions");
+            url_bar(ui, &flow.url);
+        });
+    });
 }
 
 /// The URL in a read-only `base` well, with a copy button inside it.
@@ -137,9 +113,9 @@ fn url_bar(ui: &mut egui::Ui, url: &str) {
         .fill(visuals.extreme_bg_color)
         .stroke(visuals.widgets.inactive.bg_stroke)
         .corner_radius(visuals.widgets.inactive.corner_radius)
-        .inner_margin(egui::Margin::symmetric(8, 2))
+        .inner_margin(egui::Margin::symmetric(8, 0))
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 let side = ui.spacing().interact_size.y;
                 let mut display = url;
                 ui.add(

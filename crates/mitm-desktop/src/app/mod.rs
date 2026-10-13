@@ -127,6 +127,7 @@ impl MitmApp {
                 }
             }
             AppCommand::OpenTab(tab) => dock::open_tab(&mut self.dock, tab),
+            AppCommand::DetachInspector(detach) => dock::detach_inspector(&mut self.dock, detach),
             AppCommand::OpenSettings(section) => {
                 self.state.settings.section = section;
                 dock::open_tab(&mut self.dock, Tab::Settings);
@@ -338,6 +339,7 @@ impl eframe::App for MitmApp {
             .frame(egui::Frame::new().fill(palette.base).inner_margin(egui::Margin::symmetric(8, 0)))
             .show(ui, |ui| crate::ui::status_bar::show(ui, &self.state));
 
+        self.state.inspector.prefs.popped_out = self.dock.find_tab(&Tab::Inspector).is_some();
         if let Some((path, tab)) = dock::tab_bar_menus(ui, &self.dock) {
             dock::open_in_leaf(&mut self.dock, path, tab);
         }
@@ -355,7 +357,6 @@ impl eframe::App for MitmApp {
         }
         palette::show(ui.ctx(), &mut self.palette, &self.state, &mut self.cmds);
         crate::features::repeater::show_curl_import(ui.ctx(), &mut self.state.repeater.curl_import, &mut self.cmds);
-        crate::features::inspector::show_window(ui.ctx(), &mut self.state.inspector, &self.state.traffic, &mut self.cmds);
         let now = ui.input(|i| i.time);
         environments::show_quick_vars(ui.ctx(), &mut self.state.environments, now);
         let workspace = self.state.environments.active_workspace().map(|w| (w.id.clone(), w.name.clone())).unwrap_or_default();

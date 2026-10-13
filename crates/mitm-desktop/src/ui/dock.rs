@@ -1,5 +1,5 @@
 use eframe::egui;
-use egui_dock::{DockState, NodePath, TabIndex};
+use egui_dock::{DockState, Node, NodePath, Split, TabIndex};
 use crate::app::command::Commands;
 use crate::features;
 use crate::widgets::template;
@@ -28,6 +28,8 @@ pub enum Tab {
     JsonTools,
     Cvss,
     Totp,
+    /// The traffic inspector detached from Traffic; opened from the inspector, not from panel menus.
+    Inspector,
 }
 
 impl Tab {
@@ -72,6 +74,7 @@ impl Tab {
             Tab::JsonTools => "JSON Tools",
             Tab::Cvss => "CVSS",
             Tab::Totp => "TOTP",
+            Tab::Inspector => "Inspector",
         }
     }
 
@@ -101,6 +104,26 @@ impl Tab {
 
 pub fn initial_layout() -> DockState<Tab> {
     DockState::new(vec![Tab::Traffic, Tab::Intercept, Tab::Repeater])
+}
+
+/// Moves the inspector into its own panel beside Traffic, or back into Traffic.
+pub fn detach_inspector(dock: &mut DockState<Tab>, detach: bool) {
+    match (dock.find_tab(&Tab::Inspector), detach) {
+        (Some(path), true) => {
+            let _ = dock.set_active_tab(path);
+        }
+        (Some(path), false) => {
+            dock.remove_tab(path);
+        }
+        (None, true) => match dock.find_tab(&Tab::Traffic) {
+            Some(traffic) => {
+                let beside = NodePath { surface: traffic.surface, node: traffic.node };
+                dock.split(beside, Split::Right, 0.5, Node::leaf(Tab::Inspector));
+            }
+            None => dock.push_to_focused_leaf(Tab::Inspector),
+        },
+        (None, false) => {}
+    }
 }
 
 pub fn open_tab(dock: &mut DockState<Tab>, tab: Tab) {
@@ -216,6 +239,13 @@ impl TabViewer<'_> {
                 template::set_active_env(state.environments.repeater_env.as_ref());
                 features::repeater::show(ui, &mut state.repeater, cmds);
                 template::set_active_env(state.environments.active_environment());
+            }
+            Tab::Inspector => {
+                if state.traffic.selected_flow().is_some() {
+                    features::inspector::show(ui, &mut state.inspector, &state.traffic, &state.collections.trees, cmds);
+                } else {
+                    ui.centered_and_justified(|ui| ui.weak("Select a request in Traffic"));
+                }
             }
             Tab::Fuzzer => features::fuzzer::show(ui, &mut state.fuzzer, cmds),
             Tab::Intercept => features::intercept::show(ui, &mut state.intercept, &state.proxy.listeners, cmds),
