@@ -13,6 +13,7 @@ Bodies and headers are stored as text (headers as JSON arrays of `[name, value]`
 | `rewrite_rules` / `rewrite_history` | Rewrite rules (partial edits or full mocks) and the log of rules that fired. |
 | `app_preferences` | Key/value settings: `proxy_mode`, `proxy_listeners`, `intercept_enabled`, `intercept_mode`, `intercept_source_scope`, `rewrite_enabled`, `rewrite_source_scope`, `ws_mitm_enabled`, `webhook_port`, `history_limiter_enabled`, `history_limiter_max_rows`, `active_workspace_id`. |
 | `workspaces` / `environments` | Workspaces and their environments. Variables and their variants are JSON in `environments.variables_json`. |
+| `bodies` | History request/response bodies, once per content (sha-256 of the bytes, `hash`), zstd-compressed when that saves at least 10 % (`codec` 1). `is_text` 0 means binary, read back as `base64:`. `history.request_body_hash` / `response_body_hash` point here; `history.request_body` / `response_body` stay empty. Unreferenced bodies are deleted after history deletes. |
 | `vaults` / `vault_workspaces` | Vaults hold credentials and link to any number of workspaces, or none. Deleting a vault deletes its credentials; deleting a workspace only removes its links. |
 | `credentials` / `credential_keys` | Credentials per vault. Field keys and kinds are plaintext in `fields_json`; values and notes are AES-256-GCM `ciphertext` under the single data key in `credential_keys`, which is stored raw (`kdf` NULL) or wrapped by a master password. |
 | `collections` / `requests` | Folder tree and saved requests per workspace. Repeater tabs are `requests` in a hidden workspace (`REPEATER_WORKSPACE_ID`) with its own environment. |
@@ -287,6 +288,13 @@ CREATE TABLE credential_keys (
     wrapped_key BLOB NOT NULL,
     updated_at_ms INTEGER NOT NULL
 );
+CREATE TABLE bodies (
+    hash BLOB PRIMARY KEY,
+    codec INTEGER NOT NULL,
+    is_text INTEGER NOT NULL,
+    size INTEGER NOT NULL,
+    data BLOB NOT NULL
+) WITHOUT ROWID;
 CREATE TABLE vaults (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,

@@ -138,9 +138,18 @@ fn flush_history_batch(db: &Db, buffer: &mut Vec<HistoryEntry>) {
                         let req_headers = serde_json::to_string(&entry.request_headers).unwrap_or_else(|_| "[]".to_string());
                         let res_headers = serde_json::to_string(&entry.response_headers).unwrap_or_else(|_| "[]".to_string());
 
+                        let hashes = crate::db::bodies::put(&tx, &entry.request_body)
+                            .and_then(|request| Ok((request, crate::db::bodies::put(&tx, &entry.response_body)?)));
+                        let (request_hash, response_hash) = match hashes {
+                            Ok(hashes) => hashes,
+                            Err(e) => {
+                                eprintln!("[DB Actor] Error storing bodies of history entry (id: {}): {}", entry.id, e);
+                                continue;
+                            }
+                        };
                         let res = tx.execute(
-                            "INSERT OR REPLACE INTO history (id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, is_intercepted, is_rewritten, is_failed, listener_label, request_at, response_at) 
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            "INSERT OR REPLACE INTO history (id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, request_body_hash, response_body_hash, phase, duration_ms, is_intercepted, is_rewritten, is_failed, listener_label, request_at, response_at) 
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             rusqlite::params![
                                 entry.id,
                                 entry.method,
@@ -152,8 +161,8 @@ fn flush_history_batch(db: &Db, buffer: &mut Vec<HistoryEntry>) {
                                 entry.status_code,
                                 req_headers,
                                 res_headers,
-                                entry.request_body,
-                                entry.response_body,
+                                request_hash,
+                                response_hash,
                                 entry.phase,
                                 entry.duration_ms,
                                 if entry.is_intercepted { 1 } else { 0 },

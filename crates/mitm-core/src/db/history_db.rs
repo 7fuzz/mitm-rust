@@ -52,13 +52,12 @@ pub fn get_history_logs(
     let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
 
     if include_bodies {
-        let entries = stmt
+        let rows: Vec<_> = stmt
             .query_map(&param_refs[..], full_from_row)
             .map_err(|e| e.to_string())?
             .filter_map(|r| r.ok())
             .collect();
-
-        Ok(entries)
+        rows.into_iter().map(|row| with_bodies(&conn, row)).collect()
     } else {
         let entries = stmt
             .query_map(&param_refs[..], summary_from_row)
@@ -72,14 +71,17 @@ pub fn get_history_logs(
 
 const SUMMARY_FIELDS: &str = "id, method, url, host, path, content_type, response_size, status_code, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at";
 
-const FULL_FIELDS: &str = "id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at";
+const FULL_FIELDS: &str = "id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body_hash, response_body_hash, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at";
 
-fn full_from_row(row: &rusqlite::Row) -> rusqlite::Result<HistoryEntry> {
+type BodyHashes = (Option<Vec<u8>>, Option<Vec<u8>>);
+
+/// A full row with its body hashes; `with_bodies` reads the bodies they point to.
+fn full_from_row(row: &rusqlite::Row) -> rusqlite::Result<(HistoryEntry, BodyHashes)> {
     let headers = |idx: usize| -> Vec<(String, String)> {
         let json: String = row.get(idx).unwrap_or_else(|_| "[]".to_string());
         serde_json::from_str(&json).unwrap_or_default()
     };
-    Ok(HistoryEntry {
+    let entry = HistoryEntry {
         id: row.get(0)?,
         method: row.get(1)?,
         url: row.get(2)?,
@@ -90,8 +92,8 @@ fn full_from_row(row: &rusqlite::Row) -> rusqlite::Result<HistoryEntry> {
         status_code: row.get(7)?,
         request_headers: headers(8),
         response_headers: headers(9),
-        request_body: row.get(10).unwrap_or_default(),
-        response_body: row.get(11).unwrap_or_default(),
+        request_body: String::new(),
+        response_body: String::new(),
         phase: row.get(12)?,
         duration_ms: row.get(13)?,
         created_at: row.get(14)?,
@@ -101,7 +103,14 @@ fn full_from_row(row: &rusqlite::Row) -> rusqlite::Result<HistoryEntry> {
         listener_label: row.get(18)?,
         request_at: row.get(19)?,
         response_at: row.get(20)?,
-    })
+    };
+    Ok((entry, (row.get(10)?, row.get(11)?)))
+}
+
+fn with_bodies(conn: &rusqlite::Connection, (mut entry, (request, response)): (HistoryEntry, BodyHashes)) -> Result<HistoryEntry, String> {
+    entry.request_body = super::bodies::get(conn, request.as_deref())?;
+    entry.response_body = super::bodies::get(conn, response.as_deref())?;
+    Ok(entry)
 }
 
 fn summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<HistoryEntry> {
@@ -195,10 +204,14 @@ pub fn get_history_by_ids(db: &Db, ids: &[i64]) -> Result<Vec<HistoryEntry>, Str
         let mut stmt = conn
             .prepare(&format!("SELECT {FULL_FIELDS} FROM history WHERE id IN ({placeholders})"))
             .map_err(|e| e.to_string())?;
-        let rows = stmt
+        let rows: Vec<_> = stmt
             .query_map(rusqlite::params_from_iter(chunk), full_from_row)
-            .map_err(|e| e.to_string())?;
-        entries.extend(rows.filter_map(|r| r.ok()));
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        for row in rows {
+            entries.push(with_bodies(&conn, row)?);
+        }
     }
     entries.sort_by_key(|e| e.id);
     Ok(entries)
@@ -210,31 +223,28 @@ pub fn get_history_detail(
 ) -> Result<Option<HistoryDetail>, String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, request_headers, response_headers, request_body, response_body FROM history WHERE id = ?")
+        .prepare("SELECT id, request_headers, response_headers, request_body_hash, response_body_hash FROM history WHERE id = ?")
         .map_err(|e| e.to_string())?;
 
     let mut rows = stmt
         .query_map([id], |row| {
             let req_headers_json: String = row.get(1)?;
             let res_headers_json: String = row.get(2)?;
-            let request_body: String = row.get(3)?;
-            let response_body: String = row.get(4)?;
+            let request_hash: Option<Vec<u8>> = row.get(3)?;
+            let response_hash: Option<Vec<u8>> = row.get(4)?;
 
             let request_headers: Vec<(String, String)> = serde_json::from_str(&req_headers_json).unwrap_or_default();
             let response_headers: Vec<(String, String)> = serde_json::from_str(&res_headers_json).unwrap_or_default();
 
-            Ok(HistoryDetail {
-                id: row.get(0)?,
-                request_headers,
-                response_headers,
-                request_body,
-                response_body,
-            })
+            let detail = HistoryDetail { id: row.get(0)?, request_headers, response_headers, request_body: String::new(), response_body: String::new() };
+            Ok((detail, request_hash, response_hash))
         })
         .map_err(|e| e.to_string())?;
 
     if let Some(res) = rows.next() {
-        let detail = res.map_err(|e| e.to_string())?;
+        let (mut detail, request_hash, response_hash) = res.map_err(|e| e.to_string())?;
+        detail.request_body = super::bodies::get(&conn, request_hash.as_deref())?;
+        detail.response_body = super::bodies::get(&conn, response_hash.as_deref())?;
         Ok(Some(detail))
     } else {
         Ok(None)
@@ -247,6 +257,7 @@ pub fn clear_history(db: &Db) -> Result<(), String> {
         "DELETE FROM history;
          DELETE FROM sqlite_sequence WHERE name = 'history';"
     ).map_err(|e| e.to_string())?;
+    super::bodies::collect_garbage(&conn)?;
     super::storage::reclaim(&conn)?;
     Ok(())
 }
@@ -255,6 +266,7 @@ pub fn delete_history_entry(db: &Db, id: i64) -> Result<(), String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM history WHERE id = ?1", [id])
         .map_err(|e| e.to_string())?;
+    super::bodies::collect_garbage(&conn)?;
     super::storage::reclaim(&conn)?;
     Ok(())
 }

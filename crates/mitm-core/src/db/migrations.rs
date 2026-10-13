@@ -148,6 +148,12 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         sql: include_str!("../../migrations/20261013_0023_credential_tags.sql"),
         after: None,
     },
+    MigrationSpec {
+        version: 24,
+        name: "20261013_0024_body_store",
+        sql: include_str!("../../migrations/20261013_0024_body_store.sql"),
+        after: Some(crate::db::bodies::migrate_history_bodies),
+    },
 ];
 
 pub fn run_all(event_bus: Option<&EventBus>, conn: &Connection) -> Result<(), String> {

@@ -5,6 +5,7 @@ mod error;
 pub mod history_db;
 pub mod migrations;
 pub mod recovery;
+pub mod bodies;
 pub mod storage;
 pub mod webhook_db;
 pub mod ws_db;
@@ -98,8 +99,8 @@ pub fn init_database(db: &Db, event_bus: Option<&crate::events::EventBus>) -> Re
 
     migrations::run_all(event_bus, &conn).map_err(InitError::migration)?;
     // Only shrinks the file; a failure (e.g. no disk space for the copy) leaves it working as before.
-    if let Err(e) = storage::enable_auto_vacuum(&conn) {
-        eprintln!("[DB] Couldn't switch to incremental vacuum: {e}");
+    if let Err(e) = storage::enable_auto_vacuum(&conn).and_then(|_| storage::reclaim(&conn)) {
+        eprintln!("[DB] Couldn't give free space back: {e}");
     }
     Ok(())
 }
@@ -131,6 +132,7 @@ pub fn prune_history_logs_conn(conn: &Connection, max_rows: u32) -> Result<usize
         params![max_rows],
     ).map_err(|e| e.to_string())?;
     if pruned > 0 {
+        bodies::collect_garbage(conn)?;
         storage::reclaim(conn)?;
     }
     Ok(pruned)
