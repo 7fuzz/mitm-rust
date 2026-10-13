@@ -37,10 +37,10 @@ pub fn palette_items(state: &AppState, ctx: &egui::Context) -> Vec<PaletteItem> 
         });
     }
 
-    for entry in &state.credentials.entries {
+    for entry in &state.credentials.linked {
         if entry.fields.iter().any(|f| f.kind == mitm_core::credentials::FieldKind::Totp) {
             items.push(PaletteItem {
-                label: format!("Copy TOTP: {}", entry.name),
+                label: format!("Copy TOTP: {}/{}", entry.vault, entry.name),
                 command: crate::features::credentials::Cmd::CopyTotp(entry.id.clone()).into(),
                 shortcut: None,
             });

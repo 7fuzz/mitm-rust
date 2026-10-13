@@ -27,22 +27,26 @@ pub struct Row {
 #[derive(Default)]
 pub struct JsonImport {
     pub open: bool,
+    /// The vault the rows go into; created and linked to the workspace when it doesn't exist.
+    vault: String,
     json: String,
     rows: Vec<Row>,
     error: Option<String>,
 }
 
 impl JsonImport {
-    pub fn start(&mut self) {
-        *self = Self { open: true, ..Self::default() };
+    pub fn start(&mut self, vault: Option<String>) {
+        *self = Self { open: true, vault: vault.unwrap_or_default(), ..Self::default() };
     }
 
     pub fn failed(&mut self, error: String) {
-        *self = Self { open: true, error: Some(error), ..Self::default() };
+        let vault = std::mem::take(&mut self.vault);
+        *self = Self { open: true, vault, error: Some(error), ..Self::default() };
     }
 
     pub fn open_with(&mut self, json: String) {
-        *self = Self { open: true, json, ..Self::default() };
+        let vault = std::mem::take(&mut self.vault);
+        *self = Self { open: true, vault, json, ..Self::default() };
         self.parse();
     }
 
@@ -196,9 +200,10 @@ fn row(path: &str, value: &Value, owner: String, owner_name: Option<&str>, key: 
     }
 }
 
-/// Writes the picked rows, creating entries as needed; a field that exists gets the new value.
-/// Returns (fields written, entries touched).
-pub fn apply(db: &Db, workspace_id: &str, rows: &[Row]) -> Result<(usize, usize), String> {
+/// Writes the picked rows into `vault` (linked to the workspace, created as needed), creating entries as needed;
+/// a field that exists gets the new value. Returns (fields written, entries touched).
+pub fn apply(db: &Db, workspace_id: &str, vault: &str, rows: &[Row]) -> Result<(usize, usize), String> {
+    credentials::validate_name(vault)?;
     let mut entries: Vec<(String, Vec<&Row>)> = Vec::new();
     for row in rows.iter().filter(|r| r.picked) {
         credentials::validate_name(&row.entry)?;
@@ -208,11 +213,12 @@ pub fn apply(db: &Db, workspace_id: &str, rows: &[Row]) -> Result<(usize, usize)
             None => entries.push((row.entry.clone(), vec![row])),
         }
     }
+    let vault_id = credentials::link_or_create_vault(db, workspace_id, vault)?;
     let mut fields = 0;
     for (name, picked) in &entries {
-        let mut credential = match credentials::find_credential(db, workspace_id, name)? {
+        let mut credential = match credentials::find_in_vault(db, &vault_id, name)? {
             Some(existing) => existing,
-            None => credentials::create_credential(db, workspace_id, name)?,
+            None => credentials::create_credential(db, &vault_id, name)?,
         };
         for row in picked {
             match credential.field_mut(&row.field) {
@@ -232,6 +238,8 @@ pub fn show(ctx: &egui::Context, state: &mut CredentialsState, db: &Db, cmds: &m
     }
     let mut close = false;
     let mut import = false;
+    let vault_names: Vec<String> = state.vaults.iter().map(|v| v.name.clone()).collect();
+    let vault_names = vault_names.as_slice();
     let modal = egui::Modal::new(egui::Id::new("credentials_json_import")).show(ctx, |ui| {
         ui.set_width(760.0);
         ui.heading("Import credentials from JSON");
@@ -285,17 +293,22 @@ pub fn show(ctx: &egui::Context, state: &mut CredentialsState, db: &Db, cmds: &m
         ui.add_space(8.0);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let picked = form.rows.iter().filter(|r| r.picked).count();
-            if ui.add_enabled(picked > 0, crate::widgets::button::primary(ui, &format!("Import {picked}"))).clicked() {
+            let vault_ok = credentials::validate_name(form.vault.trim()).is_ok();
+            if ui.add_enabled(picked > 0 && vault_ok, crate::widgets::button::primary(ui, &format!("Import {picked}"))).clicked() {
                 import = true;
             }
             if ui.button("Cancel").clicked() {
                 close = true;
             }
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.label("Into vault");
+                vault_picker(ui, &mut form.vault, vault_names);
+            });
         });
     });
     if import {
         let workspace_id = state.loaded_for.clone().unwrap_or_default();
-        match apply(db, &workspace_id, &state.json_import.rows) {
+        match apply(db, &workspace_id, state.json_import.vault.trim(), &state.json_import.rows) {
             Ok(_) => {
                 close = true;
                 state.stale = true;
@@ -305,6 +318,21 @@ pub fn show(ctx: &egui::Context, state: &mut CredentialsState, db: &Db, cmds: &m
     }
     if close || modal.should_close() {
         state.json_import = JsonImport::default();
+    }
+}
+
+/// A vault name typed in, or picked from the existing ones.
+pub fn vault_picker(ui: &mut egui::Ui, name: &mut String, existing: &[String]) {
+    ui.add(egui::TextEdit::singleline(name).hint_text("vault").desired_width(140.0));
+    if !existing.is_empty() {
+        ui.menu_button(crate::ui::icons::CARET_DOWN, |ui| {
+            for vault in existing {
+                if ui.button(vault).clicked() {
+                    *name = vault.clone();
+                    ui.close();
+                }
+            }
+        });
     }
 }
 
@@ -367,13 +395,14 @@ mod tests {
         mitm_core::db::init_database(&db, None).unwrap();
         let ws = mitm_core::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
         let mut picked = rows(&json!({ "credentials": { "adminEmail": "a@x", "adminPassword": "p1", "note": "n" } }));
-        assert_eq!(apply(&db, &ws, &picked).unwrap(), (2, 1));
+        assert_eq!(apply(&db, &ws, "DG", &picked).unwrap(), (2, 1));
         picked.iter_mut().find(|r| r.field == "password").unwrap().value = "p2".into();
-        apply(&db, &ws, &picked).unwrap();
-        let admin = credentials::find_credential(&db, &ws, "admin").unwrap().unwrap();
+        apply(&db, &ws, "dg", &picked).unwrap();
+        let admin = credentials::find_credential(&db, &ws, "DG", "admin").unwrap().unwrap();
         assert_eq!(admin.fields.len(), 2);
         assert_eq!(admin.field("password").unwrap().value, "p2");
-        assert!(credentials::find_credential(&db, &ws, "credentials").unwrap().is_none());
+        assert!(credentials::find_credential(&db, &ws, "DG", "credentials").unwrap().is_none());
+        assert!(apply(&db, &ws, "D G", &picked).is_err());
         let _ = std::fs::remove_file(&db);
     }
 }

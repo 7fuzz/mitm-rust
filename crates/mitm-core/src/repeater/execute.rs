@@ -611,16 +611,16 @@ mod tests {
         let db = crate::credentials::tests_support::temp_db();
         let ws = crate::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
         crate::workspace::set_active_workspace_db(&db, &ws).unwrap();
-        let mut cred = create_credential(&db, &ws, "dgAdmin").unwrap();
+        let mut cred = create_credential(&db, &crate::credentials::tests_support::vault(&db, &ws, "DG"), "dgAdmin").unwrap();
         cred.fields = vec![Field { key: "password".into(), kind: FieldKind::Secret, extracted: false, value: "hunter2".into() }];
         save_credential(&db, &cred).unwrap();
 
         let base = crate::collections::execute::tests::serve_echo().await;
-        let mut signin = tab("signin", format!("{base}/signin?pw={{{{$cred:dgAdmin.password}}}}"));
+        let mut signin = tab("signin", format!("{base}/signin?pw={{{{$cred:DG/dgAdmin.password}}}}"));
         signin.method = "POST".into();
-        signin.headers = vec![HeaderItem { id: "h".into(), key: "X-Pass".into(), value: "{{$cred:dgAdmin.password}}".into(), enabled: true }];
+        signin.headers = vec![HeaderItem { id: "h".into(), key: "X-Pass".into(), value: "{{$cred:DG/dgAdmin.password}}".into(), enabled: true }];
         signin.body_type = "raw".into();
-        signin.body_content = Some("pw={{$cred:dgAdmin.password}}".into());
+        signin.body_content = Some("pw={{$cred:DG/dgAdmin.password}}".into());
         create_repeater_tab_db(&db, &signin).unwrap();
 
         let result = execute_repeater_tab(&db, &signin).await.unwrap();
@@ -638,11 +638,11 @@ mod tests {
         let db = crate::credentials::tests_support::temp_db();
         let ws = crate::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
         crate::workspace::set_active_workspace_db(&db, &ws).unwrap();
-        crate::credentials::create_credential(&db, &ws, "dgAdmin").unwrap();
+        crate::credentials::create_credential(&db, &crate::credentials::tests_support::vault(&db, &ws, "DG"), "dgAdmin").unwrap();
         crate::credentials::set_master_password(&db, None, "pw").unwrap();
         crate::credentials::lock(&db);
 
-        let signin = tab("signin", "http://127.0.0.1:9/{{$cred:dgAdmin.password}}".into());
+        let signin = tab("signin", "http://127.0.0.1:9/{{$cred:DG/dgAdmin.password}}".into());
         create_repeater_tab_db(&db, &signin).unwrap();
         let result = execute_repeater_tab(&db, &signin).await;
         let history = crate::repeater::get_repeater_history_db(&db, "signin", 1, 10).unwrap();

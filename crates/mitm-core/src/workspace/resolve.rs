@@ -171,7 +171,7 @@ pub fn totp_params_in_env(env: Option<&Environment>, key: &str) -> Option<crate:
     crate::utils::totp::parse_secret(env_var_value(env?, name)?).ok()
 }
 
-/// Where `{{$cred:entry.field}}` refs are looked up.
+/// Where `{{$cred:vault/entry.field}}` refs are looked up: the vaults linked to `workspace_id`.
 #[derive(Debug, Clone, Copy)]
 pub struct CredentialScope<'a> {
     pub db: &'a Db,
@@ -269,9 +269,9 @@ pub fn interpolate(
                         }
                         None => unresolved(),
                     }
-                } else if let Some((entry, field)) = crate::credentials::parse_ref(key) {
+                } else if let Some(cred) = crate::credentials::parse_ref(key) {
                     let Some(scope) = creds else { return unresolved() };
-                    match crate::credentials::resolve(scope.db, scope.workspace_id, entry, field) {
+                    match crate::credentials::resolve(scope.db, scope.workspace_id, cred) {
                         crate::credentials::Resolve::Value(value, kind) => {
                             if kind == crate::credentials::FieldKind::Secret && !record.secrets.contains(&value) {
                                 record.secrets.push(value.clone());

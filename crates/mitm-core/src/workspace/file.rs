@@ -25,12 +25,23 @@ pub struct WorkspaceFile {
     pub environments: Vec<EnvironmentEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub collections: Vec<CollectionEntry>,
-    /// Credential entries without values, so variables linked to them re-link on import.
+    /// The vaults linked to the workspace, with their entries but no values, so refs to them re-link on import.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub vaults: Vec<VaultEntry>,
+    /// Entries from files made before vaults; import puts them in a vault named after the workspace.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub credentials: Vec<CredentialEntry>,
     /// Credential values and notes, encrypted with a passphrase chosen at export.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credentials_sealed: Option<SealedCredentials>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct VaultEntry {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub credentials: Vec<CredentialEntry>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -41,7 +52,7 @@ pub struct CredentialEntry {
     pub fields: Vec<crate::credentials::FieldMeta>,
 }
 
-/// `ciphertext` is AES-256-GCM over the JSON of `[{name, values: {key: value}, notes}]`, keyed by argon2id of the
+/// `ciphertext` is AES-256-GCM over the JSON of `[{vault, name, values: {key: value}, notes}]`, keyed by argon2id of the
 /// passphrase. Binary parts are base64.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -259,6 +270,7 @@ impl WorkspaceFile {
             workspace,
             environments: Vec::new(),
             collections: Vec::new(),
+            vaults: Vec::new(),
             credentials: Vec::new(),
             credentials_sealed: None,
         }

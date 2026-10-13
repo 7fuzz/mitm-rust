@@ -4,21 +4,28 @@ mod lock;
 mod view;
 
 use crate::util::save_queue::SaveQueue;
-use mitm_core::credentials::{self, Credential, CredentialSummary, Field, FieldKind};
+use std::collections::HashSet;
+use mitm_core::credentials::{self, Credential, CredentialSummary, Field, FieldKind, Vault};
 use serde::{Deserialize, Serialize};
 use mitm_core::db::Db;
 
 pub use commands::{handle, Cmd};
-pub use json_import::show as show_json_import;
+pub use json_import::{show as show_json_import, vault_picker};
 pub use lock::{settings_section, show_unlock};
 pub use view::show;
 
 
-/// An entry name or field key being renamed; renames go through core so refs to them are rewritten.
+/// What a rename edits; renames go through core so refs to them are rewritten.
+#[derive(Clone, PartialEq)]
+enum RenameTarget {
+    Vault(String),
+    Entry(String),
+    Field(String, String),
+}
+
 #[derive(Clone)]
 struct Rename {
-    id: String,
-    field: Option<String>,
+    target: RenameTarget,
     text: String,
 }
 
@@ -44,9 +51,16 @@ pub struct CredentialsState {
     pub prefs: CredentialsPrefs,
     loaded_for: Option<String>,
     stale: bool,
+    pub vaults: Vec<Vault>,
+    /// Every entry in every vault, with values; empty while locked.
     pub entries: Vec<Credential>,
     /// Names and field keys, which stay readable while locked.
     pub summaries: Vec<CredentialSummary>,
+    /// Entries in the vaults linked to the loaded workspace, the ones its refs reach; without values while locked.
+    pub linked: Vec<Credential>,
+    collapsed: HashSet<String>,
+    /// Asked before a vault and its entries are deleted.
+    delete_vault: Option<String>,
     pub has_password: bool,
     pub locked: bool,
     unlock: lock::UnlockPrompt,
@@ -69,8 +83,12 @@ impl Default for CredentialsState {
             prefs: CredentialsPrefs::default(),
             loaded_for: None,
             stale: false,
+            vaults: Vec::new(),
             entries: Vec::new(),
             summaries: Vec::new(),
+            linked: Vec::new(),
+            collapsed: HashSet::new(),
+            delete_vault: None,
             has_password: false,
             locked: false,
             unlock: lock::UnlockPrompt::default(),
@@ -111,26 +129,42 @@ impl CredentialsState {
         self.loaded_for = Some(workspace_id.to_string());
         self.has_password = credentials::has_master_password(db);
         self.locked = credentials::is_locked(db);
-        self.summaries = credentials::list_credentials(db, workspace_id).unwrap_or_default();
+        self.vaults = credentials::list_vaults(db).unwrap_or_default();
+        self.summaries = credentials::list_credentials(db).unwrap_or_default();
         self.entries = if self.locked {
             Vec::new()
         } else {
             self.summaries.iter().filter_map(|s| credentials::load_credential(db, &s.id).ok()).collect()
         };
         if !self.selected.as_ref().is_some_and(|id| self.summaries.iter().any(|e| &e.id == id)) {
-            self.selected = self.summaries.first().map(|e| e.id.clone());
+            let first_linked = self.summaries.iter().find(|s| self.is_linked(&s.vault_id)).or(self.summaries.first());
+            self.selected = first_linked.map(|e| e.id.clone());
         }
         self.publish();
     }
 
-    /// Hands the template widget what it may show: values when unlocked, names only when locked.
-    fn publish(&self) {
-        if self.locked {
-            let names: Vec<Credential> = self.summaries.iter().map(locked_placeholder).collect();
-            crate::widgets::template::set_credentials(&names, true);
+    fn is_linked(&self, vault_id: &str) -> bool {
+        let workspace_id = self.loaded_for.as_deref().unwrap_or_default();
+        self.vaults.iter().any(|v| v.id == vault_id && v.is_linked(workspace_id))
+    }
+
+    /// Refreshes `linked` and hands the template widget what it may show: values when unlocked, names only when locked.
+    fn publish(&mut self) {
+        self.linked = if self.locked {
+            self.summaries.iter().filter(|s| self.is_linked(&s.vault_id)).map(locked_placeholder).collect()
         } else {
-            crate::widgets::template::set_credentials(&self.entries, false);
-        }
+            self.entries.iter().filter(|e| self.is_linked(&e.vault_id)).cloned().collect()
+        };
+        crate::widgets::template::set_credentials(&self.linked, self.locked);
+    }
+
+    /// The vault new things go into by default: the selected entry's, else the first linked one.
+    pub fn default_vault(&self) -> Option<&Vault> {
+        let selected = self.selected.as_ref().and_then(|id| self.summaries.iter().find(|s| &s.id == id));
+        let workspace_id = self.loaded_for.as_deref().unwrap_or_default();
+        selected
+            .and_then(|s| self.vaults.iter().find(|v| v.id == s.vault_id))
+            .or_else(|| self.vaults.iter().find(|v| v.is_linked(workspace_id)))
     }
 
     pub fn ask_unlock(&mut self, pending: Option<crate::app::command::AppCommand>) {
@@ -222,17 +256,56 @@ impl CredentialsState {
         }
     }
 
-    fn create(&mut self, db: &Db) {
-        let Some(workspace_id) = self.loaded_for.clone() else { return };
-        let name = free_name(self.entries.iter().map(|e| e.name.as_str()), "credential");
-        match credentials::create_credential(db, &workspace_id, &name) {
+    fn create(&mut self, db: &Db, vault_id: &str) {
+        let taken = self.summaries.iter().filter(|s| s.vault_id == vault_id).map(|s| s.name.as_str());
+        let name = free_name(taken, "credential");
+        match credentials::create_credential(db, vault_id, &name) {
             Ok(created) => {
-                self.rename = Some(Rename { id: created.id.clone(), field: None, text: created.name.clone() });
+                self.collapsed.remove(vault_id);
+                self.rename = Some(Rename { target: RenameTarget::Entry(created.id.clone()), text: created.name.clone() });
                 self.selected = Some(created.id);
                 self.reload(db);
             }
             Err(e) => self.error = Some(e.to_string()),
         }
+    }
+
+    /// A new vault, linked to the loaded workspace and up for renaming.
+    fn create_vault(&mut self, db: &Db) {
+        let name = free_name(self.vaults.iter().map(|v| v.name.as_str()), "vault");
+        let created = credentials::create_vault(db, &name).and_then(|vault| {
+            if let Some(workspace_id) = &self.loaded_for {
+                credentials::link_vault(db, &vault.id, workspace_id)?;
+            }
+            Ok(vault)
+        });
+        match created {
+            Ok(vault) => {
+                self.rename = Some(Rename { target: RenameTarget::Vault(vault.id), text: vault.name });
+                self.reload(db);
+            }
+            Err(e) => self.error = Some(e.to_string()),
+        }
+    }
+
+    fn set_linked(&mut self, db: &Db, vault_id: &str, workspace_id: &str, linked: bool) {
+        let result = if linked {
+            credentials::link_vault(db, vault_id, workspace_id)
+        } else {
+            credentials::unlink_vault(db, vault_id, workspace_id)
+        };
+        if let Err(e) = result {
+            self.error = Some(e.to_string());
+        }
+        self.reload(db);
+    }
+
+    fn remove_vault(&mut self, db: &Db, id: &str) {
+        self.flush(db);
+        if let Err(e) = credentials::delete_vault(db, id) {
+            self.error = Some(e.to_string());
+        }
+        self.reload(db);
     }
 
     fn delete(&mut self, db: &Db, id: &str) {
@@ -249,17 +322,18 @@ impl CredentialsState {
         entry.fields.push(Field { key: key.clone(), kind: FieldKind::Text, extracted: false, value: String::new() });
         self.saves.insert(id);
         self.flush(db);
-        self.rename = Some(Rename { id: id.to_string(), field: Some(key.clone()), text: key });
+        self.rename = Some(Rename { target: RenameTarget::Field(id.to_string(), key.clone()), text: key });
     }
 
     fn commit_rename(&mut self, db: &Db) {
         let Some(rename) = self.rename.take() else { return };
         let text = rename.text.trim();
         self.flush(db);
-        let result = match &rename.field {
-            None => credentials::rename_credential(db, &rename.id, text),
-            Some(old) if old != text => credentials::rename_field(db, &rename.id, old, text),
-            Some(_) => Ok(()),
+        let result = match &rename.target {
+            RenameTarget::Vault(id) => credentials::rename_vault(db, id, text),
+            RenameTarget::Entry(id) => credentials::rename_credential(db, id, text),
+            RenameTarget::Field(id, old) if old != text => credentials::rename_field(db, id, old, text),
+            RenameTarget::Field(..) => Ok(()),
         };
         if let Err(e) = result {
             self.error = Some(e.to_string());
@@ -268,26 +342,30 @@ impl CredentialsState {
     }
 }
 
-/// Moves a variable's value into `entry.field` (created as needed) and returns the ref to leave behind.
-pub fn move_value(db: &Db, workspace_id: &str, entry: &str, field: &str, value: String) -> Result<String, String> {
+/// Moves a variable's value into `vault/entry.field` (vault and entry created as needed, the vault linked to the
+/// workspace) and returns the ref to leave behind.
+pub fn move_value(db: &Db, workspace_id: &str, vault: &str, entry: &str, field: &str, value: String) -> Result<String, String> {
+    credentials::validate_name(vault)?;
     credentials::validate_name(entry)?;
     credentials::validate_name(field)?;
-    let mut credential = match credentials::find_credential(db, workspace_id, entry)? {
+    let vault_id = credentials::link_or_create_vault(db, workspace_id, vault)?;
+    let mut credential = match credentials::find_in_vault(db, &vault_id, entry)? {
         Some(existing) => existing,
-        None => credentials::create_credential(db, workspace_id, entry)?,
+        None => credentials::create_credential(db, &vault_id, entry)?,
     };
     if credential.field(field).is_some() {
         return Err(format!("{} already has a field \"{field}\"", credential.name));
     }
     credential.fields.push(Field { key: field.to_string(), kind: FieldKind::Secret, extracted: false, value });
     credentials::save_credential(db, &credential)?;
-    Ok(credentials::format_ref(&credential.name, field))
+    Ok(credentials::format_ref(&credential.vault, &credential.name, field))
 }
 
 fn locked_placeholder(summary: &CredentialSummary) -> Credential {
     Credential {
         id: summary.id.clone(),
-        workspace_id: summary.workspace_id.clone(),
+        vault_id: summary.vault_id.clone(),
+        vault: summary.vault.clone(),
         name: summary.name.clone(),
         fields: summary
             .fields
@@ -301,7 +379,7 @@ fn locked_placeholder(summary: &CredentialSummary) -> Credential {
     }
 }
 
-/// `base`, or `base2`, `base3`… when taken (case-insensitive, like credential names).
+/// `base`, or `base2`, `base3`… when taken (case-insensitive, like credential and vault names).
 fn free_name<'a>(taken: impl Iterator<Item = &'a str> + Clone, base: &str) -> String {
     let is_taken = |name: &str| taken.clone().any(|t| t.eq_ignore_ascii_case(name));
     if !is_taken(base) {
@@ -321,17 +399,18 @@ mod tests {
     }
 
     #[test]
-    fn move_value_creates_or_extends_an_entry_and_returns_its_link() {
+    fn move_value_creates_or_extends_an_entry_in_a_linked_vault_and_returns_its_link() {
         let db = mitm_core::db::Db::new(std::env::temp_dir().join(format!("mitm-desktop-creds-{}.db", uuid::Uuid::new_v4())));
         mitm_core::db::init_database(&db, None).unwrap();
         let ws = mitm_core::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
 
-        assert_eq!(move_value(&db, &ws, "dgAdmin", "password", "hunter2".into()).unwrap(), "{{$cred:dgAdmin.password}}");
-        assert_eq!(move_value(&db, &ws, "DGADMIN", "pin", "1234".into()).unwrap(), "{{$cred:dgAdmin.pin}}");
-        assert!(move_value(&db, &ws, "dgAdmin", "password", "again".into()).is_err());
-        assert!(move_value(&db, &ws, "dg admin", "x", String::new()).is_err());
+        assert_eq!(move_value(&db, &ws, "DG", "dgAdmin", "password", "hunter2".into()).unwrap(), "{{$cred:DG/dgAdmin.password}}");
+        assert_eq!(move_value(&db, &ws, "dg", "DGADMIN", "pin", "1234".into()).unwrap(), "{{$cred:DG/dgAdmin.pin}}");
+        assert!(move_value(&db, &ws, "DG", "dgAdmin", "password", "again".into()).is_err());
+        assert!(move_value(&db, &ws, "DG", "dg admin", "x", String::new()).is_err());
+        assert!(move_value(&db, &ws, "D G", "x", "y", String::new()).is_err());
 
-        let entry = credentials::find_credential(&db, &ws, "dgAdmin").unwrap().unwrap();
+        let entry = credentials::find_credential(&db, &ws, "DG", "dgAdmin").unwrap().unwrap();
         assert_eq!(entry.field("password").map(|f| (f.kind, f.value.as_str())), Some((FieldKind::Secret, "hunter2")));
         assert_eq!(entry.fields.len(), 2);
         let _ = std::fs::remove_file(&db);

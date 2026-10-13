@@ -520,7 +520,7 @@ pub(crate) fn extract_targets_credentials(env: Option<&crate::workspace::Environ
 }
 
 /// Writes extracted values into `(auto)` variants of the env workspace's active environment. A target that is a
-/// `$cred:entry.field` ref, or a variable whose `(auto)` variant links to one, is written into that credential
+/// `$cred:vault/entry.field` ref, or a variable whose `(auto)` variant links to one, is written into that credential
 /// (looked up in `credentials_workspace_id`) instead, so the variant keeps its link.
 pub fn perform_auto_extraction_db(
     db: &Db,
@@ -546,10 +546,10 @@ pub fn perform_auto_extraction_db(
     let mut envs = crate::workspace::get_workspace_environments_db(db, workspace_id).unwrap_or_default();
     let mut active_env = envs.iter_mut().find(|e| e.is_active);
     let mut modified = false;
-    let write_credential = |entry: &str, field: &str, value: &str| {
+    let write_credential = |cred: crate::credentials::CredRef, value: &str| {
         let Some(credentials_workspace_id) = credentials_workspace_id else { return };
-        if let Err(e) = crate::credentials::write_extracted(db, credentials_workspace_id, entry, field, value) {
-            eprintln!("[extract] skipped $cred:{entry}.{field}: {e}");
+        if let Err(e) = crate::credentials::write_extracted(db, credentials_workspace_id, cred.vault, cred.entry, cred.field, value) {
+            eprintln!("[extract] skipped $cred:{}/{}.{}: {e}", cred.vault, cred.entry, cred.field);
         }
     };
 
@@ -576,8 +576,8 @@ pub fn perform_auto_extraction_db(
                 continue;
             }
 
-            if let Some((entry, field)) = crate::credentials::parse_ref(target_var_name) {
-                write_credential(entry, field, &val_str);
+            if let Some(cred) = crate::credentials::parse_ref(target_var_name) {
+                write_credential(cred, &val_str);
                 continue;
             }
             let Some(active_env) = active_env.as_deref_mut() else { continue };
@@ -596,8 +596,8 @@ pub fn perform_auto_extraction_db(
 
                     match auto_idx {
                         Some(idx) => {
-                            if let Some((entry, field)) = crate::credentials::link_target(&v.variants[idx].value) {
-                                write_credential(entry, field, &val_str);
+                            if let Some(cred) = crate::credentials::link_target(&v.variants[idx].value) {
+                                write_credential(cred, &val_str);
                                 continue;
                             }
                             v.variants[idx].value = val_str.clone();
@@ -786,7 +786,7 @@ pub(crate) mod tests {
 
         let db = crate::credentials::tests_support::temp_db();
         let ws = crate::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
-        let mut cred = create_credential(&db, &ws, "dgAdmin").unwrap();
+        let mut cred = create_credential(&db, &crate::credentials::tests_support::vault(&db, &ws, "DG"), "dgAdmin").unwrap();
         let field = |key: &str, kind, value: &str| Field { key: key.into(), kind, extracted: false, value: value.into() };
         cred.fields = vec![field("password", FieldKind::Secret, "hunter2!"), field("totp", FieldKind::Totp, "MZXW6"), field("user", FieldKind::Text, "admin@x")];
         save_credential(&db, &cred).unwrap();
@@ -801,7 +801,7 @@ pub(crate) mod tests {
                 enabled: true,
                 r#type: "default".into(),
                 active_index: 0,
-                variants: vec![VariableVariant { name: "dev".into(), value: "{{$cred:dgAdmin.password}}".into() }],
+                variants: vec![VariableVariant { name: "dev".into(), value: "{{$cred:DG/dgAdmin.password}}".into() }],
             }],
             created_at_ms: 0,
             updated_at_ms: 0,
@@ -814,9 +814,9 @@ pub(crate) mod tests {
         req.method = "POST".into();
         req.url = format!("{base}/signin");
         req.params = vec![crate::repeater::ParamItem { id: "p".into(), key: "pw".into(), value: "{{adminPassword}}".into(), enabled: true }];
-        req.headers = vec![HeaderItem { id: "h".into(), key: "X-Pass".into(), value: "{{$cred:dgAdmin.password}}".into(), enabled: true }];
+        req.headers = vec![HeaderItem { id: "h".into(), key: "X-Pass".into(), value: "{{$cred:DG/dgAdmin.password}}".into(), enabled: true }];
         req.body_type = "raw".into();
-        req.body_raw = Some("{{adminPassword}}|{{$cred:dgAdmin.totp}}|{{$cred:dgAdmin.user}}|{{$uuid}}".into());
+        req.body_raw = Some("{{adminPassword}}|{{$cred:DG/dgAdmin.totp}}|{{$cred:DG/dgAdmin.user}}|{{$uuid}}".into());
         crate::collections::update_request_db(&db, req.clone()).unwrap();
 
         let result = execute_collection_request_db(&db, &req.id).await.unwrap();
@@ -873,7 +873,7 @@ pub(crate) mod tests {
     fn setup_extract() -> (crate::db::Db, String) {
         let db = crate::credentials::tests_support::temp_db();
         let ws = crate::workspace::create_workspace_db(&db, "W".into(), None).unwrap().id;
-        crate::credentials::create_credential(&db, &ws, "dgAdmin").unwrap();
+        crate::credentials::create_credential(&db, &crate::credentials::tests_support::vault(&db, &ws, "DG"), "dgAdmin").unwrap();
         (db, ws)
     }
 
@@ -885,40 +885,40 @@ pub(crate) mod tests {
     #[test]
     fn extract_writes_through_a_linked_auto_variant() {
         let (db, ws) = setup_extract();
-        crate::workspace::save_workspace_environment_db(&db, linked_env(&ws, vec![("(auto)", "{{$cred:dgAdmin.accessToken}}")])).unwrap();
+        crate::workspace::save_workspace_environment_db(&db, linked_env(&ws, vec![("(auto)", "{{$cred:DG/dgAdmin.accessToken}}")])).unwrap();
         extract(&db, &ws, "accessToken");
 
-        let cred = crate::credentials::find_credential(&db, &ws, "dgAdmin").unwrap().unwrap();
+        let cred = crate::credentials::find_credential(&db, &ws, "DG", "dgAdmin").unwrap().unwrap();
         let field = cred.field("accessToken").unwrap();
         assert_eq!((field.value.as_str(), field.kind, field.extracted), ("eyJtoken", crate::credentials::FieldKind::Secret, true));
         let env = crate::workspace::active_environment_db(&db, &ws).unwrap();
-        assert_eq!(env.variables[0].variants[0].value, "{{$cred:dgAdmin.accessToken}}");
-        assert_eq!(env.variables[0].value, "{{$cred:dgAdmin.accessToken}}");
+        assert_eq!(env.variables[0].variants[0].value, "{{$cred:DG/dgAdmin.accessToken}}");
+        assert_eq!(env.variables[0].value, "{{$cred:DG/dgAdmin.accessToken}}");
         let _ = std::fs::remove_file(&db);
     }
 
     #[test]
     fn extract_writes_a_direct_cred_target_and_skips_a_missing_entry() {
         let (db, ws) = setup_extract();
-        extract(&db, &ws, "$cred:dgAdmin.token");
-        extract(&db, &ws, "{{$cred:nobody.token}}");
-        let cred = crate::credentials::find_credential(&db, &ws, "dgAdmin").unwrap().unwrap();
+        extract(&db, &ws, "$cred:DG/dgAdmin.token");
+        extract(&db, &ws, "{{$cred:DG/nobody.token}}");
+        let cred = crate::credentials::find_credential(&db, &ws, "DG", "dgAdmin").unwrap().unwrap();
         assert_eq!(cred.field("token").unwrap().value, "eyJtoken");
-        assert!(crate::credentials::find_credential(&db, &ws, "nobody").unwrap().is_none());
+        assert!(crate::credentials::find_credential(&db, &ws, "DG", "nobody").unwrap().is_none());
         let _ = std::fs::remove_file(&db);
     }
 
     #[test]
     fn extract_never_touches_a_linked_variant_other_than_auto() {
         let (db, ws) = setup_extract();
-        let env = linked_env(&ws, vec![("(auto)", ""), ("manual", "{{$cred:dgAdmin.accessToken}}")]);
+        let env = linked_env(&ws, vec![("(auto)", ""), ("manual", "{{$cred:DG/dgAdmin.accessToken}}")]);
         crate::workspace::save_workspace_environment_db(&db, env).unwrap();
         extract(&db, &ws, "accessToken");
 
         let env = crate::workspace::active_environment_db(&db, &ws).unwrap();
         assert_eq!(env.variables[0].variants[0].value, "eyJtoken");
-        assert_eq!(env.variables[0].variants[1].value, "{{$cred:dgAdmin.accessToken}}");
-        let cred = crate::credentials::find_credential(&db, &ws, "dgAdmin").unwrap().unwrap();
+        assert_eq!(env.variables[0].variants[1].value, "{{$cred:DG/dgAdmin.accessToken}}");
+        let cred = crate::credentials::find_credential(&db, &ws, "DG", "dgAdmin").unwrap().unwrap();
         assert!(cred.field("accessToken").is_none());
         let _ = std::fs::remove_file(&db);
     }
@@ -926,7 +926,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn an_extracted_token_is_masked_in_the_next_request() {
         let (db, ws) = setup_extract();
-        crate::workspace::save_workspace_environment_db(&db, linked_env(&ws, vec![("(auto)", "{{$cred:dgAdmin.accessToken}}")])).unwrap();
+        crate::workspace::save_workspace_environment_db(&db, linked_env(&ws, vec![("(auto)", "{{$cred:DG/dgAdmin.accessToken}}")])).unwrap();
         extract(&db, &ws, "accessToken");
 
         let base = serve_echo().await;
@@ -953,11 +953,11 @@ pub(crate) mod tests {
 
         let col = crate::collections::create_collection_db(&db, ws.clone(), None, "c".into()).unwrap();
         let mut uses_ref = crate::collections::create_request_db(&db, col.id.clone(), "signin".into()).unwrap();
-        uses_ref.url = "http://127.0.0.1:9/{{$cred:dgAdmin.password}}".into();
+        uses_ref.url = "http://127.0.0.1:9/{{$cred:DG/dgAdmin.password}}".into();
         crate::collections::update_request_db(&db, uses_ref.clone()).unwrap();
         let mut extracts = crate::collections::create_request_db(&db, col.id.clone(), "token".into()).unwrap();
         extracts.url = "http://127.0.0.1:9/token".into();
-        extracts.extract_rules = vec![rule("$cred:dgAdmin.accessToken")];
+        extracts.extract_rules = vec![rule("$cred:DG/dgAdmin.accessToken")];
         crate::collections::update_request_db(&db, extracts.clone()).unwrap();
         let mut plain = crate::collections::create_request_db(&db, col.id, "plain".into()).unwrap();
         plain.url = "http://127.0.0.1:9/plain".into();

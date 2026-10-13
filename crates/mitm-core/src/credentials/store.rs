@@ -56,7 +56,9 @@ impl Field {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CredentialSummary {
     pub id: String,
-    pub workspace_id: String,
+    pub vault_id: String,
+    /// The vault's name, as refs spell it.
+    pub vault: String,
     pub name: String,
     pub fields: Vec<FieldMeta>,
 }
@@ -70,7 +72,9 @@ impl CredentialSummary {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Credential {
     pub id: String,
-    pub workspace_id: String,
+    pub vault_id: String,
+    /// The vault's name, as refs spell it; read with the entry, never written through it.
+    pub vault: String,
     pub name: String,
     pub fields: Vec<Field>,
     pub notes: String,
@@ -100,7 +104,7 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
-/// Entry names and field keys: `[A-Za-z0-9_-]{1,64}`, so a `{{$cred:entry.field}}` ref splits on its one dot.
+/// Vault names, entry names and field keys: `[A-Za-z0-9_-]{1,64}`, so a `{{$cred:vault/entry.field}}` ref splits cleanly.
 pub fn validate_name(name: &str) -> Result<(), CredentialError> {
     let ok = (1..=64).contains(&name.len())
         && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
@@ -122,10 +126,10 @@ fn validate_fields(fields: &[Field]) -> Result<(), String> {
 }
 
 
-fn name_taken(conn: &Connection, workspace_id: &str, name: &str, except_id: &str) -> Result<bool, String> {
+fn name_taken(conn: &Connection, vault_id: &str, name: &str, except_id: &str) -> Result<bool, String> {
     conn.query_row(
-        "SELECT 1 FROM credentials WHERE workspace_id = ? AND name = ? COLLATE NOCASE AND id != ?",
-        params![workspace_id, name, except_id],
+        "SELECT 1 FROM credentials WHERE vault_id = ? AND name = ? COLLATE NOCASE AND id != ?",
+        params![vault_id, name, except_id],
         |_| Ok(()),
     )
     .optional()
@@ -133,18 +137,23 @@ fn name_taken(conn: &Connection, workspace_id: &str, name: &str, except_id: &str
     .map_err(|e| e.to_string())
 }
 
-pub fn list_credentials(db: &Db, workspace_id: &str) -> Result<Vec<CredentialSummary>, CredentialError> {
+/// Every entry in every vault, vault by vault.
+pub fn list_credentials(db: &Db) -> Result<Vec<CredentialSummary>, CredentialError> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, workspace_id, name, fields_json FROM credentials WHERE workspace_id = ? ORDER BY order_index, name")
+        .prepare(
+            "SELECT c.id, c.vault_id, v.name, c.name, c.fields_json FROM credentials c JOIN vaults v ON v.id = c.vault_id
+             ORDER BY v.order_index, v.name, c.order_index, c.name",
+        )
         .map_err(|e| e.to_string())?;
     let rows = stmt
-        .query_map([workspace_id], |r| {
-            let fields_json: String = r.get(3)?;
+        .query_map([], |r| {
+            let fields_json: String = r.get(4)?;
             Ok(CredentialSummary {
                 id: r.get(0)?,
-                workspace_id: r.get(1)?,
-                name: r.get(2)?,
+                vault_id: r.get(1)?,
+                vault: r.get(2)?,
+                name: r.get(3)?,
                 fields: serde_json::from_str(&fields_json).unwrap_or_default(),
             })
         })
@@ -154,10 +163,10 @@ pub fn list_credentials(db: &Db, workspace_id: &str) -> Result<Vec<CredentialSum
     Ok(rows)
 }
 
-type Row = (String, String, String, String, Vec<u8>, Vec<u8>, i64, i64, i64);
+type Row = (String, String, String, String, String, Vec<u8>, Vec<u8>, i64, i64, i64);
 
 fn decrypt_row(key: &crypto::DataKey, row: Row) -> Result<Credential, String> {
-    let (id, workspace_id, name, fields_json, nonce, ciphertext, order_index, created_at_ms, updated_at_ms) = row;
+    let (id, vault_id, vault, name, fields_json, nonce, ciphertext, order_index, created_at_ms, updated_at_ms) = row;
     let plain = crypto::open(key, id.as_bytes(), &nonce, &ciphertext)?;
     let payload: Payload = serde_json::from_slice(&plain).map_err(|e| e.to_string())?;
     let metas: Vec<FieldMeta> = serde_json::from_str(&fields_json).unwrap_or_default();
@@ -170,65 +179,75 @@ fn decrypt_row(key: &crypto::DataKey, row: Row) -> Result<Credential, String> {
             extracted: m.extracted,
         })
         .collect();
-    Ok(Credential { id, workspace_id, name, fields, notes: payload.notes, order_index, created_at_ms, updated_at_ms })
+    Ok(Credential { id, vault_id, vault, name, fields, notes: payload.notes, order_index, created_at_ms, updated_at_ms })
 }
 
 fn existing_key(db: &Db) -> Result<crypto::DataKey, CredentialError> {
     session::data_key(db)?.ok_or_else(|| "credentials have no data key".into())
 }
 
-const COLUMNS: &str = "id, workspace_id, name, fields_json, nonce, ciphertext, order_index, created_at_ms, updated_at_ms";
+const COLUMNS: &str = "id, vault_id, name, fields_json, nonce, ciphertext, order_index, created_at_ms, updated_at_ms";
+const SELECT: &str = "SELECT c.id, c.vault_id, v.name, c.name, c.fields_json, c.nonce, c.ciphertext, c.order_index, c.created_at_ms, \
+                      c.updated_at_ms FROM credentials c JOIN vaults v ON v.id = c.vault_id";
 
 fn read_row(r: &rusqlite::Row) -> rusqlite::Result<Row> {
-    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?))
+    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?))
 }
 
 pub fn load_credential(db: &Db, id: &str) -> Result<Credential, CredentialError> {
     let row = db.conn().map_err(|e| e.to_string())?
-        .query_row(&format!("SELECT {COLUMNS} FROM credentials WHERE id = ?"), [id], read_row)
+        .query_row(&format!("{SELECT} WHERE c.id = ?"), [id], read_row)
         .map_err(|e| e.to_string())?;
     Ok(decrypt_row(&existing_key(db)?, row)?)
 }
 
-/// Looks an entry up by name, ignoring case.
-pub fn find_credential(db: &Db, workspace_id: &str, name: &str) -> Result<Option<Credential>, CredentialError> {
+/// Looks an entry up by vault and entry name, ignoring case; only vaults linked to the workspace count.
+pub fn find_credential(db: &Db, workspace_id: &str, vault: &str, name: &str) -> Result<Option<Credential>, CredentialError> {
     let conn = db.conn().map_err(|e| e.to_string())?;
-    let Some(row) = find_row(&conn, workspace_id, name)? else { return Ok(None) };
+    let Some(vault_id) = super::vault::linked_vault_id(&conn, workspace_id, vault)? else { return Ok(None) };
+    let Some(row) = find_row(&conn, &vault_id, name)? else { return Ok(None) };
     Ok(Some(decrypt_row(&existing_key(db)?, row)?))
 }
 
-fn find_row(conn: &Connection, workspace_id: &str, name: &str) -> Result<Option<Row>, String> {
-    conn.query_row(
-        &format!("SELECT {COLUMNS} FROM credentials WHERE workspace_id = ? AND name = ? COLLATE NOCASE"),
-        params![workspace_id, name],
-        read_row,
-    )
-    .optional()
-    .map_err(|e| e.to_string())
+/// Looks an entry up by name inside one vault, ignoring case.
+pub fn find_in_vault(db: &Db, vault_id: &str, name: &str) -> Result<Option<Credential>, CredentialError> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
+    let Some(row) = find_row(&conn, vault_id, name)? else { return Ok(None) };
+    Ok(Some(decrypt_row(&existing_key(db)?, row)?))
+}
+
+fn find_row(conn: &Connection, vault_id: &str, name: &str) -> Result<Option<Row>, String> {
+    conn.query_row(&format!("{SELECT} WHERE c.vault_id = ? AND c.name = ? COLLATE NOCASE"), params![vault_id, name], read_row)
+        .optional()
+        .map_err(|e| e.to_string())
 }
 
 pub(crate) fn find_credential_conn(
     conn: &Connection,
     key: &crypto::DataKey,
-    workspace_id: &str,
+    vault_id: &str,
     name: &str,
 ) -> Result<Option<Credential>, String> {
-    find_row(conn, workspace_id, name)?.map(|row| decrypt_row(key, row)).transpose()
+    find_row(conn, vault_id, name)?.map(|row| decrypt_row(key, row)).transpose()
 }
 
 /// A new, empty entry that `insert_credential_conn` can store.
-pub(crate) fn new_credential(conn: &Connection, workspace_id: &str, name: &str) -> Result<Credential, CredentialError> {
+pub(crate) fn new_credential(conn: &Connection, vault_id: &str, name: &str) -> Result<Credential, CredentialError> {
     validate_name(name)?;
-    if name_taken(conn, workspace_id, name, "")? {
-        return Err(format!("A credential named \"{name}\" already exists").into());
+    let vault: String = conn
+        .query_row("SELECT name FROM vaults WHERE id = ?", [vault_id], |r| r.get(0))
+        .map_err(|_| "Vault not found".to_string())?;
+    if name_taken(conn, vault_id, name, "")? {
+        return Err(format!("A credential named \"{name}\" already exists in {vault}").into());
     }
     let order_index: i64 = conn
-        .query_row("SELECT COALESCE(MAX(order_index) + 1, 0) FROM credentials WHERE workspace_id = ?", [workspace_id], |r| r.get(0))
+        .query_row("SELECT COALESCE(MAX(order_index) + 1, 0) FROM credentials WHERE vault_id = ?", [vault_id], |r| r.get(0))
         .map_err(|e| e.to_string())?;
     let now = now_ms();
     Ok(Credential {
         id: uuid::Uuid::new_v4().to_string(),
-        workspace_id: workspace_id.to_string(),
+        vault_id: vault_id.to_string(),
+        vault,
         name: name.to_string(),
         fields: Vec::new(),
         notes: String::new(),
@@ -238,9 +257,9 @@ pub(crate) fn new_credential(conn: &Connection, workspace_id: &str, name: &str) 
     })
 }
 
-pub fn create_credential(db: &Db, workspace_id: &str, name: &str) -> Result<Credential, CredentialError> {
+pub fn create_credential(db: &Db, vault_id: &str, name: &str) -> Result<Credential, CredentialError> {
     let conn = db.conn().map_err(|e| e.to_string())?;
-    let credential = new_credential(&conn, workspace_id, name)?;
+    let credential = new_credential(&conn, vault_id, name)?;
     write(&conn, &session::data_key_or_create(db)?, &credential, true)?;
     Ok(credential)
 }
@@ -275,7 +294,7 @@ fn write(conn: &Connection, key: &crypto::DataKey, credential: &Credential, inse
             &format!("INSERT INTO credentials ({COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"),
             params![
                 credential.id,
-                credential.workspace_id,
+                credential.vault_id,
                 credential.name,
                 fields_json,
                 sealed.nonce,
@@ -298,10 +317,11 @@ fn write(conn: &Connection, key: &crypto::DataKey, credential: &Credential, inse
     Ok(())
 }
 
-/// Stores an extracted value (a token) in `entry.field`. A missing field is created as an extracted secret;
+/// Stores an extracted value (a token) in `vault/entry.field`. A missing field is created as an extracted secret;
 /// a missing entry is an error, since entries are never created implicitly.
-pub fn write_extracted(db: &Db, workspace_id: &str, entry: &str, field: &str, value: &str) -> Result<(), CredentialError> {
-    let mut credential = find_credential(db, workspace_id, entry)?.ok_or_else(|| format!("no credential named \"{entry}\""))?;
+pub fn write_extracted(db: &Db, workspace_id: &str, vault: &str, entry: &str, field: &str, value: &str) -> Result<(), CredentialError> {
+    let mut credential = find_credential(db, workspace_id, vault, entry)?
+        .ok_or_else(|| format!("no credential named \"{vault}/{entry}\" in this workspace's vaults"))?;
     match credential.field_mut(field) {
         Some(existing) => existing.value = value.to_string(),
         None => {
@@ -333,6 +353,12 @@ pub(crate) mod tests {
         crate::workspace::create_workspace_db(db, name.to_string(), None).unwrap().id
     }
 
+    /// The vault named `name`, created when missing, linked to `workspace_id`.
+    pub(crate) fn vault(db: &crate::db::Db, workspace_id: &str, name: &str) -> String {
+        let conn = crate::db::open(db).unwrap();
+        crate::credentials::ensure_linked_vault(&conn, workspace_id, name).unwrap()
+    }
+
     pub(crate) fn field(key: &str, kind: FieldKind, value: &str) -> Field {
         Field { key: key.to_string(), kind, extracted: false, value: value.to_string() }
     }
@@ -341,7 +367,9 @@ pub(crate) mod tests {
     fn create_save_load_and_delete() {
         let db = temp_db();
         let ws = workspace(&db, "W");
-        let mut cred = create_credential(&db, &ws, "dgAdmin").unwrap();
+        let dg = vault(&db, &ws, "DG");
+        let mut cred = create_credential(&db, &dg, "dgAdmin").unwrap();
+        assert_eq!(cred.vault, "DG");
         cred.fields = vec![field("username", FieldKind::Text, "admin@x"), field("password", FieldKind::Secret, "hunter2")];
         cred.notes = "staging only".into();
         save_credential(&db, &cred).unwrap();
@@ -349,9 +377,10 @@ pub(crate) mod tests {
         let loaded = load_credential(&db, &cred.id).unwrap();
         assert_eq!(loaded.fields, cred.fields);
         assert_eq!(loaded.notes, "staging only");
-        assert_eq!(find_credential(&db, &ws, "DGADMIN").unwrap().unwrap().id, cred.id);
+        assert_eq!(find_credential(&db, &ws, "dg", "DGADMIN").unwrap().unwrap().id, cred.id);
+        assert_eq!(find_in_vault(&db, &dg, "dgadmin").unwrap().unwrap().id, cred.id);
 
-        let listed = list_credentials(&db, &ws).unwrap();
+        let listed = list_credentials(&db).unwrap();
         assert_eq!(listed[0].fields[1], FieldMeta { key: "password".into(), kind: FieldKind::Secret, extracted: false });
 
         let raw: Vec<u8> = crate::db::open(&db)
@@ -361,23 +390,36 @@ pub(crate) mod tests {
         assert!(!String::from_utf8_lossy(&raw).contains("hunter2"));
 
         delete_credential(&db, &cred.id).unwrap();
-        assert!(list_credentials(&db, &ws).unwrap().is_empty());
+        assert!(list_credentials(&db).unwrap().is_empty());
         let _ = std::fs::remove_file(&db);
     }
 
     #[test]
-    fn names_are_validated_and_unique_per_workspace() {
+    fn only_linked_vaults_are_found_from_a_workspace() {
+        let db = temp_db();
+        let (a, b) = (workspace(&db, "A"), workspace(&db, "B"));
+        let dg = vault(&db, &a, "DG");
+        create_credential(&db, &dg, "dgAdmin").unwrap();
+        assert!(find_credential(&db, &a, "DG", "dgAdmin").unwrap().is_some());
+        assert!(find_credential(&db, &b, "DG", "dgAdmin").unwrap().is_none());
+        crate::credentials::link_vault(&db, &dg, &b).unwrap();
+        assert!(find_credential(&db, &b, "DG", "dgAdmin").unwrap().is_some());
+        let _ = std::fs::remove_file(&db);
+    }
+
+    #[test]
+    fn names_are_validated_and_unique_per_vault() {
         let db = temp_db();
         let ws = workspace(&db, "W");
-        let other = workspace(&db, "Other");
-        for bad in ["", "dg admin", "dg.admin", "dg$", &"x".repeat(65)] {
-            assert!(create_credential(&db, &ws, bad).is_err(), "{bad:?}");
+        let (dg, other) = (vault(&db, &ws, "DG"), vault(&db, &ws, "Other"));
+        for bad in ["", "dg admin", "dg.admin", "dg/admin", "dg$", &"x".repeat(65)] {
+            assert!(create_credential(&db, &dg, bad).is_err(), "{bad:?}");
         }
-        create_credential(&db, &ws, "dgAdmin").unwrap();
-        assert!(create_credential(&db, &ws, "DGadmin").is_err());
+        create_credential(&db, &dg, "dgAdmin").unwrap();
+        assert!(create_credential(&db, &dg, "DGadmin").is_err());
         assert!(create_credential(&db, &other, "dgAdmin").is_ok());
 
-        let mut cred = create_credential(&db, &ws, "two").unwrap();
+        let mut cred = create_credential(&db, &dg, "two").unwrap();
         cred.fields = vec![field("token", FieldKind::Secret, "a"), field("TOKEN", FieldKind::Secret, "b")];
         assert!(save_credential(&db, &cred).is_err());
         cred.fields = vec![field("bad key", FieldKind::Text, "")];
@@ -386,11 +428,14 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn deleting_a_workspace_deletes_its_credentials() {
+    fn vaults_outlive_workspaces_and_take_their_credentials_when_deleted() {
         let db = temp_db();
         let ws = workspace(&db, "W");
-        create_credential(&db, &ws, "dgAdmin").unwrap();
+        let dg = vault(&db, &ws, "DG");
+        create_credential(&db, &dg, "dgAdmin").unwrap();
         crate::workspace::delete_workspace_db(&db, &ws).unwrap();
+        assert_eq!(list_credentials(&db).unwrap().len(), 1);
+        crate::credentials::delete_vault(&db, &dg).unwrap();
         let count: i64 = crate::db::open(&db).unwrap().query_row("SELECT COUNT(*) FROM credentials", [], |r| r.get(0)).unwrap();
         assert_eq!(count, 0);
         let _ = std::fs::remove_file(&db);

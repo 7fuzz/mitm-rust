@@ -121,17 +121,18 @@ Each method also exists as a `workspace::*_db(db_path, …)` function. The deskt
 
 ## Credentials
 
-Per workspace, under `credentials`. Entries have `text`, `secret` and `totp` fields, referenced as `{{$cred:entry.field}}` (a `totp` field gives its current code). Values and notes are AES-256-GCM encrypted with one data key, stored raw or wrapped by an optional master password (argon2id). Calls that need values return `Err(credentials::LOCKED)` while it is locked.
+Entries live in vaults. A vault can be linked to any number of workspaces, or none, and a workspace's refs only reach its linked vaults. Entries have `text`, `secret` and `totp` fields, referenced as `{{$cred:vault/entry.field}}` (a `totp` field gives its current code). Values and notes are AES-256-GCM encrypted with one data key, stored raw or wrapped by an optional master password (argon2id). Calls that need values return `Err(credentials::LOCKED)` while it is locked.
 
 | Function | Notes |
 | --- | --- |
-| `list_credentials(db, ws)` | Names and field keys only, so it works while locked. |
-| `create_credential` / `load_credential` / `find_credential` / `save_credential` / `delete_credential` | `save_credential` never renames. |
-| `rename_credential` / `rename_field` | Rewrite every ref to them in the workspace's environments and requests. |
-| `resolve(db, ws, entry, field)` | `Value(text, kind)`, `Locked` or `Missing`. |
-| `write_extracted(db, ws, entry, field, value)` | Where extract rules put tokens that target a credential, directly or through a linked `(auto)` variant. |
+| `list_vaults` / `create_vault` / `delete_vault` / `link_vault` / `unlink_vault` / `link_or_create_vault` | Deleting a vault deletes its entries; deleting a workspace only drops its links. |
+| `list_credentials(db)` | Every entry in every vault, names and field keys only, so it works while locked. |
+| `create_credential(db, vault_id, name)` / `load_credential` / `find_credential(db, ws, vault, name)` / `find_in_vault` / `save_credential` / `delete_credential` | `save_credential` never renames. `find_credential` only looks in vaults linked to `ws`. |
+| `rename_vault` / `rename_credential` / `rename_field` | Rewrite every ref to them in every workspace's environments and requests. |
+| `resolve(db, ws, cred_ref)` | `Value(text, kind)`, `Locked` or `Missing`. |
+| `write_extracted(db, ws, vault, entry, field, value)` | Where extract rules put tokens that target a credential, directly or through a linked `(auto)` variant. |
 | `set_master_password` / `remove_master_password` / `unlock` / `lock` / `is_locked` / `reset_credentials` | The password only rewraps the data key. `reset_credentials` wipes values and keeps names. |
-| `export_credentials` / `open_sealed` | The `credentials` and `credentialsSealed` parts of a workspace file. |
+| `export_credentials` / `open_sealed` | The `vaults` and `credentialsSealed` parts of a workspace file. |
 
 Collections and Repeater runs mask `secret` values in their history, and abort with `LOCKED` (no history row) when a ref or an extract target needs locked credentials.
 

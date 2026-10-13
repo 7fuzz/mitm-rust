@@ -150,12 +150,12 @@ pub fn ensure_unlocked(db: &Db) -> Result<(), CredentialError> {
 mod tests {
     use super::*;
     use crate::credentials::store::tests::{field, temp_db, workspace};
-    use crate::credentials::{create_credential, find_credential, load_credential, resolve, save_credential, FieldKind, Resolve};
+    use crate::credentials::{create_credential, find_credential, load_credential, resolve, save_credential, CredRef, FieldKind, Resolve};
 
     fn with_entry() -> (crate::db::Db, String, String) {
         let db = temp_db();
         let ws = workspace(&db, "W");
-        let mut cred = create_credential(&db, &ws, "dgAdmin").unwrap();
+        let mut cred = create_credential(&db, &crate::credentials::tests_support::vault(&db, &ws, "DG"), "dgAdmin").unwrap();
         cred.fields = vec![field("password", FieldKind::Secret, "hunter2")];
         cred.notes = "n".into();
         save_credential(&db, &cred).unwrap();
@@ -171,7 +171,7 @@ mod tests {
 
         lock(&db);
         assert!(is_locked(&db));
-        assert_eq!(resolve(&db, &ws, "dgAdmin", "password"), Resolve::Locked);
+        assert_eq!(resolve(&db, &ws, CredRef { vault: "DG", entry: "dgAdmin", field: "password" }), Resolve::Locked);
         assert_eq!(load_credential(&db, &id).unwrap_err(), CredentialError::Locked);
         assert_eq!(unlock(&db, "wrong").unwrap_err(), CredentialError::from(WRONG_PASSWORD));
         unlock(&db, "one").unwrap();
@@ -188,7 +188,7 @@ mod tests {
         remove_master_password(&db, "two").unwrap();
         lock(&db);
         assert!(!is_locked(&db));
-        assert_eq!(find_credential(&db, &ws, "dgAdmin").unwrap().unwrap().fields[0].value, "hunter2");
+        assert_eq!(find_credential(&db, &ws, "DG", "dgAdmin").unwrap().unwrap().fields[0].value, "hunter2");
         let _ = std::fs::remove_file(&db);
     }
 
@@ -197,11 +197,11 @@ mod tests {
         let db = temp_db();
         let ws = workspace(&db, "W");
         set_master_password(&db, None, "pw").unwrap();
-        create_credential(&db, &ws, "a").unwrap();
+        create_credential(&db, &crate::credentials::tests_support::vault(&db, &ws, "DG"), "a").unwrap();
         lock(&db);
-        assert_eq!(create_credential(&db, &ws, "b").unwrap_err(), CredentialError::Locked);
+        assert_eq!(create_credential(&db, &crate::credentials::tests_support::vault(&db, &ws, "DG"), "b").unwrap_err(), CredentialError::Locked);
         unlock(&db, "pw").unwrap();
-        create_credential(&db, &ws, "b").unwrap();
+        create_credential(&db, &crate::credentials::tests_support::vault(&db, &ws, "DG"), "b").unwrap();
         let _ = std::fs::remove_file(&db);
     }
 
@@ -216,7 +216,7 @@ mod tests {
         assert_eq!(cred.name, "dgAdmin");
         assert_eq!((cred.fields[0].key.as_str(), cred.fields[0].value.as_str()), ("password", ""));
         assert_eq!(cred.notes, "");
-        assert!(find_credential(&db, &ws, "dgadmin").unwrap().is_some());
+        assert!(find_credential(&db, &ws, "DG", "dgadmin").unwrap().is_some());
         let _ = std::fs::remove_file(&db);
     }
 }

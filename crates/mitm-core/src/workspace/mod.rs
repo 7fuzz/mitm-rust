@@ -108,22 +108,22 @@ mod tests {
         use crate::credentials::{create_credential, save_credential, Field, FieldKind};
         let db = crate::credentials::tests_support::temp_db();
         let ws = create_workspace_db(&db, "W".into(), None).unwrap().id;
-        let mut cred = create_credential(&db, &ws, "dgAdmin").unwrap();
+        let mut cred = create_credential(&db, &crate::credentials::tests_support::vault(&db, &ws, "DG"), "dgAdmin").unwrap();
         cred.fields = vec![Field { key: "password".into(), kind: FieldKind::Secret, extracted: false, value: "hunter2".into() }];
         save_credential(&db, &cred).unwrap();
 
         let mut env = env_with(&[("adminPassword", "")]);
-        env.variables[0].variants = vec![VariableVariant { name: "dev".into(), value: "{{$cred:dgAdmin.password}}".into() }];
+        env.variables[0].variants = vec![VariableVariant { name: "dev".into(), value: "{{$cred:DG/dgAdmin.password}}".into() }];
         let scope = Some(CredentialScope { db: &db, workspace_id: &ws });
 
         let mut record = Interpolation::default();
-        let out = interpolate(Some(&env), scope, "p={{adminPassword}}&q={{ $cred:DGADMIN.Password }}", &mut record);
+        let out = interpolate(Some(&env), scope, "p={{adminPassword}}&q={{ $cred:DG/DGADMIN.Password }}", &mut record);
         assert_eq!(out, "p=hunter2&q=hunter2");
         assert_eq!(record.secrets, ["hunter2"]);
 
-        let missing = "{{$cred:dgAdmin.nope}} {{$cred:nobody.password}}";
+        let missing = "{{$cred:DG/dgAdmin.nope}} {{$cred:DG/nobody.password}}";
         assert_eq!(interpolate(Some(&env), scope, missing, &mut Interpolation::default()), missing);
-        assert_eq!(interpolate(None, None, "{{$cred:dgAdmin.password}}", &mut record), "{{$cred:dgAdmin.password}}");
+        assert_eq!(interpolate(None, None, "{{$cred:DG/dgAdmin.password}}", &mut record), "{{$cred:DG/dgAdmin.password}}");
         let _ = std::fs::remove_file(&db);
     }
 

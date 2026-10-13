@@ -218,7 +218,7 @@ pub fn preview_workspace_import_db(db: &Db, json_content: &str) -> Result<Import
 /// Fetched before the import transaction: creating the data key writes through its own connection.
 fn credential_import(db: &Db, json_content: &str, passphrase: Option<&str>) -> Result<Option<CredentialImport>, CredentialError> {
     let Ok(file) = WorkspaceFile::parse(json_content) else { return Ok(None) };
-    if file.credentials.is_empty() {
+    if file.credentials.is_empty() && file.vaults.iter().all(|v| v.credentials.is_empty()) {
         return Ok(None);
     }
     let sealed = match (&file.credentials_sealed, passphrase) {
@@ -346,6 +346,32 @@ fn open_workspace(
     Ok((id, name, true))
 }
 
+/// Links the file's vaults to the workspace, creating the missing ones, and adds their entries. Entries from
+/// files made before vaults go in a vault named after the workspace, returned so their refs can name it.
+fn import_vaults(
+    conn: &Connection,
+    file: &WorkspaceFile,
+    workspace_id: &str,
+    workspace_name: &str,
+    credentials: Option<&CredentialImport>,
+) -> Result<(usize, Option<String>), String> {
+    let legacy = (!file.credentials.is_empty()).then(|| crate::credentials::vault_name_from(workspace_name));
+    let mut groups: Vec<(&str, &str, &[file::CredentialEntry])> =
+        file.vaults.iter().map(|v| (v.name.as_str(), v.name.as_str(), v.credentials.as_slice())).collect();
+    if let Some(name) = &legacy {
+        groups.push((name, "", &file.credentials));
+    }
+    let mut imported = 0;
+    for (name, file_vault, entries) in groups {
+        let vault_id = crate::credentials::ensure_linked_vault(conn, workspace_id, name).map_err(|e| e.to_string())?;
+        imported += match credentials {
+            Some(c) => crate::credentials::import_credentials(conn, &c.key, &vault_id, file_vault, entries, &c.sealed)?,
+            None => entries.len(),
+        };
+    }
+    Ok((imported, legacy))
+}
+
 fn import_workspace_file(
     conn: &Connection,
     file: WorkspaceFile,
@@ -386,10 +412,7 @@ fn import_workspace_file(
             .map_err(|e| e.to_string())?;
     }
 
-    let credentials_imported = match credentials {
-        Some(c) => crate::credentials::import_credentials(conn, &c.key, &workspace_id, &file.credentials, &c.sealed)?,
-        None => file.credentials.len(),
-    };
+    let (credentials_imported, legacy_vault) = import_vaults(conn, &file, &workspace_id, &workspace_name, credentials)?;
 
     let mut ctx = FileImport { conn, workspace_id: &workspace_id, ts, collections: 0, requests: Vec::new() };
     for (index, collection) in file.collections.iter().enumerate() {
@@ -406,6 +429,9 @@ fn import_workspace_file(
         }
         let resolve = |refs: &[String]| -> Vec<String> { refs.iter().filter_map(|r| ids.get(r.as_str())).map(|id| id.to_string()).collect() };
         crate::http::steps::save_steps(conn, id, &resolve(&entry.before), &resolve(&entry.after)).map_err(|e| e.to_string())?;
+    }
+    if let Some(vault) = legacy_vault {
+        crate::credentials::rewrite_legacy_refs(conn, &workspace_id, &vault)?;
     }
 
     Ok(ImportSummary {

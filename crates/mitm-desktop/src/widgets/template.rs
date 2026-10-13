@@ -28,7 +28,8 @@ thread_local! {
     static CREDENTIALS_LOCKED: Cell<bool> = const { Cell::new(false) };
 }
 
-/// The active workspace's credentials, for `{{$cred:entry.field}}` highlights, hovers and completion.
+/// The credentials in vaults linked to the active workspace, for `{{$cred:vault/entry.field}}` highlights, hovers
+/// and completion.
 /// While `locked` the entries carry no values.
 pub fn set_credentials(entries: &[Credential], locked: bool) {
     CREDENTIALS.with(|cell| *cell.borrow_mut() = entries.to_vec());
@@ -36,10 +37,11 @@ pub fn set_credentials(entries: &[Credential], locked: bool) {
 }
 
 fn cred_field(name: &str) -> Option<(FieldKind, String)> {
-    let (entry, field) = mitm_core::credentials::parse_ref(name)?;
+    let cred = mitm_core::credentials::parse_ref(name)?;
     CREDENTIALS.with(|cell| {
         let entries = cell.borrow();
-        let field = entries.iter().find(|e| e.name.eq_ignore_ascii_case(entry))?.field(field)?;
+        let entry = entries.iter().find(|e| e.vault.eq_ignore_ascii_case(cred.vault) && e.name.eq_ignore_ascii_case(cred.entry))?;
+        let field = entry.field(cred.field)?;
         Some((field.kind, field.value.clone()))
     })
 }
@@ -351,7 +353,7 @@ fn credential_refs() -> Vec<String> {
     CREDENTIALS.with(|cell| {
         cell.borrow()
             .iter()
-            .flat_map(|e| e.fields.iter().map(move |f| format!("$cred:{}.{}", e.name, f.key)))
+            .flat_map(|e| e.fields.iter().map(move |f| format!("$cred:{}/{}.{}", e.vault, e.name, f.key)))
             .collect()
     })
 }
@@ -619,7 +621,8 @@ mod tests {
         let field = |key: &str, kind, value: &str| Field { key: key.into(), kind, extracted: false, value: value.into() };
         set_credentials(&[Credential {
             id: "c".into(),
-            workspace_id: "w".into(),
+            vault_id: "v".into(),
+            vault: "DG".into(),
             name: "dgAdmin".into(),
             fields: vec![
                 field("user", FieldKind::Text, "admin@x"),
@@ -631,13 +634,15 @@ mod tests {
             created_at_ms: 0,
             updated_at_ms: 0,
         }], false);
-        assert_eq!(hover_value("$cred:dgAdmin.user"), "admin@x");
-        assert_eq!(hover_value("$cred:DGADMIN.password"), "••••••");
-        assert!(hover_value("$cred:dgAdmin.totp").ends_with('s'));
-        assert_eq!(hover_value("$cred:dgAdmin.nope"), "undefined");
-        assert!(resolve_var("$cred:dgAdmin.password").is_some());
-        assert!(resolve_var("$cred:other.password").is_none());
+        assert_eq!(hover_value("$cred:DG/dgAdmin.user"), "admin@x");
+        assert_eq!(hover_value("$cred:dg/DGADMIN.password"), "••••••");
+        assert!(hover_value("$cred:DG/dgAdmin.totp").ends_with('s'));
+        assert_eq!(hover_value("$cred:DG/dgAdmin.nope"), "undefined");
+        assert_eq!(hover_value("$cred:dgAdmin.user"), "undefined");
+        assert!(resolve_var("$cred:DG/dgAdmin.password").is_some());
+        assert!(resolve_var("$cred:Other/dgAdmin.password").is_none());
         assert_eq!(matching_keys("$cred:dg").len(), 3);
+        assert_eq!(matching_keys("$cred:DG/dgAdmin.u"), ["$cred:DG/dgAdmin.user"]);
         assert!(matching_keys("dg").iter().all(|k| !k.starts_with('$')));
         set_credentials(&[], false);
     }

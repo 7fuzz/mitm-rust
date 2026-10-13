@@ -24,6 +24,7 @@ pub struct VariantModal {
 pub struct MoveModal {
     pub env_id: String,
     pub var_idx: usize,
+    pub vault: String,
     pub entry: String,
     pub field: String,
     pub error: Option<String>,

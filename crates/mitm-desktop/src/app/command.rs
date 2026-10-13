@@ -54,7 +54,7 @@ pub enum AppCommand {
     DeleteWorkspace(String),
 
     Environments(crate::features::environments::Cmd),
-    MoveToCredentials { env_id: String, var_idx: usize, entry: String, field: String },
+    MoveToCredentials { env_id: String, var_idx: usize, vault: String, entry: String, field: String },
     Credentials(crate::features::credentials::Cmd),
     PickCredentialsJson,
     PickQrImage(QrTarget),

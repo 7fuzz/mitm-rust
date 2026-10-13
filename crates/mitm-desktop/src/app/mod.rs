@@ -291,7 +291,9 @@ impl MitmApp {
             AppCommand::ExportWorkspace => self.export_workspace(ctx),
             AppCommand::ExportWorkspaceFile { options, passphrase } => self.export_workspace_file(ctx, options, passphrase),
             AppCommand::ImportWorkspace { json, target, name, passphrase } => self.import_workspace(ctx, json, target, name, passphrase),
-            AppCommand::MoveToCredentials { env_id, var_idx, entry, field } => self.move_to_credentials(ctx, env_id, var_idx, entry, field),
+            AppCommand::MoveToCredentials { env_id, var_idx, vault, entry, field } => {
+                self.move_to_credentials(ctx, env_id, var_idx, vault, entry, field)
+            }
         }
     }
 

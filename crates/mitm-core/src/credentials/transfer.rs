@@ -1,4 +1,4 @@
-//! Credentials in workspace files: names and field keys always, values only sealed by a passphrase.
+//! Vaults in workspace files: vault names, entry names and field keys always, values only sealed by a passphrase.
 
 use std::collections::BTreeMap;
 use base64::Engine;
@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 use super::crypto::{self, DataKey, KdfParams};
 use super::store::{self, list_credentials, load_credential, Field};
-use crate::workspace::file::{CredentialEntry, SealedCredentials};
+use super::vault::list_vaults;
+use crate::workspace::file::{CredentialEntry, SealedCredentials, VaultEntry};
 use crate::db::Db;
 use super::CredentialError;
 
@@ -16,6 +17,9 @@ const WRONG_PASSPHRASE: &str = "Wrong passphrase for the credentials in this fil
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SealedEntry {
+    /// Empty in files from before vaults.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub vault: String,
     pub name: String,
     #[serde(default)]
     pub values: BTreeMap<String, String>,
@@ -27,16 +31,27 @@ fn b64() -> base64::engine::GeneralPurpose {
     base64::engine::general_purpose::STANDARD
 }
 
-/// The workspace's entries for a file, plus their values sealed with `passphrase` when one is given.
+/// The vaults linked to the workspace for a file, plus their values sealed with `passphrase` when one is given.
 /// Extracted fields (tokens) carry their values only with `include_auto`.
 pub fn export_credentials(
     db: &Db,
     workspace_id: &str,
     passphrase: Option<&str>,
     include_auto: bool,
-) -> Result<(Vec<CredentialEntry>, Option<SealedCredentials>), String> {
-    let summaries = list_credentials(db, workspace_id)?;
-    let entries = summaries.iter().map(|c| CredentialEntry { name: c.name.clone(), fields: c.fields.clone() }).collect();
+) -> Result<(Vec<VaultEntry>, Option<SealedCredentials>), String> {
+    let vaults: Vec<_> = list_vaults(db)?.into_iter().filter(|v| v.is_linked(workspace_id)).collect();
+    let summaries: Vec<_> = list_credentials(db)?.into_iter().filter(|c| vaults.iter().any(|v| v.id == c.vault_id)).collect();
+    let entries = vaults
+        .iter()
+        .map(|vault| VaultEntry {
+            name: vault.name.clone(),
+            credentials: summaries
+                .iter()
+                .filter(|c| c.vault_id == vault.id)
+                .map(|c| CredentialEntry { name: c.name.clone(), fields: c.fields.clone() })
+                .collect(),
+        })
+        .collect();
     let Some(passphrase) = passphrase.filter(|_| !summaries.is_empty()) else { return Ok((entries, None)) };
 
     let mut sealed_entries = Vec::new();
@@ -48,7 +63,7 @@ pub fn export_credentials(
             .filter(|f| include_auto || !f.extracted)
             .map(|f| (f.key.clone(), f.value.clone()))
             .collect();
-        sealed_entries.push(SealedEntry { name: credential.name, values, notes: credential.notes });
+        sealed_entries.push(SealedEntry { vault: credential.vault, name: credential.name, values, notes: credential.notes });
     }
     Ok((entries, Some(seal(passphrase, &sealed_entries)?)))
 }
@@ -79,29 +94,31 @@ pub fn open_sealed(block: &SealedCredentials, passphrase: &str) -> Result<Vec<Se
     Ok(serde_json::from_slice(&plain).map_err(|e| e.to_string())?)
 }
 
-/// Writes the file's entries into the workspace. An entry that already exists only gains the fields it lacks.
+/// Writes a file vault's entries into `vault_id`. An entry that already exists only gains the fields it lacks.
+/// `sealed` values count when their vault is `file_vault` (empty for files from before vaults).
 /// Returns how many entries were created or extended.
 pub(crate) fn import_credentials(
     conn: &Connection,
     key: &DataKey,
-    workspace_id: &str,
+    vault_id: &str,
+    file_vault: &str,
     entries: &[CredentialEntry],
     sealed: &[SealedEntry],
 ) -> Result<usize, String> {
     let mut touched = 0;
     for entry in entries {
-        let values = sealed.iter().find(|s| s.name.eq_ignore_ascii_case(&entry.name));
+        let values = sealed.iter().find(|s| s.vault.eq_ignore_ascii_case(file_vault) && s.name.eq_ignore_ascii_case(&entry.name));
         let value_of = |key: &str| {
             values
                 .and_then(|v| v.values.iter().find(|(k, _)| k.eq_ignore_ascii_case(key)))
                 .map(|(_, v)| v.clone())
                 .unwrap_or_default()
         };
-        let existing = store::find_credential_conn(conn, key, workspace_id, &entry.name)?;
+        let existing = store::find_credential_conn(conn, key, vault_id, &entry.name)?;
         let is_new = existing.is_none();
         let mut credential = match existing {
             Some(c) => c,
-            None => store::new_credential(conn, workspace_id, &entry.name)?,
+            None => store::new_credential(conn, vault_id, &entry.name)?,
         };
         let before = credential.fields.len();
         for meta in &entry.fields {
@@ -129,6 +146,7 @@ mod tests {
     #[test]
     fn sealed_block_opens_only_with_its_passphrase() {
         let entries = vec![SealedEntry {
+            vault: "DG".into(),
             name: "dgAdmin".into(),
             values: [("password".to_string(), "hunter2".to_string())].into(),
             notes: "n".into(),

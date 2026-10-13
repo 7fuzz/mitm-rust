@@ -5,6 +5,8 @@ pub struct MigrationSpec {
     pub version: u32,
     pub name: &'static str,
     pub sql: &'static str,
+    /// Data changes SQL can't express, run in the migration's transaction after its SQL.
+    pub after: Option<fn(&Connection) -> Result<(), String>>,
 }
 
 pub const MIGRATIONS: &[MigrationSpec] = &[
@@ -12,106 +14,133 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         version: 1,
         name: "20260825_0001_init",
         sql: include_str!("../../migrations/20260825_0001_init.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 2,
         name: "20260825_0002_intercept_action",
         sql: include_str!("../../migrations/20260825_0002_intercept_action.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 3,
         name: "20260825_0003_repeaters",
         sql: include_str!("../../migrations/20260825_0003_repeaters.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 4,
         name: "20260825_0004_workspaces_and_collections",
         sql: include_str!("../../migrations/20260825_0004_workspaces_and_collections.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 5,
         name: "20260825_0005_fix_environments_schema",
         sql: include_str!("../../migrations/20260825_0005_fix_environments_schema.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 6,
         name: "20260827_0006_separate_body_buffers",
         sql: include_str!("../../migrations/20260827_0006_separate_body_buffers.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 7,
         name: "20260827_0007_drop_body_content",
         sql: include_str!("../../migrations/20260827_0007_drop_body_content.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 8,
         name: "20260831_0008_rewrite_rules",
         sql: include_str!("../../migrations/20260831_0008_rewrite_rules.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 9,
         name: "20260831_0009_history_flags",
         sql: include_str!("../../migrations/20260831_0009_history_flags.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 10,
         name: "20260831_0010_webhooks",
         sql: include_str!("../../migrations/20260831_0010_webhooks.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 11,
         name: "20260831_0011_websockets",
         sql: include_str!("../../migrations/20260831_0011_websockets.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 12,
         name: "20261001_0012_listener_source",
         sql: include_str!("../../migrations/20261001_0012_listener_source.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 13,
         name: "20261002_0013_source_scoping",
         sql: include_str!("../../migrations/20261002_0013_source_scoping.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 14,
         name: "20261002_0014_history_timestamps",
         sql: include_str!("../../migrations/20261002_0014_history_timestamps.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 15,
         name: "20261003_0015_fuzzer",
         sql: include_str!("../../migrations/20261003_0015_fuzzer.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 16,
         name: "20261003_0016_repeater_workspace",
         sql: include_str!("../../migrations/20261003_0016_repeater_workspace.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 17,
         name: "20261004_0017_integer_ids",
         sql: include_str!("../../migrations/20261004_0017_integer_ids.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 18,
         name: "20261004_0018_drop_legacy_proxy_address",
         sql: include_str!("../../migrations/20261004_0018_drop_legacy_proxy_address.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 19,
         name: "20261005_0019_request_steps",
         sql: include_str!("../../migrations/20261005_0019_request_steps.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 20,
         name: "20261008_0020_fuzz_write_through",
         sql: include_str!("../../migrations/20261008_0020_fuzz_write_through.sql"),
+        after: None,
     },
     MigrationSpec {
         version: 21,
         name: "20261012_0021_credentials",
         sql: include_str!("../../migrations/20261012_0021_credentials.sql"),
+        after: None,
+    },
+    MigrationSpec {
+        version: 22,
+        name: "20261013_0022_vaults",
+        sql: include_str!("../../migrations/20261013_0022_vaults.sql"),
+        after: Some(crate::credentials::migrate_into_vaults),
     },
 ];
 
@@ -203,6 +232,23 @@ pub fn run_all(event_bus: Option<&EventBus>, conn: &Connection) -> Result<(), St
                         let _ = conn.execute_batch("ROLLBACK");
                         return Err(full_err);
                     }
+                }
+            }
+
+            if let Some(after) = m.after {
+                if let Err(err) = after(conn) {
+                    let full_err = format!("Migration {} failed: {}", m.name, err);
+                    emit_progress(MigrationProgressPayload {
+                        step: idx + 1,
+                        total,
+                        name: m.name.to_string(),
+                        status: "Migration Error".to_string(),
+                        is_complete: false,
+                        has_error: true,
+                        error_message: Some(full_err.clone()),
+                    });
+                    let _ = conn.execute_batch("ROLLBACK");
+                    return Err(full_err);
                 }
             }
 

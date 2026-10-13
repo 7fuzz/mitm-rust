@@ -68,7 +68,7 @@ impl MitmApp {
 
     pub(super) fn export_workspace(&mut self, ctx: &egui::Context) {
         let environments = &mut self.state.environments;
-        if let Some(options) = environments.export.ask(&environments.environments, &self.state.credentials.entries) {
+        if let Some(options) = environments.export.ask(&environments.environments, &self.state.credentials.linked) {
             self.run_command(ctx, AppCommand::ExportWorkspaceFile { options, passphrase: None });
         }
     }
@@ -127,13 +127,13 @@ impl MitmApp {
         }
     }
 
-    pub(super) fn move_to_credentials(&mut self, ctx: &egui::Context, env_id: String, var_idx: usize, entry: String, field: String) {
+    pub(super) fn move_to_credentials(&mut self, ctx: &egui::Context, env_id: String, var_idx: usize, vault: String, entry: String, field: String) {
         let db = &self.core.db;
         let workspace_id = self.state.environments.active_workspace_id.clone();
         let environments = &mut self.state.environments;
         let Some(env) = environments.environments.iter_mut().find(|e| e.id == env_id) else { return };
         let Some(var) = env.variables.get_mut(var_idx) else { return };
-        match crate::features::credentials::move_value(db, &workspace_id, &entry, &field, var.current_value().to_string()) {
+        match crate::features::credentials::move_value(db, &workspace_id, &vault, &entry, &field, var.current_value().to_string()) {
             Ok(link) => {
                 if var.variants.is_empty() {
                     var.value = link;

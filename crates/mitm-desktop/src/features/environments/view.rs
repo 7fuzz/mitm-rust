@@ -362,10 +362,10 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
                             let is_secret = var.r#type == "secret";
                             let current = var.current_value().to_string();
                             let link = mitm_core::credentials::link_target(&current)
-                                .map(|(entry, field)| (entry.to_string(), field.to_string()));
-                            let resp = if let Some((entry, field)) = &link {
+                                .map(|cred| format!("{} {}/{} · {}", icons::LOCK, cred.vault, cred.entry, cred.field));
+                            let resp = if let Some(link) = &link {
                                 let label = ui
-                                    .add(egui::Label::new(RichText::new(format!("{} {entry} · {field}", icons::LOCK)).monospace()).sense(egui::Sense::click()))
+                                    .add(egui::Label::new(RichText::new(link).monospace()).sense(egui::Sense::click()))
                                     .on_hover_text(&current);
                                 if icon_button(ui, icons::X, "Unlink").clicked() {
                                     set_active_value(var, String::new());
@@ -535,10 +535,13 @@ fn environment_editor(ui: &mut egui::Ui, state: &mut EnvironmentsState, credenti
 
     if let Some(var_idx) = open_move {
         let key = &state.environments[env_idx].variables[var_idx].key;
+        let workspace_name = state.workspaces.iter().find(|w| w.id == state.active_workspace_id).map_or("", |w| w.name.as_str());
+        let vault = credentials.first().map_or_else(|| mitm_core::credentials::vault_name_from(workspace_name), |c| c.vault.clone());
         state.move_modal = Some(MoveModal {
             env_id: selected_id.clone(),
             var_idx,
-            entry: credentials.first().map(|c| c.name.clone()).unwrap_or_default(),
+            entry: credentials.iter().find(|c| c.vault == vault).map(|c| c.name.clone()).unwrap_or_default(),
+            vault,
             field: field_key_from(key),
             error: None,
         });
@@ -556,22 +559,32 @@ fn set_active_value(var: &mut EnvironmentVariable, value: String) {
     var.value = value;
 }
 
-/// Picks a credential field to link the variant to; returns the ref to store as its value.
+/// Picks a credential field from the workspace's vaults to link the variant to; returns the ref to store as its value.
 fn link_menu(ui: &mut egui::Ui, credentials: &[Credential]) -> Option<String> {
     if credentials.iter().all(|c| c.fields.is_empty()) {
         return None;
     }
+    let mut vaults: Vec<&str> = credentials.iter().map(|c| c.vault.as_str()).collect();
+    vaults.dedup();
     let mut picked = None;
-    ui.menu_button(icons::LINK, |ui| {
-        for credential in credentials.iter().filter(|c| !c.fields.is_empty()) {
+    let entries = |ui: &mut egui::Ui, vault: &str, picked: &mut Option<String>| {
+        for credential in credentials.iter().filter(|c| c.vault == vault && !c.fields.is_empty()) {
             ui.menu_button(&credential.name, |ui| {
                 for field in &credential.fields {
                     if ui.button(&field.key).clicked() {
-                        picked = Some(mitm_core::credentials::format_ref(&credential.name, &field.key));
+                        *picked = Some(mitm_core::credentials::format_ref(&credential.vault, &credential.name, &field.key));
                         ui.close();
                     }
                 }
             });
+        }
+    };
+    ui.menu_button(icons::LINK, |ui| match vaults.as_slice() {
+        [only] => entries(ui, only, &mut picked),
+        _ => {
+            for vault in &vaults {
+                ui.menu_button(*vault, |ui| entries(ui, vault, &mut picked));
+            }
         }
     })
     .response
@@ -598,12 +611,20 @@ fn move_modal(ctx: &egui::Context, state: &mut EnvironmentsState, credentials: &
         ui.heading("Move to credentials");
         ui.add_space(6.0);
         egui::Grid::new("move_to_credentials_grid").num_columns(2).show(ui, |ui| {
+            ui.label("Vault");
+            ui.horizontal(|ui| {
+                let mut vaults: Vec<String> = credentials.iter().map(|c| c.vault.clone()).collect();
+                vaults.dedup();
+                crate::features::credentials::vault_picker(ui, &mut modal.vault, &vaults);
+            });
+            ui.end_row();
             ui.label("Entry");
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut modal.entry).desired_width(160.0));
-                if !credentials.is_empty() {
+                let in_vault: Vec<&Credential> = credentials.iter().filter(|c| c.vault.eq_ignore_ascii_case(modal.vault.trim())).collect();
+                if !in_vault.is_empty() {
                     ui.menu_button(icons::CARET_DOWN, |ui| {
-                        for credential in credentials {
+                        for credential in in_vault {
                             if ui.button(&credential.name).clicked() {
                                 modal.entry = credential.name.clone();
                                 ui.close();
@@ -626,6 +647,7 @@ fn move_modal(ctx: &egui::Context, state: &mut EnvironmentsState, credentials: &
                 cmds.push(AppCommand::MoveToCredentials {
                     env_id: modal.env_id.clone(),
                     var_idx: modal.var_idx,
+                    vault: modal.vault.trim().to_string(),
                     entry: modal.entry.trim().to_string(),
                     field: modal.field.trim().to_string(),
                 });

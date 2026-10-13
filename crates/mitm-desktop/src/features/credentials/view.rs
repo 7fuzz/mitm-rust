@@ -1,11 +1,12 @@
 use eframe::egui::{self, RichText};
-use mitm_core::credentials::{Credential, FieldKind};
+use mitm_core::credentials::{Credential, CredentialSummary, FieldKind, Vault};
+use mitm_core::workspace::Workspace;
 use mitm_core::utils::totp;
 use crate::app::command::{Commands, QrTarget};
 use crate::features::utilities::totp::{group_code, qr_buttons, show_code};
 use crate::widgets::{confirm, split};
 use super::lock::unlock_form;
-use super::{CredentialsState, Rename};
+use super::{CredentialsState, Rename, RenameTarget};
 use crate::ui::icons;
 use crate::widgets::button::icon_button;
 use crate::widgets::list_row::list_row;
@@ -13,22 +14,34 @@ use crate::widgets::search::search_field;
 use crate::widgets::section::section_with;
 use mitm_core::db::Db;
 
-pub fn show(ui: &mut egui::Ui, state: &mut CredentialsState, workspace_id: &str, db: &Db, cmds: &mut Commands) {
+pub fn show(ui: &mut egui::Ui, state: &mut CredentialsState, workspace_id: &str, workspaces: &[Workspace], db: &Db, cmds: &mut Commands) {
     state.sync(db, workspace_id);
     let now = ui.input(|i| i.time);
     let [mut list_ui, mut detail_ui] = split::side_by_side(ui, "credentials_split", &mut state.split_fraction);
-    entry_list(&mut list_ui, state, db);
+    vault_list(&mut list_ui, state, workspaces, db);
     entry_detail(&mut detail_ui, state, db, now, cmds);
+    delete_vault_modal(ui.ctx(), state, db);
 }
 
-fn entry_list(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db) {
-    section_with(ui, "Credentials", |ui| {
+enum ListAction {
+    Select(String),
+    AddEntry(String),
+    ToggleCollapsed(String),
+    Rename(RenameTarget, String),
+    DeleteEntry(String),
+    DeleteVault(String),
+    Link { vault_id: String, workspace_id: String, linked: bool },
+}
+
+fn vault_list(ui: &mut egui::Ui, state: &mut CredentialsState, workspaces: &[Workspace], db: &Db) {
+    section_with(ui, "Vaults", |ui| {
         ui.add_enabled_ui(!state.locked, |ui| {
             if icon_button(ui, icons::DOWNLOAD_SIMPLE, "Import from JSON…").clicked() {
-                state.json_import.start();
+                let vault = state.default_vault().map(|v| v.name.clone());
+                state.json_import.start(vault);
             }
-            if icon_button(ui, icons::PLUS, "Add credential").clicked() {
-                state.create(db);
+            if icon_button(ui, icons::PLUS, "New vault").clicked() {
+                state.create_vault(db);
             }
         });
     });
@@ -36,36 +49,173 @@ fn entry_list(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db) {
     ui.add_space(4.0);
 
     let filter = state.search.trim().to_lowercase();
-    let mut delete = None;
+    let workspace_id = state.loaded_for.clone().unwrap_or_default();
+    let (linked, other): (Vec<Vault>, Vec<Vault>) = state.vaults.iter().cloned().partition(|v| v.is_linked(&workspace_id));
+    let mut action = None;
     egui::ScrollArea::vertical().id_salt("credential_list").show(ui, |ui| {
-        for entry in state.summaries.iter().filter(|e| filter.is_empty() || e.name.to_lowercase().contains(&filter)) {
-            let selected = state.selected.as_deref() == Some(entry.id.as_str());
-            let code = state.entries.iter().find(|e| e.id == entry.id).and_then(first_code);
-            let row = list_row(ui, selected, |ui| {
-                ui.label(&entry.name);
-                if let Some(code) = code {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new(group_code(&code)).monospace().weak());
-                    });
-                }
-            });
-            if row.clicked() {
-                state.selected = Some(entry.id.clone());
+        if state.vaults.is_empty() {
+            ui.weak("No vaults yet");
+        }
+        for vault in &linked {
+            vault_rows(ui, state, db, vault, &filter, workspaces, &workspace_id, &mut action);
+        }
+        if !other.is_empty() {
+            ui.add_space(10.0);
+            ui.label(RichText::new("OTHER VAULTS").small().weak())
+                .on_hover_text("Not linked to this workspace, so its requests and variables can't use them");
+            for vault in &other {
+                vault_rows(ui, state, db, vault, &filter, workspaces, &workspace_id, &mut action);
             }
-            row.context_menu(|ui| {
-                if ui.button("Rename").clicked() {
-                    state.rename = Some(Rename { id: entry.id.clone(), field: None, text: entry.name.clone() });
-                    ui.close();
-                }
-                if ui.button("Delete").clicked() {
-                    delete = Some(entry.id.clone());
-                    ui.close();
-                }
-            });
         }
     });
-    if let Some(id) = delete {
-        state.delete(db, &id);
+
+    match action {
+        Some(ListAction::Select(id)) => state.selected = Some(id),
+        Some(ListAction::AddEntry(vault_id)) => state.create(db, &vault_id),
+        Some(ListAction::ToggleCollapsed(vault_id)) => {
+            if !state.collapsed.remove(&vault_id) {
+                state.collapsed.insert(vault_id);
+            }
+        }
+        Some(ListAction::Rename(target, text)) => state.rename = Some(Rename { target, text }),
+        Some(ListAction::DeleteEntry(id)) => state.delete(db, &id),
+        Some(ListAction::DeleteVault(id)) => state.delete_vault = Some(id),
+        Some(ListAction::Link { vault_id, workspace_id, linked }) => state.set_linked(db, &vault_id, &workspace_id, linked),
+        None => {}
+    }
+}
+
+fn vault_rows(
+    ui: &mut egui::Ui,
+    state: &mut CredentialsState,
+    db: &Db,
+    vault: &Vault,
+    filter: &str,
+    workspaces: &[Workspace],
+    workspace_id: &str,
+    action: &mut Option<ListAction>,
+) {
+    let vault_matches = vault.name.to_lowercase().contains(filter);
+    let entries: Vec<CredentialSummary> = state
+        .summaries
+        .iter()
+        .filter(|s| s.vault_id == vault.id && (filter.is_empty() || vault_matches || s.name.to_lowercase().contains(filter)))
+        .cloned()
+        .collect();
+    if !filter.is_empty() && entries.is_empty() && !vault_matches {
+        return;
+    }
+    let collapsed = filter.is_empty() && state.collapsed.contains(&vault.id);
+
+    let target = RenameTarget::Vault(vault.id.clone());
+    let header = list_row(ui, false, |ui| {
+        ui.label(RichText::new(if collapsed { icons::CARET_RIGHT } else { icons::CARET_DOWN }).weak());
+        if !rename_edit(ui, state, db, &target) {
+            ui.label(RichText::new(&vault.name).strong());
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let add = ui.add_enabled_ui(!state.locked, |ui| icon_button(ui, icons::PLUS, "Add credential")).inner;
+            if add.clicked() {
+                *action = Some(ListAction::AddEntry(vault.id.clone()));
+            }
+            if collapsed {
+                ui.label(RichText::new(entries.len().to_string()).small().weak());
+            }
+        });
+    });
+    if header.clicked() {
+        *action = Some(ListAction::ToggleCollapsed(vault.id.clone()));
+    }
+    header.context_menu(|ui| {
+        if ui.button("Rename").clicked() {
+            *action = Some(ListAction::Rename(target.clone(), vault.name.clone()));
+            ui.close();
+        }
+        let linked_here = vault.is_linked(workspace_id);
+        let toggle = if linked_here { "Unlink from this workspace" } else { "Link to this workspace" };
+        if ui.button(toggle).clicked() {
+            *action = Some(ListAction::Link { vault_id: vault.id.clone(), workspace_id: workspace_id.to_string(), linked: !linked_here });
+            ui.close();
+        }
+        ui.menu_button("Workspaces", |ui| {
+            for workspace in workspaces {
+                let mut linked = vault.is_linked(&workspace.id);
+                if ui.checkbox(&mut linked, &workspace.name).changed() {
+                    *action = Some(ListAction::Link { vault_id: vault.id.clone(), workspace_id: workspace.id.clone(), linked });
+                }
+            }
+        });
+        ui.separator();
+        if ui.button(RichText::new("Delete vault…").color(ui.visuals().error_fg_color)).clicked() {
+            *action = Some(ListAction::DeleteVault(vault.id.clone()));
+            ui.close();
+        }
+    });
+    if collapsed {
+        return;
+    }
+
+    for entry in &entries {
+        let selected = state.selected.as_deref() == Some(entry.id.as_str());
+        let code = state.entries.iter().find(|e| e.id == entry.id).and_then(first_code);
+        let row = ui
+            .indent(("credential_entry", &entry.id), |ui| {
+                list_row(ui, selected, |ui| {
+                    ui.label(&entry.name);
+                    if let Some(code) = code {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(RichText::new(group_code(&code)).monospace().weak());
+                        });
+                    }
+                })
+            })
+            .inner;
+        if row.clicked() {
+            *action = Some(ListAction::Select(entry.id.clone()));
+        }
+        row.context_menu(|ui| {
+            if ui.button("Rename").clicked() {
+                *action = Some(ListAction::Rename(RenameTarget::Entry(entry.id.clone()), entry.name.clone()));
+                ui.close();
+            }
+            if ui.button("Delete").clicked() {
+                *action = Some(ListAction::DeleteEntry(entry.id.clone()));
+                ui.close();
+            }
+        });
+    }
+    if entries.is_empty() && filter.is_empty() {
+        ui.indent(("empty_vault", &vault.id), |ui| ui.weak("Empty"));
+    }
+}
+
+fn delete_vault_modal(ctx: &egui::Context, state: &mut CredentialsState, db: &Db) {
+    let Some(id) = state.delete_vault.clone() else { return };
+    let Some(vault) = state.vaults.iter().find(|v| v.id == id).cloned() else {
+        state.delete_vault = None;
+        return;
+    };
+    let count = state.summaries.iter().filter(|s| s.vault_id == id).count();
+    let mut close = false;
+    let modal = egui::Modal::new(egui::Id::new("delete_vault")).show(ctx, |ui| {
+        ui.set_width(340.0);
+        ui.heading(format!("Delete {}?", vault.name));
+        ui.add_space(6.0);
+        let entries = if count == 1 { "1 credential".to_string() } else { format!("{count} credentials") };
+        ui.label(format!("Its {entries} are deleted too, and refs to it stop resolving in {} workspace(s).", vault.workspace_ids.len()));
+        ui.add_space(8.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.add(crate::widgets::button::danger_filled(ui, "Delete")).clicked() {
+                state.remove_vault(db, &id);
+                close = true;
+            }
+            if ui.button("Cancel").clicked() {
+                close = true;
+            }
+        });
+    });
+    if close || modal.should_close() {
+        state.delete_vault = None;
     }
 }
 
@@ -93,7 +243,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, now: f
 
     ui.horizontal(|ui| {
         let name = state.entries[index].name.clone();
-        if rename_field(ui, state, db, &id, None, &name, RichText::new(&name).heading().strong()) {
+        if rename_field(ui, state, db, RenameTarget::Entry(id.clone()), &name, RichText::new(&name).heading().strong()) {
             return;
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -121,7 +271,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, now: f
     egui::Grid::new(("credential_fields", &id)).num_columns(4).spacing([8.0, 6.0]).show(ui, |ui| {
         let keys: Vec<String> = state.entries[index].fields.iter().map(|f| f.key.clone()).collect();
         for (i, key) in keys.iter().enumerate() {
-            rename_field(ui, state, db, &id, Some(key), key, RichText::new(key).strong());
+            rename_field(ui, state, db, RenameTarget::Field(id.clone(), key.clone()), key, RichText::new(key).strong());
             let Some(entry) = state.entries.iter_mut().find(|e| e.id == id) else { return };
             let field = &mut entry.fields[i];
             egui::ComboBox::from_id_salt(("credential_kind", &id, i))
@@ -237,26 +387,22 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, now: f
 }
 
 /// A label that turns into an edit on click. Returns true while editing.
-fn rename_field(
-    ui: &mut egui::Ui,
-    state: &mut CredentialsState,
-    db: &Db,
-    id: &str,
-    field: Option<&String>,
-    current: &str,
-    label: RichText,
-) -> bool {
-    let editing = state.rename.as_ref().is_some_and(|r| r.id == id && r.field.as_ref() == field);
-    if !editing {
-        let response = ui
-            .add(egui::Label::new(label).sense(egui::Sense::click()))
-            .on_hover_cursor(egui::CursorIcon::Text);
-        if response.clicked() {
-            state.rename = Some(Rename { id: id.to_string(), field: field.cloned(), text: current.to_string() });
-        }
-        return false;
+fn rename_field(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, target: RenameTarget, current: &str, label: RichText) -> bool {
+    if rename_edit(ui, state, db, &target) {
+        return true;
     }
-    let Some(rename) = state.rename.as_mut() else { return false };
+    let response = ui
+        .add(egui::Label::new(label).sense(egui::Sense::click()))
+        .on_hover_cursor(egui::CursorIcon::Text);
+    if response.clicked() {
+        state.rename = Some(Rename { target, text: current.to_string() });
+    }
+    false
+}
+
+/// The edit for a rename of `target` in progress; returns false when none is.
+fn rename_edit(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, target: &RenameTarget) -> bool {
+    let Some(rename) = state.rename.as_mut().filter(|r| &r.target == target) else { return false };
     let edit = ui.add(egui::TextEdit::singleline(&mut rename.text).desired_width(140.0));
     if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         state.rename = None;

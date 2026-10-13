@@ -20,10 +20,24 @@
     },
     "environments": { "type": "array", "items": { "$ref": "#/$defs/environment" } },
     "collections": { "type": "array", "items": { "$ref": "#/$defs/collection" } },
-    "credentials": { "type": "array", "items": { "$ref": "#/$defs/credential" } },
+    "vaults": { "type": "array", "items": { "$ref": "#/$defs/vault" } },
+    "credentials": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/credential" },
+      "description": "Files made before vaults: entries imported into a vault named after the workspace."
+    },
     "credentialsSealed": { "$ref": "#/$defs/credentialsSealed" }
   },
   "$defs": {
+    "vault": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+        "credentials": { "type": "array", "items": { "$ref": "#/$defs/credential" } }
+      }
+    },
     "credential": {
       "type": "object",
       "required": ["name"],
