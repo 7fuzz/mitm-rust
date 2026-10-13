@@ -50,6 +50,7 @@ pub fn show(
             SettingsSection::Appearance => appearance_section(ui),
             SettingsSection::Shortcuts => shortcuts_section(ui),
             SettingsSection::Data => data_section(ui, data, cmds),
+            SettingsSection::Storage => super::storage::show(ui, &mut data.storage, db),
             SettingsSection::Credentials => crate::features::credentials::settings_section(ui, credentials, db),
             SettingsSection::Database => crate::features::database::show(ui, database, db),
         });

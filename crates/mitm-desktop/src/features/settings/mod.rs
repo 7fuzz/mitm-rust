@@ -1,4 +1,5 @@
 mod commands;
+mod storage;
 mod view;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -15,17 +16,19 @@ pub enum SettingsSection {
     Appearance,
     Shortcuts,
     Data,
+    Storage,
     Credentials,
     Database,
 }
 
 impl SettingsSection {
-    pub const ALL: [SettingsSection; 7] = [
+    pub const ALL: [SettingsSection; 8] = [
         SettingsSection::Proxy,
         SettingsSection::Certificate,
         SettingsSection::Appearance,
         SettingsSection::Shortcuts,
         SettingsSection::Data,
+        SettingsSection::Storage,
         SettingsSection::Credentials,
         SettingsSection::Database,
     ];
@@ -37,6 +40,7 @@ impl SettingsSection {
             SettingsSection::Appearance => "Appearance",
             SettingsSection::Shortcuts => "Shortcuts",
             SettingsSection::Data => "Data",
+            SettingsSection::Storage => "Storage",
             SettingsSection::Credentials => "Credentials",
             SettingsSection::Database => "Database",
         }
@@ -71,6 +75,7 @@ pub struct DataSectionState {
     pub factory_reset_open: bool,
     pub factory_reset_input: String,
     pub resetting: bool,
+    pub storage: storage::StorageState,
 }
 
 pub struct ProxyState {
