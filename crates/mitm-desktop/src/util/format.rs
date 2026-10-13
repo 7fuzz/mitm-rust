@@ -126,6 +126,20 @@ impl Exchange {
         }
     }
 
+    /// A request with no response yet, e.g. as it stands in an editor.
+    pub fn request_only(method: String, url: String, request_headers: Vec<(String, String)>, request_body: String) -> Self {
+        Self {
+            method,
+            url,
+            request_headers,
+            request_body,
+            status_code: 0,
+            response_headers: Vec::new(),
+            response_body: String::new(),
+            content_type: String::new(),
+        }
+    }
+
     pub fn curl(&self) -> String {
         self.curl_with(&self.request_headers, &self.request_body)
     }
@@ -143,7 +157,7 @@ impl Exchange {
         curl
     }
 
-    pub fn custom_text(&self, options: &CopyOptions) -> String {
+    fn custom_text(&self, options: &CopyOptions) -> String {
         let pretty = |body: &str, content_type: &str| {
             options.pretty_json.then(|| pretty_json(body)).flatten().unwrap_or_else(|| display_body(body, content_type))
         };
@@ -175,8 +189,13 @@ impl Exchange {
         text
     }
 
-    pub fn copy_text(&self, format: CopyFormat) -> String {
+    pub fn copy_text(&self, format: &CopyFormat) -> String {
         match format {
+            CopyFormat::Url => self.url.clone(),
+            CopyFormat::Request => self.raw_request(),
+            CopyFormat::Response => self.raw_response(),
+            CopyFormat::ResponseBody => display_body(&self.response_body, &self.content_type),
+            CopyFormat::Custom(options) => self.custom_text(options),
             CopyFormat::Curl => self.curl(),
             CopyFormat::CurlAndResponse => format!("{}\n\n{}", self.curl(), self.response_section()),
             CopyFormat::UrlBodyAndResponse => {
@@ -190,6 +209,16 @@ impl Exchange {
         }
     }
 
+    fn raw_request(&self) -> String {
+        raw_message(format!("{} {}", self.method, self.url), &self.request_headers, &self.request_body, "")
+    }
+
+    fn raw_response(&self) -> String {
+        let reason = http::StatusCode::from_u16(self.status_code).ok().and_then(|s| s.canonical_reason()).unwrap_or("");
+        let status_line = format!("HTTP/1.1 {} {}", self.status_code, reason).trim_end().to_string();
+        raw_message(status_line, &self.response_headers, &self.response_body, &self.content_type)
+    }
+
     fn response_section(&self) -> String {
         let code = if self.status_code == 0 { 200 } else { self.status_code };
         if self.response_body.trim().is_empty() {
@@ -198,6 +227,19 @@ impl Exchange {
             format!("{}\n{}", code, display_body(&self.response_body, &self.content_type))
         }
     }
+}
+
+fn raw_message(first_line: String, headers: &[(String, String)], body: &str, content_type: &str) -> String {
+    let mut text = first_line;
+    if !headers.is_empty() {
+        text.push('\n');
+        text.push_str(&headers_to_text(headers));
+    }
+    if !body.trim().is_empty() {
+        text.push_str("\n\n");
+        text.push_str(&display_body(body, content_type));
+    }
+    text
 }
 
 fn shell_quote(text: &str) -> String {
@@ -230,11 +272,16 @@ impl Default for CopyOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum CopyFormat {
-    Curl,
     CurlAndResponse,
     UrlBodyAndResponse,
+    Url,
+    Curl,
+    Request,
+    Response,
+    ResponseBody,
+    Custom(CopyOptions),
 }
 
 pub fn display_body(body: &str, content_type: &str) -> String {
@@ -332,6 +379,22 @@ mod tests {
             ..CopyOptions::default()
         };
         assert_eq!(exchange.custom_text(&bare), "curl -X POST 'https://api.test/u'");
+    }
+
+    #[test]
+    fn request_and_response_copy_as_raw_messages() {
+        let exchange = Exchange {
+            method: "POST".to_string(),
+            url: "https://api.test/u".to_string(),
+            request_headers: vec![("X-A".to_string(), "1".to_string())],
+            request_body: r#"{"a":1}"#.to_string(),
+            status_code: 404,
+            response_headers: vec![("Server".to_string(), "t".to_string())],
+            response_body: String::new(),
+            content_type: "text/plain".to_string(),
+        };
+        assert_eq!(exchange.copy_text(&CopyFormat::Request), "POST https://api.test/u\nX-A: 1\n\n{\n  \"a\": 1\n}");
+        assert_eq!(exchange.copy_text(&CopyFormat::Response), "HTTP/1.1 404 Not Found\nServer: t");
     }
 
     #[test]

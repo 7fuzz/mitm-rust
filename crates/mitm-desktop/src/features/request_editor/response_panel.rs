@@ -1,8 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::repeater::HeaderItem;
-use crate::util::format::{format_bytes, CopyFormat, Exchange};
-use crate::widgets::flash;
-use crate::widgets::copy_custom;
+use crate::util::format::{format_bytes, Exchange};
+use crate::widgets::copy_menu;
 use crate::widgets::message_pane::{self, PaneData, PaneState, SaveBody};
 use crate::widgets::pills::status_text;
 use crate::ui::icons;
@@ -15,36 +14,6 @@ pub struct ResponseData<'a> {
     pub size: u64,
     pub headers: Vec<(String, String)>,
     pub body: &'a str,
-}
-
-pub struct RequestCopy {
-    pub method: String,
-    pub url: String,
-    pub headers: Vec<(String, String)>,
-    pub body: String,
-}
-
-impl RequestCopy {
-    fn actions(&self) -> Vec<(&'static str, String)> {
-        let header_lines: Vec<String> = self.headers.iter().map(|(k, v)| format!("{}: {}", k, v)).collect();
-        let mut raw = format!("{} {}\n{}", self.method, self.url, header_lines.join("\n"));
-        if !self.body.is_empty() {
-            raw.push_str(&format!("\n\n{}", self.body));
-        }
-        let curl_headers: String = header_lines.iter().map(|h| format!(" -H '{}'", h)).collect();
-        let curl_body = if self.body.is_empty() {
-            String::new()
-        } else {
-            format!(" -d '{}'", self.body.replace('\'', "'\\''"))
-        };
-        vec![
-            ("Copy URL", self.url.clone()),
-            ("Copy Headers", header_lines.join("\n")),
-            ("Copy Body", self.body.clone()),
-            ("Copy Raw Request", raw),
-            ("Copy as cURL", format!("curl -X {} '{}'{}{}", self.method, self.url, curl_headers, curl_body)),
-        ]
-    }
 }
 
 /// Shows or hides the run history; sits in the response header's toolbar.
@@ -71,7 +40,7 @@ pub fn show(
     id_salt: &str,
     pane: &mut PaneState,
     response: Option<ResponseData>,
-    request: Option<&RequestCopy>,
+    editor: Option<&Exchange>,
     exchange: Option<&Exchange>,
     toolbar: impl FnOnce(&mut egui::Ui),
 ) -> Option<SaveBody> {
@@ -90,7 +59,7 @@ pub fn show(
             }
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            copy_menu(ui, id_salt, response.as_ref(), request, exchange);
+            copy_menu(ui, id_salt, editor, exchange);
             toolbar(ui);
         });
     });
@@ -123,76 +92,26 @@ fn content_type(headers: &[(String, String)]) -> &str {
         .map_or("", |(_, v)| v.as_str())
 }
 
-fn copy_menu(
-    ui: &mut egui::Ui,
-    id_salt: &str,
-    response: Option<&ResponseData>,
-    request: Option<&RequestCopy>,
-    exchange: Option<&Exchange>,
-) {
-    let flash_id = ui.id().with((id_salt, "copied"));
-    let title = match flash::current(ui, flash_id) {
-        Some(message) => format!("{} {}", icons::CHECK, message),
-        None => format!("Copy {}", icons::CARET_DOWN),
-    };
-
-    let mut copied: Option<(&str, String)> = None;
-    ui.menu_button(title, |ui| {
-        if let Some(request) = request {
-            section(ui, "REQUEST");
-            for (label, text) in request.actions() {
-                if ui.button(label).clicked() {
-                    copied = Some((label, text));
+/// Copies the shown run; before the first run, or from the submenu, the request as it stands in the editor.
+fn copy_menu(ui: &mut egui::Ui, id_salt: &str, editor: Option<&Exchange>, run: Option<&Exchange>) {
+    copy_menu::button(ui, id_salt, |ui| {
+        let copied = match (run, editor) {
+            (Some(run), editor) => {
+                let mut copied = copy_menu::items(ui, true).map(|format| run.copy_text(&format));
+                if let Some(editor) = editor {
+                    ui.separator();
+                    if let Some(format) = ui.menu_button("Editor request", |ui| copy_menu::items(ui, false)).inner.flatten() {
+                        copied = Some(editor.copy_text(&format));
+                    }
                 }
+                copied
             }
-            ui.separator();
-        }
-
-        section(ui, "RESPONSE");
-        let status_line = response.map(|r| format!("HTTP/1.1 {} {}", r.status_code, r.status_text).trim().to_string());
-        let header_text = response.map(|r| r.headers.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<_>>().join("\n"));
-        let has_body = response.is_some_and(|r| !r.body.is_empty());
-        if ui.add_enabled(has_body, egui::Button::new("Copy Body")).clicked() {
-            copied = response.map(|r| ("Copy Body", r.body.to_string()));
-        }
-        if ui.add_enabled(response.is_some(), egui::Button::new("Copy Headers")).clicked() {
-            copied = Some(("Copy Headers", format!("{}\n{}", status_line.clone().unwrap_or_default(), header_text.clone().unwrap_or_default())));
-        }
-        if ui.add_enabled(response.is_some(), egui::Button::new("Copy Full Response")).clicked() {
-            let mut full = format!("{}\n{}", status_line.unwrap_or_default(), header_text.unwrap_or_default());
-            if let Some(r) = response.filter(|r| !r.body.is_empty()) {
-                full.push_str(&format!("\n\n{}", r.body));
+            (None, Some(editor)) => copy_menu::items(ui, false).map(|format| editor.copy_text(&format)),
+            (None, None) => {
+                ui.add_enabled_ui(false, |ui| copy_menu::items(ui, false));
+                None
             }
-            copied = Some(("Copy Full Response", full));
-        }
-
-        ui.separator();
-        section(ui, "REQUEST + RESPONSE");
-        let mut formats = vec![
-            ("Copy cURL and Response", CopyFormat::CurlAndResponse),
-            ("Copy URL, Body, and Response", CopyFormat::UrlBodyAndResponse),
-        ];
-        if request.is_none() {
-            formats.insert(0, ("Copy cURL", CopyFormat::Curl));
-        }
-        for (label, format) in formats {
-            if ui.add_enabled(exchange.is_some(), egui::Button::new(label)).clicked() {
-                copied = exchange.map(|e| (label, e.copy_text(format)));
-            }
-        }
-        if let (Some(exchange), Some(options)) = (exchange, copy_custom::submenu(ui)) {
-            copied = Some(("Copy Custom", exchange.custom_text(&options)));
-        }
+        };
+        copied.map(|text| ui.ctx().copy_text(text)).is_some()
     });
-
-    if let Some((label, text)) = copied {
-        ui.ctx().copy_text(text);
-        let message = label.trim_start_matches("Copy ").to_string() + " copied";
-        flash::set(ui, flash_id, message);
-        ui.close();
-    }
-}
-
-fn section(ui: &mut egui::Ui, text: &str) {
-    ui.label(RichText::new(text).weak().small().strong());
 }

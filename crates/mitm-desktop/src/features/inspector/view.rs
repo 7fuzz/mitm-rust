@@ -1,10 +1,11 @@
 use eframe::egui::{self, RichText};
 use mitm_core::proxy::history::HistoryEntry;
 use crate::app::command::{AppCommand, Commands};
-use crate::features::traffic::{FlowFlags, TrafficState};
+use crate::features::traffic::{Cmd, FlowFlags, TrafficState};
 use crate::util::format::{format_bytes, format_duration};
 use crate::ui::theme::Tone;
 use crate::widgets::button::icon_button;
+use crate::widgets::copy_menu;
 use crate::widgets::pills::{badge, render_method_pill, render_status_pill};
 use crate::widgets::split;
 use crate::widgets::message_pane::{self as pane, PaneData};
@@ -115,6 +116,10 @@ fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, prefs: &mu
             if icon_button(ui, icon, hint).clicked() {
                 prefs.popped_out = !prefs.popped_out;
             }
+            copy_menu::button(ui, "inspector", |ui| {
+                let format = copy_menu::items(ui, !flags.is_pending());
+                format.map(|format| cmds.push(Cmd::Copy(flow.id, format))).is_some()
+            });
             if ui.button("Fuzzer").on_hover_text("Send to Fuzzer").clicked() {
                 cmds.push(AppCommand::SendFlowToFuzzer(flow.id));
             }

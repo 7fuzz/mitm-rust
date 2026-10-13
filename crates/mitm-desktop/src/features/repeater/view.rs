@@ -1,6 +1,7 @@
 use eframe::egui::{self, RichText};
 use crate::app::command::{AppCommand, Commands};
-use crate::features::request_editor::response_panel::{self, header_pairs, RequestCopy, ResponseData};
+use crate::features::request_editor::response_panel::{self, header_pairs, ResponseData};
+use crate::util::format::Exchange;
 use crate::features::request_editor::run_list::{self, Run, RunAction};
 use crate::features::request_editor::url_params::build_url;
 use crate::widgets::split;
@@ -48,17 +49,16 @@ pub fn show(ui: &mut egui::Ui, state: &mut RepeaterState, cmds: &mut Commands) {
 
 fn response(ui: &mut egui::Ui, state: &mut RepeaterState, tab_id: &str, cmds: &mut Commands) {
     let Some(tab) = state.tabs.iter().find(|t| t.id == tab_id) else { return };
-    let request = RequestCopy {
-        method: tab.method.clone(),
-        url: build_url(&tab.url, &tab.params),
-        headers: tab
-            .headers
+    let editor = Exchange::request_only(
+        tab.method.clone(),
+        build_url(&tab.url, &tab.params),
+        tab.headers
             .iter()
             .filter(|h| h.enabled && !h.key.trim().is_empty())
             .map(|h| (h.key.clone(), h.value.clone()))
             .collect(),
-        body: tab.body_content.clone().unwrap_or_default(),
-    };
+        tab.body_content.clone().unwrap_or_default(),
+    );
 
     let shown = state.responses.get(tab_id);
     let exchange = shown
@@ -77,7 +77,7 @@ fn response(ui: &mut egui::Ui, state: &mut RepeaterState, tab_id: &str, cmds: &m
 
     let mut history_open = state.prefs.history_open;
     let mut stacked = state.prefs.stacked;
-    let save = response_panel::show(ui, "repeater_response", &mut state.response_pane, data, Some(&request), exchange.as_ref(), |ui| {
+    let save = response_panel::show(ui, "repeater_response", &mut state.response_pane, data, Some(&editor), exchange.as_ref(), |ui| {
         response_panel::history_toggle(ui, &mut history_open);
         response_panel::stack_toggle(ui, &mut stacked);
         if executing {

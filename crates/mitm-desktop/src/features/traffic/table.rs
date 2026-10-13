@@ -5,9 +5,9 @@ use mitm_core::collections::CollectionTreeItem;
 use mitm_core::proxy::history::HistoryEntry;
 use crate::app::command::{AppCommand, Commands};
 use crate::features::collections::SaveTarget;
-use crate::util::format::{format_bytes, format_duration, local_clock, CopyFormat};
+use crate::util::format::{format_bytes, format_duration, local_clock};
 use crate::ui::theme::{self, Tone};
-use crate::widgets::copy_custom;
+use crate::widgets::copy_menu;
 use crate::widgets::pills::{badge, method_text, render_source_pill, status_text};
 use super::{Cmd, flow_status_badge, ColumnId, ColumnLayout, FlowFlags, TrafficState};
 
@@ -338,15 +338,8 @@ fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, folders: &[CollectionTreeIt
         new_folder_entry(ui, flow.id, cmds);
     });
     ui.menu_button("Copy", |ui| {
-        if ui.button("Copy URL").clicked() {
-            ui.ctx().copy_text(flow.url.clone());
-            ui.close();
-        }
-        menu_item(ui, "Copy Curl", Cmd::Copy(flow.id, CopyFormat::Curl), cmds);
-        menu_item(ui, "Copy Curl and Res", Cmd::Copy(flow.id, CopyFormat::CurlAndResponse), cmds);
-        menu_item(ui, "Copy URL, Body, and Response", Cmd::Copy(flow.id, CopyFormat::UrlBodyAndResponse), cmds);
-        if let Some(options) = copy_custom::submenu(ui) {
-            cmds.push(Cmd::CopyCustom(flow.id, options));
+        if let Some(format) = copy_menu::items(ui, !FlowFlags::of(flow).is_pending()) {
+            cmds.push(Cmd::Copy(flow.id, format));
         }
     });
     ui.separator();

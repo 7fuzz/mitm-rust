@@ -3,6 +3,7 @@ use mitm_core::fuzzer::{FuzzConfig, FuzzResult, FuzzStart};
 use crate::app::command::AppCommand;
 use crate::app::cx::Cx;
 use crate::app::jobs::Jobs;
+use crate::util::format::{CopyFormat, Exchange};
 use super::FuzzerState;
 use mitm_core::db::Db;
 
@@ -11,7 +12,7 @@ pub enum Cmd {
     Start(FuzzConfig),
     Stop,
     SelectResult { run_id: i64, idx: u32 },
-    CopyCurl { run_id: i64, idx: u32 },
+    Copy { run_id: i64, idx: u32, format: CopyFormat },
     SaveRun { run_id: i64, name: String },
     LoadRun(i64),
     DeleteRun(i64),
@@ -42,9 +43,9 @@ pub fn handle(state: &mut FuzzerState, cx: &Cx, cmd: Cmd) {
         }
         Cmd::Stop => cx.core.stop_fuzz(),
         Cmd::SelectResult { run_id, idx } => state.select_result(run_id, idx, db),
-        Cmd::CopyCurl { run_id, idx } => {
+        Cmd::Copy { run_id, idx, format } => {
             if let Some(result) = state.result(run_id, idx, db) {
-                cx.ctx.copy_text(crate::util::format::Exchange::from_fuzz_result(&result).curl());
+                cx.ctx.copy_text(Exchange::from_fuzz_result(&result).copy_text(&format));
             }
         }
         Cmd::SaveRun { run_id, name } => match cx.core.save_fuzz_run(run_id, &name) {

@@ -9,6 +9,7 @@ use crate::features::request_editor::method::method_combo;
 use crate::features::request_editor::url_params::{build_url, new_id, parse_query};
 use crate::util::format::{format_bytes, format_duration};
 use crate::ui::theme::{self, Tone};
+use crate::widgets::copy_menu;
 use crate::widgets::pills::render_status_pill;
 use crate::widgets::tri_state::tri_state_button;
 use crate::widgets::{split, template};
@@ -588,10 +589,11 @@ fn results_table(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Command
                         ui.close();
                     }
                     if let Some(run_id) = fuzzer.run_id {
-                        if ui.button("Copy cURL").clicked() {
-                            cmds.push(Cmd::CopyCurl { run_id, idx: r.idx });
-                            ui.close();
-                        }
+                        ui.menu_button("Copy", |ui| {
+                            if let Some(format) = copy_menu::items(ui, r.error.is_none()) {
+                                cmds.push(Cmd::Copy { run_id, idx: r.idx, format });
+                            }
+                        });
                     }
                 });
             });

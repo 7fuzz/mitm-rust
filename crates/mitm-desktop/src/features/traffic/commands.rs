@@ -5,7 +5,7 @@ use crate::app::command::AppCommand;
 use crate::app::cx::Cx;
 use crate::app::jobs::Jobs;
 use crate::features::inspector::InspectorState;
-use crate::util::format::{CopyFormat, CopyOptions, Exchange};
+use crate::util::format::{CopyFormat, Exchange};
 use super::TrafficState;
 use mitm_core::db::Db;
 
@@ -18,7 +18,6 @@ pub enum Cmd {
     ExportHar(Vec<i64>),
     Delete(i64),
     Copy(i64, CopyFormat),
-    CopyCustom(i64, CopyOptions),
     SetHistoryLimit(HistorySettings),
 }
 
@@ -69,12 +68,7 @@ pub fn handle(traffic: &mut TrafficState, inspector: &mut InspectorState, cx: &C
         }
         Cmd::Copy(id, format) => {
             if let Some(exchange) = exchange(traffic, db, id) {
-                cx.ctx.copy_text(exchange.copy_text(format));
-            }
-        }
-        Cmd::CopyCustom(id, options) => {
-            if let Some(exchange) = exchange(traffic, db, id) {
-                cx.ctx.copy_text(exchange.custom_text(&options));
+                cx.ctx.copy_text(exchange.copy_text(&format));
             }
         }
         Cmd::SetHistoryLimit(settings) => {
