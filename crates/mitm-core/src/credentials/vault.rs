@@ -291,6 +291,7 @@ mod tests {
         .unwrap();
         migrate_into_vaults(&conn).unwrap();
         migrate_into_vaults(&conn).unwrap();
+        conn.execute_batch(include_str!("../../migrations/20261013_0023_credential_tags.sql")).unwrap();
 
         let vaults = list_vaults(&db).unwrap();
         assert_eq!((vaults.len(), vaults[0].name.as_str()), (1, "DG-Assessment"));

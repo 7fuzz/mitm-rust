@@ -61,6 +61,8 @@ pub struct CredentialsState {
     collapsed: HashSet<String>,
     /// Asked before a vault and its entries are deleted.
     delete_vault: Option<String>,
+    /// The tag being typed for the selected entry.
+    tag_draft: String,
     pub has_password: bool,
     pub locked: bool,
     unlock: lock::UnlockPrompt,
@@ -89,6 +91,7 @@ impl Default for CredentialsState {
             linked: Vec::new(),
             collapsed: HashSet::new(),
             delete_vault: None,
+            tag_draft: String::new(),
             has_password: false,
             locked: false,
             unlock: lock::UnlockPrompt::default(),
@@ -288,6 +291,19 @@ impl CredentialsState {
         }
     }
 
+    /// Moves `dragged` next to `target` (after it when `after`) within their vault.
+    fn reorder(&mut self, db: &Db, vault_id: &str, dragged: &str, target: &str, after: bool) {
+        let mut ids: Vec<String> =
+            self.summaries.iter().filter(|s| s.vault_id == vault_id && s.id != dragged).map(|s| s.id.clone()).collect();
+        let at = ids.iter().position(|id| id == target).map_or(ids.len(), |i| i + usize::from(after));
+        ids.insert(at, dragged.to_string());
+        self.flush(db);
+        if let Err(e) = credentials::reorder_credentials(db, vault_id, &ids) {
+            self.error = Some(e.to_string());
+        }
+        self.reload(db);
+    }
+
     fn set_linked(&mut self, db: &Db, vault_id: &str, workspace_id: &str, linked: bool) {
         let result = if linked {
             credentials::link_vault(db, vault_id, workspace_id)
@@ -376,6 +392,7 @@ fn locked_placeholder(summary: &CredentialSummary) -> Credential {
         vault_id: summary.vault_id.clone(),
         vault: summary.vault.clone(),
         name: summary.name.clone(),
+        tags: summary.tags.clone(),
         fields: summary
             .fields
             .iter()

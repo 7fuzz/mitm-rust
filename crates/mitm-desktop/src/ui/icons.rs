@@ -20,6 +20,7 @@ pub const CARET_UP: &str = "\u{E13C}";
 pub const CHECK: &str = "\u{E182}";
 pub const CLOCK_COUNTER_CLOCKWISE: &str = "\u{E1A0}";
 pub const COPY: &str = "\u{E1CA}";
+pub const DOTS_SIX_VERTICAL: &str = "\u{EAE2}";
 pub const DOTS_THREE: &str = "\u{E1FE}";
 pub const DOWNLOAD_SIMPLE: &str = "\u{E20C}";
 pub const EXPORT: &str = "\u{EAF0}";

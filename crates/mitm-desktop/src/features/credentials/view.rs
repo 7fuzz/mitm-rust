@@ -10,7 +10,9 @@ use super::lock::unlock_form;
 use super::{CredentialsState, Rename, RenameTarget};
 use crate::ui::icons;
 use crate::widgets::button::icon_button;
-use crate::widgets::list_row::list_row;
+use crate::widgets::list_row::{list_row, list_row_sensing};
+use crate::widgets::pills::badge;
+use crate::ui::theme::Tone;
 use crate::widgets::search::search_field;
 use crate::widgets::section::section_with;
 use mitm_core::db::Db;
@@ -24,8 +26,26 @@ pub fn show(ui: &mut egui::Ui, state: &mut CredentialsState, workspace_id: &str,
     delete_vault_modal(ui.ctx(), state, db);
 }
 
+/// What a credential row carries while it's dragged to a new place in its vault.
+struct EntryDrag {
+    id: String,
+    vault_id: String,
+    name: String,
+}
+
+/// What a field row carries while it's dragged to a new place in its entry.
+struct FieldDrag {
+    entry_id: String,
+    index: usize,
+    key: String,
+}
+
+/// Tags shown on a list row before the rest collapse into `+N`.
+const ROW_TAGS: usize = 3;
+
 enum ListAction {
     Select(String),
+    Reorder { vault_id: String, dragged: String, target: String, after: bool },
     AddEntry(String),
     ToggleCollapsed(String),
     Rename(RenameTarget, String),
@@ -46,12 +66,13 @@ fn vault_list(ui: &mut egui::Ui, state: &mut CredentialsState, workspaces: &[Wor
             }
         });
     });
-    search_field(ui, &mut state.search, "Search");
+    search_field(ui, &mut state.search, "Search names and tags");
     ui.add_space(4.0);
 
     let filter = state.search.trim().to_lowercase();
     let workspace_id = state.loaded_for.clone().unwrap_or_default();
     let (linked, other): (Vec<Vault>, Vec<Vault>) = state.vaults.iter().cloned().partition(|v| v.is_linked(&workspace_id));
+    floating_drag_label(ui);
     let mut action = None;
     egui::ScrollArea::vertical().id_salt("credential_list").show(ui, |ui| {
         if state.vaults.is_empty() {
@@ -72,6 +93,7 @@ fn vault_list(ui: &mut egui::Ui, state: &mut CredentialsState, workspaces: &[Wor
 
     match action {
         Some(ListAction::Select(id)) => state.selected = Some(id),
+        Some(ListAction::Reorder { vault_id, dragged, target, after }) => state.reorder(db, &vault_id, &dragged, &target, after),
         Some(ListAction::AddEntry(vault_id)) => state.create(db, &vault_id),
         Some(ListAction::ToggleCollapsed(vault_id)) => {
             if !state.collapsed.remove(&vault_id) {
@@ -100,7 +122,7 @@ fn vault_rows(
     let entries: Vec<CredentialSummary> = state
         .summaries
         .iter()
-        .filter(|s| s.vault_id == vault.id && (filter.is_empty() || vault_matches || s.name.to_lowercase().contains(filter)))
+        .filter(|s| s.vault_id == vault.id && (filter.is_empty() || vault_matches || entry_matches(s, filter)))
         .cloned()
         .collect();
     if !filter.is_empty() && entries.is_empty() && !vault_matches {
@@ -163,8 +185,9 @@ fn vault_rows(
         let code = state.entries.iter().find(|e| e.id == entry.id).and_then(first_code);
         let row = ui
             .indent(("credential_entry", &entry.id), |ui| {
-                list_row(ui, selected, |ui| {
-                    ui.label(&entry.name);
+                list_row_sensing(ui, selected, egui::Sense::click_and_drag(), |ui| {
+                    ui.add(egui::Label::new(&entry.name).selectable(false));
+                    tag_pills(ui, &entry.tags, ROW_TAGS);
                     if let Some(code) = code {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.label(RichText::new(group_code(&code)).monospace().weak());
@@ -175,6 +198,20 @@ fn vault_rows(
             .inner;
         if row.clicked() {
             *action = Some(ListAction::Select(entry.id.clone()));
+        }
+        if row.drag_started() {
+            row.dnd_set_drag_payload(EntryDrag { id: entry.id.clone(), vault_id: vault.id.clone(), name: entry.name.clone() });
+        }
+        let same_vault = |drag: &EntryDrag| drag.vault_id == vault.id && drag.id != entry.id;
+        if row.dnd_hover_payload::<EntryDrag>().is_some_and(|d| same_vault(&d)) {
+            let after = row.ctx.pointer_interact_pos().is_some_and(|p| p.y > row.rect.center().y);
+            let y = if after { row.rect.bottom() } else { row.rect.top() };
+            let stroke = egui::Stroke::new(2.0, ui.visuals().selection.stroke.color);
+            ui.painter().hline(row.rect.x_range(), y, stroke);
+        }
+        if let Some(drag) = row.dnd_release_payload::<EntryDrag>().filter(|d| same_vault(d)) {
+            let after = row.ctx.pointer_interact_pos().is_some_and(|p| p.y > row.rect.center().y);
+            *action = Some(ListAction::Reorder { vault_id: vault.id.clone(), dragged: drag.id.clone(), target: entry.id.clone(), after });
         }
         row.context_menu(|ui| {
             if ui.button("Rename").clicked() {
@@ -264,6 +301,8 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, now: f
             }
         });
     }
+    ui.add_space(2.0);
+    tag_editor(ui, state, &id, now);
     ui.add_space(6.0);
     if state.selected.as_deref() != Some(id.as_str()) {
         return;
@@ -271,9 +310,18 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, now: f
 
     let mut changed = false;
     let mut remove = None;
-    egui::Grid::new(("credential_fields", &id)).num_columns(4).spacing([8.0, 6.0]).show(ui, |ui| {
+    let mut handles = Vec::new();
+    let grid = egui::Grid::new(("credential_fields", &id)).num_columns(5).spacing([8.0, 6.0]).show(ui, |ui| {
         let keys: Vec<String> = state.entries[index].fields.iter().map(|f| f.key.clone()).collect();
         for (i, key) in keys.iter().enumerate() {
+            let handle = ui
+                .add(egui::Label::new(RichText::new(icons::DOTS_SIX_VERTICAL).weak()).selectable(false).sense(egui::Sense::drag()))
+                .on_hover_cursor(egui::CursorIcon::Grab)
+                .on_hover_text("Drag to reorder");
+            if handle.drag_started() {
+                handle.dnd_set_drag_payload(FieldDrag { entry_id: id.clone(), index: i, key: key.clone() });
+            }
+            handles.push(handle.rect.y_range());
             rename_field(ui, state, db, RenameTarget::Field(id.clone(), key.clone()), key, RichText::new(key).strong());
             let Some(entry) = state.entries.iter_mut().find(|e| e.id == id) else { return };
             let field = &mut entry.fields[i];
@@ -374,6 +422,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, now: f
             entry.fields.remove(i);
             changed = true;
         }
+        changed |= drop_field(ui, entry, &handles, grid.response.rect.x_range());
     }
     if ui.button("Add field").clicked() {
         state.add_field(db, &id);
@@ -387,6 +436,111 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, now: f
     if changed {
         state.mark_dirty(&id, now);
     }
+}
+
+fn entry_matches(entry: &CredentialSummary, filter: &str) -> bool {
+    entry.name.to_lowercase().contains(filter) || entry.tags.iter().any(|t| t.to_lowercase().contains(filter))
+}
+
+/// A stable colour per tag, so the same tag looks the same everywhere.
+fn tag_tone(tag: &str) -> Tone {
+    const TONES: [Tone; 5] = [Tone::Info, Tone::Success, Tone::Caution, Tone::Accent, Tone::Source];
+    let hash = tag.to_lowercase().bytes().fold(0u32, |h, b| h.wrapping_mul(31).wrapping_add(u32::from(b)));
+    TONES[hash as usize % TONES.len()]
+}
+
+fn tag_pills(ui: &mut egui::Ui, tags: &[String], max: usize) {
+    for tag in tags.iter().take(max) {
+        badge(ui, tag, tag_tone(tag));
+    }
+    if tags.len() > max {
+        ui.label(RichText::new(format!("+{}", tags.len() - max)).small().weak()).on_hover_text(tags[max..].join(", "));
+    }
+}
+
+/// The entry's tags, each removable, and a field to add one (Enter) or pick one used elsewhere.
+fn tag_editor(ui: &mut egui::Ui, state: &mut CredentialsState, id: &str, now: f64) {
+    let Some(entry) = state.entries.iter().find(|e| e.id == id) else { return };
+    let mut tags = entry.tags.clone();
+    let mut known: Vec<String> = Vec::new();
+    for tag in state.summaries.iter().flat_map(|s| &s.tags) {
+        if !tags.iter().chain(&known).any(|t| t.eq_ignore_ascii_case(tag)) {
+            known.push(tag.clone());
+        }
+    }
+    known.sort_by_key(|t| t.to_lowercase());
+
+    let mut changed = false;
+    ui.horizontal_wrapped(|ui| {
+        let mut remove = None;
+        for (i, tag) in tags.iter().enumerate() {
+            let pill = badge(ui, &format!("{tag} {}", icons::X), tag_tone(tag)).interact(egui::Sense::click());
+            if pill.on_hover_text("Remove tag").clicked() {
+                remove = Some(i);
+            }
+        }
+        if let Some(i) = remove {
+            tags.remove(i);
+            changed = true;
+        }
+        let edit = ui.add(egui::TextEdit::singleline(&mut state.tag_draft).hint_text("Add tag").desired_width(90.0));
+        if edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !state.tag_draft.trim().is_empty() {
+            tags.push(std::mem::take(&mut state.tag_draft));
+            changed = true;
+            edit.request_focus();
+        }
+        if !known.is_empty() {
+            ui.menu_button(icons::CARET_DOWN, |ui| {
+                for tag in &known {
+                    if ui.button(tag).clicked() {
+                        tags.push(tag.clone());
+                        changed = true;
+                        ui.close();
+                    }
+                }
+            });
+        }
+    });
+    if changed {
+        if let Some(entry) = state.entries.iter_mut().find(|e| e.id == id) {
+            entry.tags = mitm_core::credentials::normalize_tags(&tags);
+        }
+        state.mark_dirty(id, now);
+    }
+}
+
+/// While a field of `entry` is dragged, marks where it would land; on release moves it there.
+fn drop_field(ui: &egui::Ui, entry: &mut Credential, rows: &[egui::Rangef], x: egui::Rangef) -> bool {
+    let Some(drag) = egui::DragAndDrop::payload::<FieldDrag>(ui.ctx()).filter(|d| d.entry_id == entry.id) else { return false };
+    let Some(pointer) = ui.ctx().pointer_interact_pos() else { return false };
+    let slot = rows.iter().filter(|row| row.center() < pointer.y).count();
+    let y = match slot {
+        0 => rows.first().map_or(0.0, |r| r.min - 3.0),
+        n if n == rows.len() => rows[n - 1].max + 3.0,
+        n => (rows[n - 1].max + rows[n].min) / 2.0,
+    };
+    ui.painter().hline(x, y, egui::Stroke::new(2.0, ui.visuals().selection.stroke.color));
+    ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+    if !ui.input(|i| i.pointer.any_released()) || drag.index >= entry.fields.len() || entry.fields[drag.index].key != drag.key {
+        return false;
+    }
+    egui::DragAndDrop::clear_payload(ui.ctx());
+    let field = entry.fields.remove(drag.index);
+    entry.fields.insert(if slot > drag.index { slot - 1 } else { slot }, field);
+    true
+}
+
+fn floating_drag_label(ui: &egui::Ui) {
+    let Some(drag) = egui::DragAndDrop::payload::<EntryDrag>(ui.ctx()) else { return };
+    let Some(pos) = ui.ctx().pointer_interact_pos() else { return };
+    ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+    egui::Area::new(egui::Id::new("credential_drag_label"))
+        .order(egui::Order::Tooltip)
+        .fixed_pos(pos + egui::vec2(12.0, 8.0))
+        .interactable(false)
+        .show(ui.ctx(), |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| ui.label(&drag.name));
+        });
 }
 
 /// A label that turns into an edit on click. Returns true while editing.
@@ -421,4 +575,24 @@ fn rename_edit(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, target:
         output.state.store(ui.ctx(), edit.id);
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_matches_names_and_tags_and_tags_keep_their_colour() {
+        let entry = CredentialSummary {
+            id: "c".into(),
+            vault_id: "v".into(),
+            vault: "DG".into(),
+            name: "dgAdmin".into(),
+            tags: vec!["Staging".into()],
+            fields: Vec::new(),
+        };
+        assert!(entry_matches(&entry, "admin") && entry_matches(&entry, "stag"));
+        assert!(!entry_matches(&entry, "prod"));
+        assert_eq!(tag_tone("staging"), tag_tone("Staging"));
+    }
 }

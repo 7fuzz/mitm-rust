@@ -93,7 +93,7 @@ The vaults linked to the workspace, with their credential entries but no values.
 | `name` | text | Required. Letters, digits, `-` and `_`. |
 | `credentials` | list | Entries: `{ "name", "fields" }`. |
 
-An entry's `name` follows the same rule. Its `fields` are `{ "key", "kind", "extracted" }`: `kind` is `text` (default), `secret` or `totp`, and `extracted` marks a field an extract rule writes (a token).
+An entry's `name` follows the same rule. `tags` is a list of free-text tags (up to 32 characters each). Its `fields` are `{ "key", "kind", "extracted" }`: `kind` is `text` (default), `secret` or `totp`, and `extracted` marks a field an extract rule writes (a token).
 
 Files made before vaults have a top-level `credentials` list of entries instead. Import puts those in a vault named after the workspace and adds that vault to the file's `{{$cred:entry.field}}` refs.
 

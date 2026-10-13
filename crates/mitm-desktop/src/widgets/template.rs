@@ -624,6 +624,7 @@ mod tests {
             vault_id: "v".into(),
             vault: "DG".into(),
             name: "dgAdmin".into(),
+            tags: Vec::new(),
             fields: vec![
                 field("user", FieldKind::Text, "admin@x"),
                 field("password", FieldKind::Secret, "hunter2"),

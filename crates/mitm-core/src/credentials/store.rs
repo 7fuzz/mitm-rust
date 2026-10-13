@@ -60,6 +60,7 @@ pub struct CredentialSummary {
     /// The vault's name, as refs spell it.
     pub vault: String,
     pub name: String,
+    pub tags: Vec<String>,
     pub fields: Vec<FieldMeta>,
 }
 
@@ -76,6 +77,7 @@ pub struct Credential {
     /// The vault's name, as refs spell it; read with the entry, never written through it.
     pub vault: String,
     pub name: String,
+    pub tags: Vec<String>,
     pub fields: Vec<Field>,
     pub notes: String,
     pub order_index: i64,
@@ -115,6 +117,20 @@ pub fn validate_name(name: &str) -> Result<(), CredentialError> {
     }
 }
 
+pub const MAX_TAG_CHARS: usize = 32;
+
+/// Trimmed, non-empty, at most `MAX_TAG_CHARS`, and each tag once ignoring case; the first spelling wins.
+pub fn normalize_tags(tags: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for tag in tags {
+        let tag: String = tag.trim().chars().take(MAX_TAG_CHARS).collect();
+        if !tag.is_empty() && !out.iter().any(|t| t.eq_ignore_ascii_case(&tag)) {
+            out.push(tag);
+        }
+    }
+    out
+}
+
 fn validate_fields(fields: &[Field]) -> Result<(), String> {
     for (i, field) in fields.iter().enumerate() {
         validate_name(&field.key)?;
@@ -142,18 +158,20 @@ pub fn list_credentials(db: &Db) -> Result<Vec<CredentialSummary>, CredentialErr
     let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
-            "SELECT c.id, c.vault_id, v.name, c.name, c.fields_json FROM credentials c JOIN vaults v ON v.id = c.vault_id
+            "SELECT c.id, c.vault_id, v.name, c.name, c.fields_json, c.tags_json FROM credentials c JOIN vaults v ON v.id = c.vault_id
              ORDER BY v.order_index, v.name, c.order_index, c.name",
         )
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |r| {
             let fields_json: String = r.get(4)?;
+            let tags_json: String = r.get(5)?;
             Ok(CredentialSummary {
                 id: r.get(0)?,
                 vault_id: r.get(1)?,
                 vault: r.get(2)?,
                 name: r.get(3)?,
+                tags: serde_json::from_str(&tags_json).unwrap_or_default(),
                 fields: serde_json::from_str(&fields_json).unwrap_or_default(),
             })
         })
@@ -163,10 +181,10 @@ pub fn list_credentials(db: &Db) -> Result<Vec<CredentialSummary>, CredentialErr
     Ok(rows)
 }
 
-type Row = (String, String, String, String, String, Vec<u8>, Vec<u8>, i64, i64, i64);
+type Row = (String, String, String, String, String, String, Vec<u8>, Vec<u8>, i64, i64, i64);
 
 fn decrypt_row(key: &crypto::DataKey, row: Row) -> Result<Credential, String> {
-    let (id, vault_id, vault, name, fields_json, nonce, ciphertext, order_index, created_at_ms, updated_at_ms) = row;
+    let (id, vault_id, vault, name, tags_json, fields_json, nonce, ciphertext, order_index, created_at_ms, updated_at_ms) = row;
     let plain = crypto::open(key, id.as_bytes(), &nonce, &ciphertext)?;
     let payload: Payload = serde_json::from_slice(&plain).map_err(|e| e.to_string())?;
     let metas: Vec<FieldMeta> = serde_json::from_str(&fields_json).unwrap_or_default();
@@ -179,19 +197,20 @@ fn decrypt_row(key: &crypto::DataKey, row: Row) -> Result<Credential, String> {
             extracted: m.extracted,
         })
         .collect();
-    Ok(Credential { id, vault_id, vault, name, fields, notes: payload.notes, order_index, created_at_ms, updated_at_ms })
+    let tags = serde_json::from_str(&tags_json).unwrap_or_default();
+    Ok(Credential { id, vault_id, vault, name, tags, fields, notes: payload.notes, order_index, created_at_ms, updated_at_ms })
 }
 
 fn existing_key(db: &Db) -> Result<crypto::DataKey, CredentialError> {
     session::data_key(db)?.ok_or_else(|| "credentials have no data key".into())
 }
 
-const COLUMNS: &str = "id, vault_id, name, fields_json, nonce, ciphertext, order_index, created_at_ms, updated_at_ms";
-const SELECT: &str = "SELECT c.id, c.vault_id, v.name, c.name, c.fields_json, c.nonce, c.ciphertext, c.order_index, c.created_at_ms, \
-                      c.updated_at_ms FROM credentials c JOIN vaults v ON v.id = c.vault_id";
+const COLUMNS: &str = "id, vault_id, name, tags_json, fields_json, nonce, ciphertext, order_index, created_at_ms, updated_at_ms";
+const SELECT: &str = "SELECT c.id, c.vault_id, v.name, c.name, c.tags_json, c.fields_json, c.nonce, c.ciphertext, c.order_index, \
+                      c.created_at_ms, c.updated_at_ms FROM credentials c JOIN vaults v ON v.id = c.vault_id";
 
 fn read_row(r: &rusqlite::Row) -> rusqlite::Result<Row> {
-    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?))
+    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?))
 }
 
 pub fn load_credential(db: &Db, id: &str) -> Result<Credential, CredentialError> {
@@ -249,6 +268,7 @@ pub(crate) fn new_credential(conn: &Connection, vault_id: &str, name: &str) -> R
         vault_id: vault_id.to_string(),
         vault,
         name: name.to_string(),
+        tags: Vec::new(),
         fields: Vec::new(),
         notes: String::new(),
         order_index,
@@ -289,13 +309,15 @@ fn write(conn: &Connection, key: &crypto::DataKey, credential: &Credential, inse
     let sealed = crypto::seal(key, credential.id.as_bytes(), &plain);
     let metas: Vec<FieldMeta> = credential.fields.iter().map(Field::meta).collect();
     let fields_json = serde_json::to_string(&metas).map_err(|e| e.to_string())?;
+    let tags_json = serde_json::to_string(&normalize_tags(&credential.tags)).map_err(|e| e.to_string())?;
     let changed = if insert {
         conn.execute(
-            &format!("INSERT INTO credentials ({COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"),
+            &format!("INSERT INTO credentials ({COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
             params![
                 credential.id,
                 credential.vault_id,
                 credential.name,
+                tags_json,
                 fields_json,
                 sealed.nonce,
                 sealed.ciphertext,
@@ -305,9 +327,10 @@ fn write(conn: &Connection, key: &crypto::DataKey, credential: &Credential, inse
             ],
         )
     } else {
+        // The position only changes through `reorder_credentials`, so a stale copy can't undo a reorder.
         conn.execute(
-            "UPDATE credentials SET fields_json = ?, nonce = ?, ciphertext = ?, order_index = ?, updated_at_ms = ? WHERE id = ?",
-            params![fields_json, sealed.nonce, sealed.ciphertext, credential.order_index, now_ms(), credential.id],
+            "UPDATE credentials SET tags_json = ?, fields_json = ?, nonce = ?, ciphertext = ?, updated_at_ms = ? WHERE id = ?",
+            params![tags_json, fields_json, sealed.nonce, sealed.ciphertext, now_ms(), credential.id],
         )
     }
     .map_err(|e| e.to_string())?;
@@ -330,6 +353,23 @@ pub fn write_extracted(db: &Db, workspace_id: &str, vault: &str, entry: &str, fi
         }
     }
     save_credential(db, &credential)
+}
+
+/// Puts the vault's entries in the order of `ids`; entries not listed keep their place after them.
+pub fn reorder_credentials(db: &Db, vault_id: &str, ids: &[String]) -> Result<(), CredentialError> {
+    let mut conn = db.conn().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    for (index, id) in ids.iter().enumerate() {
+        tx.execute("UPDATE credentials SET order_index = ? WHERE id = ? AND vault_id = ?", params![index as i64, id, vault_id])
+            .map_err(|e| e.to_string())?;
+    }
+    tx.execute(
+        "UPDATE credentials SET order_index = order_index + ? WHERE vault_id = ? AND id NOT IN (SELECT value FROM json_each(?))",
+        params![ids.len() as i64, vault_id, serde_json::to_string(ids).map_err(|e| e.to_string())?],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 pub fn delete_credential(db: &Db, id: &str) -> Result<(), CredentialError> {
@@ -391,6 +431,32 @@ pub(crate) mod tests {
 
         delete_credential(&db, &cred.id).unwrap();
         assert!(list_credentials(&db).unwrap().is_empty());
+        let _ = std::fs::remove_file(&db);
+    }
+
+    #[test]
+    fn tags_are_normalized_saved_and_listed() {
+        let db = temp_db();
+        let ws = workspace(&db, "W");
+        let mut cred = create_credential(&db, &vault(&db, &ws, "DG"), "dgAdmin").unwrap();
+        cred.tags = vec![" staging ".into(), "Admin".into(), "admin".into(), "".into(), "x".repeat(40)];
+        save_credential(&db, &cred).unwrap();
+        let expected = vec!["staging".to_string(), "Admin".to_string(), "x".repeat(MAX_TAG_CHARS)];
+        assert_eq!(load_credential(&db, &cred.id).unwrap().tags, expected);
+        assert_eq!(list_credentials(&db).unwrap()[0].tags, expected);
+        let _ = std::fs::remove_file(&db);
+    }
+
+    #[test]
+    fn reorder_sets_the_order_and_saving_keeps_it() {
+        let db = temp_db();
+        let ws = workspace(&db, "W");
+        let dg = vault(&db, &ws, "DG");
+        let [a, _b, c] = ["a", "b", "c"].map(|name| create_credential(&db, &dg, name).unwrap());
+        reorder_credentials(&db, &dg, &[c.id.clone(), a.id.clone()]).unwrap();
+        save_credential(&db, &c).unwrap();
+        let names: Vec<String> = list_credentials(&db).unwrap().into_iter().map(|s| s.name).collect();
+        assert_eq!(names, ["c", "a", "b"]);
         let _ = std::fs::remove_file(&db);
     }
 

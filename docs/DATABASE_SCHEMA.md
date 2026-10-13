@@ -310,6 +310,7 @@ CREATE TABLE credentials (
     order_index INTEGER NOT NULL DEFAULT 0,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL,
+    tags_json TEXT NOT NULL DEFAULT '[]',
     UNIQUE (vault_id, name)
 );
 CREATE INDEX idx_credentials_vault ON credentials(vault_id, order_index);

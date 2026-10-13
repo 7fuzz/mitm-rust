@@ -49,6 +49,8 @@ pub struct VaultEntry {
 pub struct CredentialEntry {
     pub name: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fields: Vec<crate::credentials::FieldMeta>,
 }
 

@@ -48,7 +48,7 @@ pub fn export_credentials(
             credentials: summaries
                 .iter()
                 .filter(|c| c.vault_id == vault.id)
-                .map(|c| CredentialEntry { name: c.name.clone(), fields: c.fields.clone() })
+                .map(|c| CredentialEntry { name: c.name.clone(), tags: c.tags.clone(), fields: c.fields.clone() })
                 .collect(),
         })
         .collect();
@@ -120,7 +120,8 @@ pub(crate) fn import_credentials(
             Some(c) => c,
             None => store::new_credential(conn, vault_id, &entry.name)?,
         };
-        let before = credential.fields.len();
+        let before = (credential.fields.len(), credential.tags.len());
+        credential.tags = store::normalize_tags(&[credential.tags.clone(), entry.tags.clone()].concat());
         for meta in &entry.fields {
             if credential.field(&meta.key).is_none() {
                 credential.fields.push(Field { key: meta.key.clone(), kind: meta.kind, extracted: meta.extracted, value: value_of(&meta.key) });
@@ -129,7 +130,7 @@ pub(crate) fn import_credentials(
         if is_new {
             credential.notes = values.map(|v| v.notes.clone()).unwrap_or_default();
             store::insert_credential_conn(conn, key, &credential)?;
-        } else if credential.fields.len() > before {
+        } else if (credential.fields.len(), credential.tags.len()) != before {
             store::update_credential_conn(conn, key, &credential)?;
         } else {
             continue;
