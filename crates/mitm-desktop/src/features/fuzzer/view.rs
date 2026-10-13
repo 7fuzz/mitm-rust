@@ -590,8 +590,8 @@ fn results_table(ui: &mut egui::Ui, fuzzer: &mut FuzzerState, cmds: &mut Command
                     }
                     if let Some(run_id) = fuzzer.run_id {
                         ui.menu_button("Copy", |ui| {
-                            if let Some(format) = copy_menu::items(ui, r.error.is_none()) {
-                                cmds.push(Cmd::Copy { run_id, idx: r.idx, format });
+                            if let Some(action) = copy_menu::items(ui, r.error.is_none()) {
+                                cmds.push(Cmd::Copy { run_id, idx: r.idx, action });
                             }
                         });
                     }

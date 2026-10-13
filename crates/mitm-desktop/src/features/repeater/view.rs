@@ -1,7 +1,7 @@
 use eframe::egui::{self, RichText};
 use crate::app::command::{AppCommand, Commands};
 use crate::features::request_editor::response_panel::{self, header_pairs, ResponseData};
-use crate::util::format::Exchange;
+use crate::util::copy::Exchange;
 use crate::features::request_editor::run_list::{self, Run, RunAction};
 use crate::features::request_editor::url_params::build_url;
 use crate::widgets::split;

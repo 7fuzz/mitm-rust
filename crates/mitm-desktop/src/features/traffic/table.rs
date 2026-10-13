@@ -338,8 +338,8 @@ fn flow_menu(ui: &mut egui::Ui, flow: &HistoryEntry, folders: &[CollectionTreeIt
         new_folder_entry(ui, flow.id, cmds);
     });
     ui.menu_button("Copy", |ui| {
-        if let Some(format) = copy_menu::items(ui, !FlowFlags::of(flow).is_pending()) {
-            cmds.push(Cmd::Copy(flow.id, format));
+        if let Some(action) = copy_menu::items(ui, !FlowFlags::of(flow).is_pending()) {
+            cmds.push(Cmd::Copy(flow.id, action));
         }
     });
     ui.separator();

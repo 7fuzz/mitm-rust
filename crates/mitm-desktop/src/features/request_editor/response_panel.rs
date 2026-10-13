@@ -1,6 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::repeater::HeaderItem;
-use crate::util::format::{format_bytes, Exchange};
+use crate::util::copy::Exchange;
+use crate::util::format::format_bytes;
 use crate::widgets::copy_menu;
 use crate::widgets::message_pane::{self, PaneData, PaneState, SaveBody};
 use crate::widgets::pills::status_text;
@@ -97,16 +98,16 @@ fn copy_menu(ui: &mut egui::Ui, id_salt: &str, editor: Option<&Exchange>, run: O
     copy_menu::button(ui, id_salt, |ui| {
         let copied = match (run, editor) {
             (Some(run), editor) => {
-                let mut copied = copy_menu::items(ui, true).map(|format| run.copy_text(&format));
+                let mut copied = copy_menu::items(ui, true).map(|action| run.copy_text(&action));
                 if let Some(editor) = editor {
                     ui.separator();
-                    if let Some(format) = ui.menu_button("Editor request", |ui| copy_menu::items(ui, false)).inner.flatten() {
-                        copied = Some(editor.copy_text(&format));
+                    if let Some(action) = ui.menu_button("Editor request", |ui| copy_menu::items(ui, false)).inner.flatten() {
+                        copied = Some(editor.copy_text(&action));
                     }
                 }
                 copied
             }
-            (None, Some(editor)) => copy_menu::items(ui, false).map(|format| editor.copy_text(&format)),
+            (None, Some(editor)) => copy_menu::items(ui, false).map(|action| editor.copy_text(&action)),
             (None, None) => {
                 ui.add_enabled_ui(false, |ui| copy_menu::items(ui, false));
                 None

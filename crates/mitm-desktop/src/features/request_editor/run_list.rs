@@ -1,7 +1,7 @@
 use eframe::egui::{self, RichText};
 use mitm_core::collections::RequestHistoryItem;
 use mitm_core::repeater::{HeaderItem, RepeaterHistoryItem};
-use crate::util::format::Exchange;
+use crate::util::copy::Exchange;
 use crate::widgets::copy_menu;
 use crate::widgets::message_pane::{self, PaneData, PaneState};
 use crate::widgets::pills::status_text;
@@ -141,8 +141,8 @@ pub fn show<R: Run>(
                     ui.close();
                 }
                 ui.menu_button("Copy", |ui| {
-                    if let Some(format) = copy_menu::items(ui, true) {
-                        ui.ctx().copy_text(run.exchange().copy_text(&format));
+                    if let Some(action) = copy_menu::items(ui, true) {
+                        ui.ctx().copy_text(run.exchange().copy_text(&action));
                     }
                 });
             });

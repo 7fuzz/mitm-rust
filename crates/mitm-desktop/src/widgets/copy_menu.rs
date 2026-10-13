@@ -1,11 +1,13 @@
 use eframe::egui::containers::menu::{MenuConfig, SubMenuButton};
 use eframe::egui::{self, PopupCloseBehavior, RichText};
 use crate::ui::icons;
-use crate::util::format::{CopyFormat, CopyOptions};
+use crate::util::copy::{CopyAction, CopyFormat, CopyParts, CopySettings};
 use crate::widgets::flash;
 
-/// The copy actions every request/response view offers; returns the one chosen.
-pub fn items(ui: &mut egui::Ui, has_response: bool) -> Option<CopyFormat> {
+const SETTINGS_ID: &str = "copy_settings";
+
+/// The copy actions every request/response view offers; returns the one chosen, with the saved Copy Options.
+pub fn items(ui: &mut egui::Ui, has_response: bool) -> Option<CopyAction> {
     let mut chosen = None;
     let mut item = |ui: &mut egui::Ui, label: &str, format: CopyFormat, enabled: bool| {
         if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
@@ -30,10 +32,12 @@ pub fn items(ui: &mut egui::Ui, has_response: bool) -> Option<CopyFormat> {
     item(ui, "Copy Headers", CopyFormat::ResponseHeaders, has_response);
     item(ui, "Copy Full Response", CopyFormat::Response, has_response);
     ui.separator();
-    if let Some(options) = custom(ui) {
-        chosen = Some(CopyFormat::Custom(options));
+    if let Some(parts) = custom(ui) {
+        chosen = Some(CopyFormat::Custom(parts));
     }
-    chosen
+    settings_menu(ui);
+    let settings = ui.data_mut(|d| d.get_persisted(egui::Id::new(SETTINGS_ID))).unwrap_or_default();
+    chosen.map(|format| CopyAction { format, settings })
 }
 
 /// A "Copy" toolbar menu; `add_contents` returns true once it copied, which flashes a confirmation.
@@ -52,9 +56,31 @@ fn section(ui: &mut egui::Ui, text: &str) {
     ui.label(RichText::new(text).weak().small().strong());
 }
 
-fn custom(ui: &mut egui::Ui) -> Option<CopyOptions> {
+fn settings_menu(ui: &mut egui::Ui) {
+    let id = egui::Id::new(SETTINGS_ID);
+    let saved: CopySettings = ui.data_mut(|d| d.get_persisted(id)).unwrap_or_default();
+    let mut settings = saved.clone();
+    let config = MenuConfig::new().close_behavior(PopupCloseBehavior::CloseOnClickOutside);
+    SubMenuButton::new("Copy Options").config(config).ui(ui, |ui| {
+        ui.checkbox(&mut settings.markdown_fence, "Wrap in ``` for Markdown");
+        ui.checkbox(&mut settings.pretty_json, "Pretty JSON");
+        ui.checkbox(&mut settings.truncate, "Truncate long values");
+        ui.add_enabled_ui(settings.truncate, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Keep");
+                ui.add(egui::DragValue::new(&mut settings.max_chars).range(10..=100_000).suffix(" chars"));
+            });
+            ui.checkbox(&mut settings.show_truncated_size, "Show how much was cut");
+        });
+    });
+    if settings != saved {
+        ui.data_mut(|d| d.insert_persisted(id, settings));
+    }
+}
+
+fn custom(ui: &mut egui::Ui) -> Option<CopyParts> {
     let id = egui::Id::new("copy_custom_options");
-    let saved: CopyOptions = ui.data_mut(|d| d.get_persisted(id)).unwrap_or_default();
+    let saved: CopyParts = ui.data_mut(|d| d.get_persisted(id)).unwrap_or_default();
     let mut options = saved.clone();
     let mut copy = false;
     // Toggling a checkbox must not close the menu; only Copy or a click outside does.
@@ -67,8 +93,6 @@ fn custom(ui: &mut egui::Ui) -> Option<CopyOptions> {
         ui.checkbox(&mut options.status_text, "Status text");
         ui.checkbox(&mut options.response_headers, "Response headers");
         ui.checkbox(&mut options.response_body, "Response body");
-        ui.separator();
-        ui.checkbox(&mut options.pretty_json, "Pretty JSON");
         ui.separator();
         if ui.button("Copy").clicked() {
             copy = true;

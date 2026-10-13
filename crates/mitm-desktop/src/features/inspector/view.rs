@@ -117,8 +117,8 @@ fn summary(ui: &mut egui::Ui, flow: &HistoryEntry, flags: &FlowFlags, prefs: &mu
                 prefs.popped_out = !prefs.popped_out;
             }
             copy_menu::button(ui, "inspector", |ui| {
-                let format = copy_menu::items(ui, !flags.is_pending());
-                format.map(|format| cmds.push(Cmd::Copy(flow.id, format))).is_some()
+                let action = copy_menu::items(ui, !flags.is_pending());
+                action.map(|action| cmds.push(Cmd::Copy(flow.id, action))).is_some()
             });
             if ui.button("Fuzzer").on_hover_text("Send to Fuzzer").clicked() {
                 cmds.push(AppCommand::SendFlowToFuzzer(flow.id));
