@@ -107,9 +107,13 @@ pub struct TrafficState {
     pub stored_count: u64,
     pub har_export: HarExport,
     jobs: commands::TrafficJobs,
-    /// Ids whose stored headers match the search; summaries are loaded without headers.
+    /// Ids whose stored headers match `header_search_key`; summaries are loaded without headers.
     header_matches: HashSet<i64>,
     header_search_key: Option<String>,
+    header_search: crate::app::jobs::Latest<(String, HashSet<i64>)>,
+    /// The query being typed and when it last changed; the database is searched once typing pauses.
+    header_typed: Option<(String, f64)>,
+    header_searching: Option<String>,
     // Bumped to make egui forget its stored column widths and start again from `prefs.widths`.
     width_epoch: u32,
     // Top visible flow id and vertical offset from the last frame.
@@ -132,6 +136,9 @@ impl Default for TrafficState {
             jobs: Default::default(),
             header_matches: HashSet::new(),
             header_search_key: None,
+            header_search: Default::default(),
+            header_typed: None,
+            header_searching: None,
             width_epoch: 0,
             scroll_anchor: None,
         }
@@ -157,22 +164,53 @@ impl TrafficState {
         self.flows.extend(page);
     }
 
-    /// Re-runs the header search in the database when the query or the toggle changed.
-    pub fn sync_header_search(&mut self, db: &Db) {
+    fn header_query(&self) -> Option<String> {
         let query = self.prefs.search_query.trim();
-        let key = (self.prefs.search_headers && !query.is_empty()).then(|| query.to_string());
-        if key == self.header_search_key {
+        (self.prefs.search_headers && !query.is_empty()).then(|| query.to_string())
+    }
+
+    /// Searches stored headers off the UI thread once the query has stopped changing for a moment.
+    pub fn sync_header_search(&mut self, db: &Db, ctx: &eframe::egui::Context, now: f64) {
+        const SETTLE_SECS: f64 = 0.3;
+        let wanted = self.header_query();
+        if let Some((key, ids)) = self.header_search.take() {
+            self.header_searching = None;
+            if wanted.as_ref() == Some(&key) {
+                self.header_matches = ids;
+                self.header_search_key = Some(key);
+            }
+        }
+        let Some(query) = wanted else {
+            self.header_matches.clear();
+            self.header_search_key = None;
+            self.header_typed = None;
+            return;
+        };
+        if [&self.header_search_key, &self.header_searching].iter().any(|key| key.as_ref() == Some(&query)) {
             return;
         }
-        self.header_matches = match &key {
-            Some(query) => mitm_core::db::get_history_page(db, Some(query), true, None, self.max_flows as u32)
+        let typed_at = match &self.header_typed {
+            Some((typed, at)) if *typed == query => *at,
+            _ => {
+                self.header_typed = Some((query.clone(), now));
+                now
+            }
+        };
+        let waited = now - typed_at;
+        if waited < SETTLE_SECS {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(SETTLE_SECS - waited));
+            return;
+        }
+        self.header_searching = Some(query.clone());
+        let (db, limit) = (db.clone(), self.max_flows as u32);
+        self.header_search.start(ctx, move || {
+            let ids = mitm_core::db::get_history_page(&db, Some(&query), true, None, limit)
                 .unwrap_or_default()
                 .into_iter()
                 .map(|f| f.id)
-                .collect(),
-            None => HashSet::new(),
-        };
-        self.header_search_key = key;
+                .collect();
+            (query, ids)
+        });
     }
 
     /// Default order, every column shown, default widths.
@@ -304,12 +342,13 @@ impl TrafficState {
         if !self.prefs.search_headers || search.is_empty() {
             return false;
         }
-        self.header_matches.contains(&flow.id)
+        let settled = self.header_search_key.as_deref().is_some_and(|key| key.eq_ignore_ascii_case(search));
+        (settled && self.header_matches.contains(&flow.id))
             || flow
                 .request_headers
                 .iter()
                 .chain(&flow.response_headers)
-                .any(|(k, v)| k.to_lowercase().contains(search) || v.to_lowercase().contains(search))
+                .any(|(k, v)| contains_folded(k, search) || contains_folded(v, search))
     }
 
     fn matches_source(&self, flow: &HistoryEntry) -> bool {
@@ -388,7 +427,16 @@ fn matches_search(flow: &HistoryEntry, search: &str) -> bool {
     flow.status_code.to_string().contains(search)
         || [&flow.url, &flow.host, &flow.path, &flow.method, &flow.content_type, &flow.listener_label]
             .iter()
-            .any(|field| field.to_lowercase().contains(search))
+            .any(|field| contains_folded(field, search))
+}
+
+/// Whether `text` contains `lowered` (already lowercase), ignoring case, without allocating for ASCII.
+fn contains_folded(text: &str, lowered: &str) -> bool {
+    if !lowered.is_ascii() {
+        return text.to_lowercase().contains(lowered);
+    }
+    let needle = lowered.as_bytes();
+    needle.is_empty() || text.as_bytes().windows(needle.len()).any(|window| window.eq_ignore_ascii_case(needle))
 }
 
 pub fn show(
@@ -416,6 +464,14 @@ pub fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_matches_ignore_case_without_lowercasing_the_text() {
+        assert!(contains_folded("api.DULUIN.com/Assessment", "assessment"));
+        assert!(contains_folded("anything", ""));
+        assert!(!contains_folded("api.test", "assess"));
+        assert!(contains_folded("Ünïcode", "ünï"));
+    }
 
     fn flow(id: i64) -> HistoryEntry {
         HistoryEntry {

@@ -9,6 +9,7 @@ use mitm_core::db::Db;
 
 pub fn show(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
     state.ensure_loaded(db);
+    state.run_jobs(db, ui.ctx());
 
     ui.horizontal(|ui| {
         crate::widgets::subtabs::subtabs(ui, &mut state.tab, &[(DatabaseTab::Tables, "Tables", None), (DatabaseTab::Query, "SQL query", None)]);
@@ -17,7 +18,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
 
     match state.tab {
         DatabaseTab::Tables => tables_view(ui, state, db),
-        DatabaseTab::Query => query_view(ui, state, db),
+        DatabaseTab::Query => query_view(ui, state),
     }
 }
 
@@ -47,7 +48,7 @@ fn tables_view(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
             }
         });
     if let Some(name) = clicked {
-        state.select_table(db, name);
+        state.select_table(name);
     }
 
     if let Some(error) = &state.error {
@@ -76,16 +77,23 @@ fn table_content(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
         crate::widgets::search::claim_focus(&search_edit);
         if search_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             state.page = 0;
-            state.load_current_page(db);
+            state.request_page();
         }
         if ui.small_button("Search").clicked() {
             state.page = 0;
-            state.load_current_page(db);
+            state.request_page();
         }
         if !state.search_query.is_empty() && ui.small_button("Clear").clicked() {
             state.search_query.clear();
             state.page = 0;
-            state.load_current_page(db);
+            state.request_page();
+        }
+
+        if state.is_loading_page() {
+            ui.spinner();
+            if !state.search_query.trim().is_empty() {
+                ui.weak("Searching…");
+            }
         }
 
         ui.add_space(8.0);
@@ -95,20 +103,20 @@ fn table_content(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
 
         if ui.add_enabled(state.page > 0, egui::Button::new(icons::CARET_DOUBLE_LEFT)).clicked() {
             state.page = 0;
-            state.load_current_page(db);
+            state.request_page();
         }
         if ui.add_enabled(state.page > 0, egui::Button::new(icons::CARET_LEFT)).clicked() {
             state.page -= 1;
-            state.load_current_page(db);
+            state.request_page();
         }
         ui.label(format!("Page {} / {} ({} rows)", state.page + 1, total_pages, total));
         if ui.add_enabled(state.page + 1 < total_pages, egui::Button::new(icons::CARET_RIGHT)).clicked() {
             state.page += 1;
-            state.load_current_page(db);
+            state.request_page();
         }
         if ui.add_enabled(state.page + 1 < total_pages, egui::Button::new(icons::CARET_DOUBLE_RIGHT)).clicked() {
             state.page = total_pages - 1;
-            state.load_current_page(db);
+            state.request_page();
         }
     });
 
@@ -147,7 +155,7 @@ fn render_grid(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
         state.selected_row_index,
     );
     match click {
-        Some(GridClick::Sort(column)) => state.toggle_sort(db, &column),
+        Some(GridClick::Sort(column)) => state.toggle_sort(&column),
         Some(GridClick::Row(index)) => state.select_row(db, index),
         None => {}
     }
@@ -302,14 +310,17 @@ fn render_detail(ui: &mut egui::Ui, state: &mut DatabaseState) {
     }
 }
 
-fn query_view(ui: &mut egui::Ui, state: &mut DatabaseState, db: &Db) {
+fn query_view(ui: &mut egui::Ui, state: &mut DatabaseState) {
     ui.horizontal(|ui| {
         ui.strong("SQL Editor");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let can_run = !state.sql_query.trim().is_empty();
+            let can_run = !state.sql_query.trim().is_empty() && !state.is_running_query();
             let is_ctrl_enter = ui.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(egui::Key::Enter));
             if ui.add_enabled(can_run, egui::Button::new("Run (Ctrl+Enter)")).clicked() || (can_run && is_ctrl_enter) {
-                state.run_query(db);
+                state.request_query();
+            }
+            if state.is_running_query() {
+                ui.spinner();
             }
         });
     });

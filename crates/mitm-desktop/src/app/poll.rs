@@ -43,7 +43,7 @@ impl MitmApp {
         for error in save_errors.into_iter().flatten() {
             top_bar::flash(ui, Err(error));
         }
-        self.state.traffic.sync_header_search(&self.core.db);
+        self.state.traffic.sync_header_search(&self.core.db, ui.ctx(), now);
         for (target, decoded) in self.qr_images.drain().flatten() {
                 match (target, decoded) {
                 (QrTarget::TotpTool, Ok(text)) => {

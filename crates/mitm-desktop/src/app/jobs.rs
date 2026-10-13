@@ -51,3 +51,38 @@ impl<T> Reply<T> {
         self.ctx.request_repaint();
     }
 }
+
+/// One blocking job on its own thread whose result only matters until a newer one starts:
+/// starting again drops the pending result.
+pub struct Latest<T> {
+    rx: Option<std::sync::mpsc::Receiver<T>>,
+}
+
+impl<T> Default for Latest<T> {
+    fn default() -> Self {
+        Self { rx: None }
+    }
+}
+
+impl<T: Send + 'static> Latest<T> {
+    pub fn start(&mut self, ctx: &egui::Context, job: impl FnOnce() -> T + Send + 'static) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            if tx.send(job()).is_ok() {
+                ctx.request_repaint();
+            }
+        });
+        self.rx = Some(rx);
+    }
+
+    pub fn take(&mut self) -> Option<T> {
+        let value = self.rx.as_ref()?.try_recv().ok()?;
+        self.rx = None;
+        Some(value)
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.rx.is_some()
+    }
+}
