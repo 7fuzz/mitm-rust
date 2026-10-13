@@ -192,20 +192,17 @@ impl Exchange {
     pub fn copy_text(&self, format: &CopyFormat) -> String {
         match format {
             CopyFormat::Url => self.url.clone(),
+            CopyFormat::UrlAndBody => self.url_and_body(),
+            CopyFormat::RequestHeaders => headers_to_text(&self.request_headers),
+            CopyFormat::RequestBody => display_body(&self.request_body, ""),
             CopyFormat::Request => self.raw_request(),
-            CopyFormat::Response => self.raw_response(),
             CopyFormat::ResponseBody => display_body(&self.response_body, &self.content_type),
+            CopyFormat::ResponseHeaders => raw_message(self.status_line(), &self.response_headers, "", ""),
+            CopyFormat::Response => self.raw_response(),
             CopyFormat::Custom(options) => self.custom_text(options),
             CopyFormat::Curl => self.curl(),
             CopyFormat::CurlAndResponse => format!("{}\n\n{}", self.curl(), self.response_section()),
-            CopyFormat::UrlBodyAndResponse => {
-                let mut request = format!("{} {}", self.method, self.url);
-                if !self.request_body.trim().is_empty() {
-                    request.push('\n');
-                    request.push_str(&display_body(&self.request_body, ""));
-                }
-                format!("{}\n\n{}", request, self.response_section())
-            }
+            CopyFormat::UrlBodyAndResponse => format!("{}\n\n{}", self.url_and_body(), self.response_section()),
         }
     }
 
@@ -213,10 +210,22 @@ impl Exchange {
         raw_message(format!("{} {}", self.method, self.url), &self.request_headers, &self.request_body, "")
     }
 
-    fn raw_response(&self) -> String {
+    fn url_and_body(&self) -> String {
+        let mut text = format!("{} {}", self.method, self.url);
+        if !self.request_body.trim().is_empty() {
+            text.push('\n');
+            text.push_str(&display_body(&self.request_body, ""));
+        }
+        text
+    }
+
+    fn status_line(&self) -> String {
         let reason = http::StatusCode::from_u16(self.status_code).ok().and_then(|s| s.canonical_reason()).unwrap_or("");
-        let status_line = format!("HTTP/1.1 {} {}", self.status_code, reason).trim_end().to_string();
-        raw_message(status_line, &self.response_headers, &self.response_body, &self.content_type)
+        format!("HTTP/1.1 {} {}", self.status_code, reason).trim_end().to_string()
+    }
+
+    fn raw_response(&self) -> String {
+        raw_message(self.status_line(), &self.response_headers, &self.response_body, &self.content_type)
     }
 
     fn response_section(&self) -> String {
@@ -277,10 +286,14 @@ pub enum CopyFormat {
     CurlAndResponse,
     UrlBodyAndResponse,
     Url,
+    UrlAndBody,
+    RequestHeaders,
+    RequestBody,
     Curl,
     Request,
-    Response,
     ResponseBody,
+    ResponseHeaders,
+    Response,
     Custom(CopyOptions),
 }
 
@@ -395,6 +408,8 @@ mod tests {
         };
         assert_eq!(exchange.copy_text(&CopyFormat::Request), "POST https://api.test/u\nX-A: 1\n\n{\n  \"a\": 1\n}");
         assert_eq!(exchange.copy_text(&CopyFormat::Response), "HTTP/1.1 404 Not Found\nServer: t");
+        assert_eq!(exchange.copy_text(&CopyFormat::UrlAndBody), "POST https://api.test/u\n{\n  \"a\": 1\n}");
+        assert_eq!(exchange.copy_text(&CopyFormat::RequestHeaders), "X-A: 1");
     }
 
     #[test]

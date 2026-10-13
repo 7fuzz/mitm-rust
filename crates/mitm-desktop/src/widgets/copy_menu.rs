@@ -1,5 +1,5 @@
 use eframe::egui::containers::menu::{MenuConfig, SubMenuButton};
-use eframe::egui::{self, PopupCloseBehavior};
+use eframe::egui::{self, PopupCloseBehavior, RichText};
 use crate::ui::icons;
 use crate::util::format::{CopyFormat, CopyOptions};
 use crate::widgets::flash;
@@ -13,14 +13,22 @@ pub fn items(ui: &mut egui::Ui, has_response: bool) -> Option<CopyFormat> {
             ui.close();
         }
     };
+    section(ui, "REQUEST + RESPONSE");
     item(ui, "Copy cURL and Response", CopyFormat::CurlAndResponse, has_response);
     item(ui, "Copy URL, Body, and Response", CopyFormat::UrlBodyAndResponse, has_response);
     ui.separator();
+    section(ui, "REQUEST");
     item(ui, "Copy URL", CopyFormat::Url, true);
+    item(ui, "Copy URL and Body", CopyFormat::UrlAndBody, true);
+    item(ui, "Copy Headers", CopyFormat::RequestHeaders, true);
+    item(ui, "Copy Body", CopyFormat::RequestBody, true);
     item(ui, "Copy cURL", CopyFormat::Curl, true);
-    item(ui, "Copy Request", CopyFormat::Request, true);
-    item(ui, "Copy Response", CopyFormat::Response, has_response);
-    item(ui, "Copy Response Body", CopyFormat::ResponseBody, has_response);
+    item(ui, "Copy Full Request", CopyFormat::Request, true);
+    ui.separator();
+    section(ui, "RESPONSE");
+    item(ui, "Copy Body", CopyFormat::ResponseBody, has_response);
+    item(ui, "Copy Headers", CopyFormat::ResponseHeaders, has_response);
+    item(ui, "Copy Full Response", CopyFormat::Response, has_response);
     ui.separator();
     if let Some(options) = custom(ui) {
         chosen = Some(CopyFormat::Custom(options));
@@ -38,6 +46,10 @@ pub fn button(ui: &mut egui::Ui, id_salt: &str, add_contents: impl FnOnce(&mut e
     if ui.menu_button(title, add_contents).inner.unwrap_or(false) {
         flash::set(ui, flash_id, "Copied");
     }
+}
+
+fn section(ui: &mut egui::Ui, text: &str) {
+    ui.label(RichText::new(text).weak().small().strong());
 }
 
 fn custom(ui: &mut egui::Ui) -> Option<CopyOptions> {
