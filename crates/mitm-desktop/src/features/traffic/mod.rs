@@ -528,7 +528,7 @@ mod tests {
         state.remove(11);
         assert_eq!(state.stored_count, 41);
 
-        state.history_limit = HistorySettings { limiter_enabled: true, max_rows: 41 };
+        state.history_limit = HistorySettings { limiter_enabled: true, max_rows: 41, max_body_mb: 0 };
         state.upsert(flow(12));
         assert_eq!(state.stored_count, 41);
 

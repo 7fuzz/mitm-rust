@@ -177,6 +177,7 @@ impl AppState {
         let history_settings = HistorySettings {
             limiter_enabled,
             max_rows,
+            max_body_mb: crate::db::get_preference(&db, "history_max_body_mb").and_then(|v| v.parse().ok()).unwrap_or(0),
         };
 
         Self {

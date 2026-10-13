@@ -105,6 +105,15 @@ fn limit_menu(ui: &mut egui::Ui, state: &mut TrafficState, cmds: &mut Commands) 
         }
 
         ui.separator();
+        let mut cap_bodies = draft.max_body_mb > 0;
+        if ui.checkbox(&mut cap_bodies, "Skip large bodies").on_hover_text("Bodies over the size are stored as a short note; new traffic only").changed() {
+            draft.max_body_mb = if cap_bodies { 10 } else { 0 };
+        }
+        if cap_bodies {
+            ui.add(egui::DragValue::new(&mut draft.max_body_mb).range(1..=1024).prefix("Over ").suffix(" MB"));
+        }
+
+        ui.separator();
         ui.horizontal(|ui| {
             if ui.button("Apply & Delete Old").clicked() {
                 cmds.push(Cmd::SetHistoryLimit(draft.clone()));

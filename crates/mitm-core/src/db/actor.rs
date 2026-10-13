@@ -132,14 +132,19 @@ fn flush_history_batch(db: &Db, buffer: &mut Vec<HistoryEntry>) {
 
     match db.conn() {
         Ok(mut conn) => {
+            let max_body_bytes: u64 = conn
+                .query_row("SELECT value FROM app_preferences WHERE key = 'history_max_body_mb'", [], |r| r.get::<_, String>(0))
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .map_or(0, |mb| mb * 1024 * 1024);
             match conn.transaction() {
                 Ok(tx) => {
                     for entry in buffer.iter() {
                         let req_headers = serde_json::to_string(&entry.request_headers).unwrap_or_else(|_| "[]".to_string());
                         let res_headers = serde_json::to_string(&entry.response_headers).unwrap_or_else(|_| "[]".to_string());
 
-                        let hashes = crate::db::bodies::put(&tx, &entry.request_body)
-                            .and_then(|request| Ok((request, crate::db::bodies::put(&tx, &entry.response_body)?)));
+                        let store = |body: &str| crate::db::bodies::put(&tx, &crate::db::bodies::within_limit(body, max_body_bytes));
+                        let hashes = store(&entry.request_body).and_then(|request| Ok((request, store(&entry.response_body)?)));
                         let (request_hash, response_hash) = match hashes {
                             Ok(hashes) => hashes,
                             Err(e) => {

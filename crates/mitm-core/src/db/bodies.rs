@@ -51,6 +51,19 @@ pub fn get(conn: &Connection, hash: Option<&[u8]>) -> Result<String, String> {
     Ok(from_bytes(bytes, is_text))
 }
 
+/// `body`, or a short note in its place when it's over `max_bytes` (0: no limit).
+pub fn within_limit(body: &str, max_bytes: u64) -> std::borrow::Cow<'_, str> {
+    let size = match body.strip_prefix("base64:") {
+        Some(b64) => b64.len() as u64 / 4 * 3,
+        None => body.len() as u64,
+    };
+    if max_bytes == 0 || size <= max_bytes {
+        return std::borrow::Cow::Borrowed(body);
+    }
+    let mb = |bytes: u64| bytes as f64 / (1024.0 * 1024.0);
+    std::borrow::Cow::Owned(format!("[Body not stored: {:.1} MB, over the {:.0} MB limit]", mb(size), mb(max_bytes)))
+}
+
 /// Deletes bodies no history row points to any more.
 pub fn collect_garbage(conn: &Connection) -> Result<usize, String> {
     conn.execute(
@@ -131,6 +144,16 @@ mod tests {
             .unwrap();
         assert!(stored * 10 < json.len() as i64, "repetitive JSON compresses: {stored} of {}", json.len());
         let _ = std::fs::remove_file(db.path());
+    }
+
+    #[test]
+    fn bodies_over_the_limit_become_a_note() {
+        assert_eq!(within_limit("small", 0), "small");
+        assert_eq!(within_limit("small", 10), "small");
+        let big = "x".repeat(3 * 1024 * 1024);
+        assert_eq!(within_limit(&big, 1024 * 1024), "[Body not stored: 3.0 MB, over the 1 MB limit]");
+        let binary = format!("base64:{}", "A".repeat(4 * 1024 * 1024));
+        assert_eq!(within_limit(&binary, 2 * 1024 * 1024), "[Body not stored: 3.0 MB, over the 2 MB limit]");
     }
 
     #[test]

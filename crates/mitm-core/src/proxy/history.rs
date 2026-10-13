@@ -46,6 +46,9 @@ pub struct HistoryDetail {
 pub struct HistorySettings {
     pub limiter_enabled: bool,
     pub max_rows: u32,
+    /// Bodies over this many MB are stored as a short note instead; 0 stores every body.
+    #[serde(default)]
+    pub max_body_mb: u32,
 }
 
 impl Default for HistorySettings {
@@ -53,6 +56,7 @@ impl Default for HistorySettings {
         Self {
             limiter_enabled: true,
             max_rows: 500,
+            max_body_mb: 0,
         }
     }
 }

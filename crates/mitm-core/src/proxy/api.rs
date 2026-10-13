@@ -304,6 +304,7 @@ impl MitmCore {
     pub async fn set_history_settings(&self, settings: crate::proxy::history::HistorySettings) -> Result<(), String> {
         db::set_preference(&self.db, "history_limiter_enabled", if settings.limiter_enabled { "true" } else { "false" })?;
         db::set_preference(&self.db, "history_limiter_max_rows", &settings.max_rows.to_string())?;
+        db::set_preference(&self.db, "history_max_body_mb", &settings.max_body_mb.to_string())?;
         if settings.limiter_enabled {
             db::prune_history_logs(&self.db, settings.max_rows)?;
         }
