@@ -259,7 +259,7 @@ impl CredentialsState {
     fn create(&mut self, db: &Db, vault_id: &str) {
         let taken = self.summaries.iter().filter(|s| s.vault_id == vault_id).map(|s| s.name.as_str());
         let name = free_name(taken, "credential");
-        match credentials::create_credential(db, vault_id, &name) {
+        match create_login(db, vault_id, &name) {
             Ok(created) => {
                 self.collapsed.remove(vault_id);
                 self.rename = Some(Rename { target: RenameTarget::Entry(created.id.clone()), text: created.name.clone() });
@@ -342,6 +342,15 @@ impl CredentialsState {
     }
 }
 
+/// A new entry with empty `username` and `password` fields, the ones most entries need.
+fn create_login(db: &Db, vault_id: &str, name: &str) -> Result<Credential, credentials::CredentialError> {
+    let mut credential = credentials::create_credential(db, vault_id, name)?;
+    let empty = |key: &str, kind| Field { key: key.to_string(), kind, extracted: false, value: String::new() };
+    credential.fields = vec![empty("username", FieldKind::Text), empty("password", FieldKind::Secret)];
+    credentials::save_credential(db, &credential)?;
+    Ok(credential)
+}
+
 /// Moves a variable's value into `vault/entry.field` (vault and entry created as needed, the vault linked to the
 /// workspace) and returns the ref to leave behind.
 pub fn move_value(db: &Db, workspace_id: &str, vault: &str, entry: &str, field: &str, value: String) -> Result<String, String> {
@@ -396,6 +405,18 @@ mod tests {
     fn free_names_skip_taken_ones_ignoring_case() {
         assert_eq!(free_name(["a"].into_iter(), "field"), "field");
         assert_eq!(free_name(["Field", "field2"].into_iter(), "field"), "field3");
+    }
+
+    #[test]
+    fn new_entries_start_with_username_and_password() {
+        let db = mitm_core::db::Db::new(std::env::temp_dir().join(format!("mitm-desktop-login-{}.db", uuid::Uuid::new_v4())));
+        mitm_core::db::init_database(&db, None).unwrap();
+        let vault = credentials::create_vault(&db, "DG").unwrap();
+        let created = create_login(&db, &vault.id, "dgAdmin").unwrap();
+        let loaded = credentials::load_credential(&db, &created.id).unwrap();
+        let fields: Vec<_> = loaded.fields.iter().map(|f| (f.key.as_str(), f.kind, f.value.as_str())).collect();
+        assert_eq!(fields, [("username", FieldKind::Text, ""), ("password", FieldKind::Secret, "")]);
+        let _ = std::fs::remove_file(&db);
     }
 
     #[test]

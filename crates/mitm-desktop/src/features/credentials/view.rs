@@ -1,3 +1,4 @@
+use eframe::egui::containers::menu::{MenuConfig, SubMenuButton};
 use eframe::egui::{self, RichText};
 use mitm_core::credentials::{Credential, CredentialSummary, FieldKind, Vault};
 use mitm_core::workspace::Workspace;
@@ -137,7 +138,9 @@ fn vault_rows(
             *action = Some(ListAction::Link { vault_id: vault.id.clone(), workspace_id: workspace_id.to_string(), linked: !linked_here });
             ui.close();
         }
-        ui.menu_button("Workspaces", |ui| {
+        // Several workspaces can be ticked in one go, so only a click outside closes it.
+        let config = MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
+        SubMenuButton::new("Workspaces").config(config).ui(ui, |ui| {
             for workspace in workspaces {
                 let mut linked = vault.is_linked(&workspace.id);
                 if ui.checkbox(&mut linked, &workspace.name).changed() {
@@ -403,13 +406,19 @@ fn rename_field(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, target
 /// The edit for a rename of `target` in progress; returns false when none is.
 fn rename_edit(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, target: &RenameTarget) -> bool {
     let Some(rename) = state.rename.as_mut().filter(|r| &r.target == target) else { return false };
-    let edit = ui.add(egui::TextEdit::singleline(&mut rename.text).desired_width(140.0));
+    let len = rename.text.chars().count();
+    let mut output = egui::TextEdit::singleline(&mut rename.text).desired_width(140.0).show(ui);
+    let edit = output.response;
     if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         state.rename = None;
     } else if edit.lost_focus() {
         state.commit_rename(db);
-    } else {
+    } else if !edit.has_focus() {
+        // Select the whole name so typing replaces it.
         edit.request_focus();
+        let all = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(len));
+        output.state.cursor.set_char_range(Some(all));
+        output.state.store(ui.ctx(), edit.id);
     }
     true
 }
