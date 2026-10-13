@@ -53,17 +53,29 @@ pub fn show(ui: &mut egui::Ui, state: &mut TotpState, cmds: &mut Commands) {
 }
 
 /// The current code with a copy button and a countdown bar; repaints when the window rolls over.
-pub fn show_code(ui: &mut egui::Ui, params: &TotpParams, size: f32) {
-    let now = totp::now_unix();
-    let code = totp::code_at(params, now);
-    let left = totp::remaining(params.period, now);
-
+fn show_code(ui: &mut egui::Ui, params: &TotpParams, size: f32) {
     ui.horizontal(|ui| {
-        ui.label(RichText::new(group_code(&code)).monospace().size(size).strong());
+        code_label(ui, params, size);
         if icon_button(ui, icons::COPY, "Copy").clicked() {
-            crate::util::clipboard::copy_secret(ui.ctx(), &code);
+            copy_code(ui, params);
         }
     });
+    countdown(ui, params);
+}
+
+pub fn code_label(ui: &mut egui::Ui, params: &TotpParams, size: f32) {
+    let code = totp::code_at(params, totp::now_unix());
+    ui.label(RichText::new(group_code(&code)).monospace().size(size).strong());
+}
+
+pub fn copy_code(ui: &egui::Ui, params: &TotpParams) {
+    crate::util::clipboard::copy_secret(ui.ctx(), &totp::code_at(params, totp::now_unix()));
+}
+
+/// The time left on the current code as a bar, and the next code once it's close.
+pub fn countdown(ui: &mut egui::Ui, params: &TotpParams) {
+    let now = totp::now_unix();
+    let left = totp::remaining(params.period, now);
     ui.horizontal(|ui| {
         let fraction = left as f32 / params.period.max(1) as f32;
         ui.add(egui::ProgressBar::new(fraction).desired_width(160.0).desired_height(4.0));

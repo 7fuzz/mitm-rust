@@ -1,4 +1,5 @@
 mod commands;
+mod fields;
 mod json_import;
 mod lock;
 mod view;
@@ -233,7 +234,14 @@ impl CredentialsState {
         }
     }
 
+    /// Queues the entry's save and mirrors its tags and fields onto its summary, which the sidebar draws from.
     fn mark_dirty(&mut self, id: &str, now: f64) {
+        if let (Some(entry), Some(summary)) =
+            (self.entries.iter().find(|e| e.id == id), self.summaries.iter_mut().find(|s| s.id == id))
+        {
+            summary.tags = entry.tags.clone();
+            summary.fields = entry.fields.iter().map(Field::meta).collect();
+        }
         self.saves.edited(id, now);
         self.publish();
     }
@@ -343,9 +351,11 @@ impl CredentialsState {
 
     fn commit_rename(&mut self, db: &Db) {
         let Some(rename) = self.rename.take() else { return };
-        let text = rename.text.trim();
+        let text = credentials::sanitize_name(rename.text.trim());
+        let text = text.as_str();
         self.flush(db);
         let result = match &rename.target {
+            _ if text.is_empty() => Ok(()),
             RenameTarget::Vault(id) => credentials::rename_vault(db, id, text),
             RenameTarget::Entry(id) => credentials::rename_credential(db, id, text),
             RenameTarget::Field(id, old) if old != text => credentials::rename_field(db, id, old, text),

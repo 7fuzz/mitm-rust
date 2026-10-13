@@ -1,6 +1,6 @@
 mod view;
 
-pub use view::{qr_buttons, show, show_code};
+pub use view::{code_label, copy_code, countdown, qr_buttons, show};
 
 #[derive(Default)]
 pub struct TotpState {

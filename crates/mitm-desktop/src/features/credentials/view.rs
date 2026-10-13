@@ -3,8 +3,8 @@ use eframe::egui::{self, RichText};
 use mitm_core::credentials::{Credential, CredentialSummary, FieldKind, Vault};
 use mitm_core::workspace::Workspace;
 use mitm_core::utils::totp;
-use crate::app::command::{Commands, QrTarget};
-use crate::features::utilities::totp::{group_code, qr_buttons, show_code};
+use crate::app::command::Commands;
+use crate::features::utilities::totp::group_code;
 use crate::widgets::{confirm, split};
 use super::lock::unlock_form;
 use super::{CredentialsState, Rename, RenameTarget};
@@ -31,13 +31,6 @@ struct EntryDrag {
     id: String,
     vault_id: String,
     name: String,
-}
-
-/// What a field row carries while it's dragged to a new place in its entry.
-struct FieldDrag {
-    entry_id: String,
-    index: usize,
-    key: String,
 }
 
 /// Tags shown on a list row before the rest collapse into `+N`.
@@ -308,122 +301,7 @@ fn entry_detail(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, now: f
         return;
     }
 
-    let mut changed = false;
-    let mut remove = None;
-    let mut handles = Vec::new();
-    let grid = egui::Grid::new(("credential_fields", &id)).num_columns(5).spacing([8.0, 6.0]).show(ui, |ui| {
-        let keys: Vec<String> = state.entries[index].fields.iter().map(|f| f.key.clone()).collect();
-        for (i, key) in keys.iter().enumerate() {
-            let handle = ui
-                .add(egui::Label::new(RichText::new(icons::DOTS_SIX_VERTICAL).weak()).selectable(false).sense(egui::Sense::drag()))
-                .on_hover_cursor(egui::CursorIcon::Grab)
-                .on_hover_text("Drag to reorder");
-            if handle.drag_started() {
-                handle.dnd_set_drag_payload(FieldDrag { entry_id: id.clone(), index: i, key: key.clone() });
-            }
-            handles.push(handle.rect.y_range());
-            rename_field(ui, state, db, RenameTarget::Field(id.clone(), key.clone()), key, RichText::new(key).strong());
-            let Some(entry) = state.entries.iter_mut().find(|e| e.id == id) else { return };
-            let field = &mut entry.fields[i];
-            egui::ComboBox::from_id_salt(("credential_kind", &id, i))
-                .selected_text(field.kind.label())
-                .width(70.0)
-                .show_ui(ui, |ui| {
-                    for kind in FieldKind::ALL {
-                        changed |= ui.selectable_value(&mut field.kind, kind, kind.label()).changed();
-                    }
-                });
-            let draft = state.totp_draft.as_ref().filter(|(d_id, d_key, _)| d_id == &id && d_key == key).map(|d| d.2.clone());
-            match field.kind {
-                FieldKind::Text => {
-                    ui.horizontal(|ui| {
-                        changed |= ui.add(egui::TextEdit::singleline(&mut field.value).desired_width(260.0)).changed();
-                        if icon_button(ui, icons::COPY, "Copy").clicked() {
-                            ui.ctx().copy_text(field.value.clone());
-                        }
-                    });
-                }
-                FieldKind::Secret => {
-                    ui.horizontal(|ui| {
-                        let eye = ui.add(egui::Button::new(icons::EYE).sense(egui::Sense::drag())).on_hover_text("Hold to reveal");
-                        let revealed = eye.is_pointer_button_down_on();
-                        let edit = egui::TextEdit::singleline(&mut field.value).password(!revealed).desired_width(230.0);
-                        changed |= ui.add(edit).changed();
-                        if icon_button(ui, icons::COPY, "Copy").clicked() {
-                            crate::util::clipboard::copy_secret(ui.ctx(), &field.value);
-                        }
-                    });
-                }
-                FieldKind::Totp => {
-                    let params = totp::parse_secret(&field.value).ok();
-                    match (draft, params) {
-                        (None, Some(params)) => {
-                            ui.horizontal(|ui| {
-                                ui.vertical(|ui| show_code(ui, &params, 16.0));
-                                if icon_button(ui, icons::PENCIL_SIMPLE, "Edit secret").clicked() {
-                                    state.totp_draft = Some((id.clone(), key.clone(), field.value.clone()));
-                                }
-                            });
-                        }
-                        (draft, _) => {
-                            let mut text = draft.unwrap_or_default();
-                            let (edit, scanned) = ui
-                                .horizontal(|ui| {
-                                    let eye = ui.add(egui::Button::new(icons::EYE).sense(egui::Sense::drag())).on_hover_text("Hold to reveal");
-                                    let edit = ui.add(
-                                        egui::TextEdit::singleline(&mut text)
-                                            .password(!eye.is_pointer_button_down_on())
-                                            .hint_text("secret or otpauth://…")
-                                            .desired_width(220.0),
-                                    );
-                                    let target = QrTarget::CredentialField { id: id.clone(), key: key.clone() };
-                                    (edit, qr_buttons(ui, cmds, target))
-                                })
-                                .inner;
-                            let was_scanned = matches!(scanned, Some(Ok(_)));
-                            match scanned {
-                                Some(Ok(scanned)) => text = scanned,
-                                Some(Err(e)) => state.error = Some(e),
-                                None => {}
-                            }
-                            let has_saved = totp::parse_secret(&field.value).is_ok();
-                            let escaped = edit.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape));
-                            let unchanged = text.trim().is_empty() || text.trim() == field.value;
-                            if has_saved && (escaped || (edit.lost_focus() && unchanged)) {
-                                state.totp_draft = None;
-                            } else if (edit.lost_focus() || was_scanned) && !text.trim().is_empty() {
-                                match totp::parse_secret(&text) {
-                                    Ok(_) => {
-                                        field.value = text.trim().to_string();
-                                        changed = true;
-                                        state.totp_draft = None;
-                                    }
-                                    Err(e) => {
-                                        state.error = Some(e);
-                                        state.totp_draft = Some((id.clone(), key.clone(), text));
-                                    }
-                                }
-                            } else if edit.changed() || state.totp_draft.is_some() {
-                                state.totp_draft = Some((id.clone(), key.clone(), text));
-                            }
-                        }
-                    }
-                }
-            }
-            if icon_button(ui, icons::X, "Remove field").clicked() {
-                remove = Some(i);
-            }
-            ui.end_row();
-        }
-    });
-
-    if let Some(entry) = state.entries.iter_mut().find(|e| e.id == id) {
-        if let Some(i) = remove {
-            entry.fields.remove(i);
-            changed = true;
-        }
-        changed |= drop_field(ui, entry, &handles, grid.response.rect.x_range());
-    }
+    let mut changed = super::fields::field_rows(ui, state, db, &id, cmds);
     if ui.button("Add field").clicked() {
         state.add_field(db, &id);
     }
@@ -444,9 +322,8 @@ fn entry_matches(entry: &CredentialSummary, filter: &str) -> bool {
 
 /// A stable colour per tag, so the same tag looks the same everywhere.
 fn tag_tone(tag: &str) -> Tone {
-    const TONES: [Tone; 5] = [Tone::Info, Tone::Success, Tone::Caution, Tone::Accent, Tone::Source];
     let hash = tag.to_lowercase().bytes().fold(0u32, |h, b| h.wrapping_mul(31).wrapping_add(u32::from(b)));
-    TONES[hash as usize % TONES.len()]
+    Tone::Tag((hash as usize % Tone::TAG_COUNT) as u8)
 }
 
 fn tag_pills(ui: &mut egui::Ui, tags: &[String], max: usize) {
@@ -483,9 +360,31 @@ fn tag_editor(ui: &mut egui::Ui, state: &mut CredentialsState, id: &str, now: f6
             tags.remove(i);
             changed = true;
         }
-        let edit = ui.add(egui::TextEdit::singleline(&mut state.tag_draft).hint_text("Add tag").desired_width(90.0));
+        let edit_id = ui.make_persistent_id(("tag_draft", id));
+        let suggestions = tag_suggestions(&known, &state.tag_draft);
+        if ui.memory(|m| m.has_focus(edit_id))
+            && !suggestions.is_empty()
+            && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab))
+        {
+            state.tag_draft = suggestions[0].clone();
+            let mut edit_state = egui::text_edit::TextEditState::load(ui.ctx(), edit_id).unwrap_or_default();
+            let end = egui::text::CCursor::new(state.tag_draft.chars().count());
+            edit_state.cursor.set_char_range(Some(egui::text::CCursorRange::one(end)));
+            edit_state.store(ui.ctx(), edit_id);
+        }
+        // Holding Tab back from focus navigation while there's something to complete.
+        let filter = egui::EventFilter { horizontal_arrows: true, vertical_arrows: true, tab: !suggestions.is_empty(), ..Default::default() };
+        let edit = ui.add(
+            egui::TextEdit::singleline(&mut state.tag_draft).id(edit_id).hint_text("Add tag").desired_width(90.0).event_filter(filter),
+        );
         if edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !state.tag_draft.trim().is_empty() {
             tags.push(std::mem::take(&mut state.tag_draft));
+            changed = true;
+            edit.request_focus();
+        }
+        if let Some(tag) = suggestion_popup(ui, &edit, &suggestions) {
+            tags.push(tag);
+            state.tag_draft.clear();
             changed = true;
             edit.request_focus();
         }
@@ -509,25 +408,44 @@ fn tag_editor(ui: &mut egui::Ui, state: &mut CredentialsState, id: &str, now: f6
     }
 }
 
-/// While a field of `entry` is dragged, marks where it would land; on release moves it there.
-fn drop_field(ui: &egui::Ui, entry: &mut Credential, rows: &[egui::Rangef], x: egui::Rangef) -> bool {
-    let Some(drag) = egui::DragAndDrop::payload::<FieldDrag>(ui.ctx()).filter(|d| d.entry_id == entry.id) else { return false };
-    let Some(pointer) = ui.ctx().pointer_interact_pos() else { return false };
-    let slot = rows.iter().filter(|row| row.center() < pointer.y).count();
-    let y = match slot {
-        0 => rows.first().map_or(0.0, |r| r.min - 3.0),
-        n if n == rows.len() => rows[n - 1].max + 3.0,
-        n => (rows[n - 1].max + rows[n].min) / 2.0,
-    };
-    ui.painter().hline(x, y, egui::Stroke::new(2.0, ui.visuals().selection.stroke.color));
-    ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-    if !ui.input(|i| i.pointer.any_released()) || drag.index >= entry.fields.len() || entry.fields[drag.index].key != drag.key {
-        return false;
+/// Known tags containing `draft`, ignoring case, those starting with it first.
+fn tag_suggestions(known: &[String], draft: &str) -> Vec<String> {
+    const MAX: usize = 6;
+    let draft = draft.trim().to_lowercase();
+    if draft.is_empty() {
+        return Vec::new();
     }
-    egui::DragAndDrop::clear_payload(ui.ctx());
-    let field = entry.fields.remove(drag.index);
-    entry.fields.insert(if slot > drag.index { slot - 1 } else { slot }, field);
-    true
+    let mut matches: Vec<&String> = known.iter().filter(|t| t.to_lowercase().contains(&draft)).collect();
+    matches.sort_by_key(|t| !t.to_lowercase().starts_with(&draft));
+    matches.into_iter().take(MAX).cloned().collect()
+}
+
+/// The suggestions under the tag edit while it has focus, the first marked as the one Tab completes to.
+/// Returns a clicked suggestion.
+fn suggestion_popup(ui: &egui::Ui, edit: &egui::Response, suggestions: &[String]) -> Option<String> {
+    let open_id = edit.id.with("suggestions_open");
+    let was_open = ui.data(|d| d.get_temp::<bool>(open_id)).unwrap_or(false);
+    // A click on a suggestion takes focus from the edit before it lands; stay up until it does.
+    let clicking = was_open && ui.input(|i| i.pointer.any_down() || i.pointer.any_released());
+    let open = !suggestions.is_empty() && (edit.has_focus() || clicking);
+    ui.data_mut(|d| d.insert_temp(open_id, open));
+    if !open {
+        return None;
+    }
+    let mut picked = None;
+    egui::Area::new(edit.id.with("suggestions"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(edit.rect.left_bottom() + egui::vec2(0.0, 2.0))
+        .show(ui.ctx(), |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                for (i, tag) in suggestions.iter().enumerate() {
+                    if ui.add(egui::Button::selectable(i == 0, tag).frame_when_inactive(false)).clicked() {
+                        picked = Some(tag.clone());
+                    }
+                }
+            });
+        });
+    picked
 }
 
 fn floating_drag_label(ui: &egui::Ui) {
@@ -543,8 +461,10 @@ fn floating_drag_label(ui: &egui::Ui) {
         });
 }
 
+pub(super) const RENAME_WIDTH: f32 = 140.0;
+
 /// A label that turns into an edit on click. Returns true while editing.
-fn rename_field(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, target: RenameTarget, current: &str, label: RichText) -> bool {
+pub(super) fn rename_field(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, target: RenameTarget, current: &str, label: RichText) -> bool {
     if rename_edit(ui, state, db, &target) {
         return true;
     }
@@ -557,11 +477,28 @@ fn rename_field(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, target
     false
 }
 
+/// Rewrites a name being typed into a valid one, keeping the cursor after the same character.
+fn sanitize_in_place(ui: &egui::Ui, text: &mut String, output: &mut egui::text_edit::TextEditOutput) {
+    let clean = mitm_core::credentials::sanitize_name(text);
+    if clean == *text {
+        return;
+    }
+    let cursor = output.cursor_range.map_or(0, |r| r.primary.index.0);
+    let before: String = text.chars().take(cursor).collect();
+    let kept = mitm_core::credentials::sanitize_name(&before).chars().count().min(clean.chars().count());
+    *text = clean;
+    output.state.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(kept))));
+    output.state.clone().store(ui.ctx(), output.response.id);
+}
+
 /// The edit for a rename of `target` in progress; returns false when none is.
 fn rename_edit(ui: &mut egui::Ui, state: &mut CredentialsState, db: &Db, target: &RenameTarget) -> bool {
     let Some(rename) = state.rename.as_mut().filter(|r| &r.target == target) else { return false };
     let len = rename.text.chars().count();
-    let mut output = egui::TextEdit::singleline(&mut rename.text).desired_width(140.0).show(ui);
+    let mut output = egui::TextEdit::singleline(&mut rename.text).desired_width(RENAME_WIDTH).show(ui);
+    if output.response.changed() {
+        sanitize_in_place(ui, &mut rename.text, &mut output);
+    }
     let edit = output.response;
     if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         state.rename = None;
@@ -594,5 +531,14 @@ mod tests {
         assert!(entry_matches(&entry, "admin") && entry_matches(&entry, "stag"));
         assert!(!entry_matches(&entry, "prod"));
         assert_eq!(tag_tone("staging"), tag_tone("Staging"));
+    }
+
+    #[test]
+    fn tag_suggestions_match_anywhere_and_put_prefix_matches_first() {
+        let known: Vec<String> = ["backstage", "prod", "staging", "Stable"].map(String::from).to_vec();
+        assert_eq!(tag_suggestions(&known, "sta"), ["staging", "Stable", "backstage"]);
+        assert_eq!(tag_suggestions(&known, "PROD"), ["prod"]);
+        assert!(tag_suggestions(&known, " ").is_empty());
+        assert!(tag_suggestions(&known, "qa").is_empty());
     }
 }

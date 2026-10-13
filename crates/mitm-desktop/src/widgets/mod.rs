@@ -4,6 +4,7 @@ pub mod copy_menu;
 pub mod diff;
 pub mod flash;
 pub mod form_view;
+pub mod grow_edit;
 pub mod json_tree;
 pub mod pills;
 pub mod tri_state;

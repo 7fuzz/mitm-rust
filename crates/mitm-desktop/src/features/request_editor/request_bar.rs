@@ -1,5 +1,5 @@
 use eframe::egui::{self, Align, Layout};
-use crate::widgets::template;
+use crate::widgets::{grow_edit, template};
 use super::method::method_combo;
 
 const MAX_URL_LINES: f32 = 3.0;
@@ -33,47 +33,20 @@ pub fn show(ui: &mut egui::Ui, id_salt: &str, method: &mut String, url: &mut Str
 /// One line tall, growing to three as the URL wraps, then scrolling. Line breaks are dropped, since a URL
 /// has none; Enter neither adds one nor ends editing.
 fn url_field(ui: &mut egui::Ui, url: &mut String, hint: &str, width: f32) -> egui::Response {
-    let row = ui.text_style_height(&egui::TextStyle::Monospace);
-    // Padding that makes a single line exactly as tall as the buttons beside it.
-    let pad_y = ((ui.spacing().interact_size.y - row) / 2.0).max(1.0).round() as i8;
-    let margin = egui::Margin::symmetric(4, pad_y);
     let mut layouter = template::layouter(egui::TextStyle::Monospace, None);
-    let frame = egui::Frame::new()
-        .fill(ui.visuals().extreme_bg_color)
-        .stroke(ui.visuals().widgets.inactive.bg_stroke)
-        .corner_radius(ui.visuals().widgets.inactive.corner_radius)
-        .inner_margin(margin)
-        .show(ui, |ui| {
-            egui::ScrollArea::vertical()
-                .id_salt("url_field")
-                .max_height(row * MAX_URL_LINES)
-                .min_scrolled_height(0.0)
-                .auto_shrink([true, true])
-                .show(ui, |ui| {
-                    template::show(ui, url, |text| {
-                        egui::TextEdit::multiline(text)
-                            .frame(egui::Frame::NONE)
-                            .margin(egui::Margin::ZERO)
-                            .desired_rows(1)
-                            .return_key(None)
-                            .hint_text(hint)
-                            .layouter(&mut layouter)
-                            .font(egui::TextStyle::Monospace)
-                            .desired_width(width - margin.sum().x)
-                    })
-                })
-                .inner
-        });
-    let response = frame.inner;
-    if response.has_focus() {
-        let visuals = ui.visuals();
-        ui.painter().rect_stroke(
-            frame.response.rect,
-            visuals.widgets.inactive.corner_radius,
-            visuals.selection.stroke,
-            egui::StrokeKind::Inside,
-        );
-    }
+    let response = grow_edit::show(ui, "url_field", egui::TextStyle::Monospace, width, MAX_URL_LINES, |ui, inner_width| {
+        template::show(ui, url, |text| {
+            egui::TextEdit::multiline(text)
+                .frame(egui::Frame::NONE)
+                .margin(egui::Margin::ZERO)
+                .desired_rows(1)
+                .return_key(None)
+                .hint_text(hint)
+                .layouter(&mut layouter)
+                .font(egui::TextStyle::Monospace)
+                .desired_width(inner_width)
+        })
+    });
     if response.changed() && url.contains(['\n', '\r']) {
         url.retain(|c| c != '\n' && c != '\r');
     }

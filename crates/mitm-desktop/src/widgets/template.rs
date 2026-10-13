@@ -85,6 +85,14 @@ fn cred_totp(name: &str) -> Option<mitm_core::utils::totp::TotpParams> {
     }
 }
 
+/// A multi-line value (a key, a certificate) as its first line and `…`, so a hover stays one line.
+fn first_line(value: &str) -> String {
+    match value.trim_start().split_once('\n') {
+        Some((first, _)) => format!("{} …", first.trim_end()),
+        None => value.to_string(),
+    }
+}
+
 fn hover_value(name: &str) -> String {
     if let Some(params) = totp_params(name).or_else(|| cred_totp(name)) {
         return live_code(&params);
@@ -92,7 +100,7 @@ fn hover_value(name: &str) -> String {
     match cred_field(name) {
         Some(_) if CREDENTIALS_LOCKED.with(|c| c.get()) => return format!("{} locked", icons::LOCK),
         Some((FieldKind::Secret, _)) => return "••••••".to_string(),
-        Some((_, value)) => return value,
+        Some((_, value)) => return first_line(&value),
         None if mitm_core::credentials::parse_ref(name).is_some() => return "undefined".to_string(),
         None => {}
     }
@@ -639,6 +647,8 @@ mod tests {
         assert_eq!(hover_value("$cred:dg/DGADMIN.password"), "••••••");
         assert!(hover_value("$cred:DG/dgAdmin.totp").ends_with('s'));
         assert_eq!(hover_value("$cred:DG/dgAdmin.nope"), "undefined");
+        assert_eq!(first_line("-----BEGIN KEY-----\nMIIB\n-----END KEY-----"), "-----BEGIN KEY----- …");
+        assert_eq!(first_line("one line"), "one line");
         assert_eq!(hover_value("$cred:dgAdmin.user"), "undefined");
         assert!(resolve_var("$cred:DG/dgAdmin.password").is_some());
         assert!(resolve_var("$cred:Other/dgAdmin.password").is_none());

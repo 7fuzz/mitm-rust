@@ -117,6 +117,19 @@ pub fn validate_name(name: &str) -> Result<(), CredentialError> {
     }
 }
 
+/// Turns typed text into a name `validate_name` accepts: whitespace becomes `_`, other disallowed characters are
+/// dropped, and the result is cut at 64. Empty when nothing usable is left.
+pub fn sanitize_name(text: &str) -> String {
+    text.chars()
+        .filter_map(|c| match c {
+            c if c.is_whitespace() => Some('_'),
+            c if c.is_ascii_alphanumeric() || c == '_' || c == '-' => Some(c),
+            _ => None,
+        })
+        .take(64)
+        .collect()
+}
+
 pub const MAX_TAG_CHARS: usize = 32;
 
 /// Trimmed, non-empty, at most `MAX_TAG_CHARS`, and each tag once ignoring case; the first spelling wins.
@@ -491,6 +504,16 @@ pub(crate) mod tests {
         cred.fields = vec![field("bad key", FieldKind::Text, "")];
         assert!(save_credential(&db, &cred).is_err());
         let _ = std::fs::remove_file(&db);
+    }
+
+    #[test]
+    fn sanitized_names_pass_validation() {
+        assert_eq!(sanitize_name("my api key!"), "my_api_key");
+        assert_eq!(sanitize_name("dg.admin/é-2"), "dgadmin-2");
+        assert_eq!(sanitize_name("a\tb"), "a_b");
+        assert_eq!(sanitize_name("!!!"), "");
+        assert_eq!(sanitize_name(&"x".repeat(80)).len(), 64);
+        assert!(validate_name(&sanitize_name("Gateway Client (prod)")).is_ok());
     }
 
     #[test]

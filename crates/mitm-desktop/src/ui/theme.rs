@@ -10,9 +10,27 @@ pub enum Tone {
     Accent,
     Source,
     Neutral,
+    /// One of `TAG_HUES`, for user labels where the colour carries no meaning.
+    Tag(u8),
 }
 
+/// Distinct hues for tags as (dark, light) pairs; red is left out since it reads as an error.
+const TAG_HUES: [(Color32, Color32); 10] = [
+    (Color32::from_rgb(96, 165, 250), Color32::from_rgb(29, 78, 216)),
+    (Color32::from_rgb(74, 222, 128), Color32::from_rgb(21, 128, 61)),
+    (Color32::from_rgb(251, 146, 60), Color32::from_rgb(194, 65, 12)),
+    (Color32::from_rgb(192, 132, 252), Color32::from_rgb(126, 34, 206)),
+    (Color32::from_rgb(165, 180, 252), Color32::from_rgb(67, 56, 202)),
+    (Color32::from_rgb(45, 212, 191), Color32::from_rgb(15, 118, 110)),
+    (Color32::from_rgb(34, 211, 238), Color32::from_rgb(14, 116, 144)),
+    (Color32::from_rgb(244, 114, 182), Color32::from_rgb(190, 24, 93)),
+    (Color32::from_rgb(163, 230, 53), Color32::from_rgb(77, 124, 15)),
+    (Color32::from_rgb(250, 204, 21), Color32::from_rgb(161, 98, 7)),
+];
+
 impl Tone {
+    pub const TAG_COUNT: usize = TAG_HUES.len();
+
     pub fn color(self, visuals: &Visuals) -> Color32 {
         let (dark, light) = match self {
             Tone::Success => (Color32::from_rgb(74, 222, 128), Color32::from_rgb(21, 128, 61)),
@@ -23,6 +41,7 @@ impl Tone {
             Tone::Accent => (Color32::from_rgb(192, 132, 252), Color32::from_rgb(126, 34, 206)),
             Tone::Source => (Color32::from_rgb(165, 180, 252), Color32::from_rgb(67, 56, 202)),
             Tone::Neutral => (Color32::from_rgb(156, 163, 175), Color32::from_rgb(75, 85, 99)),
+            Tone::Tag(i) => TAG_HUES[usize::from(i) % TAG_HUES.len()],
         };
         if visuals.dark_mode { dark } else { light }
     }
