@@ -73,10 +73,23 @@ fn appearance_section(ui: &mut egui::Ui) {
         egui::gui_zoom::zoom_menu_buttons(ui);
     });
     ui.add_space(6.0);
-    let mut zoom = ui.ctx().zoom_factor();
-    if ui.add(egui::Slider::new(&mut zoom, 0.5..=2.5).text("Factor").step_by(0.1)).changed() {
+    zoom_slider(ui);
+}
+
+/// Applies the zoom when a drag ends rather than during it: zooming rescales the slider under the pointer,
+/// which moves the value again and runs it to one end.
+fn zoom_slider(ui: &mut egui::Ui) {
+    let pending_id = ui.id().with("zoom_pending");
+    let mut zoom = ui.data(|d| d.get_temp::<f32>(pending_id)).unwrap_or_else(|| ui.ctx().zoom_factor());
+    let slider = ui.add(egui::Slider::new(&mut zoom, 0.5..=2.5).text("Factor").step_by(0.1));
+    if slider.dragged() {
+        ui.data_mut(|d| d.insert_temp(pending_id, zoom));
+        return;
+    }
+    if slider.changed() || slider.drag_stopped() {
         ui.ctx().set_zoom_factor(zoom);
     }
+    ui.data_mut(|d| d.remove::<f32>(pending_id));
 }
 
 fn shortcuts_section(ui: &mut egui::Ui) {
