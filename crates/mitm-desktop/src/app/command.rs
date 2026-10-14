@@ -45,6 +45,7 @@ pub enum AppCommand {
     WebSockets(crate::features::websockets::Cmd),
 
     Webhooks(crate::features::webhooks::Cmd),
+    PickMarkdownFile,
     DecodeInEncodingTool(String),
     Hashing(crate::features::utilities::hashing::Cmd),
     RecomputeHmac { secret: String, payload: String },

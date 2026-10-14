@@ -42,6 +42,7 @@ pub struct MitmApp {
     collection_runs: Jobs<(String, Result<ExecutionResult, RunError>)>,
     import_files: Jobs<Option<Result<(String, String), String>>>,
     credential_files: Jobs<Option<Result<String, String>>>,
+    markdown_files: Jobs<Option<Result<(String, String), String>>>,
     qr_images: Jobs<Option<(crate::app::command::QrTarget, Result<String, String>)>>,
     file_saves: Jobs<Option<Result<String, String>>>,
     factory_resets: Jobs<Result<Option<MitmCore>, String>>,
@@ -63,6 +64,7 @@ impl MitmApp {
             collection_runs: Jobs::default(),
             import_files: Jobs::default(),
             credential_files: Jobs::default(),
+            markdown_files: Jobs::default(),
             qr_images: Jobs::default(),
             file_saves: Jobs::default(),
             factory_resets: Jobs::default(),
@@ -265,6 +267,7 @@ impl MitmApp {
                 let cx = Cx { rt: &self.rt, core: &self.core, ctx };
                 crate::features::webhooks::handle(&mut self.state.webhooks, &cx, cmd);
             }
+            AppCommand::PickMarkdownFile => self.pick_markdown_file(ctx),
             AppCommand::DecodeInEncodingTool(text) => {
                 self.state.encoding.load_for_decode(text);
                 dock::open_tab(&mut self.dock, Tab::Encoding);

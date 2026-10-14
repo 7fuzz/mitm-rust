@@ -26,6 +26,7 @@ pub enum Tab {
     HmacTool,
     JsonDiff,
     JsonTools,
+    Markdown,
     Cvss,
     Totp,
     /// The traffic inspector detached from Traffic; opened from the inspector, not from panel menus.
@@ -33,7 +34,7 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 18] = [
+    pub const ALL: [Tab; 19] = [
         Tab::Traffic,
         Tab::Repeater,
         Tab::Fuzzer,
@@ -50,6 +51,7 @@ impl Tab {
         Tab::HmacTool,
         Tab::JsonDiff,
         Tab::JsonTools,
+        Tab::Markdown,
         Tab::Cvss,
         Tab::Totp,
     ];
@@ -72,6 +74,7 @@ impl Tab {
             Tab::HmacTool => "HMAC signature",
             Tab::JsonDiff => "JSON Diff",
             Tab::JsonTools => "JSON Tools",
+            Tab::Markdown => "Markdown",
             Tab::Cvss => "CVSS",
             Tab::Totp => "TOTP",
             Tab::Inspector => "Inspector",
@@ -90,6 +93,7 @@ impl Tab {
     pub const UTILITIES: &'static [Tab] = &[
         Tab::JsonDiff,
         Tab::JsonTools,
+        Tab::Markdown,
         Tab::Cvss,
         Tab::Encoding,
         Tab::Hashing,
@@ -258,6 +262,7 @@ impl TabViewer<'_> {
             Tab::HmacTool => features::utilities::hmac_tool::show(ui, &mut state.hmac_tool),
             Tab::JsonDiff => features::utilities::json_diff::show(ui, &mut state.json_diff),
             Tab::JsonTools => features::utilities::json_tools::show(ui, &mut state.json_tools),
+            Tab::Markdown => features::utilities::markdown::show(ui, &mut state.markdown, cmds),
             Tab::Cvss => features::utilities::cvss::show(ui, &mut state.cvss),
             Tab::Totp => features::utilities::totp::show(ui, &mut state.totp, cmds),
             Tab::Environments => features::environments::show(ui, &mut state.environments, &state.credentials.linked, cmds),

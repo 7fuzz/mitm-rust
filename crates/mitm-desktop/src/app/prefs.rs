@@ -12,6 +12,7 @@ use crate::features::utilities::hashing::HashingPrefs;
 use crate::features::utilities::hmac_tool::HmacToolPrefs;
 use crate::features::utilities::json_diff::JsonDiffPrefs;
 use crate::features::utilities::json_tools::JsonToolsPrefs;
+use crate::features::utilities::markdown::MarkdownPrefs;
 use crate::features::inspector::InspectorPrefs;
 use crate::features::intercept::InterceptPrefs;
 use crate::features::repeater::RepeaterPrefs;
@@ -106,6 +107,10 @@ impl Section for JsonToolsPrefs {
     const KEY: &'static str = "json_tools";
 }
 
+impl Section for MarkdownPrefs {
+    const KEY: &'static str = "markdown";
+}
+
 fn load<T: Section>(storage: Option<&dyn Storage>) -> T {
     storage.and_then(|s| eframe::get_value(s, T::KEY)).unwrap_or_default()
 }
@@ -128,6 +133,7 @@ pub fn restore(storage: Option<&dyn Storage>, state: &mut AppState) -> DockState
     state.hmac_tool.prefs = load(storage);
     state.json_diff.prefs = load(storage);
     state.json_tools.prefs = load(storage);
+    state.markdown.prefs = load(storage);
     state.settings = load(storage);
     state.traffic.prefs = load(storage);
     state.intercept.prefs = load(storage);
@@ -149,6 +155,7 @@ pub fn carry_over(from: &mut AppState, to: &mut AppState) {
     to.hmac_tool.prefs = std::mem::take(&mut from.hmac_tool.prefs);
     to.json_diff.prefs = std::mem::take(&mut from.json_diff.prefs);
     to.json_tools.prefs = std::mem::take(&mut from.json_tools.prefs);
+    to.markdown.prefs = std::mem::take(&mut from.markdown.prefs);
     to.settings = std::mem::take(&mut from.settings);
     to.traffic.prefs = std::mem::take(&mut from.traffic.prefs);
     to.intercept.prefs = std::mem::take(&mut from.intercept.prefs);
@@ -171,6 +178,7 @@ pub fn persist(storage: &mut dyn Storage, dock: &DockState<Tab>, state: &AppStat
     save(storage, &state.hmac_tool.prefs);
     save(storage, &state.json_diff.prefs);
     save(storage, &state.json_tools.prefs);
+    save(storage, &state.markdown.prefs);
     save(storage, &state.settings);
     save(storage, &state.traffic.prefs);
     save(storage, &state.intercept.prefs);

@@ -51,6 +51,14 @@ impl MitmApp {
         });
     }
 
+    pub(super) fn pick_markdown_file(&mut self, ctx: &egui::Context) {
+        self.markdown_files.spawn(&self.rt, ctx, async {
+            let path = crate::util::files::pick_open(&[("Markdown", &["md", "markdown", "txt"])]).await?;
+            let name = crate::util::files::file_name(&path);
+            Some(std::fs::read_to_string(&path).map(|text| (name, text)).map_err(|e| e.to_string()))
+        });
+    }
+
     pub(super) fn pick_credentials_json(&mut self, ctx: &egui::Context) {
         self.credential_files.spawn(&self.rt, ctx, async {
             let path = crate::util::files::pick_open(&[("JSON", &["json"])]).await?;

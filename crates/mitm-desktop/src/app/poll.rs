@@ -55,6 +55,12 @@ impl MitmApp {
                 (QrTarget::CredentialField { .. }, Err(e)) => self.state.credentials.show_error(e),
             }
         }
+        for result in self.markdown_files.drain().flatten() {
+            match result {
+                Ok((name, text)) => self.state.markdown.loaded(name, text),
+                Err(e) => top_bar::flash(ui, Err(e)),
+            }
+        }
         for result in self.credential_files.drain().flatten() {
             let import = &mut self.state.credentials.json_import;
             match result {
