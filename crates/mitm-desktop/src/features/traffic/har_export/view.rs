@@ -89,8 +89,7 @@ fn hosts(ui: &mut egui::Ui, export: &mut HarExport) {
     let matching: Vec<(&String, &usize)> =
         export.facets.hosts.iter().filter(|(host, _)| host.to_lowercase().contains(&search)).collect();
     let row_height = ui.spacing().interact_size.y;
-    egui::ScrollArea::vertical()
-        .max_height(240.0)
+    crate::widgets::modal_scroll::vertical(240.0)
         .auto_shrink([false, true])
         .show_rows(ui, row_height, matching.len(), |ui, range| {
             for (host, count) in &matching[range] {

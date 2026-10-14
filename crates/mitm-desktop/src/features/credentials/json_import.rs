@@ -260,7 +260,7 @@ pub fn show(ctx: &egui::Context, state: &mut CredentialsState, db: &Db, cmds: &m
                 form.parse();
             }
         } else {
-            egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+            crate::widgets::modal_scroll::vertical(420.0).show(ui, |ui| {
                 egui::Grid::new("credentials_json_rows").num_columns(5).striped(false).spacing([8.0, 4.0]).show(ui, |ui| {
                     ui.label("");
                     for title in ["Path", "Entry", "Field", "Kind"] {

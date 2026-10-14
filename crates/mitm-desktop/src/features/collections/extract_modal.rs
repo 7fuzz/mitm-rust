@@ -36,7 +36,7 @@ pub fn show(ctx: &egui::Context, state: &mut CollectionsState, cmds: &mut Comman
             ui.add_space(4.0);
         }
 
-        egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+        crate::widgets::modal_scroll::vertical(420.0).show(ui, |ui| {
             extract_rules::show(ui, "extract_modal_rules", &mut modal.rules);
         });
 

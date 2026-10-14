@@ -116,7 +116,7 @@ pub fn show(ctx: &egui::Context, state: &mut EnvironmentsState, now: f64) {
         if matches.is_empty() {
             ui.weak("No variables match");
         }
-        egui::ScrollArea::vertical().max_height(320.0).auto_shrink([false, true]).show(ui, |ui| {
+        crate::widgets::modal_scroll::vertical(320.0).auto_shrink([false, true]).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             for (row, &var_idx) in matches.iter().enumerate() {
                 let var = &mut variables[var_idx];

@@ -112,7 +112,7 @@ pub fn show(ctx: &egui::Context, state: &mut PaletteState, app_state: &AppState,
         });
         ui.add_space(4.0);
 
-        egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+        crate::widgets::modal_scroll::vertical(320.0).show(ui, |ui| {
             for (index, item) in matches.iter().enumerate() {
                 let selected = index == state.selected;
                 let response = egui::Sides::new().show(

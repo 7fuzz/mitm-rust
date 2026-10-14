@@ -11,6 +11,7 @@ pub mod tri_state;
 pub mod split;
 pub mod template;
 pub mod message_pane;
+pub mod modal_scroll;
 pub mod search;
 pub mod source_scope;
 pub mod toast;
