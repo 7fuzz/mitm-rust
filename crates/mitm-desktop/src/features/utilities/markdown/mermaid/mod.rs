@@ -44,7 +44,10 @@ pub fn render(ui: &mut egui::Ui, id: &str, code: &str) {
         .corner_radius(6.0)
         .inner_margin(12.0)
         .show(ui, |ui| {
-            egui::ScrollArea::horizontal().id_salt(id).show(ui, |ui| match kind {
+            // Bound the scroll area to the pane; without this it expands to the diagram's
+            // width, widening the whole preview instead of scrolling within it.
+            let width = ui.available_width();
+            egui::ScrollArea::horizontal().id_salt(id).max_width(width).show(ui, |ui| match kind {
                 Kind::Flowchart => flowchart::render(ui, code),
                 Kind::Sequence => sequence::render(ui, code),
                 Kind::Unknown => {}

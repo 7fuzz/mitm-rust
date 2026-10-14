@@ -50,32 +50,65 @@ impl MarkdownState {
 pub(crate) enum Segment<'a> {
     Markdown(&'a str),
     Mermaid(&'a str),
+    Table(&'a str),
 }
 
-/// Splits the source so mermaid fences can be rendered as diagrams and the rest by the Markdown viewer.
+/// Splits the source so mermaid fences and tables render in their own horizontally scrollable
+/// boxes, and everything else flows through the Markdown viewer.
 pub(crate) fn segments(src: &str) -> Vec<Segment<'_>> {
     let lines = line_ranges(src);
+    let line = |i: usize| &src[lines[i].0..lines[i].1];
     let mut out = Vec::new();
     let mut md_start = 0;
     let mut i = 0;
     while i < lines.len() {
         let (ls, le) = lines[i];
-        if fence_lang(&src[ls..le]).as_deref() == Some("mermaid") {
-            push_markdown(&mut out, &src[md_start..ls]);
-            let code_start = lines.get(i + 1).map_or(le, |r| r.0);
+        if let Some(lang) = fence_lang(line(i)) {
             let mut j = i + 1;
-            while j < lines.len() && fence_lang(&src[lines[j].0..lines[j].1]).as_deref() != Some("") {
+            while j < lines.len() && fence_lang(line(j)).as_deref() != Some("") {
                 j += 1;
             }
-            let code_end = if j > i + 1 { lines[j - 1].1 } else { code_start };
-            out.push(Segment::Mermaid(&src[code_start..code_end]));
-            md_start = lines.get(j).map_or(src.len(), |r| r.1);
+            if lang == "mermaid" {
+                push_markdown(&mut out, &src[md_start..ls]);
+                let code_start = lines.get(i + 1).map_or(le, |r| r.0);
+                let code_end = if j > i + 1 { lines[j - 1].1 } else { code_start };
+                out.push(Segment::Mermaid(&src[code_start..code_end]));
+                md_start = lines.get(j).map_or(src.len(), |r| r.1);
+            }
+            // Skip to the closing fence so a non-mermaid block's `|` lines aren't read as a table.
+            i = j + 1;
+            continue;
+        }
+        if line(i).contains('|') && i + 1 < lines.len() && is_delimiter_row(line(i + 1)) {
+            push_markdown(&mut out, &src[md_start..ls]);
+            let mut j = i + 2;
+            while j < lines.len() && line(j).contains('|') && !line(j).trim().is_empty() {
+                j += 1;
+            }
+            let end = lines[j - 1].1;
+            out.push(Segment::Table(&src[ls..end]));
+            md_start = end;
             i = j;
+            continue;
         }
         i += 1;
     }
     push_markdown(&mut out, &src[md_start..]);
     out
+}
+
+/// A GFM table delimiter row, e.g. `| --- | :--: |` or `--- | ---`.
+fn is_delimiter_row(line: &str) -> bool {
+    let trimmed = line.trim().trim_start_matches('|').trim_end_matches('|');
+    let mut cells = 0;
+    for cell in trimmed.split('|') {
+        let cell = cell.trim();
+        if cell.is_empty() || !cell.contains('-') || !cell.chars().all(|c| c == '-' || c == ':') {
+            return false;
+        }
+        cells += 1;
+    }
+    cells > 0
 }
 
 fn push_markdown<'a>(out: &mut Vec<Segment<'a>>, text: &'a str) {
@@ -114,6 +147,7 @@ mod tests {
             .map(|s| match s {
                 Segment::Markdown(_) => "md",
                 Segment::Mermaid(_) => "mermaid",
+                Segment::Table(_) => "table",
             })
             .collect()
     }
@@ -132,6 +166,24 @@ mod tests {
     #[test]
     fn leaves_other_code_fences_in_markdown() {
         let src = "```rust\nfn main() {}\n```\n";
+        assert_eq!(kinds(src), ["md"]);
+    }
+
+    #[test]
+    fn extracts_a_table() {
+        let src = "Intro\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\nAfter\n";
+        assert_eq!(kinds(src), ["md", "table", "md"]);
+    }
+
+    #[test]
+    fn a_pipe_without_a_delimiter_row_is_not_a_table() {
+        let src = "a | b not a table\nmore text\n";
+        assert_eq!(kinds(src), ["md"]);
+    }
+
+    #[test]
+    fn pipes_inside_a_code_fence_are_not_a_table() {
+        let src = "```\n| A | B |\n| --- | --- |\n```\n";
         assert_eq!(kinds(src), ["md"]);
     }
 

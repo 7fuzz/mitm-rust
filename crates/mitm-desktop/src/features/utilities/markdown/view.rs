@@ -78,25 +78,37 @@ fn editor(ui: &mut egui::Ui, source: &mut String) {
 
 fn preview(ui: &mut egui::Ui, state: &MarkdownState) {
     egui::ScrollArea::vertical().id_salt("md_preview").auto_shrink([false, false]).show(ui, |ui| {
-        ui.set_width(ui.available_width());
+        // Cap the content to the pane so regular text wraps; tables and diagrams get their own
+        // horizontal scroll instead of widening the whole preview.
+        let width = ui.available_width();
+        ui.set_max_width(width);
         if state.source.trim().is_empty() {
             ui.weak("Nothing to preview");
-            return;
-        }
-        if !state.prefs.mermaid {
-            commonmark(ui, 0, &state.source);
             return;
         }
         for (i, segment) in segments(&state.source).into_iter().enumerate() {
             match segment {
                 Segment::Markdown(text) => commonmark(ui, i, text),
-                Segment::Mermaid(code) => {
+                Segment::Table(md) => {
+                    side_scroll(ui, ("md_table", i), width, |ui| commonmark(ui, i, md));
+                }
+                Segment::Mermaid(code) if state.prefs.mermaid => {
                     ui.push_id(("md_mermaid", i), |ui| mermaid::render(ui, "diagram", code));
                     ui.add_space(6.0);
+                }
+                Segment::Mermaid(code) => {
+                    side_scroll(ui, ("md_mermaid_src", i), width, |ui| {
+                        commonmark(ui, i, &format!("```\n{}\n```", code));
+                    });
                 }
             }
         }
     });
+}
+
+/// Puts wide content (a table, a code block) in its own horizontal scroll area bounded to the pane.
+fn side_scroll(ui: &mut egui::Ui, salt: impl egui::AsIdSalt, width: f32, content: impl FnOnce(&mut egui::Ui)) {
+    egui::ScrollArea::horizontal().id_salt(salt).max_width(width).show(ui, content);
 }
 
 fn commonmark(ui: &mut egui::Ui, salt: usize, text: &str) {
