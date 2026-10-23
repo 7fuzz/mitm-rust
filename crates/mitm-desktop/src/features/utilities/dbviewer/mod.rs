@@ -1,6 +1,7 @@
 mod edit_dialog;
 mod fk;
 mod grid;
+mod sidebar;
 mod store;
 mod tabs;
 
@@ -10,16 +11,18 @@ use std::sync::Arc;
 use mitm_core::credentials;
 use mitm_core::db::Db;
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use dbviewer_core::{upsert, Engine, ForeignKey, SavedQuery, Profile, QueryResult, Session, SshConfig, TableKind, TableRef};
+use dbviewer_core::{upsert, Engine, ForeignKey, SavedQuery, Profile, QueryResult, Session, SshConfig, TableRef};
 use egui::RichText;
 use egui_dock::{DockArea, DockState};
 
 use self::edit_dialog::{EditDialog, Outcome, Request, PICKER_LIMIT};
+use self::sidebar::{RowCounts, SidebarTab};
 use self::tabs::{Browser, Cmd, Content, QueryTab, SchemaView, TabId, Viewer};
 
 enum Event {
     Connected(Result<(Arc<Session>, Vec<String>), String>),
     Tables { database: String, result: Result<Vec<TableRef>, String> },
+    RowCounts { database: String, result: Result<HashMap<(String, String), i64>, String> },
     Table { tab: TabId, generation: u64, result: Result<QueryResult, String> },
     Query { tab: TabId, result: Result<QueryResult, String> },
     PrimaryKey { tab: TabId, result: Result<Vec<String>, String> },
@@ -90,6 +93,10 @@ struct App {
     loading_databases: HashSet<String>,
     columns: HashMap<String, HashMap<String, Vec<String>>>,
     loading_columns: HashSet<String>,
+    row_counts: HashMap<String, RowCounts>,
+    loading_counts: HashSet<String>,
+    sidebar_tab: SidebarTab,
+    recent: Vec<TableRef>,
     filter: String,
     edit: Option<EditDialog>,
     dock: DockState<TabId>,
@@ -125,6 +132,10 @@ impl App {
             loading_databases: HashSet::new(),
             columns: HashMap::new(),
             loading_columns: HashSet::new(),
+            row_counts: HashMap::new(),
+            loading_counts: HashSet::new(),
+            sidebar_tab: SidebarTab::default(),
+            recent: Vec::new(),
             filter: String::new(),
             edit: None,
             dock: DockState::new(Vec::new()),
@@ -191,6 +202,9 @@ impl App {
         self.loading_databases.clear();
         self.columns.clear();
         self.loading_columns.clear();
+        self.row_counts.clear();
+        self.loading_counts.clear();
+        self.recent.clear();
     }
 
     fn close_table_tabs(&mut self) {
@@ -209,6 +223,19 @@ impl App {
         self.rt.spawn(async move {
             let result = session.tables(&database).await.map_err(|e| format!("{e:#}"));
             let _ = tx.send(Event::Tables { database, result });
+            ctx.request_repaint();
+        });
+    }
+
+    fn load_row_counts(&mut self, ctx: &egui::Context, database: String) {
+        let Some(session) = self.session() else { return };
+        if self.row_counts.contains_key(&database) || !self.loading_counts.insert(database.clone()) {
+            return;
+        }
+        let (tx, ctx) = (self.tx.clone(), ctx.clone());
+        self.rt.spawn(async move {
+            let result = session.row_estimates(&database).await.map_err(|e| format!("{e:#}"));
+            let _ = tx.send(Event::RowCounts { database, result });
             ctx.request_repaint();
         });
     }
@@ -259,6 +286,7 @@ impl App {
             self.dock.set_focused_node_and_surface(path.node_path());
             return;
         }
+        self.remember_recent(&table);
         let id = self.new_tab_id();
         self.contents.insert(id, Content::Table(Browser::new(table.clone())));
         self.dock.push_to_focused_leaf(id);
@@ -459,6 +487,14 @@ impl App {
                         Err(e) => self.error = Some(e),
                     }
                 }
+                Event::RowCounts { database, result } => {
+                    self.loading_counts.remove(&database);
+                    let mut by_schema = RowCounts::new();
+                    for ((schema, table), count) in result.unwrap_or_default() {
+                        by_schema.entry(schema).or_default().insert(table, count);
+                    }
+                    self.row_counts.insert(database, by_schema);
+                }
                 Event::Table { tab, generation, result } => {
                     let Some(Content::Table(browser)) = self.contents.get_mut(&tab).filter(|c| matches!(c, Content::Table(b) if b.generation == generation)) else {
                         continue;
@@ -592,39 +628,6 @@ impl App {
         }
     }
 
-    fn saved_queries_section(&mut self, ui: &mut egui::Ui) {
-        let Some(connection) = self.connection_name() else { return };
-        let mine: Vec<SavedQuery> = self.saved.iter().filter(|q| q.connection == connection).cloned().collect();
-        let mut open = None;
-        let mut delete = None;
-        egui::CollapsingHeader::new(format!("Saved queries ({})", mine.len())).id_salt("saved_queries").show(ui, |ui| {
-            if mine.is_empty() {
-                ui.label(RichText::new("Use Save on a query tab").weak().small());
-            }
-            egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
-                for query in &mine {
-                    let response = ui.selectable_label(false, &query.name).on_hover_text(&query.sql);
-                    if response.clicked() {
-                        open = Some(query.clone());
-                    }
-                    response.context_menu(|ui| {
-                        if ui.button("Delete").clicked() {
-                            delete = Some(query.clone());
-                            ui.close();
-                        }
-                    });
-                }
-            });
-        });
-        if let Some(query) = open {
-            self.open_saved(&query);
-        }
-        if let Some(query) = delete {
-            self.saved.retain(|q| *q != query);
-            self.persist_saved();
-        }
-    }
-
     fn credentials_locked(&self) -> bool {
         credentials::is_locked(&self.db)
     }
@@ -645,145 +648,6 @@ impl App {
     fn reload_profiles(&mut self) {
         self.profiles_loaded = false;
         self.load_profiles();
-    }
-
-    fn sidebar(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            ui.heading("Connections");
-            if ui.small_button("New").clicked() {
-                self.form = Some(ProfileForm::new(None, Profile::default()));
-            }
-        });
-        if self.credentials_locked() {
-            ui.label(RichText::new("Connections are stored in credentials, which are locked. Unlock them in the Credentials tab.").weak());
-        }
-        let mut connect = None;
-        let mut edit = None;
-        let mut delete = None;
-        for (i, profile) in self.profiles.iter().enumerate() {
-            let active = matches!(&self.connection, Connection::Connected { name, .. } if *name == profile.name);
-            let label = if profile.ssh.is_some() { format!("{} (ssh)", profile.name) } else { profile.name.clone() };
-            let response = ui.selectable_label(active, label);
-            if response.double_clicked() {
-                connect = Some(i);
-            }
-            response.context_menu(|ui| {
-                if ui.button("Connect").clicked() {
-                    connect = Some(i);
-                    ui.close();
-                }
-                if ui.button("Edit").clicked() {
-                    edit = Some(i);
-                    ui.close();
-                }
-                if ui.button("Delete").clicked() {
-                    delete = Some(i);
-                    ui.close();
-                }
-            });
-        }
-        if let Some(i) = connect {
-            let profile = &self.profiles[i];
-            let ask_db = profile.password.is_empty();
-            let ask_ssh = profile.ssh.as_ref().is_some_and(|s| s.secret.is_empty());
-            if ask_db || ask_ssh {
-                self.prompt = Some(PasswordPrompt { index: i, password: String::new(), ssh_secret: String::new(), ask_db, ask_ssh, focused: false, reveal: false });
-            } else {
-                self.connect(ui.ctx(), i, String::new(), String::new());
-            }
-        }
-        if let Some(i) = edit {
-            self.form = Some(ProfileForm::new(Some(i), self.profiles[i].clone()));
-        }
-        if let Some(i) = delete {
-            if let Err(e) = store::delete_profile(&self.db, &self.profiles[i].name) {
-                self.error = Some(e);
-            }
-            self.reload_profiles();
-        }
-
-        ui.separator();
-        match &self.connection {
-            Connection::Disconnected => {
-                ui.label(RichText::new("Double-click a connection").weak());
-            }
-            Connection::Connecting(name) => {
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label(format!("Connecting to {name}..."));
-                });
-            }
-            Connection::Connected { name, .. } => {
-                let mut disconnect = false;
-                let mut new_query = false;
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(name).strong());
-                    disconnect = ui.small_button("Disconnect").clicked();
-                    new_query = ui.small_button("New query").clicked();
-                });
-                if new_query {
-                    self.open_query(None, None);
-                }
-                if disconnect {
-                    self.connection = Connection::Disconnected;
-                    self.reset_databases();
-                    self.close_table_tabs();
-                }
-            }
-        }
-
-        if self.session().is_some() {
-            self.saved_queries_section(ui);
-            ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("Filter tables"));
-            let filter = self.filter.to_lowercase();
-            let mut open = None;
-            let mut expand = None;
-            let multiple = self.databases.len() > 1;
-            let active_tab = self.dock.find_active_focused().map(|(_, id)| *id);
-            let open_tables: Vec<&TableRef> = active_tab
-                .and_then(|id| self.contents.get(&id))
-                .and_then(|c| match c {
-                    Content::Table(b) => Some(&b.table),
-                    Content::Query(_) => None,
-                })
-                .into_iter()
-                .collect();
-            let mut query_database = None;
-            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                for database in &self.databases {
-                    let mut list = |ui: &mut egui::Ui| match self.tables.get(database) {
-                        Some(tables) => table_list(ui, tables, &filter, &open_tables, &mut open),
-                        None => {
-                            ui.spinner();
-                        }
-                    };
-                    if multiple {
-                        let header = egui::CollapsingHeader::new(database).id_salt(("db", database)).show(ui, |ui| {
-                            expand = Some(database.clone());
-                            list(ui);
-                        });
-                        header.header_response.context_menu(|ui| {
-                            if ui.button("Query this database").clicked() {
-                                query_database = Some(database.clone());
-                                ui.close();
-                            }
-                        });
-                    } else {
-                        list(ui);
-                    }
-                }
-            });
-            if let Some(database) = expand {
-                self.load_tables(ui.ctx(), database);
-            }
-            if let Some(table) = open {
-                self.open_table(ui.ctx(), table);
-            }
-            if let Some(database) = query_database {
-                self.open_query(Some(database), None);
-            }
-        }
     }
 
     fn windows(&mut self, ctx: &egui::Context) {
@@ -912,9 +776,7 @@ impl App {
 
         egui::CentralPanel::no_frame().show(ui, |ui| {
             if self.contents.is_empty() {
-                ui.centered_and_justified(|ui| {
-                    ui.label(RichText::new("Pick a table, or open a new query").weak());
-                });
+                self.empty_state(ui);
                 return;
             }
             let mut cmds = Vec::new();
@@ -1037,26 +899,6 @@ impl ProfileForm {
         self.ssh.port = self.ssh_port.trim().parse().ok();
         self.profile.ssh = self.use_ssh.then_some(self.ssh);
         (self.index, self.profile)
-    }
-}
-
-fn table_list(ui: &mut egui::Ui, tables: &[TableRef], filter: &str, open_tables: &[&TableRef], open: &mut Option<TableRef>) {
-    let mut current_schema = "";
-    for table in tables.iter().filter(|t| t.name.to_lowercase().contains(filter)) {
-        if !table.schema.is_empty() && table.schema != current_schema {
-            current_schema = &table.schema;
-            ui.label(RichText::new(current_schema).small().weak());
-        }
-        let selected = open_tables.contains(&table);
-        let suffix = match table.kind {
-            TableKind::Table => "",
-            TableKind::View => "  view",
-            TableKind::MaterializedView => "  matview",
-            TableKind::Foreign => "  foreign",
-        };
-        if ui.selectable_label(selected, format!("{}{suffix}", table.name)).clicked() {
-            *open = Some(table.clone());
-        }
     }
 }
 
