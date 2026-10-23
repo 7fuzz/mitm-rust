@@ -65,7 +65,7 @@ Every module is a dock tab. Tabs can be split, moved or floated, and the layout 
 | Webhooks | Local receiver with endpoints, signature verification, and replay to a URL. |
 | Environments | Workspaces, environments and variables; import and export. |
 | Settings | Proxy mode and listeners, certificate, appearance, shortcuts, data and a database browser. |
-| Utilities ▸ | JSON Diff, JSON Tools, CVSS (3.1 and 4.0), Encoding, Hashing, HMAC signature. |
+| Utilities ▸ | JSON Diff, JSON Tools, CVSS (3.1 and 4.0), Encoding, Hashing, HMAC signature, DB Viewer (PostgreSQL, MySQL and MariaDB, optionally over an SSH tunnel; connections in `~/.local/share/dbviewer/`). |
 
 Keyboard shortcuts are listed in [docs/SHORTCUTS.md](docs/SHORTCUTS.md) and under **Settings ▸ Shortcuts**.
 
@@ -85,6 +85,7 @@ These differences are intentional:
 
 ```text
 crates/
+├── dbviewer-core/      # Database sessions, SSH tunnels, profiles (used by Utilities ▸ DB Viewer)
 ├── mitm-core/          # Headless engine: no UI code
 │   ├── lib.rs          # MitmCore, the API the app calls
 │   ├── state.rs        # Shared runtime state and types

@@ -42,6 +42,7 @@ pub struct AppState {
     pub json_tools: JsonToolsState,
     pub markdown: MarkdownState,
     pub totp: TotpState,
+    pub dbviewer: crate::features::utilities::dbviewer::DbViewerState,
     pub database: crate::features::database::DatabaseState,
     pub environments: crate::features::environments::EnvironmentsState,
     pub credentials: CredentialsState,

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/mitm-core",
+    "crates/dbviewer-core",
     "crates/mitm-desktop",
 ]
 resolver = "2"

@@ -29,12 +29,13 @@ pub enum Tab {
     Markdown,
     Cvss,
     Totp,
+    DbViewer,
     /// The traffic inspector detached from Traffic; opened from the inspector, not from panel menus.
     Inspector,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 19] = [
+    pub const ALL: [Tab; 20] = [
         Tab::Traffic,
         Tab::Repeater,
         Tab::Fuzzer,
@@ -54,6 +55,7 @@ impl Tab {
         Tab::Markdown,
         Tab::Cvss,
         Tab::Totp,
+        Tab::DbViewer,
     ];
 
     pub fn name(&self) -> &'static str {
@@ -77,6 +79,7 @@ impl Tab {
             Tab::Markdown => "Markdown",
             Tab::Cvss => "CVSS",
             Tab::Totp => "TOTP",
+            Tab::DbViewer => "DB Viewer",
             Tab::Inspector => "Inspector",
         }
     }
@@ -99,6 +102,7 @@ impl Tab {
         Tab::Hashing,
         Tab::HmacTool,
         Tab::Totp,
+        Tab::DbViewer,
     ];
 
     pub fn is_utility(&self) -> bool {
@@ -265,6 +269,7 @@ impl TabViewer<'_> {
             Tab::Markdown => features::utilities::markdown::show(ui, &mut state.markdown, cmds),
             Tab::Cvss => features::utilities::cvss::show(ui, &mut state.cvss),
             Tab::Totp => features::utilities::totp::show(ui, &mut state.totp, cmds),
+            Tab::DbViewer => features::utilities::dbviewer::show(ui, &mut state.dbviewer),
             Tab::Environments => features::environments::show(ui, &mut state.environments, &state.credentials.linked, cmds),
             Tab::Credentials => {
                 features::credentials::show(ui, &mut state.credentials, &state.environments.active_workspace_id, &state.environments.workspaces, self.db, cmds)
