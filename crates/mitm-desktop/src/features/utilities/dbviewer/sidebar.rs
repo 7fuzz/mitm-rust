@@ -124,6 +124,10 @@ impl App {
                 let label = if profile.ssh.is_some() { format!("{} (ssh)", profile.name) } else { profile.name.clone() };
                 let is_active = active.as_deref() == Some(profile.name.as_str());
                 let (rect, row) = ui.allocate_exact_size(egui::vec2(MENU_WIDTH, ROW_HEIGHT), egui::Sense::click());
+                if row.hovered() || is_active {
+                    let fill = if is_active { ui.visuals().selection.bg_fill.gamma_multiply(0.5) } else { ui.visuals().widgets.hovered.weak_bg_fill };
+                    ui.painter().rect_filled(rect, 4, fill);
+                }
                 let actions = egui::Rect::from_min_max(egui::pos2(rect.right() - 48.0, rect.top()), rect.right_bottom());
                 let mut buttons = ui.new_child(egui::UiBuilder::new().max_rect(actions).layout(Layout::right_to_left(Align::Center)));
                 if icon_button(&mut buttons, icons::TRASH, "Delete").clicked() {
@@ -133,10 +137,6 @@ impl App {
                 if icon_button(&mut buttons, icons::PENCIL_SIMPLE, "Edit").clicked() {
                     edit = Some(i);
                     ui.close();
-                }
-                if row.hovered() || is_active {
-                    let fill = if is_active { ui.visuals().selection.bg_fill.gamma_multiply(0.5) } else { ui.visuals().widgets.hovered.weak_bg_fill };
-                    ui.painter().rect_filled(rect, 4, fill);
                 }
                 let text_rect = egui::Rect::from_min_max(egui::pos2(rect.left() + 8.0, rect.top()), egui::pos2(actions.left(), rect.bottom()));
                 ui.painter().with_clip_rect(text_rect).text(
