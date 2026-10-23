@@ -269,7 +269,7 @@ impl TabViewer<'_> {
             Tab::Markdown => features::utilities::markdown::show(ui, &mut state.markdown, cmds),
             Tab::Cvss => features::utilities::cvss::show(ui, &mut state.cvss),
             Tab::Totp => features::utilities::totp::show(ui, &mut state.totp, cmds),
-            Tab::DbViewer => features::utilities::dbviewer::show(ui, &mut state.dbviewer, self.db),
+            Tab::DbViewer => features::utilities::dbviewer::show(ui, &mut state.dbviewer, self.db, || state.credentials.mark_stale()),
             Tab::Environments => features::environments::show(ui, &mut state.environments, &state.credentials.linked, cmds),
             Tab::Credentials => {
                 features::credentials::show(ui, &mut state.credentials, &state.environments.active_workspace_id, &state.environments.workspaces, self.db, cmds)

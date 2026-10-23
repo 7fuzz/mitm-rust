@@ -4,12 +4,15 @@ use dbviewer_core::{SavedQuery, TableKind, TableRef};
 use egui::containers::menu::MenuButton;
 use egui::{Align, Layout, RichText};
 
+use mitm_core::credentials;
+
 use super::{App, Connection};
 use crate::ui::icons;
 use crate::ui::theme::{color, Tone};
 use crate::widgets::search::search_field;
 
 const ROW_HEIGHT: f32 = 22.0;
+const MENU_WIDTH: f32 = 200.0;
 const RECENT_LIMIT: usize = 6;
 
 pub type RowCounts = HashMap<String, HashMap<String, i64>>;
@@ -31,7 +34,8 @@ impl App {
         ui.add_space(4.0);
         self.connection_header(ui);
         if self.credentials_locked() {
-            ui.label(RichText::new("Connections are stored in credentials, which are locked. Unlock them in the Credentials tab.").weak());
+            ui.label(RichText::new("Connections are stored in credentials, which are locked.").weak());
+            self.unlock_form(ui);
         }
         if self.session().is_none() {
             return;
@@ -68,6 +72,28 @@ impl App {
         self.close_table_tabs();
     }
 
+    fn unlock_form(&mut self, ui: &mut egui::Ui) {
+        let mut submit = false;
+        ui.horizontal(|ui| {
+            let edit = ui.add(egui::TextEdit::singleline(&mut self.unlock_password).password(true).hint_text("master password").desired_width(ui.available_width() - 70.0));
+            submit = ui.button("Unlock").clicked() || (edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+        });
+        if submit {
+            match credentials::unlock(&self.db, &self.unlock_password) {
+                Ok(()) => {
+                    self.unlock_password.clear();
+                    self.unlock_error = None;
+                    self.unlocked = true;
+                    self.reload_profiles();
+                }
+                Err(e) => self.unlock_error = Some(e.to_string()),
+            }
+        }
+        if let Some(error) = &self.unlock_error {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+    }
+
     fn active_profile_name(&self) -> Option<&str> {
         match &self.connection {
             Connection::Disconnected => None,
@@ -90,28 +116,40 @@ impl App {
         let (mut connect, mut edit, mut delete, mut new, mut disconnect) = (None, None, None, false, false);
         let profiles = &self.profiles;
         MenuButton::from_button(button).ui(ui, |ui| {
-            ui.set_min_width(240.0);
+            ui.set_width(MENU_WIDTH);
             if profiles.is_empty() {
                 ui.label(RichText::new("No connections yet").weak());
             }
             for (i, profile) in profiles.iter().enumerate() {
-                ui.horizontal(|ui| {
-                    let label = if profile.ssh.is_some() { format!("{} (ssh)", profile.name) } else { profile.name.clone() };
-                    if ui.selectable_label(active.as_deref() == Some(profile.name.as_str()), label).clicked() {
-                        connect = Some(i);
-                        ui.close();
-                    }
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if icon_button(ui, icons::TRASH, "Delete").clicked() {
-                            delete = Some(i);
-                            ui.close();
-                        }
-                        if icon_button(ui, icons::PENCIL_SIMPLE, "Edit").clicked() {
-                            edit = Some(i);
-                            ui.close();
-                        }
-                    });
-                });
+                let label = if profile.ssh.is_some() { format!("{} (ssh)", profile.name) } else { profile.name.clone() };
+                let is_active = active.as_deref() == Some(profile.name.as_str());
+                let (rect, row) = ui.allocate_exact_size(egui::vec2(MENU_WIDTH, ROW_HEIGHT), egui::Sense::click());
+                let actions = egui::Rect::from_min_max(egui::pos2(rect.right() - 48.0, rect.top()), rect.right_bottom());
+                let mut buttons = ui.new_child(egui::UiBuilder::new().max_rect(actions).layout(Layout::right_to_left(Align::Center)));
+                if icon_button(&mut buttons, icons::TRASH, "Delete").clicked() {
+                    delete = Some(i);
+                    ui.close();
+                }
+                if icon_button(&mut buttons, icons::PENCIL_SIMPLE, "Edit").clicked() {
+                    edit = Some(i);
+                    ui.close();
+                }
+                if row.hovered() || is_active {
+                    let fill = if is_active { ui.visuals().selection.bg_fill.gamma_multiply(0.5) } else { ui.visuals().widgets.hovered.weak_bg_fill };
+                    ui.painter().rect_filled(rect, 4, fill);
+                }
+                let text_rect = egui::Rect::from_min_max(egui::pos2(rect.left() + 8.0, rect.top()), egui::pos2(actions.left(), rect.bottom()));
+                ui.painter().with_clip_rect(text_rect).text(
+                    egui::pos2(text_rect.left(), rect.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    label,
+                    egui::TextStyle::Body.resolve(ui.style()),
+                    ui.visuals().text_color(),
+                );
+                if row.clicked() && connect.is_none() && edit.is_none() && delete.is_none() {
+                    connect = Some(i);
+                    ui.close();
+                }
             }
             ui.separator();
             if ui.button("New connection").clicked() {
@@ -307,12 +345,20 @@ impl App {
         let mut open_saved = None;
         let mut connect = None;
         let mut new_query = false;
+        let mut unlock = false;
+        let locked = self.credentials_locked();
         let saved = self.connection_saved_queries();
         ui.horizontal(|ui| {
             ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
             ui.vertical(|ui| {
                 ui.set_width(width);
                 match &self.connection {
+                    Connection::Disconnected if locked => {
+                        ui.heading("Credentials locked");
+                        ui.label(RichText::new("Connections are stored in credentials. Enter the master password to use them.").weak());
+                        ui.add_space(4.0);
+                        unlock = true;
+                    }
                     Connection::Disconnected => {
                         ui.heading("Not connected");
                         if self.profiles.is_empty() {
@@ -366,6 +412,15 @@ impl App {
                 }
             });
         });
+        if unlock {
+            ui.horizontal(|ui| {
+                ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
+                ui.vertical(|ui| {
+                    ui.set_width(width);
+                    self.unlock_form(ui);
+                });
+            });
+        }
         if let Some(i) = connect {
             self.request_connect(ui.ctx(), i);
         }

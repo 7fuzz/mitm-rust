@@ -72,8 +72,13 @@ struct PasswordPrompt {
 #[derive(Default)]
 pub struct DbViewerState(Option<App>);
 
-pub fn show(ui: &mut egui::Ui, state: &mut DbViewerState, db: &Db) {
-    state.0.get_or_insert_with(|| App::new(db.clone())).show(ui);
+/// Unlocking here changes what the Credentials tab should show, so `on_unlock` lets the caller refresh it.
+pub fn show(ui: &mut egui::Ui, state: &mut DbViewerState, db: &Db, on_unlock: impl FnOnce()) {
+    let app = state.0.get_or_insert_with(|| App::new(db.clone()));
+    app.show(ui);
+    if std::mem::take(&mut app.unlocked) {
+        on_unlock();
+    }
 }
 
 struct App {
@@ -98,6 +103,9 @@ struct App {
     sidebar_tab: SidebarTab,
     recent: Vec<TableRef>,
     filter: String,
+    unlock_password: String,
+    unlock_error: Option<String>,
+    unlocked: bool,
     edit: Option<EditDialog>,
     dock: DockState<TabId>,
     contents: HashMap<TabId, Content>,
@@ -137,6 +145,9 @@ impl App {
             sidebar_tab: SidebarTab::default(),
             recent: Vec::new(),
             filter: String::new(),
+            unlock_password: String::new(),
+            unlock_error: None,
+            unlocked: false,
             edit: None,
             dock: DockState::new(Vec::new()),
             contents: HashMap::new(),
