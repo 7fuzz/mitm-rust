@@ -15,6 +15,6 @@ pub use edit::Assignment;
 pub use engine::Engine;
 pub use foreign::{display_columns, row_label, ForeignKey};
 pub use filter::{Condition, Filter, Join, Op, Sort};
-pub use profile::{Profile, ProfileStore, SshConfig};
-pub use saved::{upsert, SavedQuery, SavedQueryStore};
+pub use profile::{Profile, SshConfig};
+pub use saved::{upsert, SavedQuery};
 pub use session::{QueryResult, Session, TableKind, TableRef};

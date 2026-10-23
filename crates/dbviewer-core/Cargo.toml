@@ -10,4 +10,3 @@ serde_json = { version = "1", features = ["preserve_order"] }
 tokio = { version = "1", features = ["full"] }
 tokio-postgres = "0.7"
 mysql_async = { version = "0.36", default-features = false, features = ["minimal"] }
-dirs = "7.0"

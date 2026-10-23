@@ -154,6 +154,12 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         sql: include_str!("../../migrations/20261013_0024_body_store.sql"),
         after: Some(crate::db::bodies::migrate_history_bodies),
     },
+    MigrationSpec {
+        version: 25,
+        name: "20261023_0025_dbviewer",
+        sql: include_str!("../../migrations/20261023_0025_dbviewer.sql"),
+        after: Some(crate::db::dbviewer_db::import_json_files),
+    },
 ];
 
 pub fn run_all(event_bus: Option<&EventBus>, conn: &Connection) -> Result<(), String> {

@@ -22,6 +22,7 @@ Bodies and headers are stored as text (headers as JSON arrays of `[name, value]`
 | `fuzz_runs` / `fuzz_results` | Fuzzer runs and their rows. A run is written while it runs with `saved = 0` and dropped on the next start unless it was saved. |
 | `ws_connections` / `ws_messages` | WebSocket sessions (proxied or opened by the app, `is_client_session`) and their frames (`is_injected` for frames sent from the composer). |
 | `webhook_endpoints` / `webhook_deliveries` | Receiver endpoints and the deliveries they captured, with the signature verdict. |
+| `dbviewer_connections` / `dbviewer_queries` | DB Viewer connection profiles and saved queries, one JSON document per row (passwords in plain text). Imported once from `~/.local/share/dbviewer/*.json`. |
 
 ## Relationships
 

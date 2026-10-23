@@ -6,6 +6,7 @@ pub mod history_db;
 pub mod migrations;
 pub mod recovery;
 pub mod bodies;
+pub mod dbviewer_db;
 pub mod storage;
 pub mod webhook_db;
 pub mod ws_db;

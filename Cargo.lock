@@ -1196,7 +1196,6 @@ name = "dbviewer-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "dirs",
  "mysql_async",
  "serde",
  "serde_json",

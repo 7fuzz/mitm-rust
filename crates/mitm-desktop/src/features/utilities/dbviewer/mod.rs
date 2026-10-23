@@ -1,13 +1,15 @@
 mod edit_dialog;
 mod fk;
 mod grid;
+mod store;
 mod tabs;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use mitm_core::db::Db;
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use dbviewer_core::{upsert, Engine, ForeignKey, SavedQuery, SavedQueryStore, Profile, ProfileStore, QueryResult, Session, SshConfig, TableKind, TableRef};
+use dbviewer_core::{upsert, Engine, ForeignKey, SavedQuery, Profile, QueryResult, Session, SshConfig, TableKind, TableRef};
 use egui::RichText;
 use egui_dock::{DockArea, DockState};
 
@@ -66,17 +68,16 @@ struct PasswordPrompt {
 #[derive(Default)]
 pub struct DbViewerState(Option<App>);
 
-pub fn show(ui: &mut egui::Ui, state: &mut DbViewerState) {
-    state.0.get_or_insert_with(App::new).show(ui);
+pub fn show(ui: &mut egui::Ui, state: &mut DbViewerState, db: &Db) {
+    state.0.get_or_insert_with(|| App::new(db.clone())).show(ui);
 }
 
 struct App {
     rt: tokio::runtime::Runtime,
     tx: Sender<Event>,
     rx: Receiver<Event>,
-    store: ProfileStore,
+    db: Db,
     profiles: Vec<Profile>,
-    saved_store: SavedQueryStore,
     saved: Vec<SavedQuery>,
     save_dialog: Option<SaveDialog>,
     form: Option<ProfileForm>,
@@ -99,26 +100,23 @@ struct App {
 }
 
 impl App {
-    fn new() -> Self {
+    fn new(db: Db) -> Self {
         let (tx, rx) = unbounded();
-        let store = ProfileStore::default_location();
-        let (profiles, error) = match store.load() {
+        let (profiles, error) = match store::load_profiles(&db) {
             Ok(profiles) => (profiles, None),
-            Err(e) => (Vec::new(), Some(format!("{e:#}"))),
+            Err(e) => (Vec::new(), Some(e)),
         };
-        let saved_store = SavedQueryStore::default_location();
-        let (saved, saved_error) = match saved_store.load() {
+        let (saved, saved_error) = match store::load_queries(&db) {
             Ok(saved) => (saved, None),
-            Err(e) => (Vec::new(), Some(format!("{e:#}"))),
+            Err(e) => (Vec::new(), Some(e)),
         };
         let error = error.or(saved_error);
         Self {
             rt: tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("tokio runtime"),
             tx,
             rx,
-            store,
+            db,
             profiles,
-            saved_store,
             saved,
             save_dialog: None,
             form: None,
@@ -591,8 +589,8 @@ impl App {
     }
 
     fn persist_saved(&mut self) {
-        if let Err(e) = self.saved_store.save(&self.saved) {
-            self.error = Some(format!("{e:#}"));
+        if let Err(e) = store::save_queries(&self.db, &self.saved) {
+            self.error = Some(e);
         }
     }
 
@@ -630,8 +628,8 @@ impl App {
     }
 
     fn persist(&mut self) {
-        if let Err(e) = self.store.save(&self.profiles) {
-            self.error = Some(format!("{e:#}"));
+        if let Err(e) = store::save_profiles(&self.db, &self.profiles) {
+            self.error = Some(e);
         }
     }
 
