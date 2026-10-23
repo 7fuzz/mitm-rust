@@ -5,6 +5,9 @@ use egui::RichText;
 use egui_dock::{tab_viewer::OnCloseResponse, NodePath};
 
 use super::fk::FkState;
+use crate::ui::icons;
+use crate::ui::theme::Tone;
+use crate::widgets::pills::badge;
 use super::grid::{self, EditAccess, GridOptions};
 
 pub const PAGE_SIZE: usize = 10;
@@ -156,7 +159,8 @@ fn table_ui(ui: &mut egui::Ui, id: TabId, b: &mut Browser, read_only: bool, cmds
     let mut reload = false;
     ui.horizontal_wrapped(|ui| {
         breadcrumb(ui, &b.table);
-        if ui.add_enabled(b.page > 0, egui::Button::new("Prev")).clicked() {
+        table_badges(ui, &b.table, read_only);
+        if ui.add_enabled(b.page > 0, egui::Button::new(icons::CARET_LEFT)).on_hover_text("Previous page").clicked() {
             b.page -= 1;
             reload = true;
         }
@@ -171,7 +175,7 @@ fn table_ui(ui: &mut egui::Ui, id: TabId, b: &mut Browser, read_only: bool, cmds
             }
         }
         page_edit.on_hover_text("Type a page number and press Enter to jump");
-        if ui.add_enabled(rows == b.page_size, egui::Button::new("Next")).clicked() {
+        if ui.add_enabled(rows == b.page_size, egui::Button::new(icons::CARET_RIGHT)).on_hover_text("Next page").clicked() {
             b.page += 1;
             reload = true;
         }
@@ -186,7 +190,7 @@ fn table_ui(ui: &mut egui::Ui, id: TabId, b: &mut Browser, read_only: bool, cmds
             reload = true;
         }
         ui.label(RichText::new(format!("rows {}-{}", b.page * b.page_size + 1, b.page * b.page_size + rows)).weak());
-        reload |= ui.button("Reload").clicked();
+        reload |= ui.button(icons::ARROW_CLOCKWISE).on_hover_text("Reload").clicked();
         let active = b.filter.active_conditions();
         let label = if active > 0 { format!("Filter ({active})") } else { "Filter".to_string() };
         ui.toggle_value(&mut b.show_filters, label);
@@ -232,6 +236,22 @@ fn breadcrumb(ui: &mut egui::Ui, table: &dbviewer_core::TableRef) {
     }
     ui.label(RichText::new(&table.name).strong());
     ui.add_space(8.0);
+}
+
+fn table_badges(ui: &mut egui::Ui, table: &dbviewer_core::TableRef, read_only: bool) {
+    use dbviewer_core::TableKind;
+    let kind = match table.kind {
+        TableKind::Table => None,
+        TableKind::View => Some("view"),
+        TableKind::MaterializedView => Some("matview"),
+        TableKind::Foreign => Some("foreign"),
+    };
+    if let Some(kind) = kind {
+        badge(ui, kind, Tone::Info);
+    }
+    if read_only {
+        badge(ui, "read-only", Tone::Neutral);
+    }
 }
 
 fn edit_access(b: &Browser, read_only: bool) -> EditAccess {
@@ -338,7 +358,7 @@ fn query_ui(ui: &mut egui::Ui, id: TabId, q: &mut QueryTab, databases: &[String]
         }
         ui.horizontal(|ui| {
             let enabled = connected && !q.running;
-            if ui.add_enabled(enabled, egui::Button::new("Run  (Ctrl+Enter)")).clicked() || (run_shortcut && enabled) {
+            if ui.add_enabled(enabled, egui::Button::new("Run")).on_hover_text("Ctrl+Enter").clicked() || (run_shortcut && enabled) {
                 cmds.push(Cmd::RunQuery(id));
             }
             if ui.add_enabled(!q.sql.trim().is_empty(), egui::Button::new("Save")).clicked() {
