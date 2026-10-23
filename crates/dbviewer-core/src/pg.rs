@@ -106,6 +106,31 @@ impl Postgres {
             .collect())
     }
 
+    /// Planner estimates keyed by (schema, table); -1 means the table was never analyzed.
+    pub async fn row_estimates(&self, database: &str) -> Result<HashMap<(String, String), i64>> {
+        let result = self
+            .query(
+                database,
+                "SELECT n.nspname, c.relname, c.reltuples::bigint::text
+                 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE c.relkind IN ('r','p','m')
+                   AND n.nspname NOT IN ('pg_catalog','information_schema')
+                   AND NOT c.relispartition",
+            )
+            .await?;
+        Ok(result
+            .rows
+            .into_iter()
+            .filter_map(|row| {
+                let mut cells = row.into_iter();
+                let schema = cells.next()??;
+                let name = cells.next()??;
+                let count = cells.next()??.parse().ok()?;
+                Some(((schema, name), count))
+            })
+            .collect())
+    }
+
     pub async fn primary_key(&self, table: &TableRef) -> Result<Vec<String>> {
         let regclass = Engine::Postgres.literal(&table.qualified());
         let result = self

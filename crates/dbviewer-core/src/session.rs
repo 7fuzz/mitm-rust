@@ -121,6 +121,14 @@ impl Session {
         }
     }
 
+    /// Approximate row counts from catalog statistics, keyed by (schema, table).
+    pub async fn row_estimates(&self, database: &str) -> Result<HashMap<(String, String), i64>> {
+        match &self.backend {
+            Backend::Postgres(b) => b.row_estimates(database).await,
+            Backend::MySql(b) => b.row_estimates(database).await,
+        }
+    }
+
     /// Empty when the relation has no primary key (views, keyless tables).
     pub async fn primary_key(&self, table: &TableRef) -> Result<Vec<String>> {
         match &self.backend {

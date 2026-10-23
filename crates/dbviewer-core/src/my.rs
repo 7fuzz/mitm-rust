@@ -95,6 +95,24 @@ impl MySql {
             .collect())
     }
 
+    pub async fn row_estimates(&self, database: &str) -> Result<HashMap<(String, String), i64>> {
+        let sql = format!(
+            "SELECT table_name, CAST(table_rows AS CHAR) FROM information_schema.tables WHERE table_schema = {} AND table_type = 'BASE TABLE'",
+            self.engine.literal(database)
+        );
+        let result = self.query(database, &sql).await?;
+        Ok(result
+            .rows
+            .into_iter()
+            .filter_map(|row| {
+                let mut cells = row.into_iter();
+                let name = cells.next()??;
+                let count = cells.next()??.parse().ok()?;
+                Some(((String::new(), name), count))
+            })
+            .collect())
+    }
+
     pub async fn primary_key(&self, table: &TableRef) -> Result<Vec<String>> {
         let sql = format!(
             "SELECT column_name FROM information_schema.key_column_usage
