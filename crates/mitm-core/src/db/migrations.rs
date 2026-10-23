@@ -160,6 +160,12 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         sql: include_str!("../../migrations/20261023_0025_dbviewer.sql"),
         after: Some(crate::db::dbviewer_db::import_json_files),
     },
+    MigrationSpec {
+        version: 26,
+        name: "20261023_0026_dbviewer_connections_in_credentials",
+        sql: include_str!("../../migrations/20261023_0026_dbviewer_connections_in_credentials.sql"),
+        after: None,
+    },
 ];
 
 pub fn run_all(event_bus: Option<&EventBus>, conn: &Connection) -> Result<(), String> {

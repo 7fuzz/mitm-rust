@@ -7,6 +7,7 @@ mod tabs;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use mitm_core::credentials;
 use mitm_core::db::Db;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use dbviewer_core::{upsert, Engine, ForeignKey, SavedQuery, Profile, QueryResult, Session, SshConfig, TableKind, TableRef};
@@ -78,6 +79,7 @@ struct App {
     rx: Receiver<Event>,
     db: Db,
     profiles: Vec<Profile>,
+    profiles_loaded: bool,
     saved: Vec<SavedQuery>,
     save_dialog: Option<SaveDialog>,
     form: Option<ProfileForm>,
@@ -102,21 +104,17 @@ struct App {
 impl App {
     fn new(db: Db) -> Self {
         let (tx, rx) = unbounded();
-        let (profiles, error) = match store::load_profiles(&db) {
-            Ok(profiles) => (profiles, None),
-            Err(e) => (Vec::new(), Some(e)),
-        };
-        let (saved, saved_error) = match store::load_queries(&db) {
+        let (saved, error) = match store::load_queries(&db) {
             Ok(saved) => (saved, None),
             Err(e) => (Vec::new(), Some(e)),
         };
-        let error = error.or(saved_error);
         Self {
             rt: tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("tokio runtime"),
             tx,
             rx,
             db,
-            profiles,
+            profiles: Vec::new(),
+            profiles_loaded: false,
             saved,
             save_dialog: None,
             form: None,
@@ -627,10 +625,26 @@ impl App {
         }
     }
 
-    fn persist(&mut self) {
-        if let Err(e) = store::save_profiles(&self.db, &self.profiles) {
-            self.error = Some(e);
+    fn credentials_locked(&self) -> bool {
+        credentials::is_locked(&self.db)
+    }
+
+    fn load_profiles(&mut self) {
+        if self.profiles_loaded || self.credentials_locked() {
+            return;
         }
+        match store::load_profiles(&self.db) {
+            Ok(profiles) => {
+                self.profiles = profiles;
+                self.profiles_loaded = true;
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    fn reload_profiles(&mut self) {
+        self.profiles_loaded = false;
+        self.load_profiles();
     }
 
     fn sidebar(&mut self, ui: &mut egui::Ui) {
@@ -641,6 +655,9 @@ impl App {
                 self.form = Some(ProfileForm::new(None, Profile::default()));
             }
         });
+        if self.credentials_locked() {
+            ui.label(RichText::new("Connections are stored in credentials, which are locked. Unlock them in the Credentials tab.").weak());
+        }
         let mut connect = None;
         let mut edit = None;
         let mut delete = None;
@@ -680,8 +697,10 @@ impl App {
             self.form = Some(ProfileForm::new(Some(i), self.profiles[i].clone()));
         }
         if let Some(i) = delete {
-            self.profiles.remove(i);
-            self.persist();
+            if let Err(e) = store::delete_profile(&self.db, &self.profiles[i].name) {
+                self.error = Some(e);
+            }
+            self.reload_profiles();
         }
 
         ui.separator();
@@ -834,11 +853,14 @@ impl App {
                 Some(true) => {
                     let form = self.form.take().expect("form present");
                     let (index, profile) = form.finish();
-                    match index {
-                        Some(i) => self.profiles[i] = profile,
-                        None => self.profiles.push(profile),
+                    let previous = index.map(|i| self.profiles[i].name.clone());
+                    match store::save_profile(&self.db, previous.as_deref(), &profile) {
+                        Ok(()) => self.reload_profiles(),
+                        Err(e) => {
+                            self.error = Some(e);
+                            self.form = Some(ProfileForm::new(index, profile));
+                        }
                     }
-                    self.persist();
                 }
                 Some(false) => self.form = None,
                 None => {}
@@ -849,6 +871,7 @@ impl App {
 
 impl App {
     fn show(&mut self, ui: &mut egui::Ui) {
+        self.load_profiles();
         self.drain_events(ui.ctx());
         self.ensure_schema(ui.ctx());
 
