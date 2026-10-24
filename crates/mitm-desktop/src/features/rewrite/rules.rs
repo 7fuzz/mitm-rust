@@ -13,9 +13,9 @@ use crate::widgets::subtabs::subtabs;
 use crate::widgets::toggle::labelled_toggle;
 use mitm_core::db::Db;
 
-pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerConfig], db: &Db, cmds: &mut Commands) {
+pub fn show(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerConfig], containers: &[String], db: &Db, cmds: &mut Commands) {
     let now = ui.input(|i| i.time);
-    toolbar(ui, state, listeners, cmds, now);
+    toolbar(ui, state, listeners, containers, cmds, now);
     ui.add_space(4.0);
     if state.prefs.view == RewriteView::Log {
         log::show(ui, state, db, cmds);
@@ -54,13 +54,13 @@ fn list(ui: &mut egui::Ui, state: &mut RewriteState, now: f64) {
     });
 }
 
-fn toolbar(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerConfig], cmds: &mut Commands, now: f64) {
+fn toolbar(ui: &mut egui::Ui, state: &mut RewriteState, listeners: &[ListenerConfig], containers: &[String], cmds: &mut Commands, now: f64) {
     ui.horizontal(|ui| {
         if labelled_toggle(ui, &mut state.enabled, "Rewrite").changed() {
             cmds.push(super::Cmd::SetEnabled(state.enabled));
         }
         ui.add_space(12.0);
-        if source_scope::chips(ui, &mut state.scope, listeners) {
+        if source_scope::chips(ui, &mut state.scope, listeners, containers) {
             cmds.push(super::Cmd::SetScope(state.scope.clone()));
         }
         ui.add_space(12.0);

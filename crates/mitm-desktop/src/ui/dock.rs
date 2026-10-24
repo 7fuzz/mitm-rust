@@ -256,8 +256,8 @@ impl TabViewer<'_> {
                 }
             }
             Tab::Fuzzer => features::fuzzer::show(ui, &mut state.fuzzer, cmds),
-            Tab::Intercept => features::intercept::show(ui, &mut state.intercept, &state.proxy.listeners, cmds),
-            Tab::Rewrite => features::rewrite::show(ui, &mut state.rewrite, &state.proxy.listeners, self.db, cmds),
+            Tab::Intercept => features::intercept::show(ui, &mut state.intercept, &state.proxy.listeners, &state.traffic.containers, cmds),
+            Tab::Rewrite => features::rewrite::show(ui, &mut state.rewrite, &state.proxy.listeners, &state.traffic.containers, self.db, cmds),
             Tab::Collections => features::collections::show(ui, &mut state.collections, cmds),
             Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
             Tab::Webhooks => features::webhooks::show(ui, &mut state.webhooks, cmds),

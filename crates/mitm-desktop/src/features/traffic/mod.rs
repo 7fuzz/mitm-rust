@@ -73,6 +73,7 @@ pub struct TrafficPrefs {
     pub search_headers: bool,
     pub filters_open: bool,
     pub source_filter: Option<String>,
+    pub container_filter: Option<String>,
     pub method_filters: HashMap<String, TriState>,
     pub status_filters: HashMap<String, TriState>,
     pub flag_filters: HashMap<String, TriState>,
@@ -87,6 +88,7 @@ impl Default for TrafficPrefs {
             search_headers: false,
             filters_open: false,
             source_filter: None,
+            container_filter: None,
             method_filters: neutral_filters(METHODS),
             status_filters: neutral_filters(STATUS_GROUPS),
             flag_filters: neutral_filters(FLAGS.map(|(key, _)| key)),
@@ -103,6 +105,8 @@ pub struct TrafficState {
     pub history_limit: HistorySettings,
     pub limit_draft: HistorySettings,
     pub has_older: bool,
+    /// Container labels seen in stored or live flows, for the filter and the scope pickers.
+    pub containers: Vec<String>,
     /// Rows in the history table, which can be more than the flows loaded here.
     pub stored_count: u64,
     pub har_export: HarExport,
@@ -131,6 +135,7 @@ impl Default for TrafficState {
             history_limit: HistorySettings::default(),
             limit_draft: HistorySettings::default(),
             has_older: false,
+            containers: Vec::new(),
             stored_count: 0,
             har_export: HarExport::default(),
             jobs: Default::default(),
@@ -149,6 +154,7 @@ impl TrafficState {
     pub fn load_from_db(&mut self, db: &Db) {
         self.stored_count = mitm_core::db::get_history_count(db, None, false).unwrap_or(0);
         self.flows.clear();
+        self.containers = mitm_core::db::container_labels(db);
         self.has_older = true;
         self.load_older(db);
     }
@@ -225,7 +231,15 @@ impl TrafficState {
         self.history_limit = settings;
     }
 
+    fn note_container(&mut self, label: &str) {
+        if !label.is_empty() && !self.containers.iter().any(|c| c == label) {
+            self.containers.push(label.to_string());
+            self.containers.sort();
+        }
+    }
+
     pub fn upsert(&mut self, entry: HistoryEntry) {
+        self.note_container(&entry.container_label);
         if let Some(existing) = self.flows.iter_mut().find(|f| f.id == entry.id) {
             existing.status_code = entry.status_code;
             existing.response_size = entry.response_size;
@@ -313,10 +327,12 @@ impl TrafficState {
             + count(&self.prefs.status_filters)
             + count(&self.prefs.flag_filters)
             + usize::from(self.prefs.source_filter.is_some())
+            + usize::from(self.prefs.container_filter.is_some())
     }
 
     pub fn reset_filters(&mut self) {
         self.prefs.source_filter = None;
+        self.prefs.container_filter = None;
         for filters in [&mut self.prefs.method_filters, &mut self.prefs.status_filters, &mut self.prefs.flag_filters] {
             filters.values_mut().for_each(|v| *v = TriState::Neutral);
         }
@@ -329,6 +345,7 @@ impl TrafficState {
             .enumerate()
             .filter(|(_, flow)| {
                 self.matches_source(flow)
+                    && self.matches_container(flow)
                     && passes_tri_state(&self.prefs.method_filters, Some(&flow.method.to_uppercase()))
                     && passes_tri_state(&self.prefs.status_filters, status_group(flow.status_code))
                     && self.passes_flags(FlowFlags::of(flow))
@@ -357,6 +374,10 @@ impl TrafficState {
         };
         let label = if flow.listener_label.is_empty() { "Default" } else { &flow.listener_label };
         label.eq_ignore_ascii_case(filter)
+    }
+
+    fn matches_container(&self, flow: &HistoryEntry) -> bool {
+        self.prefs.container_filter.as_ref().is_none_or(|filter| flow.container_label == *filter)
     }
 
     fn passes_flags(&self, flags: FlowFlags) -> bool {
@@ -499,6 +520,24 @@ mod tests {
             request_at: None,
             response_at: None,
         }
+    }
+
+    #[test]
+    fn container_filter_keeps_one_container_and_new_labels_are_remembered() {
+        let mut state = TrafficState::default();
+        for (id, label) in [(1, "App A"), (2, "App B"), (3, "App A"), (4, "")] {
+            state.upsert(HistoryEntry { container_label: label.into(), ..flow(id) });
+        }
+        assert_eq!(state.containers, ["App A", "App B"]);
+        assert_eq!(state.filtered_indices().len(), 4);
+
+        state.prefs.container_filter = Some("App A".into());
+        assert_eq!(state.active_filter_count(), 1);
+        let kept: Vec<i64> = state.filtered_indices().into_iter().map(|i| state.flows[i].id).collect();
+        assert_eq!(kept, [3, 1]);
+
+        state.reset_filters();
+        assert_eq!(state.filtered_indices().len(), 4);
     }
 
     #[test]

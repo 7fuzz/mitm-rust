@@ -12,7 +12,7 @@ use crate::features::request_editor::kv_table::{self, KvLabels};
 use super::{Cmd, InterceptState};
 use crate::ui::icons;
 
-pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[ListenerConfig], cmds: &mut Commands) {
+pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[ListenerConfig], containers: &[String], cmds: &mut Commands) {
     ui.horizontal(|ui| {
         if labelled_toggle(ui, &mut state.enabled, "Intercept").changed() {
             cmds.push(Cmd::Configure { enabled: state.enabled, mode: state.mode.clone() });
@@ -40,7 +40,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut InterceptState, listeners: &[Listener
         }
 
         ui.add_space(12.0);
-        if source_scope::chips(ui, &mut state.source_scope, listeners) {
+        if source_scope::chips(ui, &mut state.source_scope, listeners, containers) {
             cmds.push(Cmd::SetScope(state.source_scope.clone()));
         }
 

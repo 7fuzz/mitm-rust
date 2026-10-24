@@ -286,6 +286,14 @@ pub fn delete_container_flows(db: &Db, container: &str, run_id: Option<i64>) -> 
     Ok(removed)
 }
 
+pub fn container_labels(db: &Db) -> Vec<String> {
+    let Ok(conn) = db.conn() else { return Vec::new() };
+    let Ok(mut stmt) = conn.prepare("SELECT DISTINCT container_label FROM history WHERE container_label != '' ORDER BY container_label") else {
+        return Vec::new();
+    };
+    stmt.query_map([], |row| row.get(0)).map(|rows| rows.flatten().collect()).unwrap_or_default()
+}
+
 pub fn count_container_flows(db: &Db, container: &str) -> Result<u64, String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     conn.query_row("SELECT COUNT(*) FROM history WHERE container_label = ?1", [container], |row| row.get(0))

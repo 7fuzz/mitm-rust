@@ -153,6 +153,12 @@ fn filter_row(ui: &mut egui::Ui, state: &mut TrafficState, listeners: &[Listener
             source_combo(ui, &mut state.prefs.source_filter, listeners);
         }
 
+        if !state.containers.is_empty() {
+            ui.add_space(12.0);
+            group_label(ui, "CONTAINER");
+            container_combo(ui, &mut state.prefs.container_filter, &state.containers);
+        }
+
         if state.active_filter_count() > 0 && ui.link("Reset filters").clicked() {
             state.reset_filters();
         }
@@ -177,6 +183,18 @@ fn source_combo(ui: &mut egui::Ui, filter: &mut Option<String>, listeners: &[Lis
             ui.selectable_value(filter, None, "All Sources");
             for l in listeners {
                 ui.selectable_value(filter, Some(l.label.clone()), format!("{} ({})", l.label, l.address));
+            }
+        });
+}
+
+fn container_combo(ui: &mut egui::Ui, filter: &mut Option<String>, containers: &[String]) {
+    let selected = filter.clone().unwrap_or_else(|| "All Containers".to_string());
+    egui::ComboBox::from_id_salt("traffic_container_filter")
+        .selected_text(selected)
+        .show_ui(ui, |ui| {
+            ui.selectable_value(filter, None, "All Containers");
+            for label in containers {
+                ui.selectable_value(filter, Some(label.clone()), label);
             }
         });
 }
