@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 use crate::events::EventBus;
+use crate::proxy::containers::ContainerTag;
 
 use crate::proxy::rules::should_intercept;
 use crate::state::AppState;
@@ -22,6 +23,7 @@ pub async fn handle_intercept_hook(
     body: Vec<u8>,
     request_headers: &[(String, String)],
     listener_label: &str,
+    container: &ContainerTag,
 ) -> Option<InterceptAction> {
     if !should_intercept(state, phase, method, url, host, &headers, request_headers, listener_label).await {
         return None;
@@ -99,8 +101,8 @@ pub async fn handle_intercept_hook(
             is_rewritten: false,
             is_failed: false,
             listener_label: listener_label.to_string(),
-            container_label: String::new(),
-            run_id: 0,
+            container_label: container.label.clone(),
+            run_id: container.run_id,
             request_at: Some(request_at.to_string()),
             response_at: None,
         };

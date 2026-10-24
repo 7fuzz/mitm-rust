@@ -7,6 +7,7 @@ use tokio_tungstenite::tungstenite::protocol::Role;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 
+use crate::proxy::containers::ContainerTag;
 use crate::state::AppState;
 use crate::ws::types::{WebSocketConn, WebSocketMessage};
 
@@ -18,6 +19,7 @@ pub async fn bridge_proxied_websocket<C, S>(
     client_addr: Option<String>,
     subprotocol: Option<String>,
     listener_label: String,
+    container: ContainerTag,
     event_bus: Option<EventBus>,
     state: Arc<AppState>,
 ) where
@@ -37,8 +39,8 @@ pub async fn bridge_proxied_websocket<C, S>(
         is_client_session: false,
         message_count: 0,
         listener_label,
-        container_label: String::new(),
-        run_id: 0,
+        container_label: container.label,
+        run_id: container.run_id,
     };
 
     match crate::db::ws_db::insert_ws_connection(&state.db, &conn_info) {

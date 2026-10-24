@@ -8,6 +8,9 @@ pub mod listener;
 pub mod rules;
 pub mod rewrite;
 
+#[cfg(test)]
+mod container_capture_tests;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
@@ -25,6 +28,7 @@ use tokio::sync::oneshot;
 use crate::events::{CoreEvent, EventBus};
 
 use crate::ca::CA;
+use crate::proxy::containers::{ContainerTag, ProxyAuth};
 use crate::proxy::intercept::handle_intercept_hook;
 use crate::state::AppState;
 use crate::proxy::history::{HistoryEntry, TrafficCapturedEvent};
@@ -100,25 +104,32 @@ async fn handle_connection(
     let ca_clone = Arc::clone(&ca);
     let event_bus_clone = event_bus.clone();
 
-    let service = service_fn(move |req| {
+    let service = service_fn(move |mut req| {
         let state = Arc::clone(&state_clone);
         let ca = Arc::clone(&ca_clone);
         let bus = event_bus_clone.clone();
         let label = listener_label.clone();
         async move {
+            let container = match state.containers.authenticate(req.headers()) {
+                ProxyAuth::Rejected => return Ok(forbidden_response()),
+                ProxyAuth::Anonymous => ContainerTag::default(),
+                ProxyAuth::Container(tag) => tag,
+            };
+            req.headers_mut().remove(hyper::header::PROXY_AUTHORIZATION);
+
             if req.method() == Method::CONNECT {
                 let host = req.uri().host().unwrap_or_default().to_string();
                 let port = req.uri().port_u16().unwrap_or(443);
 
                 tokio::spawn(async move {
-                    if let Err(e) = handle_connect(req, state, ca, bus, host, port, label).await {
+                    if let Err(e) = handle_connect(req, state, ca, bus, host, port, label, container).await {
                         eprintln!("Error in CONNECT: {}", e);
                     }
                 });
 
                 Ok(Response::new(Full::new(Bytes::new())))
             } else {
-                handle_http(req, state, bus, label).await
+                handle_http(req, state, bus, label, container).await
             }
         }
     });
@@ -143,6 +154,7 @@ async fn handle_connect(
     host: String,
     _port: u16,
     listener_label: String,
+    container: ContainerTag,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let upgraded = hyper::upgrade::on(req).await?;
     let upgraded_io = TokioIo::new(upgraded);
@@ -184,10 +196,11 @@ async fn handle_connect(
         let bus = event_bus.clone();
         let host = host_for_service.clone();
         let label = listener_label.clone();
+        let container = container.clone();
         async move {
             let uri = format!("https://{}{}", host, req.uri());
             *req.uri_mut() = uri.parse().unwrap();
-            handle_http(req, state, bus, label).await
+            handle_http(req, state, bus, label, container).await
         }
     });
 
@@ -200,6 +213,14 @@ async fn handle_connect(
     }
 
     Ok(())
+}
+
+fn forbidden_response() -> Response<Full<Bytes>> {
+    Response::builder()
+        .status(StatusCode::FORBIDDEN)
+        .header("Content-Type", "text/plain")
+        .body(Full::new(Bytes::from("Invalid proxy credentials")))
+        .unwrap()
 }
 
 pub fn is_websocket_upgrade(headers: &hyper::HeaderMap) -> bool {
@@ -219,6 +240,7 @@ async fn handle_http(
     state: Arc<AppState>,
     event_bus: Option<EventBus>,
     listener_label: String,
+    container: ContainerTag,
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
     let https = hyper_rustls::HttpsConnectorBuilder::new()
         .with_webpki_roots()
@@ -279,6 +301,7 @@ async fn handle_http(
                         false,
                         false,
                         &listener_label,
+                        &container,
                     ).await;
 
                     let state_clone = Arc::clone(&state);
@@ -286,6 +309,7 @@ async fn handle_http(
                     let url_clone = url.clone();
                     let subprotocol_clone = subprotocol.clone();
                     let ws_label = listener_label.clone();
+                    let ws_container = container.clone();
 
                     tokio::spawn(async move {
                         let client_upgraded = match hyper::upgrade::on(req).await {
@@ -311,6 +335,7 @@ async fn handle_http(
                                 None,
                                 subprotocol_clone,
                                 ws_label,
+                                ws_container,
                                 event_bus_clone,
                                 state_clone,
                             ).await;
@@ -377,6 +402,7 @@ async fn handle_http(
             false,
             true,
             &listener_label,
+            &container,
         ).await;
 
         return Ok(Response::builder()
@@ -425,6 +451,7 @@ async fn handle_http(
             true,
             false,
             &listener_label,
+            &container,
         ).await;
 
         let mut builder = Response::builder().status(mock_res.status);
@@ -462,8 +489,8 @@ async fn handle_http(
             is_rewritten: was_rewritten,
             is_failed: false,
             listener_label: listener_label.clone(),
-            container_label: String::new(),
-            run_id: 0,
+            container_label: container.label.clone(),
+            run_id: container.run_id,
             request_at: Some(request_at.clone()),
             response_at: None,
         };
@@ -485,6 +512,7 @@ async fn handle_http(
         req_body_bytes.clone(),
         &req_headers,
         &listener_label,
+        &container,
     ).await {
         Some(InterceptAction::Drop) => {
             let final_path = parse_path_from_url(&req_url_str);
@@ -507,6 +535,7 @@ async fn handle_http(
                 was_rewritten,
                 true,
                 &listener_label,
+                &container,
             ).await;
 
             return Ok(Response::builder()
@@ -546,8 +575,8 @@ async fn handle_http(
                 is_rewritten: was_rewritten,
                 is_failed: false,
                 listener_label: listener_label.clone(),
-                container_label: String::new(),
-                run_id: 0,
+                container_label: container.label.clone(),
+                run_id: container.run_id,
                 request_at: Some(request_at.clone()),
                 response_at: None,
             };
@@ -640,6 +669,7 @@ async fn handle_http(
                 res_body.clone(),
                 &final_req_headers,
                 &listener_label,
+                &container,
             ).await {
                 Some(InterceptAction::Drop) => {
                     log_and_emit_history(
@@ -661,6 +691,7 @@ async fn handle_http(
                         was_rewritten,
                         true,
                         &listener_label,
+                        &container,
                     ).await;
 
                     return Ok(Response::builder()
@@ -702,6 +733,7 @@ async fn handle_http(
                 was_rewritten,
                 false,
                 &listener_label,
+                &container,
             ).await;
 
             if proxy_mode == "block_client" {
@@ -743,6 +775,7 @@ async fn handle_http(
                 was_rewritten,
                 true,
                 &listener_label,
+                &container,
             ).await;
 
 
@@ -774,6 +807,7 @@ async fn log_and_emit_history(
     is_rewritten: bool,
     is_failed: bool,
     listener_label: &str,
+    container: &ContainerTag,
 ) {
     let content_encoding = res_headers
         .iter()
@@ -823,8 +857,8 @@ async fn log_and_emit_history(
         is_rewritten,
         is_failed,
         listener_label: listener_label.to_string(),
-        container_label: String::new(),
-        run_id: 0,
+        container_label: container.label.clone(),
+        run_id: container.run_id,
         request_at: Some(request_at.to_string()),
         response_at: Some(now_rfc3339_ms()),
     };

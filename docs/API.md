@@ -42,6 +42,10 @@ Errors are `Result<_, String>` with a message meant for the UI.
 | `list_host_ips()` | Local interface addresses, for binding to a LAN IP. |
 | `get_history_settings()` / `set_history_settings(s)` | History row limiter. Enabling it prunes immediately. |
 
+### Container credentials
+
+Clients identify a Firefork container with Basic `Proxy-Authorization` on plain requests and on `CONNECT`: username = container id, password = the shared token (`state.containers.token()`, generated once and saved as `container_proxy_token`). The flow's `container_label` is the registered name, or the raw id if none was registered, and the header is removed before forwarding. No header: the flow is stored with an empty label. Wrong token or malformed header: `403`, never `407`, and nothing is forwarded.
+
 ## Certificate
 
 | Method | Notes |
