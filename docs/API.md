@@ -54,6 +54,8 @@ Clients identify a Firefork container with Basic `Proxy-Authorization` on plain 
 | `ca_pem()` / `export_ca(path, CaFormat::{Pem, Der})` | Export the root CA. |
 | `regenerate_ca()` | New root CA with the same scope. Clients must trust it again. |
 | `ca_scope()` / `set_ca_scope(scope)` | `CaScope::Global` (any host) or `CaScope::domains(&[..])`, a CA with an X.509 name-constraints extension limited to those names and their subdomains. Setting it regenerates the CA. Hosts outside a domain-locked CA are tunnelled without interception, and those tunnels aren't recorded. The scope is saved beside the CA as `scope.json`. |
+| `ca_rotation_days()` / `set_ca_rotation_days(n)` / `ca_rotated_at()` | Auto-rotate the root CA every `n` days; 0 (default) is off. `ca_rotated_at` is the unix time of the last replacement. |
+| `start_ca_rotation()` / `stop_ca_rotation()` | The hourly check behind it (`rotate_ca_if_due()` does one check). Every replacement is announced to control-socket subscribers as `ca_rotated`. |
 
 ## Intercept
 

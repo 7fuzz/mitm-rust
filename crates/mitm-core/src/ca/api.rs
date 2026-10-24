@@ -46,6 +46,7 @@ impl MitmCore {
         let ca_dir = ca::get_default_ca_dir();
         ca::delete_ca(ca_dir.clone());
         let _ = ca::get_ca(ca_dir);
+        let _ = self.record_rotation();
         self.announce_new_ca(old_fingerprint);
         if self.state.proxy_active.load(std::sync::atomic::Ordering::SeqCst) {
             let _ = self.start_all_listeners().await?;

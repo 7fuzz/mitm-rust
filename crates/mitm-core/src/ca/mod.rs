@@ -1,4 +1,9 @@
 mod api;
+
+/// Tests that point the default CA directory somewhere else through the environment take turns.
+#[cfg(test)]
+pub(crate) static DEFAULT_CA_DIR_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+mod rotation;
 mod scope;
 
 pub use scope::CaScope;

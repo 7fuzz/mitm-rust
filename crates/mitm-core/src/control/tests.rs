@@ -127,6 +127,7 @@ async fn restarting_the_server_replaces_a_stale_socket() {
 
 #[tokio::test]
 async fn ca_info_and_pem_come_from_the_current_ca() {
+    let _env = crate::ca::DEFAULT_CA_DIR_LOCK.lock().await;
     let data_home = std::env::temp_dir().join(format!("mitm-control-ca-{}", uuid::Uuid::new_v4()));
     std::env::set_var("XDG_DATA_HOME", &data_home);
     let (core, mut client, dir) = core_with_server().await;

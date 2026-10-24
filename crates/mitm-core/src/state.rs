@@ -91,6 +91,7 @@ pub struct AppState {
     pub listener_configs: Arc<RwLock<Vec<ListenerConfig>>>,
     pub containers: crate::proxy::containers::Containers,
     pub control_stop: StopSignal,
+    pub ca_rotation_task: Arc<Mutex<Option<tokio::task::AbortHandle>>>,
     /// Pushed to control-socket clients that sent `subscribe`.
     pub control_events: broadcast::Sender<serde_json::Value>,
     pub pending_flows: Arc<DashMap<String, PendingFlow>>,
@@ -199,6 +200,7 @@ impl AppState {
             listener_configs: Arc::new(RwLock::new(initial_listener_configs)),
             containers,
             control_stop: Arc::new(Mutex::new(None)),
+            ca_rotation_task: Arc::new(Mutex::new(None)),
             control_events: broadcast::channel(64).0,
             pending_flows: Arc::new(DashMap::new()),
             rules: Arc::new(RwLock::new(initial_rules)),
