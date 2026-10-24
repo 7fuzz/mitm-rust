@@ -430,6 +430,7 @@ async fn handle_http(
         &mut req_headers,
         &mut req_body_bytes,
         &listener_label,
+        &container.label,
     ).await {
         let final_path = parse_path_from_url(&req_url_str);
         log_and_emit_history(
@@ -652,6 +653,7 @@ async fn handle_http(
                 &mut res_headers,
                 &mut res_body,
                 &listener_label,
+                &container.label,
             ).await {
                 was_rewritten = true;
             }

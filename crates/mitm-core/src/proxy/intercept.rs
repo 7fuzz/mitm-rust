@@ -25,7 +25,7 @@ pub async fn handle_intercept_hook(
     listener_label: &str,
     container: &ContainerTag,
 ) -> Option<InterceptAction> {
-    if !should_intercept(state, phase, method, url, host, &headers, request_headers, listener_label).await {
+    if !should_intercept(state, phase, method, url, host, &headers, request_headers, listener_label, &container.label).await {
         return None;
     }
 

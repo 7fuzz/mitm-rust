@@ -21,7 +21,7 @@ pub fn chips(ui: &mut egui::Ui, scope: &mut SourceScope, listeners: &[ListenerCo
 
 fn toggle(scope: &mut SourceScope, id: u32) {
     if scope.all {
-        *scope = SourceScope { all: false, ids: vec![id] };
+        *scope = SourceScope { all: false, ids: vec![id], containers: Vec::new() };
     } else if let Some(index) = scope.ids.iter().position(|&i| i == id) {
         scope.ids.remove(index);
         scope.all = scope.ids.is_empty();

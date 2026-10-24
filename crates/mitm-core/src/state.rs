@@ -237,9 +237,12 @@ impl AppState {
         self.proxy_active.load(Ordering::SeqCst)
     }
 
-    /// True when `listener_label` is covered by `scope`. Ids of removed listeners never match.
-    pub async fn source_matches(&self, scope: &SourceScope, listener_label: &str) -> bool {
+    /// True when the listener or the container is covered by `scope`. Ids of removed listeners never match.
+    pub async fn source_matches(&self, scope: &SourceScope, listener_label: &str, container_label: &str) -> bool {
         if scope.all {
+            return true;
+        }
+        if !container_label.is_empty() && scope.containers.iter().any(|c| c == container_label) {
             return true;
         }
         self.listener_configs

@@ -142,3 +142,46 @@ async fn connect_with_credentials_and_anonymous_connect_are_both_accepted() {
     }
     let _ = std::fs::remove_dir_all(&h.dir);
 }
+
+#[tokio::test]
+async fn container_scope_matches_its_containers_alongside_listeners() {
+    use crate::proxy::rules::SourceScope;
+    let h = harness().await;
+    let scope = SourceScope { all: false, ids: Vec::new(), containers: vec!["App A".to_string()] };
+    assert!(h.state.source_matches(&scope, "default", "App A").await);
+    assert!(!h.state.source_matches(&scope, "default", "App B").await);
+    assert!(!h.state.source_matches(&scope, "default", "").await);
+
+    let both = SourceScope { all: false, ids: vec![0], containers: vec!["App A".to_string()] };
+    assert!(h.state.source_matches(&both, "default", "App B").await);
+    assert!(h.state.source_matches(&SourceScope::default(), "default", "").await);
+    let _ = std::fs::remove_dir_all(&h.dir);
+}
+
+#[tokio::test]
+async fn intercept_scoped_to_one_container_pauses_only_its_flows() {
+    use crate::proxy::rules::SourceScope;
+    let h = harness().await;
+    let token = h.state.containers.token().to_string();
+    h.state.proxy_config.write().await.intercept_enabled = true;
+    h.state.proxy_config.write().await.intercept_source_scope =
+        SourceScope { all: false, ids: Vec::new(), containers: vec!["7".to_string()] };
+
+    let other = exchange(h.proxy_addr, get(&h, "/other", &basic("8", &token))).await;
+    assert!(other.starts_with("HTTP/1.1 200"), "{other}");
+
+    let paused = tokio::spawn({
+        let addr = h.proxy_addr;
+        let request = get(&h, "/scoped", &basic("7", &token));
+        async move { exchange(addr, request).await }
+    });
+    for _ in 0..40 {
+        if !h.state.pending_flows.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(h.state.pending_flows.len(), 1);
+    paused.abort();
+    let _ = std::fs::remove_dir_all(&h.dir);
+}

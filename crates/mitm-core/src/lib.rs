@@ -102,7 +102,7 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             core.toggle_interceptor(true, "both".to_string()).await.unwrap();
-            core.set_intercept_source_scope(crate::proxy::rules::SourceScope { all: false, ids: vec![2] }).await.unwrap();
+            core.set_intercept_source_scope(crate::proxy::rules::SourceScope { all: false, ids: vec![2], containers: Vec::new() }).await.unwrap();
         });
         let (history_tx, _) = mpsc::channel(1);
         let (rewrite_tx, _) = mpsc::channel(1);
@@ -143,7 +143,7 @@ mod tests {
         };
         rt.block_on(async {
             core.save_rewrite_rules(vec![rule("b"), rule("a")]).await.unwrap();
-            core.set_rewrite_source_scope(crate::proxy::rules::SourceScope { all: false, ids: vec![1] }).await.unwrap();
+            core.set_rewrite_source_scope(crate::proxy::rules::SourceScope { all: false, ids: vec![1], containers: Vec::new() }).await.unwrap();
         });
         core.set_rewrite_enabled(false).unwrap();
 

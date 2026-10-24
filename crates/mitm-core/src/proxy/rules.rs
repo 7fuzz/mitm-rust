@@ -19,6 +19,7 @@ pub async fn should_intercept(
     headers: &[(String, String)],
     request_headers: &[(String, String)],
     listener_label: &str,
+    container_label: &str,
 ) -> bool {
     let cfg = state.proxy_config.read().await;
 
@@ -32,7 +33,7 @@ pub async fn should_intercept(
         _ => {}
     }
 
-    if !state.source_matches(&cfg.intercept_source_scope, listener_label).await {
+    if !state.source_matches(&cfg.intercept_source_scope, listener_label, container_label).await {
         return false;
     }
 
@@ -168,7 +169,7 @@ mod tests {
     }
 }
 
-/// Restricts a feature to traffic from selected proxy listeners (sources).
+/// Restricts a feature to traffic from selected proxy listeners and Firefork containers (sources).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceScope {
@@ -178,10 +179,13 @@ pub struct SourceScope {
     /// Listener ids that match when `all` is false
     #[serde(default)]
     pub ids: Vec<u32>,
+    /// Container labels that match when `all` is false, in addition to the listeners
+    #[serde(default)]
+    pub containers: Vec<String>,
 }
 
 impl Default for SourceScope {
     fn default() -> Self {
-        Self { all: true, ids: Vec::new() }
+        Self { all: true, ids: Vec::new(), containers: Vec::new() }
     }
 }

@@ -177,13 +177,14 @@ pub async fn apply_request_rewrite_pipeline(
     headers: &mut Vec<(String, String)>,
     body: &mut Vec<u8>,
     listener_label: &str,
+    container_label: &str,
 ) -> Option<MockResponse> {
     if !state.is_rewrite_enabled() {
         return None;
     }
 
     let scope = state.rewrite_source_scope.read().await.clone();
-    if !state.source_matches(&scope, listener_label).await {
+    if !state.source_matches(&scope, listener_label, container_label).await {
         return None;
     }
 
@@ -418,13 +419,14 @@ pub async fn apply_response_rewrite_pipeline(
     headers: &mut Vec<(String, String)>,
     body: &mut Vec<u8>,
     listener_label: &str,
+    container_label: &str,
 ) -> bool {
     if !state.is_rewrite_enabled() {
         return false;
     }
 
     let scope = state.rewrite_source_scope.read().await.clone();
-    if !state.source_matches(&scope, listener_label).await {
+    if !state.source_matches(&scope, listener_label, container_label).await {
         return false;
     }
 

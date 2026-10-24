@@ -60,7 +60,7 @@ Clients identify a Firefork container with Basic `Proxy-Authorization` on plain 
 | --- | --- |
 | `intercept_config()` | `(enabled, mode, source_scope)`, as saved. |
 | `toggle_interceptor(enabled, mode)` | Mode is `request`, `response` or `both`. |
-| `set_intercept_source_scope(scope)` | Limit to some listeners (`SourceScope { all, ids }`). |
+| `set_intercept_source_scope(scope)` | Limit to some listeners and containers (`SourceScope { all, ids, containers }`; with `all` false a flow matches when its listener id or its container label is listed). |
 | `get_intercept_rules()` / `update_intercept_rules(rules)` | Whitelist (`intercept`) or blacklist (`pass`) rules. |
 | `forward_intercepted_flow(id, url, method, headers, body)` | Forward, optionally modified. `None` fields keep the original. |
 | `drop_intercepted_flow(id)` | Abort the flow. |
@@ -72,7 +72,7 @@ Clients identify a Firefork container with Basic `Proxy-Authorization` on plain 
 | --- | --- |
 | `rewrite_rules()` / `save_rewrite_rules(rules)` | Saving also stores the order. |
 | `rewrite_enabled()` / `set_rewrite_enabled(b)` | Global switch. |
-| `rewrite_source_scope()` / `set_rewrite_source_scope(scope)` | Listener scope. |
+| `rewrite_source_scope()` / `set_rewrite_source_scope(scope)` | Listener and container scope. |
 | `rewrite_history(limit)` / `clear_rewrite_history()` | Hit log. |
 | `proxy::rewrite::preview_rewrite(rule, sample)` | Applies one rule to sample text, for the editor preview. |
 
