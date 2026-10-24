@@ -38,6 +38,10 @@ pub(super) fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {
     if state.proxy.mode.is_enabled() {
         state.proxy.set_started(rt.block_on(core.start_all_listeners()));
     }
+    #[cfg(unix)]
+    if let Err(e) = rt.block_on(core.start_control_server()) {
+        eprintln!("[Control] {e}");
+    }
     state.proxy.apply_statuses(&rt.block_on(core.listener_status()));
     state.proxy.reload_host_ips();
     state.certificate.info = core.ca_info().ok();
