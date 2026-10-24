@@ -13,6 +13,8 @@ pub async fn call(core: &MitmCore, method: &str, params: &Value) -> Result<Value
             core.remove_container(&text(params, "id")?)?;
             Ok(json!({}))
         }
+        "ca_info" => ca_info(core),
+        "ca_pem" => Ok(json!({ "pem": core.ca_pem()? })),
         "list_containers" => Ok(json!(core.list_containers())),
         "start_run" => Ok(json!({ "run_id": core.start_container_run(&text(params, "id")?)? })),
         "delete_flows" => {
@@ -45,4 +47,17 @@ async fn status(core: &MitmCore) -> Value {
         "token": core.container_proxy_token(),
         "listeners": listeners,
     })
+}
+
+fn ca_info(core: &MitmCore) -> Result<Value, String> {
+    let info = core.ca_info()?;
+    Ok(json!({
+        "pem": core.ca_pem()?,
+        "fingerprint": info.fingerprint,
+        "common_name": info.common_name,
+        "not_before": info.not_before,
+        "not_after": info.not_after,
+        "scope": "global",
+        "domains": [],
+    }))
 }

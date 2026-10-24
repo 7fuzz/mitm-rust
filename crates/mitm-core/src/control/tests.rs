@@ -124,3 +124,21 @@ async fn restarting_the_server_replaces_a_stale_socket() {
     core.stop_control_server().await;
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[tokio::test]
+async fn ca_info_and_pem_come_from_the_current_ca() {
+    let data_home = std::env::temp_dir().join(format!("mitm-control-ca-{}", uuid::Uuid::new_v4()));
+    std::env::set_var("XDG_DATA_HOME", &data_home);
+    let (core, mut client, dir) = core_with_server().await;
+
+    let info = client.call("ca_info", Value::Null).await["result"].clone();
+    let pem = client.call("ca_pem", Value::Null).await["result"]["pem"].clone();
+    assert!(pem.as_str().unwrap().contains("BEGIN CERTIFICATE"));
+    assert_eq!(info["pem"], pem);
+    assert_eq!(info["fingerprint"], core.ca_info().unwrap().fingerprint);
+    assert_eq!(info["scope"], "global");
+    assert_eq!(info["domains"], json!([]));
+    assert!(data_home.join("mitm").join("ca").join("ca.crt").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&data_home);
+}

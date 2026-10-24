@@ -23,6 +23,8 @@ A line that isn't valid JSON gets `{"id": null, "error": "..."}` and the connect
 | `remove_container` | `{ id }` | `{}`. Keeps the container's stored flows. |
 | `list_containers` | | `[{ id, name, run_id, flows }]` |
 | `start_run` | `{ id }` | `{ run_id }`. Flows captured afterwards carry the new run id. Registers an unknown id under its own id as the name. |
+| `ca_info` | | `{ pem, fingerprint, common_name, not_before, not_after, scope, domains }`. `scope` is `global` or `domains`; `domains` lists the permitted names of a domain-locked CA. |
+| `ca_pem` | | `{ pem }` |
 | `delete_flows` | `{ id, run_id? }` | `{ deleted }`. All of the container's flows, or only one run's. |
 
 `id` is always the container id the browser sends as the proxy username; flows are stored and shown under the container's registered name.
