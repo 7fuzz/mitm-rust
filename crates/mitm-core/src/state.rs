@@ -89,6 +89,7 @@ pub struct AppState {
     pub listeners: Arc<RwLock<Vec<ListenerInstance>>>,
     pub listener_errors: Arc<DashMap<u32, String>>,
     pub listener_configs: Arc<RwLock<Vec<ListenerConfig>>>,
+    pub containers: crate::proxy::containers::Containers,
     pub pending_flows: Arc<DashMap<String, PendingFlow>>,
     pub rules: Arc<RwLock<Vec<InterceptRule>>>,
     pub rewrite_rules: Arc<RwLock<Vec<RewriteRule>>>,
@@ -180,6 +181,8 @@ impl AppState {
             max_body_mb: crate::db::get_preference(&db, "history_max_body_mb").and_then(|v| v.parse().ok()).unwrap_or(0),
         };
 
+        let containers = crate::proxy::containers::Containers::load(&db);
+
         Self {
             db,
             history_tx,
@@ -191,6 +194,7 @@ impl AppState {
             listeners: Arc::new(RwLock::new(Vec::new())),
             listener_errors: Arc::new(DashMap::new()),
             listener_configs: Arc::new(RwLock::new(initial_listener_configs)),
+            containers,
             pending_flows: Arc::new(DashMap::new()),
             rules: Arc::new(RwLock::new(initial_rules)),
             rewrite_rules: Arc::new(RwLock::new(initial_rewrite_rules)),
