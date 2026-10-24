@@ -39,6 +39,8 @@ pub struct CA {
     pub cert: Certificate,
     pub key_pair: KeyPair,
     pub cert_pem: String,
+    /// The certificate as stored; `cert` is re-signed on load and its bytes differ.
+    pub cert_der: Vec<u8>,
 }
 
 impl CA {
@@ -52,6 +54,7 @@ impl CA {
             cert,
             key_pair,
             cert_pem: self.cert_pem.clone(),
+            cert_der: self.cert_der.clone(),
         }
     }
 
@@ -70,7 +73,7 @@ impl CA {
         let not_after = params.not_after
             .format(&time::format_description::well_known::Rfc3339)
             .unwrap_or_else(|_| params.not_after.to_string());
-        let hash = ring::digest::digest(&ring::digest::SHA256, self.cert.der().as_ref());
+        let hash = ring::digest::digest(&ring::digest::SHA256, &self.cert_der);
         let fingerprint = hash.as_ref().iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(":");
 
         Ok(CaInfo {
@@ -87,10 +90,16 @@ impl CA {
     pub fn export(&self, path: &std::path::Path, format: CaFormat) -> Result<(), String> {
         let bytes = match format {
             CaFormat::Pem => self.cert_pem.as_bytes(),
-            CaFormat::Der => self.cert.der().as_ref(),
+            CaFormat::Der => &self.cert_der,
         };
         fs::write(path, bytes).map_err(|e| format!("Failed to write CA file {}: {}", path.display(), e))
     }
+}
+
+fn pem_to_der(pem: &str) -> Option<Vec<u8>> {
+    use base64::Engine;
+    let body: String = pem.lines().filter(|line| !line.starts_with("-----")).map(str::trim).collect();
+    base64::engine::general_purpose::STANDARD.decode(body).ok()
 }
 
 #[cfg(unix)]
@@ -145,10 +154,13 @@ pub fn get_ca(ca_dir: PathBuf) -> CA {
         let params = CertificateParams::from_ca_cert_pem(&cert_pem).expect("Failed to parse CA cert params");
         let cert = params.self_signed(&key_pair).expect("Failed to reconstruct CA cert");
 
+        let cert_der = pem_to_der(&cert_pem).expect("Failed to decode CA cert");
+
         CA {
             cert,
             key_pair,
             cert_pem,
+            cert_der,
         }
     } else {
         create_private_dir(&ca_dir).expect("Failed to create CA directory");
@@ -175,10 +187,13 @@ pub fn get_ca(ca_dir: PathBuf) -> CA {
         fs::write(&cert_path, &cert_pem).expect("Failed to write CA cert");
         write_private_file(&key_path, &key_pem).expect("Failed to write CA key");
 
+        let cert_der = cert.der().to_vec();
+
         CA {
             cert,
             key_pair,
             cert_pem,
+            cert_der,
         }
     }
 }
@@ -231,7 +246,12 @@ mod tests {
         let der_path = temp_dir.join("export.cer");
         ca.export(&der_path, CaFormat::Der).unwrap();
         let der_content = std::fs::read(&der_path).unwrap();
-        assert_eq!(der_content, ca.cert.der().as_ref());
+        assert_eq!(der_content, ca.cert_der);
+        assert_eq!(der_content, pem_to_der(&ca.cert_pem).unwrap());
+
+        let reloaded = get_ca(temp_dir.clone());
+        assert_eq!(reloaded.cert_der, ca.cert_der);
+        assert_eq!(reloaded.info(&temp_dir).unwrap().fingerprint, info.fingerprint);
 
         delete_ca(temp_dir.clone());
         let _ = std::fs::remove_dir_all(temp_dir);
