@@ -148,7 +148,7 @@ fn search_clause(search: Option<&str>, include_headers: bool) -> (String, Option
     let Some(term) = search.map(str::trim).filter(|t| !t.is_empty()) else {
         return (String::new(), None);
     };
-    let mut fields = vec!["url", "host", "path", "method", "content_type", "listener_label", "CAST(status_code AS TEXT)"];
+    let mut fields = vec!["url", "host", "path", "method", "content_type", "listener_label", "container_label", "CAST(status_code AS TEXT)"];
     if include_headers {
         fields.extend(["request_headers", "response_headers"]);
     }
@@ -266,6 +266,32 @@ pub fn clear_history(db: &Db) -> Result<(), String> {
     Ok(())
 }
 
+/// Flows of one container, or only one of its runs; returns how many history rows went.
+pub fn delete_container_flows(db: &Db, container: &str, run_id: Option<i64>) -> Result<usize, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
+    let run = run_id.unwrap_or(-1);
+    let removed = conn
+        .execute(
+            "DELETE FROM history WHERE container_label = ?1 AND (?2 = -1 OR run_id = ?2)",
+            rusqlite::params![container, run],
+        )
+        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM ws_connections WHERE container_label = ?1 AND (?2 = -1 OR run_id = ?2)",
+        rusqlite::params![container, run],
+    )
+    .map_err(|e| e.to_string())?;
+    super::bodies::collect_garbage(&conn)?;
+    super::storage::reclaim(&conn)?;
+    Ok(removed)
+}
+
+pub fn count_container_flows(db: &Db, container: &str) -> Result<u64, String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
+    conn.query_row("SELECT COUNT(*) FROM history WHERE container_label = ?1", [container], |row| row.get(0))
+        .map_err(|e| e.to_string())
+}
+
 pub fn delete_history_entry(db: &Db, id: i64) -> Result<(), String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM history WHERE id = ?1", [id])
@@ -328,6 +354,34 @@ mod tests {
         assert_eq!(get_history_count(&db, Some("needle"), true).unwrap(), 1);
         assert_eq!(get_history_count(&db, Some("even"), false).unwrap(), 3);
         assert_eq!(get_history_count(&db, Some("_"), false).unwrap(), 3);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn container_flows_filter_by_search_and_delete_by_container_and_run() {
+        let (db, dir) = db_with_flows(6);
+        let conn = crate::db::open(&db).unwrap();
+        conn.execute("UPDATE history SET container_label = 'App A · admin', run_id = 1 WHERE id <= 2", []).unwrap();
+        conn.execute("UPDATE history SET container_label = 'App A · admin', run_id = 2 WHERE id IN (3, 4)", []).unwrap();
+        conn.execute("UPDATE history SET container_label = 'App B' WHERE id >= 5", []).unwrap();
+        conn.execute(
+            "INSERT INTO ws_connections (url, status, handshake_time, container_label, run_id) VALUES ('ws://a', 'closed', 0, 'App A · admin', 2)",
+            [],
+        )
+        .unwrap();
+
+        assert_eq!(get_history_count(&db, Some("App A"), false).unwrap(), 4);
+        assert_eq!(count_container_flows(&db, "App B").unwrap(), 2);
+
+        assert_eq!(delete_container_flows(&db, "App A · admin", Some(1)).unwrap(), 2);
+        assert_eq!(count_container_flows(&db, "App A · admin").unwrap(), 2);
+        let ws: i64 = conn.query_row("SELECT COUNT(*) FROM ws_connections", [], |r| r.get(0)).unwrap();
+        assert_eq!(ws, 1);
+
+        assert_eq!(delete_container_flows(&db, "App A · admin", None).unwrap(), 2);
+        let ws: i64 = conn.query_row("SELECT COUNT(*) FROM ws_connections", [], |r| r.get(0)).unwrap();
+        assert_eq!(ws, 0);
+        assert_eq!(get_history_count(&db, None, false).unwrap(), 2);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

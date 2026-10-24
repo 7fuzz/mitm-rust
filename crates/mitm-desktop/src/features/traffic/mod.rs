@@ -425,7 +425,7 @@ fn matches_search(flow: &HistoryEntry, search: &str) -> bool {
         return true;
     }
     flow.status_code.to_string().contains(search)
-        || [&flow.url, &flow.host, &flow.path, &flow.method, &flow.content_type, &flow.listener_label]
+        || [&flow.url, &flow.host, &flow.path, &flow.method, &flow.content_type, &flow.listener_label, &flow.container_label]
             .iter()
             .any(|field| contains_folded(field, search))
 }
