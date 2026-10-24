@@ -26,6 +26,8 @@ pub enum CoreEvent {
         duration_ms: u64,
     },
     TrafficCleared,
+    /// Stored flows of a container (or one of its runs) were deleted; loaded lists should reload.
+    ContainerFlowsDeleted,
 
     InterceptPrompt(PendingFlowPayload),
     InterceptResolved { flow_id: String },

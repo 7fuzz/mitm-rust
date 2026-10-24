@@ -25,6 +25,7 @@ pub use proxy::rewrite::RewriteHistoryEntry;
 pub use state::AppState;
 pub use workspace::{Environment, EnvironmentVariable, Unresolved, VariableVariant, Workspace};
 
+#[derive(Clone)]
 pub struct MitmCore {
     pub state: Arc<AppState>,
     pub event_bus: EventBus,

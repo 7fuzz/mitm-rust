@@ -90,6 +90,7 @@ impl MitmApp {
                 traffic.refresh_detail_if_selected(id, db);
             }
             CoreEvent::TrafficCleared => traffic.clear(),
+            CoreEvent::ContainerFlowsDeleted => traffic.load_from_db(db),
             CoreEvent::InterceptPrompt(payload) => {
                 self.state.intercept.add_pending(payload);
                 if self.state.intercept.prefs.raise_window {

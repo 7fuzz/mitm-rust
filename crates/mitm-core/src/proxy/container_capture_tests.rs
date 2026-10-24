@@ -93,7 +93,7 @@ async fn stored(h: &Harness, path: &str) -> Option<(String, i64)> {
 #[tokio::test]
 async fn container_credentials_label_the_flow_and_never_reach_the_origin() {
     let h = harness().await;
-    h.state.containers.register("7", "App A · admin");
+    let _ = h.state.containers.register("7", "App A · admin");
     let token = h.state.containers.token().to_string();
 
     let response = exchange(h.proxy_addr, get(&h, "/labelled", &basic("7", &token))).await;

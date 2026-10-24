@@ -286,6 +286,16 @@ pub fn delete_container_flows(db: &Db, container: &str, run_id: Option<i64>) -> 
     Ok(removed)
 }
 
+/// Moves stored flows from one container label to another, after a rename.
+pub fn relabel_container_flows(db: &Db, from: &str, to: &str) -> Result<(), String> {
+    let conn = db.conn().map_err(|e| e.to_string())?;
+    for table in ["history", "ws_connections"] {
+        conn.execute(&format!("UPDATE {table} SET container_label = ?2 WHERE container_label = ?1"), [from, to])
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 pub fn container_labels(db: &Db) -> Vec<String> {
     let Ok(conn) = db.conn() else { return Vec::new() };
     let Ok(mut stmt) = conn.prepare("SELECT DISTINCT container_label FROM history WHERE container_label != '' ORDER BY container_label") else {
