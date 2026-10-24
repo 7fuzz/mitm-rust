@@ -1,5 +1,7 @@
 pub mod ca;
 pub mod collections;
+#[cfg(unix)]
+pub mod control;
 pub mod credentials;
 pub mod db;
 pub mod events;
