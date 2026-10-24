@@ -201,6 +201,8 @@ fn render_paused_flows_editor(ui: &mut egui::Ui, state: &mut InterceptState, cmd
 
 const PHASES: [(&str, &str); 3] = [("request", "Request"), ("response", "Response"), ("both", "Both")];
 const FIELDS: [(&str, &str); 5] = [("url", "URL"), ("host", "Host"), ("path", "Path"), ("method", "Method"), ("header", "Header")];
+const OTHER_COLUMNS_WIDTH: f32 = 520.0;
+const MIN_VALUE_WIDTH: f32 = 120.0;
 const OPERATORS: [(&str, &str); 3] = [("contains", "contains"), ("equals", "equals"), ("regex", "regex")];
 
 fn render_rules_manager(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mut Commands) {
@@ -211,13 +213,14 @@ fn render_rules_manager(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mu
     let mut delete = None;
     let mut swap = None;
     let count = rules.len();
+    let value_width = (ui.available_width() - OTHER_COLUMNS_WIDTH).max(MIN_VALUE_WIDTH);
 
     egui::Grid::new("rules_table_grid").striped(false).num_columns(7).spacing([8.0, 6.0]).show(ui, |ui| {
         for (index, rule) in rules.iter_mut().enumerate() {
             ui.push_id(&rule.id, |ui| {
                 modified |= ui.checkbox(&mut rule.is_enabled, "").changed();
             });
-            modified |= rule_cells(ui, &rule.id, &mut rule.target_phase, &mut rule.match_field, &mut rule.operator, &mut rule.match_value, &mut rule.action);
+            modified |= rule_cells(ui, &rule.id, &mut rule.target_phase, &mut rule.match_field, &mut rule.operator, &mut rule.match_value, &mut rule.action, value_width);
             ui.horizontal(|ui| {
                 if ui.add_enabled(index > 0, egui::Button::new(icons::CARET_UP).small()).clicked() {
                     swap = Some((index, index - 1));
@@ -235,7 +238,7 @@ fn render_rules_manager(ui: &mut egui::Ui, state: &mut InterceptState, cmds: &mu
         ui.label("");
         let draft = &mut state.new_rule;
         let value_before = draft.value.clone();
-        rule_cells(ui, "new_rule", &mut draft.phase, &mut draft.field, &mut draft.operator, &mut draft.value, &mut draft.action);
+        rule_cells(ui, "new_rule", &mut draft.phase, &mut draft.field, &mut draft.operator, &mut draft.value, &mut draft.action, value_width);
         ui.label("");
         ui.end_row();
         if value_before.is_empty() && !draft.value.trim().is_empty() {
@@ -278,13 +281,13 @@ fn rule_cells(
     operator: &mut String,
     value: &mut String,
     action: &mut String,
+    value_width: f32,
 ) -> bool {
     let mut changed = combo(ui, (id, "phase"), phase, &PHASES);
     changed |= combo(ui, (id, "field"), field, &FIELDS);
     changed |= combo(ui, (id, "operator"), operator, &OPERATORS);
-    changed |= ui
-        .add(egui::TextEdit::singleline(value).id_salt((id, "value")).hint_text("Match value").desired_width(180.0))
-        .changed();
+    let input = egui::TextEdit::singleline(value).id_salt((id, "value")).hint_text("Match value");
+    changed |= ui.add_sized([value_width, ui.spacing().interact_size.y], input).changed();
     changed |= action_chip(ui, action);
     changed
 }
