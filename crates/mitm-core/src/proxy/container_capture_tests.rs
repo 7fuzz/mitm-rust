@@ -20,6 +20,10 @@ struct Harness {
 }
 
 async fn harness() -> Harness {
+    harness_with_scope(crate::ca::CaScope::Global).await
+}
+
+async fn harness_with_scope(scope: crate::ca::CaScope) -> Harness {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let dir = std::env::temp_dir().join(format!("mitm-capture-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -47,6 +51,8 @@ async fn harness() -> Harness {
         }
     });
 
+    std::fs::create_dir_all(dir.join("ca")).unwrap();
+    scope.save(&dir.join("ca")).unwrap();
     let ca = Arc::new(crate::ca::get_ca(dir.join("ca")));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let proxy_addr = listener.local_addr().unwrap();
@@ -183,5 +189,30 @@ async fn intercept_scoped_to_one_container_pauses_only_its_flows() {
     }
     assert_eq!(h.state.pending_flows.len(), 1);
     paused.abort();
+    let _ = std::fs::remove_dir_all(&h.dir);
+}
+
+#[tokio::test]
+async fn hosts_outside_a_domain_locked_ca_are_tunnelled_untouched_and_unrecorded() {
+    let scope = crate::ca::CaScope::domains(&["locked.test"]).unwrap();
+    let h = harness_with_scope(scope).await;
+    let token = h.state.containers.token().to_string();
+
+    let mut stream = TcpStream::connect(h.proxy_addr).await.unwrap();
+    let connect = format!("CONNECT {0} HTTP/1.1\r\nHost: {0}\r\n{1}\r\n", h.upstream_addr, basic("7", &token));
+    stream.write_all(connect.as_bytes()).await.unwrap();
+    let mut buf = [0u8; 64];
+    let n = stream.read(&mut buf).await.unwrap();
+    assert!(String::from_utf8_lossy(&buf[..n]).starts_with("HTTP/1.1 200"));
+
+    stream.write_all(b"GET /raw HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").await.unwrap();
+    let mut response = Vec::new();
+    let _ = tokio::time::timeout(Duration::from_secs(5), stream.read_to_end(&mut response)).await;
+    assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200"));
+    assert!(h.upstream_requests.lock().await[0].starts_with("GET /raw"));
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let rows: i64 = h.db.conn().unwrap().query_row("SELECT COUNT(*) FROM history", [], |r| r.get(0)).unwrap();
+    assert_eq!(rows, 0);
     let _ = std::fs::remove_dir_all(&h.dir);
 }

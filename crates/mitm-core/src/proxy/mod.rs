@@ -153,12 +153,19 @@ async fn handle_connect(
     ca: Arc<CA>,
     event_bus: Option<EventBus>,
     host: String,
-    _port: u16,
+    port: u16,
     listener_label: String,
     container: ContainerTag,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let upgraded = hyper::upgrade::on(req).await?;
-    let upgraded_io = TokioIo::new(upgraded);
+    let mut upgraded_io = TokioIo::new(upgraded);
+
+    // A domain-locked CA can't vouch for other hosts, so those tunnels go through untouched.
+    if !ca.scope.permits(&host) {
+        let mut upstream = TcpStream::connect((host.as_str(), port)).await?;
+        let _ = tokio::io::copy_bidirectional(&mut upgraded_io, &mut upstream).await;
+        return Ok(());
+    }
 
     let mut params = CertificateParams::new(vec![host.clone()]).map_err(|e| format!("{}", e))?;
     params.distinguished_name.push(DnType::CommonName, host.clone());
