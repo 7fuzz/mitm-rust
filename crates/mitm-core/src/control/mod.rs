@@ -1,6 +1,8 @@
 mod api;
 mod handlers;
 
+pub use handlers::ca_snapshot;
+
 #[cfg(test)]
 mod tests;
 
@@ -10,7 +12,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::oneshot;
+use tokio::sync::{broadcast, oneshot};
 
 use crate::MitmCore;
 
@@ -48,28 +50,59 @@ pub async fn serve(core: MitmCore, listener: UnixListener, stop_rx: oneshot::Rec
 async fn handle_connection(core: MitmCore, stream: UnixStream) {
     let (read, mut write) = stream.into_split();
     let mut lines = BufReader::new(read).lines();
-    while let Ok(Some(line)) = lines.next_line().await {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let mut reply = respond(&core, &line).await.to_string();
-        reply.push('\n');
-        if write.write_all(reply.as_bytes()).await.is_err() {
+    let mut events: Option<broadcast::Receiver<Value>> = None;
+    loop {
+        let mut outgoing = tokio::select! {
+            line = lines.next_line() => match line {
+                Ok(Some(line)) if line.trim().is_empty() => continue,
+                Ok(Some(line)) => {
+                    let (reply, subscribe) = respond(&core, &line).await;
+                    if subscribe && events.is_none() {
+                        events = Some(core.state.control_events.subscribe());
+                    }
+                    reply.to_string()
+                }
+                _ => return,
+            },
+            event = next_event(&mut events) => match event {
+                Some(event) => event.to_string(),
+                None => continue,
+            },
+        };
+        outgoing.push('\n');
+        if write.write_all(outgoing.as_bytes()).await.is_err() {
             return;
         }
     }
 }
 
-async fn respond(core: &MitmCore, line: &str) -> Value {
+async fn next_event(events: &mut Option<broadcast::Receiver<Value>>) -> Option<Value> {
+    let Some(receiver) = events else { return std::future::pending().await };
+    match receiver.recv().await {
+        Ok(event) => Some(event),
+        Err(broadcast::error::RecvError::Lagged(_)) => None,
+        Err(broadcast::error::RecvError::Closed) => {
+            *events = None;
+            None
+        }
+    }
+}
+
+/// The reply line, and whether the client asked for the event stream.
+async fn respond(core: &MitmCore, line: &str) -> (Value, bool) {
     let request: Value = match serde_json::from_str(line) {
         Ok(request) => request,
-        Err(e) => return json!({ "id": null, "error": format!("Invalid JSON: {e}") }),
+        Err(e) => return (json!({ "id": null, "error": format!("Invalid JSON: {e}") }), false),
     };
     let id = request.get("id").cloned().unwrap_or(Value::Null);
     let method = request.get("method").and_then(Value::as_str).unwrap_or("");
+    if method == "subscribe" {
+        return (json!({ "id": id, "result": {} }), true);
+    }
     let params = request.get("params").cloned().unwrap_or(Value::Null);
-    match handlers::call(core, method, &params).await {
+    let reply = match handlers::call(core, method, &params).await {
         Ok(result) => json!({ "id": id, "result": result }),
         Err(error) => json!({ "id": id, "error": error }),
-    }
+    };
+    (reply, false)
 }

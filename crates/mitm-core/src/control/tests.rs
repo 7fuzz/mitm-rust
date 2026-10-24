@@ -144,6 +144,18 @@ async fn ca_info_and_pem_come_from_the_current_ca() {
     assert_eq!(locked["scope"], "domains");
     assert_eq!(locked["domains"], json!(["test.example.com"]));
     assert_ne!(locked["fingerprint"], info["fingerprint"]);
+
+    let mut subscriber = Client::connect(&dir.join("run").join("control.sock")).await;
+    assert_eq!(subscriber.call("subscribe", Value::Null).await["result"], json!({}));
+    core.regenerate_ca().await.unwrap();
+    let line = tokio::time::timeout(Duration::from_secs(5), subscriber.lines.next_line()).await.unwrap().unwrap().unwrap();
+    let event: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(event["event"], "ca_rotated");
+    assert_eq!(event["data"]["old_fingerprint"], locked["fingerprint"]);
+    assert_eq!(event["data"]["fingerprint"], core.ca_info().unwrap().fingerprint);
+    assert_eq!(event["data"]["domains"], json!(["test.example.com"]));
+    assert!(event["data"]["pem"].as_str().unwrap().contains("BEGIN CERTIFICATE"));
+    assert!(subscriber.call("status", Value::Null).await["result"].is_object());
     assert!(data_home.join("mitm").join("ca").join("ca.crt").exists());
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&data_home);

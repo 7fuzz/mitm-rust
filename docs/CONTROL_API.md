@@ -25,8 +25,17 @@ A line that isn't valid JSON gets `{"id": null, "error": "..."}` and the connect
 | `start_run` | `{ id }` | `{ run_id }`. Flows captured afterwards carry the new run id. Registers an unknown id under its own id as the name. |
 | `ca_info` | | `{ pem, fingerprint, common_name, not_before, not_after, scope, domains }`. `scope` is `global` or `domains`; `domains` lists the permitted names of a domain-locked CA. |
 | `ca_pem` | | `{ pem }` |
+| `subscribe` | | `{}`. From then on the server also pushes event lines on this connection, between replies. |
 | `delete_flows` | `{ id, run_id? }` | `{ deleted }`. All of the container's flows, or only one run's. |
 
 `id` is always the container id the browser sends as the proxy username; flows are stored and shown under the container's registered name.
+
+## Events
+
+Pushed to connections that sent `subscribe`: `{"event": "ca_rotated", "data": {...}}`.
+
+| Event | Data |
+| --- | --- |
+| `ca_rotated` | Whatever `ca_info` returns for the new CA, plus `old_fingerprint`. Sent whenever the root CA is replaced: manual regenerate, a scope change, or auto-rotate. mitm never installs the CA into a trust store itself; the subscriber imports the new one and removes the old. |
 
 Errors: unknown method, missing or empty params.
