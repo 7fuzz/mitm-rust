@@ -5,8 +5,10 @@ mod api;
 pub(crate) static DEFAULT_CA_DIR_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 mod rotation;
 mod scope;
+mod sync;
 
 pub use scope::CaScope;
+pub use sync::sync_warning;
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair, Certificate
 };

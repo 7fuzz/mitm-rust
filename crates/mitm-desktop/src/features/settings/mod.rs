@@ -66,9 +66,17 @@ pub struct CertificateState {
     pub status: Option<(String, crate::ui::theme::Tone)>,
     pub regenerating: bool,
     pub rotation_days: u32,
+    pub sync_warning: Option<String>,
     /// Comma-separated domains being typed; `None` shows what the CA currently allows.
     pub scope_draft: Option<String>,
     exports: crate::app::jobs::Jobs<commands::CaExport>,
+}
+
+impl CertificateState {
+    pub fn set_info(&mut self, info: Option<mitm_core::CaInfo>) {
+        self.sync_warning = info.as_ref().and_then(|info| mitm_core::ca::sync_warning(std::path::Path::new(&info.ca_dir)));
+        self.info = info;
+    }
 }
 
 #[derive(Default)]

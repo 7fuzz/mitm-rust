@@ -47,7 +47,7 @@ pub(super) fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {
     rt.block_on(core.start_ca_rotation());
     state.proxy.apply_statuses(&rt.block_on(core.listener_status()));
     state.proxy.reload_host_ips();
-    state.certificate.info = core.ca_info().ok();
+    state.certificate.set_info(core.ca_info().ok());
     let (enabled, mode, scope) = rt.block_on(core.intercept_config());
     state.intercept.enabled = enabled;
     state.intercept.mode = mode;

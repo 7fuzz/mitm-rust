@@ -235,6 +235,11 @@ fn certificate_section(
         }
     });
 
+    if let Some(warning) = &cert.sync_warning {
+        ui.add_space(4.0);
+        ui.label(RichText::new(format!("{} {warning}. Keep ca.key out of backups and sync.", icons::WARNING)).color(theme::color(ui, Tone::Warn)));
+    }
+
     if let Some((msg, tone)) = &cert.status {
         ui.add_space(4.0);
         ui.label(RichText::new(msg).color(theme::color(ui, *tone)));

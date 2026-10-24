@@ -169,7 +169,7 @@ fn apply_proxy_change(proxy: &mut ProxyState, cert: &mut CertificateState, cx: &
         ProxyChange::Mode(_, Err(e)) | ProxyChange::Listeners(Err(e)) => proxy.error = Some(e),
         ProxyChange::CaRegenerated(result) => {
             cert.regenerating = false;
-            cert.info = cx.core.ca_info().ok();
+            cert.set_info(cx.core.ca_info().ok());
             cert.status = Some(match result {
                 Ok(()) => ("CA certificate regenerated".to_string(), Tone::Success),
                 Err(e) => (e, Tone::Danger),
