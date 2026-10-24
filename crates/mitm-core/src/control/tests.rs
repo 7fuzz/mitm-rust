@@ -138,6 +138,12 @@ async fn ca_info_and_pem_come_from_the_current_ca() {
     assert_eq!(info["fingerprint"], core.ca_info().unwrap().fingerprint);
     assert_eq!(info["scope"], "global");
     assert_eq!(info["domains"], json!([]));
+
+    core.set_ca_scope(crate::ca::CaScope::domains(&["*.test.example.com"]).unwrap()).await.unwrap();
+    let locked = client.call("ca_info", Value::Null).await["result"].clone();
+    assert_eq!(locked["scope"], "domains");
+    assert_eq!(locked["domains"], json!(["test.example.com"]));
+    assert_ne!(locked["fingerprint"], info["fingerprint"]);
     assert!(data_home.join("mitm").join("ca").join("ca.crt").exists());
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&data_home);

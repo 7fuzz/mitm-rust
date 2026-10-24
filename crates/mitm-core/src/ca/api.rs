@@ -19,6 +19,17 @@ impl MitmCore {
         self.get_ca().export(path, format)
     }
 
+    pub fn ca_scope(&self) -> ca::CaScope {
+        ca::CaScope::load(&ca::get_default_ca_dir())
+    }
+
+    /// Changing the scope means a new CA, which clients must trust again.
+    pub async fn set_ca_scope(&self, scope: ca::CaScope) -> Result<(), String> {
+        scope.save(&ca::get_default_ca_dir())?;
+        self.regenerate_ca().await
+    }
+
+    /// Keeps the current scope.
     pub async fn regenerate_ca(&self) -> Result<(), String> {
         let ca_dir = ca::get_default_ca_dir();
         ca::delete_ca(ca_dir.clone());

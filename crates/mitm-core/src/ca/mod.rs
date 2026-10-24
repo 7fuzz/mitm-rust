@@ -1,4 +1,7 @@
 mod api;
+mod scope;
+
+pub use scope::CaScope;
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair, Certificate
 };
@@ -18,6 +21,8 @@ pub struct CaInfo {
     pub fingerprint: String,
     pub cert_path: String,
     pub ca_dir: String,
+    #[serde(flatten)]
+    pub scope: CaScope,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +46,7 @@ pub struct CA {
     pub cert_pem: String,
     /// The certificate as stored; `cert` is re-signed on load and its bytes differ.
     pub cert_der: Vec<u8>,
+    pub scope: CaScope,
 }
 
 impl CA {
@@ -55,6 +61,7 @@ impl CA {
             key_pair,
             cert_pem: self.cert_pem.clone(),
             cert_der: self.cert_der.clone(),
+            scope: self.scope.clone(),
         }
     }
 
@@ -84,6 +91,7 @@ impl CA {
             fingerprint,
             cert_path: ca_dir.join("ca.crt").to_string_lossy().to_string(),
             ca_dir: ca_dir.to_string_lossy().to_string(),
+            scope: self.scope.clone(),
         })
     }
 
@@ -161,9 +169,11 @@ pub fn get_ca(ca_dir: PathBuf) -> CA {
             key_pair,
             cert_pem,
             cert_der,
+            scope: CaScope::load(&ca_dir),
         }
     } else {
         create_private_dir(&ca_dir).expect("Failed to create CA directory");
+        let scope = CaScope::load(&ca_dir);
 
         let mut params = CertificateParams::new(Vec::new()).expect("Failed to create cert params");
         params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
@@ -172,6 +182,12 @@ pub fn get_ca(ca_dir: PathBuf) -> CA {
         params.distinguished_name.push(DnType::OrganizationName, "MITM Rust");
         params.key_usages.push(rcgen::KeyUsagePurpose::KeyCertSign);
         params.key_usages.push(rcgen::KeyUsagePurpose::CrlSign);
+        if let CaScope::Domains(domains) = &scope {
+            params.name_constraints = Some(rcgen::NameConstraints {
+                permitted_subtrees: domains.iter().cloned().map(rcgen::GeneralSubtree::DnsName).collect(),
+                excluded_subtrees: Vec::new(),
+            });
+        }
 
         // Adjust dates for clock skew
         let now = SystemTime::now();
@@ -186,6 +202,7 @@ pub fn get_ca(ca_dir: PathBuf) -> CA {
 
         fs::write(&cert_path, &cert_pem).expect("Failed to write CA cert");
         write_private_file(&key_path, &key_pem).expect("Failed to write CA key");
+        let _ = scope.save(&ca_dir);
 
         let cert_der = cert.der().to_vec();
 
@@ -194,6 +211,7 @@ pub fn get_ca(ca_dir: PathBuf) -> CA {
             key_pair,
             cert_pem,
             cert_der,
+            scope,
         }
     }
 }
@@ -225,6 +243,41 @@ mod tests {
         get_ca(dir.clone());
         assert_eq!(mode(&dir), 0o700);
         assert_eq!(mode(&key), 0o600);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn domain_locked_ca_carries_name_constraints_and_keeps_them_across_loads_and_regeneration() {
+        let dir = std::env::temp_dir().join(format!("mitm_ca_scope_{}", uuid::Uuid::new_v4()));
+        create_private_dir(&dir).unwrap();
+        CaScope::domains(&["*.test.example.com", "other.test"]).unwrap().save(&dir).unwrap();
+
+        let constraints = |ca: &CA| {
+            let params = CertificateParams::from_ca_cert_pem(&ca.cert_pem).unwrap();
+            let nc = params.name_constraints.expect("name constraints");
+            nc.permitted_subtrees
+                .into_iter()
+                .map(|s| match s {
+                    rcgen::GeneralSubtree::DnsName(name) => name,
+                    _ => unreachable!(),
+                })
+                .collect::<Vec<_>>()
+        };
+        let ca = get_ca(dir.clone());
+        assert_eq!(constraints(&ca), ["test.example.com", "other.test"]);
+        assert_eq!(ca.info(&dir).unwrap().scope.domain_list(), ["test.example.com", "other.test"]);
+        assert_eq!(constraints(&get_ca(dir.clone())), ["test.example.com", "other.test"]);
+
+        delete_ca(dir.clone());
+        let regenerated = get_ca(dir.clone());
+        assert_ne!(regenerated.cert_der, ca.cert_der);
+        assert_eq!(constraints(&regenerated), ["test.example.com", "other.test"]);
+
+        CaScope::Global.save(&dir).unwrap();
+        delete_ca(dir.clone());
+        let global = get_ca(dir.clone());
+        assert!(CertificateParams::from_ca_cert_pem(&global.cert_pem).unwrap().name_constraints.is_none());
+        assert_eq!(global.scope, CaScope::Global);
         let _ = fs::remove_dir_all(&dir);
     }
 

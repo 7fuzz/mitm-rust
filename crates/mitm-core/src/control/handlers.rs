@@ -57,7 +57,7 @@ fn ca_info(core: &MitmCore) -> Result<Value, String> {
         "common_name": info.common_name,
         "not_before": info.not_before,
         "not_after": info.not_after,
-        "scope": "global",
-        "domains": [],
+        "scope": if info.scope == crate::ca::CaScope::Global { "global" } else { "domains" },
+        "domains": info.scope.domain_list(),
     }))
 }
