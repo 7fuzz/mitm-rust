@@ -17,6 +17,7 @@ pub enum Cmd {
     CopyCaPem,
     OpenCaFolder,
     RegenerateCa,
+    SetCaScope(String),
     ClearData(mitm_core::DataCategory),
     RefreshDataCounts,
 }
@@ -48,7 +49,7 @@ pub struct Settings<'a> {
 pub fn handle(s: Settings, cx: &Cx, cmd: Cmd) {
     let core = Arc::clone(cx.core);
     match cmd {
-        Cmd::ToggleProxy | Cmd::SetProxyMode(_) | Cmd::SaveListeners(_) | Cmd::SetListenerEnabled { .. } | Cmd::RegenerateCa
+        Cmd::ToggleProxy | Cmd::SetProxyMode(_) | Cmd::SaveListeners(_) | Cmd::SetListenerEnabled { .. } | Cmd::RegenerateCa | Cmd::SetCaScope(_)
             if s.proxy.busy() => {}
         Cmd::ToggleProxy => {
             let mode = if s.proxy.mode.is_enabled() { ProxyMode::Off } else { ProxyMode::On };
@@ -78,6 +79,18 @@ pub fn handle(s: Settings, cx: &Cx, cmd: Cmd) {
         Cmd::RegenerateCa => {
             s.cert.regenerating = true;
             spawn_proxy_job(s.proxy, cx, async move { ProxyChange::CaRegenerated(core.regenerate_ca().await) });
+        }
+        Cmd::SetCaScope(draft) => {
+            let domains: Vec<&str> = draft.split(',').collect();
+            let scope = if draft.trim().is_empty() { Ok(mitm_core::ca::CaScope::Global) } else { mitm_core::ca::CaScope::domains(&domains) };
+            match scope {
+                Ok(scope) => {
+                    s.cert.regenerating = true;
+                    s.cert.scope_draft = None;
+                    spawn_proxy_job(s.proxy, cx, async move { ProxyChange::CaRegenerated(core.set_ca_scope(scope).await) });
+                }
+                Err(e) => s.cert.status = Some((e, Tone::Danger)),
+            }
         }
         Cmd::ExportCa(format) => {
             let (file_name, filter_name, ext) = match format {

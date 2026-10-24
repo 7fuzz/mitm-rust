@@ -65,6 +65,8 @@ pub struct CertificateState {
     pub info: Option<mitm_core::CaInfo>,
     pub status: Option<(String, crate::ui::theme::Tone)>,
     pub regenerating: bool,
+    /// Comma-separated domains being typed; `None` shows what the CA currently allows.
+    pub scope_draft: Option<String>,
     exports: crate::app::jobs::Jobs<commands::CaExport>,
 }
 

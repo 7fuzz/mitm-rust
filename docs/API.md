@@ -52,7 +52,8 @@ Clients identify a Firefork container with Basic `Proxy-Authorization` on plain 
 | --- | --- |
 | `ca_info()` | Common name, organization, validity, fingerprint, and file paths. |
 | `ca_pem()` / `export_ca(path, CaFormat::{Pem, Der})` | Export the root CA. |
-| `regenerate_ca()` | New root CA. Clients must trust it again. |
+| `regenerate_ca()` | New root CA with the same scope. Clients must trust it again. |
+| `ca_scope()` / `set_ca_scope(scope)` | `CaScope::Global` (any host) or `CaScope::domains(&[..])`, a CA with an X.509 name-constraints extension limited to those names and their subdomains. Setting it regenerates the CA. Hosts outside a domain-locked CA are tunnelled without interception, and those tunnels aren't recorded. The scope is saved beside the CA as `scope.json`. |
 
 ## Intercept
 

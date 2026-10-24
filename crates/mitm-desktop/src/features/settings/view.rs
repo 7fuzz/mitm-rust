@@ -187,7 +187,7 @@ fn factory_reset_modal(ctx: &egui::Context, data: &mut DataSectionState, cmds: &
 
 fn certificate_section(
     ui: &mut egui::Ui,
-    cert: &CertificateState,
+    cert: &mut CertificateState,
     cmds: &mut Commands,
 ) {
     section(ui, "Root certificate");
@@ -254,8 +254,15 @@ fn certificate_section(
                 detail_row(ui, "Valid until", &info.not_after, false);
                 detail_row(ui, "SHA-256", &info.fingerprint, true);
                 detail_row(ui, "File", &info.cert_path, true);
+                let allowed = match info.scope.domain_list() {
+                    [] => "Any host".to_string(),
+                    domains => domains.join(", "),
+                };
+                detail_row(ui, "Issues for", &allowed, false);
             });
     }
+
+    domain_lock_row(ui, cert, cmds);
 
     section(ui, "Install and trust");
 
@@ -307,6 +314,35 @@ fn certificate_section(
             let curl_cmd = format!("export CURL_CA_BUNDLE=\"{}\"", cert_path);
             copyable_command(ui, "cli_curl", "cURL:", &curl_cmd);
         });
+}
+
+fn domain_lock_row(ui: &mut egui::Ui, cert: &mut CertificateState, cmds: &mut Commands) {
+    let current = cert.info.as_ref().map(|info| info.scope.domain_list().join(", ")).unwrap_or_default();
+    let draft = cert.scope_draft.get_or_insert_with(|| current.clone());
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(draft)
+                .hint_text("Any host. Or lock to domains: *.test.example.com, other.test")
+                .desired_width((ui.available_width() - 120.0).max(200.0)),
+        );
+        let changed = *draft != current;
+        let apply_id = ui.id().with("apply_ca_scope");
+        let confirmed = ui
+            .add_enabled_ui(changed && !cert.regenerating, |ui| {
+                crate::widgets::confirm::confirm_button(
+                    ui,
+                    apply_id,
+                    RichText::new("Apply"),
+                    "Confirm regenerate?",
+                    "Changing the domains recreates the root CA. Devices will need to trust the new certificate.",
+                )
+            })
+            .inner;
+        if confirmed {
+            cmds.push(Cmd::SetCaScope(draft.clone()));
+        }
+    });
 }
 
 fn detail_row(ui: &mut egui::Ui, label: &str, value: &str, copyable: bool) {
