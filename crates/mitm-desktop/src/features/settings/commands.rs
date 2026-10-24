@@ -18,6 +18,7 @@ pub enum Cmd {
     OpenCaFolder,
     RegenerateCa,
     SetCaScope(String),
+    SetCaRotation(u32),
     ClearData(mitm_core::DataCategory),
     RefreshDataCounts,
 }
@@ -79,6 +80,11 @@ pub fn handle(s: Settings, cx: &Cx, cmd: Cmd) {
         Cmd::RegenerateCa => {
             s.cert.regenerating = true;
             spawn_proxy_job(s.proxy, cx, async move { ProxyChange::CaRegenerated(core.regenerate_ca().await) });
+        }
+        Cmd::SetCaRotation(days) => {
+            if let Some(()) = cx.report(core.set_ca_rotation_days(days)) {
+                s.cert.rotation_days = days;
+            }
         }
         Cmd::SetCaScope(draft) => {
             let domains: Vec<&str> = draft.split(',').collect();

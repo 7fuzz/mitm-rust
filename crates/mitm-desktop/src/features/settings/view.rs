@@ -263,6 +263,7 @@ fn certificate_section(
     }
 
     domain_lock_row(ui, cert, cmds);
+    rotation_row(ui, cert, cmds);
 
     section(ui, "Install and trust");
 
@@ -341,6 +342,22 @@ fn domain_lock_row(ui: &mut egui::Ui, cert: &mut CertificateState, cmds: &mut Co
             .inner;
         if confirmed {
             cmds.push(Cmd::SetCaScope(draft.clone()));
+        }
+    });
+}
+
+fn rotation_row(ui: &mut egui::Ui, cert: &mut CertificateState, cmds: &mut Commands) {
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Auto-rotate").weak());
+        let mut days = cert.rotation_days;
+        let drag = egui::DragValue::new(&mut days)
+            .range(0..=3650)
+            .custom_formatter(|n, _| if n == 0.0 { "Off".to_string() } else { format!("every {n} days") })
+            .custom_parser(|text| text.trim().trim_start_matches("every").trim_end_matches("days").trim().parse().ok().or(Some(0.0)));
+        if ui.add(drag).changed() {
+            cert.rotation_days = days;
+            cmds.push(Cmd::SetCaRotation(days));
         }
     });
 }

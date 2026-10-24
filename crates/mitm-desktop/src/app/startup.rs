@@ -21,6 +21,7 @@ impl MitmApp {
             }
         };
         if let Some(core) = fresh {
+            self.rt.block_on(self.core.shutdown_services());
             self.core = Arc::new(core);
             self.core_events = forward_core_events(&self.rt, &self.core, ctx);
         }
@@ -42,6 +43,8 @@ pub(super) fn startup_state(rt: &Runtime, core: &MitmCore) -> AppState {
     if let Err(e) = rt.block_on(core.start_control_server()) {
         eprintln!("[Control] {e}");
     }
+    state.certificate.rotation_days = core.ca_rotation_days();
+    rt.block_on(core.start_ca_rotation());
     state.proxy.apply_statuses(&rt.block_on(core.listener_status()));
     state.proxy.reload_host_ips();
     state.certificate.info = core.ca_info().ok();
