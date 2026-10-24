@@ -93,14 +93,41 @@ impl CA {
     }
 }
 
+#[cfg(unix)]
+fn set_mode(path: &std::path::Path, mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    let Ok(meta) = fs::metadata(path) else { return };
+    if meta.permissions().mode() & 0o777 != mode {
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(mode));
+    }
+}
+
+#[cfg(not(unix))]
+fn set_mode(_path: &std::path::Path, _mode: u32) {}
+
+fn create_private_dir(dir: &std::path::Path) -> std::io::Result<()> {
+    fs::create_dir_all(dir)?;
+    set_mode(dir, 0o700);
+    Ok(())
+}
+
+fn write_private_file(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options.open(path)?.write_all(contents.as_bytes())?;
+    set_mode(path, 0o600);
+    Ok(())
+}
+
 pub fn get_default_ca_dir() -> PathBuf {
     let app_dir = dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("mitm")
         .join("ca");
-    if !app_dir.exists() {
-        let _ = std::fs::create_dir_all(&app_dir);
-    }
+    let _ = create_private_dir(&app_dir);
     app_dir
 }
 
@@ -109,6 +136,8 @@ pub fn get_ca(ca_dir: PathBuf) -> CA {
     let key_path = ca_dir.join("ca.key");
 
     if cert_path.exists() && key_path.exists() {
+        set_mode(&ca_dir, 0o700);
+        set_mode(&key_path, 0o600);
         let cert_pem = fs::read_to_string(&cert_path).expect("Failed to read CA cert");
         let key_pem = fs::read_to_string(&key_path).expect("Failed to read CA key");
         
@@ -122,9 +151,7 @@ pub fn get_ca(ca_dir: PathBuf) -> CA {
             cert_pem,
         }
     } else {
-        if !ca_dir.exists() {
-            fs::create_dir_all(&ca_dir).expect("Failed to create CA directory");
-        }
+        create_private_dir(&ca_dir).expect("Failed to create CA directory");
 
         let mut params = CertificateParams::new(Vec::new()).expect("Failed to create cert params");
         params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
@@ -146,7 +173,7 @@ pub fn get_ca(ca_dir: PathBuf) -> CA {
         let key_pem = key_pair.serialize_pem();
 
         fs::write(&cert_path, &cert_pem).expect("Failed to write CA cert");
-        fs::write(&key_path, &key_pem).expect("Failed to write CA key");
+        write_private_file(&key_path, &key_pem).expect("Failed to write CA key");
 
         CA {
             cert,
@@ -166,6 +193,25 @@ pub fn delete_ca(ca_dir: PathBuf) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn ca_files_are_private_and_loose_ones_tightened() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = |p: &std::path::Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        let dir = std::env::temp_dir().join(format!("mitm_ca_perm_{}", uuid::Uuid::new_v4()));
+        get_ca(dir.clone());
+        let key = dir.join("ca.key");
+        assert_eq!(mode(&dir), 0o700);
+        assert_eq!(mode(&key), 0o600);
+
+        fs::set_permissions(&key, fs::Permissions::from_mode(0o644)).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+        get_ca(dir.clone());
+        assert_eq!(mode(&dir), 0o700);
+        assert_eq!(mode(&key), 0o600);
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn ca_lifecycle_and_info() {
