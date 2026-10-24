@@ -19,6 +19,10 @@ pub struct WebSocketConn {
     pub message_count: u64,
     #[serde(default)]
     pub listener_label: String,
+    #[serde(default)]
+    pub container_label: String,
+    #[serde(default)]
+    pub run_id: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

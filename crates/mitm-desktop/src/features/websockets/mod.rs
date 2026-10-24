@@ -183,6 +183,8 @@ mod tests {
             is_client_session: false,
             message_count: 0,
             listener_label: String::new(),
+            container_label: String::new(),
+            run_id: 0,
         })
         .unwrap()
     }
@@ -254,6 +256,8 @@ mod tests {
             is_client_session: client,
             message_count: 0,
             listener_label: label.to_string(),
+            container_label: String::new(),
+            run_id: 0,
         };
         let conns = vec![mk(false, "HTTP 8080"), mk(true, ""), mk(false, "HTTP 8080"), mk(false, "")];
         assert_eq!(sources(&conns), vec!["HTTP 8080", "Client", "Proxy"]);

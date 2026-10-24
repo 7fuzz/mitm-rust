@@ -8,7 +8,7 @@ Bodies and headers are stored as text (headers as JSON arrays of `[name, value]`
 
 | Table | Holds |
 | --- | --- |
-| `history` | Captured flows. `phase` tracks request/response progress; `is_intercepted`, `is_rewritten` and `is_failed` drive the Traffic flags; `listener_label` names the listener that captured the flow. Pruned by the history limiter when it's on. |
+| `history` | Captured flows. `phase` tracks request/response progress; `is_intercepted`, `is_rewritten` and `is_failed` drive the Traffic flags; `listener_label` names the listener that captured the flow; `container_label` and `run_id` say which Firefork container sent it and in which run. Pruned by the history limiter when it's on. |
 | `intercept_rules` | Interceptor rules in `order_index` order. `action` is `intercept` (whitelist) or `pass` (blacklist). |
 | `rewrite_rules` / `rewrite_history` | Rewrite rules (partial edits or full mocks) and the log of rules that fired. |
 | `app_preferences` | Key/value settings: `proxy_mode`, `proxy_listeners`, `intercept_enabled`, `intercept_mode`, `intercept_source_scope`, `rewrite_enabled`, `rewrite_source_scope`, `ws_mitm_enabled`, `webhook_port`, `history_limiter_enabled`, `history_limiter_max_rows`, `active_workspace_id`. |
@@ -182,8 +182,11 @@ CREATE TABLE "history" (
     is_failed INTEGER NOT NULL DEFAULT 0,
     listener_label TEXT NOT NULL DEFAULT '',
     request_at TEXT,
-    response_at TEXT
+    response_at TEXT,
+    container_label TEXT NOT NULL DEFAULT '',
+    run_id INTEGER NOT NULL DEFAULT 0
 );
+CREATE INDEX idx_history_container_run ON history(container_label, run_id);
 CREATE INDEX idx_history_created_at ON history(created_at DESC);
 CREATE INDEX idx_history_method ON history(method);
 CREATE INDEX idx_history_status ON history(status_code);
@@ -229,8 +232,11 @@ CREATE TABLE "ws_connections" (
     client_addr TEXT,
     is_client_session INTEGER NOT NULL DEFAULT 0,
     message_count INTEGER NOT NULL DEFAULT 0,
-    listener_label TEXT NOT NULL DEFAULT ''
+    listener_label TEXT NOT NULL DEFAULT '',
+    container_label TEXT NOT NULL DEFAULT '',
+    run_id INTEGER NOT NULL DEFAULT 0
 );
+CREATE INDEX idx_ws_connections_container_run ON ws_connections(container_label, run_id);
 CREATE TABLE "ws_messages" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     connection_id INTEGER NOT NULL,

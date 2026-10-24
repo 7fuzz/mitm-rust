@@ -99,6 +99,8 @@ pub async fn handle_intercept_hook(
             is_rewritten: false,
             is_failed: false,
             listener_label: listener_label.to_string(),
+            container_label: String::new(),
+            run_id: 0,
             request_at: Some(request_at.to_string()),
             response_at: None,
         };

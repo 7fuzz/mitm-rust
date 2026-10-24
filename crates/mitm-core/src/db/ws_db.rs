@@ -6,7 +6,7 @@ pub fn load_ws_connections(db: &Db) -> Result<Vec<WebSocketConn>, String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
-            "SELECT id, url, status, handshake_time, closed_at, protocol, client_addr, is_client_session, message_count, COALESCE(listener_label, '')
+            "SELECT id, url, status, handshake_time, closed_at, protocol, client_addr, is_client_session, message_count, COALESCE(listener_label, ''), container_label, run_id
              FROM ws_connections
              ORDER BY handshake_time DESC",
         )
@@ -26,6 +26,8 @@ pub fn load_ws_connections(db: &Db) -> Result<Vec<WebSocketConn>, String> {
                 is_client_session: is_client_session_int != 0,
                 message_count: row.get(8).unwrap_or(0),
                 listener_label: row.get(9).unwrap_or_default(),
+                container_label: row.get(10).unwrap_or_default(),
+                run_id: row.get(11).unwrap_or_default(),
             })
         })
         .map_err(|e| e.to_string())?;
@@ -36,8 +38,8 @@ pub fn load_ws_connections(db: &Db) -> Result<Vec<WebSocketConn>, String> {
 pub fn insert_ws_connection(db: &Db, conn_info: &WebSocketConn) -> Result<i64, String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     conn.execute(
-        "INSERT INTO ws_connections (url, status, handshake_time, closed_at, protocol, client_addr, is_client_session, message_count, listener_label)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO ws_connections (url, status, handshake_time, closed_at, protocol, client_addr, is_client_session, message_count, listener_label, container_label, run_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
             conn_info.url,
             conn_info.status,
@@ -48,6 +50,8 @@ pub fn insert_ws_connection(db: &Db, conn_info: &WebSocketConn) -> Result<i64, S
             if conn_info.is_client_session { 1 } else { 0 },
             conn_info.message_count,
             conn_info.listener_label,
+            conn_info.container_label,
+            conn_info.run_id,
         ],
     ).map_err(|e| e.to_string())?;
     Ok(conn.last_insert_rowid())
@@ -195,6 +199,8 @@ mod tests {
             is_client_session: true,
             message_count: 0,
             listener_label: String::new(),
+            container_label: String::new(),
+            run_id: 0,
         }
     }
 

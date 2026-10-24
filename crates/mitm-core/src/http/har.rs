@@ -174,6 +174,8 @@ mod tests {
             is_rewritten: false,
             is_failed: false,
             listener_label: String::new(),
+            container_label: String::new(),
+            run_id: 0,
             request_at: None,
             response_at: None,
         }

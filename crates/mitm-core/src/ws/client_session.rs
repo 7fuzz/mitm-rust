@@ -63,6 +63,8 @@ pub async fn connect_client_session(
         is_client_session: true,
         message_count: 0,
         listener_label: String::new(),
+        container_label: String::new(),
+        run_id: 0,
     };
 
     conn_info.connection_id = crate::db::ws_db::insert_ws_connection(&state.db, &conn_info)?;

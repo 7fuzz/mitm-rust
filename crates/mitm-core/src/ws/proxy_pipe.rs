@@ -37,6 +37,8 @@ pub async fn bridge_proxied_websocket<C, S>(
         is_client_session: false,
         message_count: 0,
         listener_label,
+        container_label: String::new(),
+        run_id: 0,
     };
 
     match crate::db::ws_db::insert_ws_connection(&state.db, &conn_info) {

@@ -23,6 +23,12 @@ pub struct HistoryEntry {
     pub is_failed: bool,
     #[serde(default)]
     pub listener_label: String,
+    /// Firefork container that sent the flow; empty when the client sent no proxy credentials
+    #[serde(default)]
+    pub container_label: String,
+    /// Run boundary within the container, bumped by the control API; 0 until the first run is started
+    #[serde(default)]
+    pub run_id: i64,
     /// When the proxy received the request
     #[serde(default)]
     pub request_at: Option<String>,

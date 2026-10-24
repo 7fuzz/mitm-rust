@@ -166,6 +166,12 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         sql: include_str!("../../migrations/20261023_0026_dbviewer_connections_in_credentials.sql"),
         after: None,
     },
+    MigrationSpec {
+        version: 27,
+        name: "20261024_0027_container_and_run",
+        sql: include_str!("../../migrations/20261024_0027_container_and_run.sql"),
+        after: None,
+    },
 ];
 
 pub fn run_all(event_bus: Option<&EventBus>, conn: &Connection) -> Result<(), String> {

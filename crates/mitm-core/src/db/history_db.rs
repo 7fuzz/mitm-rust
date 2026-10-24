@@ -69,9 +69,9 @@ pub fn get_history_logs(
     }
 }
 
-const SUMMARY_FIELDS: &str = "id, method, url, host, path, content_type, response_size, status_code, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at";
+const SUMMARY_FIELDS: &str = "id, method, url, host, path, content_type, response_size, status_code, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at, container_label, run_id";
 
-const FULL_FIELDS: &str = "id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body_hash, response_body_hash, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at";
+const FULL_FIELDS: &str = "id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body_hash, response_body_hash, phase, duration_ms, created_at, COALESCE(is_intercepted, 0), COALESCE(is_rewritten, 0), COALESCE(is_failed, 0), COALESCE(listener_label, ''), request_at, response_at, container_label, run_id";
 
 type BodyHashes = (Option<Vec<u8>>, Option<Vec<u8>>);
 
@@ -103,6 +103,8 @@ fn full_from_row(row: &rusqlite::Row) -> rusqlite::Result<(HistoryEntry, BodyHas
         listener_label: row.get(18)?,
         request_at: row.get(19)?,
         response_at: row.get(20)?,
+        container_label: row.get(21)?,
+        run_id: row.get(22)?,
     };
     Ok((entry, (row.get(10)?, row.get(11)?)))
 }
@@ -136,6 +138,8 @@ fn summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<HistoryEntry> {
         listener_label: row.get(14)?,
         request_at: row.get(15)?,
         response_at: row.get(16)?,
+        container_label: row.get(17)?,
+        run_id: row.get(18)?,
     })
 }
 

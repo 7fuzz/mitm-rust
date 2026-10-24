@@ -153,8 +153,8 @@ fn flush_history_batch(db: &Db, buffer: &mut Vec<HistoryEntry>) {
                             }
                         };
                         let res = tx.execute(
-                            "INSERT OR REPLACE INTO history (id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, request_body_hash, response_body_hash, phase, duration_ms, is_intercepted, is_rewritten, is_failed, listener_label, request_at, response_at) 
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            "INSERT OR REPLACE INTO history (id, method, url, host, path, content_type, response_size, status_code, request_headers, response_headers, request_body, response_body, request_body_hash, response_body_hash, phase, duration_ms, is_intercepted, is_rewritten, is_failed, listener_label, request_at, response_at, container_label, run_id) 
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             rusqlite::params![
                                 entry.id,
                                 entry.method,
@@ -176,6 +176,8 @@ fn flush_history_batch(db: &Db, buffer: &mut Vec<HistoryEntry>) {
                                 entry.listener_label,
                                 entry.request_at,
                                 entry.response_at,
+                                entry.container_label,
+                                entry.run_id,
                             ],
                         );
                         if let Err(e) = res {
