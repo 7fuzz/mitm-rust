@@ -4,7 +4,7 @@ use mitm_core::proxy::listener::ListenerConfig;
 use crate::app::command::Commands;
 use crate::widgets::confirm::confirm_button;
 use crate::widgets::tri_state::tri_state_button;
-use super::{Cmd, TrafficState, FLAGS, METHODS, STATUS_GROUPS};
+use super::{Cmd, TrafficState, CONTENT_TYPES, FLAGS, METHODS, STATUS_GROUPS};
 use crate::ui::icons;
 use crate::ui::theme::Palette;
 use crate::util::format::format_count;
@@ -139,6 +139,12 @@ fn filter_row(ui: &mut egui::Ui, state: &mut TrafficState, listeners: &[Listener
         group_label(ui, "STATUS");
         for st in STATUS_GROUPS {
             tri_state_button(ui, st, state.prefs.status_filters.entry(st.to_string()).or_default());
+        }
+
+        ui.add_space(12.0);
+        group_label(ui, "TYPE");
+        for kind in CONTENT_TYPES {
+            tri_state_button(ui, kind, state.prefs.type_filters.entry(kind.to_string()).or_default());
         }
 
         ui.add_space(12.0);

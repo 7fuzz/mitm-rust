@@ -20,6 +20,7 @@ const PAGE_SIZE: usize = 200;
 
 pub const METHODS: [&str; 6] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"];
 pub const STATUS_GROUPS: [&str; 4] = ["2xx", "3xx", "4xx", "5xx"];
+pub const CONTENT_TYPES: [&str; 8] = ["JSON", "HTML", "JS", "CSS", "Image", "Font", "XML", "Text"];
 pub const FLAGS: [(&str, &str); 4] = [
     ("waiting", "Waiting"),
     ("intercepted", "Intercepted"),
@@ -76,6 +77,7 @@ pub struct TrafficPrefs {
     pub container_filter: Option<String>,
     pub method_filters: HashMap<String, TriState>,
     pub status_filters: HashMap<String, TriState>,
+    pub type_filters: HashMap<String, TriState>,
     pub flag_filters: HashMap<String, TriState>,
 }
 
@@ -91,6 +93,7 @@ impl Default for TrafficPrefs {
             container_filter: None,
             method_filters: neutral_filters(METHODS),
             status_filters: neutral_filters(STATUS_GROUPS),
+            type_filters: neutral_filters(CONTENT_TYPES),
             flag_filters: neutral_filters(FLAGS.map(|(key, _)| key)),
         }
     }
@@ -325,6 +328,7 @@ impl TrafficState {
         let count = |filters: &HashMap<String, TriState>| filters.values().filter(|&&v| v != TriState::Neutral).count();
         count(&self.prefs.method_filters)
             + count(&self.prefs.status_filters)
+            + count(&self.prefs.type_filters)
             + count(&self.prefs.flag_filters)
             + usize::from(self.prefs.source_filter.is_some())
             + usize::from(self.prefs.container_filter.is_some())
@@ -333,7 +337,7 @@ impl TrafficState {
     pub fn reset_filters(&mut self) {
         self.prefs.source_filter = None;
         self.prefs.container_filter = None;
-        for filters in [&mut self.prefs.method_filters, &mut self.prefs.status_filters, &mut self.prefs.flag_filters] {
+        for filters in [&mut self.prefs.method_filters, &mut self.prefs.status_filters, &mut self.prefs.type_filters, &mut self.prefs.flag_filters] {
             filters.values_mut().for_each(|v| *v = TriState::Neutral);
         }
     }
@@ -348,6 +352,7 @@ impl TrafficState {
                     && self.matches_container(flow)
                     && passes_tri_state(&self.prefs.method_filters, Some(&flow.method.to_uppercase()))
                     && passes_tri_state(&self.prefs.status_filters, status_group(flow.status_code))
+                    && passes_tri_state(&self.prefs.type_filters, content_group(&flow.content_type))
                     && self.passes_flags(FlowFlags::of(flow))
                     && (matches_search(flow, &search) || self.matches_headers(flow, &search))
             })
@@ -432,6 +437,26 @@ fn status_group(code: u16) -> Option<&'static str> {
     }
 }
 
+/// Buckets a Content-Type header value; anything unrecognised, empty or "-" has no group and only passes when no type is included.
+fn content_group(content_type: &str) -> Option<&'static str> {
+    let essence = content_type.split(';').next().unwrap_or_default().trim().to_ascii_lowercase();
+    let (kind, subtype) = essence.split_once('/')?;
+    match (kind, subtype) {
+        ("image", _) => Some("Image"),
+        ("font", _) => Some("Font"),
+        (_, "json") | (_, "ld+json") => Some("JSON"),
+        (_, s) if s.ends_with("+json") => Some("JSON"),
+        (_, "html") | (_, "xhtml+xml") => Some("HTML"),
+        (_, "javascript") | (_, "x-javascript") | (_, "ecmascript") => Some("JS"),
+        (_, "css") => Some("CSS"),
+        (_, "xml") => Some("XML"),
+        (_, s) if s.ends_with("+xml") => Some("XML"),
+        (_, s) if s.starts_with("x-font") || s.starts_with("vnd.ms-fontobject") => Some("Font"),
+        ("text", _) => Some("Text"),
+        _ => None,
+    }
+}
+
 fn passes_tri_state(filters: &HashMap<String, TriState>, key: Option<&str>) -> bool {
     let has_includes = filters.values().any(|&s| s == TriState::Include);
     match key.and_then(|k| filters.get(k)).copied().unwrap_or_default() {
@@ -492,6 +517,21 @@ mod tests {
         assert!(contains_folded("anything", ""));
         assert!(!contains_folded("api.test", "assess"));
         assert!(contains_folded("Ünïcode", "ünï"));
+    }
+
+    #[test]
+    fn content_types_fall_into_groups() {
+        let group = content_group;
+        assert_eq!(group("application/json; charset=utf-8"), Some("JSON"));
+        assert_eq!(group("application/problem+json"), Some("JSON"));
+        assert_eq!(group("text/html"), Some("HTML"));
+        assert_eq!(group("application/javascript"), Some("JS"));
+        assert_eq!(group("text/css"), Some("CSS"));
+        assert_eq!(group("image/svg+xml"), Some("Image"));
+        assert_eq!(group("application/xml"), Some("XML"));
+        assert_eq!(group("text/plain"), Some("Text"));
+        assert_eq!(group("application/octet-stream"), None);
+        assert_eq!(group("-"), None);
     }
 
     fn flow(id: i64) -> HistoryEntry {
