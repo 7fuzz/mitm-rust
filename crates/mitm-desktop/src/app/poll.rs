@@ -89,6 +89,7 @@ impl MitmApp {
             let cx = Cx { rt: &self.rt, core: &self.core, ctx: ui.ctx() };
             crate::features::traffic::poll(&mut self.state.traffic, &cx);
             crate::features::webhooks::poll(&mut self.state.webhooks, &cx);
+            crate::features::containers::poll(&mut self.state.containers, &cx, now);
             crate::features::websockets::poll(&mut self.state.websockets, &cx);
             crate::features::settings::poll(self.state.settings(), &cx);
             crate::features::rewrite::poll(&mut self.state.rewrite, &cx, now);

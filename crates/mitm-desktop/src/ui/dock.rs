@@ -18,6 +18,7 @@ pub enum Tab {
     Collections,
     WebSockets,
     Webhooks,
+    Containers,
     Environments,
     Credentials,
     Settings,
@@ -35,7 +36,7 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 20] = [
+    pub const ALL: [Tab; 21] = [
         Tab::Traffic,
         Tab::Repeater,
         Tab::Fuzzer,
@@ -44,6 +45,7 @@ impl Tab {
         Tab::Collections,
         Tab::WebSockets,
         Tab::Webhooks,
+        Tab::Containers,
         Tab::Environments,
         Tab::Credentials,
         Tab::Settings,
@@ -68,6 +70,7 @@ impl Tab {
             Tab::Collections => "Collections",
             Tab::WebSockets => "WebSockets",
             Tab::Webhooks => "Webhooks",
+            Tab::Containers => "Containers",
             Tab::Environments => "Environments",
             Tab::Credentials => "Credentials",
             Tab::Settings => "Settings",
@@ -87,7 +90,7 @@ impl Tab {
     /// The non-utility tabs as menus list them, a separator between groups.
     pub const GROUPS: &'static [&'static [Tab]] = &[
         &[Tab::Traffic, Tab::Intercept, Tab::Repeater, Tab::Rewrite, Tab::Fuzzer],
-        &[Tab::WebSockets, Tab::Webhooks],
+        &[Tab::WebSockets, Tab::Webhooks, Tab::Containers],
         &[Tab::Collections, Tab::Environments, Tab::Credentials],
         &[Tab::Settings],
     ];
@@ -261,6 +264,7 @@ impl TabViewer<'_> {
             Tab::Collections => features::collections::show(ui, &mut state.collections, cmds),
             Tab::WebSockets => features::websockets::show(ui, &mut state.websockets, cmds),
             Tab::Webhooks => features::webhooks::show(ui, &mut state.webhooks, cmds),
+            Tab::Containers => features::containers::show(ui, &mut state.containers, cmds),
             Tab::Encoding => features::utilities::encoding::show(ui, &mut state.encoding),
             Tab::Hashing => features::utilities::hashing::show(ui, &mut state.hashing, cmds),
             Tab::HmacTool => features::utilities::hmac_tool::show(ui, &mut state.hmac_tool),

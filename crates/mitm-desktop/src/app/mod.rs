@@ -81,6 +81,7 @@ impl MitmApp {
                 self.state.fuzzer.finished(run_id, completed, stopped, || core.fuzz_rows(run_id).unwrap_or_default());
             }
             CoreEvent::TrafficCaptured(ev) => {
+                self.state.containers.mark_dirty();
                 let id = ev.entry.id;
                 traffic.upsert(ev.entry);
                 traffic.refresh_detail_if_selected(id, db);
@@ -90,7 +91,11 @@ impl MitmApp {
                 traffic.refresh_detail_if_selected(id, db);
             }
             CoreEvent::TrafficCleared => traffic.clear(),
-            CoreEvent::ContainerFlowsDeleted => traffic.load_from_db(db),
+            CoreEvent::ContainerFlowsDeleted => {
+                self.state.containers.mark_dirty();
+                traffic.load_from_db(db);
+            }
+            CoreEvent::ContainersChanged => self.state.containers.mark_dirty(),
             CoreEvent::InterceptPrompt(payload) => {
                 self.state.intercept.add_pending(payload);
                 if self.state.intercept.prefs.raise_window {
@@ -267,6 +272,10 @@ impl MitmApp {
             AppCommand::Webhooks(cmd) => {
                 let cx = Cx { rt: &self.rt, core: &self.core, ctx };
                 crate::features::webhooks::handle(&mut self.state.webhooks, &cx, cmd);
+            }
+            AppCommand::Containers(cmd) => {
+                let cx = Cx { rt: &self.rt, core: &self.core, ctx };
+                crate::features::containers::handle(&mut self.state.containers, &cx, cmd);
             }
             AppCommand::PickMarkdownFile => self.pick_markdown_file(ctx),
             AppCommand::DecodeInEncodingTool(text) => {

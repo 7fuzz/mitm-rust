@@ -1,5 +1,6 @@
 mod api;
 mod containers_api;
+pub use containers_api::ContainerRow;
 pub mod containers;
 pub mod host_ips;
 pub mod mitm;

@@ -34,6 +34,7 @@ pub struct AppState {
     pub collections: CollectionsState,
     pub websockets: WebSocketsState,
     pub webhooks: WebhooksState,
+    pub containers: crate::features::containers::ContainersState,
     pub cvss: CvssState,
     pub encoding: EncodingState,
     pub hashing: HashingState,
