@@ -304,6 +304,25 @@ pub fn container_labels(db: &Db) -> Vec<String> {
     stmt.query_map([], |row| row.get(0)).map(|rows| rows.flatten().collect()).unwrap_or_default()
 }
 
+pub struct ContainerActivity {
+    pub label: String,
+    pub flows: u64,
+    pub last_seen: Option<i64>,
+}
+
+/// Per container label: stored flow count and the unix time of the newest one.
+pub fn container_activity(db: &Db) -> Vec<ContainerActivity> {
+    let Ok(conn) = db.conn() else { return Vec::new() };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT container_label, COUNT(*), CAST(strftime('%s', MAX(created_at)) AS INTEGER) FROM history WHERE container_label != '' GROUP BY container_label",
+    ) else {
+        return Vec::new();
+    };
+    stmt.query_map([], |row| Ok(ContainerActivity { label: row.get(0)?, flows: row.get(1)?, last_seen: row.get(2)? }))
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
+}
+
 pub fn count_container_flows(db: &Db, container: &str) -> Result<u64, String> {
     let conn = db.conn().map_err(|e| e.to_string())?;
     conn.query_row("SELECT COUNT(*) FROM history WHERE container_label = ?1", [container], |row| row.get(0))

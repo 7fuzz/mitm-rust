@@ -93,10 +93,19 @@ async fn containers_register_rename_run_and_delete_flows() {
     let listed = client.call("list_containers", Value::Null).await;
     assert_eq!(listed["result"], json!([{ "id": "7", "name": "App A · admin", "run_id": 2, "flows": 2 }]));
 
+    let overview: Vec<_> = core.container_overview().into_iter().map(|r| (r.id, r.registered, r.flows)).collect();
+    assert_eq!(overview, [("7".to_string(), true, 2), ("Other".to_string(), false, 1)]);
+
     assert_eq!(client.call("delete_flows", json!({ "id": "7", "run_id": 1 })).await["result"]["deleted"], 1);
     assert_eq!(client.call("delete_flows", json!({ "id": "7" })).await["result"]["deleted"], 1);
     assert_eq!(crate::db::get_history_count(&core.db, None, false).unwrap(), 1);
-    assert!(matches!(events.recv().await.unwrap(), crate::CoreEvent::ContainerFlowsDeleted));
+    loop {
+        match events.recv().await.unwrap() {
+            crate::CoreEvent::ContainerFlowsDeleted => break,
+            crate::CoreEvent::ContainersChanged => {}
+            other => panic!("unexpected event {other:?}"),
+        }
+    }
 
     client.call("remove_container", json!({ "id": "7" })).await;
     assert_eq!(client.call("list_containers", Value::Null).await["result"], json!([]));

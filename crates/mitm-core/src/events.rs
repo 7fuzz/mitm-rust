@@ -28,6 +28,8 @@ pub enum CoreEvent {
     TrafficCleared,
     /// Stored flows of a container (or one of its runs) were deleted; loaded lists should reload.
     ContainerFlowsDeleted,
+    /// The container registry changed: registered, renamed, removed, or a new run started.
+    ContainersChanged,
 
     InterceptPrompt(PendingFlowPayload),
     InterceptResolved { flow_id: String },
